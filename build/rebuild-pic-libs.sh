@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — 5 个静态库的 -fPIC 重建配方（配合 reconf-pic.sh）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # 5 个「非 PIC」静态库 → -fPIC 重建（配合 build/reconf-pic.sh）。
 #
 # 为什么只有这 5 个：用 `-Wl,--error-limit=0` 让 wasm-ld 报全量错误后统计出来的

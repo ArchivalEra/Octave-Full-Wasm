@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — 批次 1 的 configure 配方（zlib/bz2/RapidJSON/CCOLAMD）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Batch 1 reconfigure: enable zlib / libbz2 / RapidJSON / CXSparse / CCOLAMD.
 # Same shape as reconf.sh; the five corresponding --without*/--disable* are gone.
 set -e

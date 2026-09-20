@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — configure 配方（-fPIC 版，为 MAIN_MODULE=1 / 真 .oct）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # -fPIC 版 configure + 全量重编 + 安装（为 MAIN_MODULE=1 可重定位主链 / 真 .oct 动态装载）。
 #
 # 与 reconf-batch1b.sh 的唯一差别：CFLAGS / CXXFLAGS / FFLAGS 各加一个 -fPIC。

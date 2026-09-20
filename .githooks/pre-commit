@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — pre-commit：重算 README 的 AUTO 区块并校验白名单
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # pre-commit：重算 README AUTO 区块并暂存，再做白名单校验。
 set -e
 HOOK_DIR="$(dirname "$0")"

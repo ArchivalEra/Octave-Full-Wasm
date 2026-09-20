@@ -6,6 +6,7 @@
 !.gitignore
 !README.md
 !LICENSE
+!THIRD-PARTY-NOTICES.md
 !HANDOFF.md
 !AGENTS.md
 !build/Makefile

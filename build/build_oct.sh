@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — 把 dldfcn/*.cc 编成「动态装载」用的 wasm side module（真 .oct）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # 把 libinterp/dldfcn/<name>.cc 编成 wasm side module（= 真 .oct），
 # 给 `-sMAIN_MODULE=1` 的主链用 dlopen 加载。容器内跑。
 #

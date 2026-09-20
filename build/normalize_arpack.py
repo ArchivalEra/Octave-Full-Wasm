@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Octave-Full-Wasm — ARPACK F77 源净化器（! 注释→c，& 续行→定式续行）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Normalize ARPACK Fortran sources to strict F77 for f2c-2016.
 
 Rules (verified safe for arpack-ng 3.7.0: no inline '!', no '::', no modules):

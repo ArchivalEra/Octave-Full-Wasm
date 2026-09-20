@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Octave-Full-Wasm — 把文件清单/行数写回 README 的 AUTO:FILES 区块
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """重算 README.md 的 AUTO 区块。
 
 用法：

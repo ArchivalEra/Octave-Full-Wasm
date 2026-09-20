@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Octave-Full-Wasm — 白名单校验：跟踪文件必须在 .gitignore 有显式放行规则
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """校验白名单：每个 git 跟踪文件必须被 .gitignore 里至少一条 `!` 规则显式放行。
 
 `!*/` 这类纯目录规则不算数（它只负责让 git 走进目录）。

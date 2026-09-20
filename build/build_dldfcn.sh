@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — 把 dldfcn/*.cc 编成「静态直装」用的 .o（挂终链 + STATIC_DLD_FCNS 注册）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Compile Octave dldfcn/*.cc modules that can't be .oct-loaded in wasm,
 # so they can be static-linked and driven by main.cc's STATIC_DLD_FCNS
 # registry.  Run INSIDE the build container (obuild), emsdk on PATH.

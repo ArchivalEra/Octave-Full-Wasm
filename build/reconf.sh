@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — 基线 configure 配方（与上游 Dockerfile 同 flag）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Octave 7.2.0 reconfigure: enable qrupdate/arpack/fftw3/fftw3f/qhull_r/glpk.
 # Same flags as Dockerfile, minus the five --without-* lines.
 set -e

@@ -75,31 +75,32 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 ## 目录
 
 <!-- AUTO:FILES -->
-- `.githooks/check-whitelist.py` (1076 bytes)
-- `.githooks/install.sh` (239 bytes)
-- `.githooks/pre-commit` (215 bytes)
-- `.githooks/pre-push` (182 bytes)
-- `.githooks/update-readme.py` (2110 bytes)
-- `.gitignore` (819 bytes)
+- `.githooks/check-whitelist.py` (1251 bytes)
+- `.githooks/install.sh` (388 bytes)
+- `.githooks/pre-commit` (378 bytes)
+- `.githooks/pre-push` (337 bytes)
+- `.githooks/update-readme.py` (2270 bytes)
+- `.gitignore` (843 bytes)
 - `AGENTS.md` (1355 bytes)
 - `HANDOFF.md` (18477 bytes)
 - `LICENSE` (34523 bytes)
+- `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (4772 bytes)
 - `build/CLIBS.md` (10963 bytes)
 - `build/Makefile` (7798 bytes)
 - `build/NOTES.md` (1657 bytes)
-- `build/build_dldfcn.sh` (1256 bytes)
-- `build/build_oct.sh` (2261 bytes)
-- `build/fftw_threads_stub.c` (377 bytes)
+- `build/build_dldfcn.sh` (1448 bytes)
+- `build/build_oct.sh` (2441 bytes)
+- `build/fftw_threads_stub.c` (553 bytes)
 - `build/main.cc` (16520 bytes)
-- `build/normalize_arpack.py` (1691 bytes)
+- `build/normalize_arpack.py` (1861 bytes)
 - `build/plotbridge/__pb_add__.m` (2731 bytes)
 - `build/plotbridge/__pb_emit__.m` (1966 bytes)
 - `build/plotbridge/__pstate__.m` (589 bytes)
 - `build/plotbridge/bar.m` (636 bytes)
-- `build/plotbridge/clf.m` (328 bytes)
-- `build/plotbridge/figure.m` (211 bytes)
+- `build/plotbridge/clf.m` (388 bytes)
+- `build/plotbridge/figure.m` (271 bytes)
 - `build/plotbridge/grid.m` (357 bytes)
 - `build/plotbridge/hold.m` (357 bytes)
 - `build/plotbridge/legend.m` (496 bytes)
@@ -114,12 +115,12 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `build/plotbridge/xlim.m` (271 bytes)
 - `build/plotbridge/ylabel.m` (139 bytes)
 - `build/plotbridge/ylim.m` (271 bytes)
-- `build/rebuild-pic-libs.sh` (3507 bytes)
-- `build/reconf-batch1.sh` (1996 bytes)
-- `build/reconf-batch1b.sh` (1931 bytes)
-- `build/reconf-pic.sh` (2506 bytes)
-- `build/reconf.sh` (2843 bytes)
-- `build/second_stub.f` (213 bytes)
+- `build/rebuild-pic-libs.sh` (3672 bytes)
+- `build/reconf-batch1.sh` (2160 bytes)
+- `build/reconf-batch1b.sh` (2101 bytes)
+- `build/reconf-pic.sh` (2671 bytes)
+- `build/reconf.sh` (3004 bytes)
+- `build/second_stub.f` (358 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)
 - `vendor/extra/asciiplot.m` (940 bytes)
 - `vendor/extra/fft.m` (1736 bytes)
@@ -155,7 +156,20 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 
 ## 许可
 
-AGPL-3.0（见 LICENSE）。这种混合（GPLv3 Octave + GPLv3 forge/
-qrupdate + GPLv2+ FFTW + BSD/ permissive 件）没有 AGPL-3.0 以外的选择。
-`build/` 补丁源自 rwl/octave-wasm（BSD），见 build/NOTES.md；
-各 vendor 文件头保留原许可声明，来源见 vendor/MANIFEST.md。
+**AGPL-3.0-or-later**（全文见 [`LICENSE`](LICENSE)）。本仓对外分发的是一个 wasm
+二进制，它静态链接了 GPLv3 的 Octave、GPLv2+ 的 FFTW、LGPL 的 libsndfile，
+以及 BSD/permissive 的若干件——这种混合**没有 AGPL-3.0 以外的选择**。
+
+本程序是自由软件：你可以按自由软件基金会发布的 GNU Affero 通用公共许可证
+（第 3 版，或你选择的任何更新版本）的条款再分发和/或修改它。本程序分发时
+希望它有用，但**不提供任何担保**，也不提供适销性或特定用途适用性的默示担保。
+
+按 AGPL-3.0 第 13 条（网络交互条款），通过计算机网络使用本程序的用户有权
+获得对应源码：**本仓即该源码**，构建可在 `obuild` 容器内完整复现
+（配方见 `build/CLIBS.md` 与 `HANDOFF.md`）。
+
+逐组件的许可与版权声明见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)：
+Octave 与 C 库长尾的版本/许可逐条列在那边，`build/` 的构建骨架源自
+rwl/octave-wasm（BSD-3-Clause，见 build/NOTES.md）；vendored `.m` 的来源见
+`vendor/MANIFEST.md`，其文件头均保留原许可声明；本仓自研文件带
+`SPDX-License-Identifier: AGPL-3.0-or-later` 头。

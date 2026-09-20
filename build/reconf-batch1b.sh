@@ -1,4 +1,8 @@
 #!/bin/sh
+# Octave-Full-Wasm — 批次 1b 的 configure 配方（libsndfile → audioread 系列）
+# Copyright (C) 2026 ArchivalEra
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Batch 1b reconfigure: enable libsndfile (audioread/audiowrite/audioinfo/
 # audioformats).  Same as batch1 but --without-sndfile is removed.
 set -e
