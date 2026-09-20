@@ -167,9 +167,15 @@
 - **可选优化（未做）**：`MAIN_MODULE=2`（DCE 版）+ 显式 `EXPORTED_FUNCTIONS` 只留
   .oct 需要的符号，应能同时压缩两份；代价是要维护导出清单。
 
-### 没有采用为基线的理由
-功能上完全达标，但交付体积翻近一倍（gzip 6.2→11.1MB），属于产品取舍，
-需人工拍板。基线 8761 保持批次 1b 不变。
+### 已采用（2026-09-20 拍板）
+用户决定采用：**贴近原版 Octave 的插件模型优先于体积**，整站 gzip 后交付。
+基线 8761 已换成该构建（实测 **20/20**），交付包见 HANDOFF §2.1.1。
+主链 flag 已同步进 `build/Makefile`（`MAIN_MODULE=1` + `-fPIC`，含回退说明）。
+
+直接后果：**新 dldfcn 模块可以只编 `.oct` 运行时加载，不必重链那 38MB 主 wasm**
+（`build/build_oct.sh` 一条命令），这正是采用它的主要理由。
+反向约束：重编 Octave 本体或静态库必须走 `build/reconf-pic.sh` +
+`build/rebuild-pic-libs.sh`，否则非 PIC 对象会让主链链接失败。
 
 ### 附：MAIN_MODULE=2（DCE 版）实测 —— 体积能压回来，但会崩
 

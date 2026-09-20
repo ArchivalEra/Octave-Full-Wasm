@@ -26,7 +26,9 @@
 - 远程：`https://github.com/ArchivalEra/Octave-Full-Wasm`（私有）
 - 许可：AGPL-3.0（`LICENSE`）；混合体无其他选择
 - 当前 HEAD：以 `git log -1` 为准（本文档自身也随每次提交更新；勿在文档里写死哈希，容易过期）
-- 产物体积：wasm raw ~20MB / gzip ~4.5MB；加 data+js+gp 合计 raw ~28MB
+- 产物体积（**已采用 MAIN_MODULE=1 / 真 .oct 版**）：wasm raw 37.9MB / gzip 7.98MB；
+  js 29.8MB / gzip 1.80MB；data 6.17MB / gzip 1.18MB。**三大件 gzip 合计 10.96MB**
+  （采用前是 6.18MB，+79% 是 .oct 能力的代价）。
 
 ---
 
@@ -40,6 +42,16 @@
 | **0** | dldfcn 静态注册表 + `convhulln` + `fftw()` | 11/12 绿 | `c4652b0` |
 | **1a** | zlib / libbz2 / RapidJSON / CCOLAMD + `gzip`/`bzip2` | `gzip`/`bzip2`/`jsonencode`/`jsondecode`/`save -v7` 全通 | `a4f2510` |
 | **1b** | libsndfile → `audioread`/`audiowrite`/`audioinfo`/`audioformats` | wav 往返：SampleRate=8000、8000 样点、峰值 1 | `4ed5392` |
+| **1d** | **真 `.oct` 动态装载**（`MAIN_MODULE=1` + wasm side module，已采用） | 8761 实测 **20/20**；`.oct` 装载 `dldprobe()`=42；convhulln 数值与静态注册逐位一致 | `a8bec25` |
+| **交付** | 整站 gzip 打包（可静态托管） | 包内 20/20 通过；用户实下 **10.96MB** | `dist/octave-full-wasm-site-20260920` |
+
+### 2.1.1 交付包（不在 git 里，在磁盘上）
+```
+/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920/      # 84MB，可直接 rsync 上静态托管
+/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920.tar.zst  # 18.8MB 归档
+  └─ serve.py（wasm MIME + gzip_static）、DEPLOY.md（nginx 配置）、MANIFEST.sha256
+```
+包内 `oct/*.oct` 是运行时动态装载的示例；装法（纯浏览器端）见 `DEPLOY.md`。
 
 ### 2.2 已装 dldfcn（`main.cc` 的 `STATIC_DLD_FCNS`，一行一模块，共 11 个）
 `__delaunayn__ / __glpk__ / __voronoi__ / convhulln / fftw / gzip / bzip2 /
@@ -65,8 +77,8 @@ owasm    旧的线上构建，端口 8757，别动
          octave-build:b2-snapshot（相近快照）
          octave-build:final / :shutdown / :libs / :full（更早的检查点）
          octave-wasm:latest（最原始镜像）
-端口     8757=旧构建  8761=基线（改这里）  8763=MAIN_MODULE 实验版  8762=dlopen PoC
-         8758/8760=历史
+端口     8757=旧构建  8761=基线（改这里）  8763=同一份构建的副本
+         8764=交付包验证用（跑的就是 dist/ 里那包）  8762=dlopen PoC  8758/8760=历史
 ```
 
 > 实验容器/端口是临时的：不需要时 `docker stop odld`（镜像留着，随时可
@@ -258,8 +270,13 @@ dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
 ---
 
 ## 8. 一句话接续
-**冻结的可用基线在 8761（批次 0/1a/1b）**；下一步是**批次 2（SUNDIALS 6.1.x → ode15s/ode15i）**，配零编译车道并行；每批自动验证、通过才覆盖 8761、提交推送。只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild` 容器内工作。
+**当前基线 8761 = 批次 0/1a/1b + 真 `.oct` 动态装载（MAIN_MODULE=1）**，实测 20/20；
+交付包已打在 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920/`（+ `.tar.zst`），
+用户实下 10.96MB。下一步是**批次 2（SUNDIALS 6.1.x → ode15s/ode15i）**，配零编译车道并行；
+每批自动验证、通过才覆盖 8761、提交推送。只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm`
+及 `obuild`/`odld` 容器内工作。
 
-**待人工拍板的一件事**：真 `.oct` 动态装载已做通（8763 实验版，见 §4.1 与 `build/CLIBS.md`），
-功能达标、数值与静态注册逐位一致，代价是交付 gzip 体积 6.18MB → 11.05MB。
-采用与否影响后续所有批次的架构选择（静态 `.o` 注册 vs `.oct`），需用户决定后再动 8761。
+**注意架构已变**：主链是 `-s MAIN_MODULE=1` + 全树 `-fPIC`。这带来一个直接好处——
+**新 dldfcn 模块可以只编成 `.oct` 用运行时加载，不必重链那 38MB 主 wasm**
+（`build/build_oct.sh`）。但任何"重编 Octave 本体/静态库"的操作都必须走
+`build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`，否则非 PIC 对象会让主链链接失败。

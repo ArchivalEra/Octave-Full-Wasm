@@ -19,7 +19,8 @@ PREFIX = ../target
 MFILE_PATH ?= $(PREFIX)/share/octave/$(OCTAVE_VER)/m
 
 #EM_CFLAGS = -O0 -g -Wall -std=c++11 -fwasm-exceptions
-EM_CFLAGS = -O2 -Wall -std=c++11 -fwasm-exceptions
+# 注意：-fPIC 与下面的 MAIN_MODULE=1 是一对，见 EM_SFLAGS 上方注释。
+EM_CFLAGS = -O2 -fPIC -Wall -std=c++11 -fwasm-exceptions
 #EM_CFLAGS = -O0 -Wall -std=c++11
 #EM_CFLAGS = -O2 --closure 1 -Wall -std=c++11 -fwasm-exceptions
 #EM_CFLAGS = -O3 --closure 1 -Wall -std=c++11 -fwasm-exceptions
@@ -35,7 +36,16 @@ EM_LDFLAGS = -L$(PREFIX)/lib -L$(PREFIX)/lib/octave/$(OCTAVE_VER) -lf2c -lrefbla
 /usr/src/octave-wasm/target/lib/fftw.o \
 /usr/src/octave-wasm/target/lib/gzip.o \
 /usr/src/octave-wasm/target/lib/audioread.o
-EM_SFLAGS = -s WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 \
+# MAIN_MODULE=1：主模块做成可重定位，运行时能 dlopen 真 .oct（wasm side module）。
+# 这一条把三件事绑在一起，动一个就得动全部：
+#   1. 本文件的 EM_SFLAGS（MAIN_MODULE + ALLOW_TABLE_GROWTH）
+#   2. EM_CFLAGS 的 -fPIC（主链走 --experimental-pic -pie，非 PIC 对象直接链接失败）
+#   3. reconf 侧：build/reconf-pic.sh + build/rebuild-pic-libs.sh（Octave 本体与
+#      glpk/arpack/sndfile/qhull/fftw3+3f 必须 -fPIC 重编），另需
+#      `embuilder build --pic zlib bzip2`
+# 代价：不做 DCE，wasm 20.5→37.9MB、js 230KB→29.8MB（gzip 后合计 6.2→11.0MB）。
+# 回退：删掉 MAIN_MODULE/ALLOW_TABLE_GROWTH 与 -fPIC，用非 PIC 的库重链即可。
+EM_SFLAGS = -s WASM=1 -s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 \
 -s FS_DEBUG=0
 
 CPPFLAGS = $(EM_CFLAGS) $(EM_CXXFLAGS) $(EM_SFLAGS)

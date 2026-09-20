@@ -39,8 +39,14 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 ├── 全量核心 .m（plot/ode/signal/special-matrix/…，两段式 addpath）
 ├── vendor/forge：forge statistics 纯 .m（normpdf/tcdf/ttest 依赖…）
 ├── vendor/plotbridge：自研 plot 翻译桥垫片（plot/hold/legend/…）
+├── 真 .oct 动态装载：主模块 -s MAIN_MODULE=1，新模块编成 wasm side module
+│   即可运行时 dlopen（与桌面版插件模型一致，不必重链那 38MB 主 wasm）
 └── gnuplot-wasm（MIT）：render(script,{data}) → SVG（另见 PoC 页）
 ```
+
+构建命令里 `-s MAIN_MODULE=1` 与 `-fPIC` 是一对：主链带 MAIN_MODULE 时，
+Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`
+重编，否则 wasm-ld 报 `recompile with -fPIC`。配方与坑见 `build/CLIBS.md`。
 
 ## 状态（2026-09-20 实测）
 
@@ -53,6 +59,8 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 | 批次 0：dldfcn 静态注册表 + convhulln + fftw() | ✅ 表驱动注册，实测通过 |
 | 批次 1a：zlib/bz2/RapidJSON/CCOLAMD + gzip/bzip2 | ✅ 实测通过 |
 | 批次 1b：libsndfile → audioread/audiowrite/audioinfo/audioformats | ✅ wav 往返通过 |
+| **真 `.oct` 动态装载**（`MAIN_MODULE=1` + wasm side module） | ✅ **已采用为基线**，8761 实测 20/20 |
+| 交付包（整站 gzip，可静态托管） | ✅ `dist/octave-full-wasm-site-20260920`，用户实下 10.96MB |
 | 待办：CXSparse/SPQR、SUNDIALS(ode15s)、HDF5、桥接 | ⬜ 见 build/CLIBS.md 与本文件"下一步" |
 
 ### 已装 dldfcn（`main.cc` 的 `STATIC_DLD_FCNS`，一行一模块）
@@ -82,13 +90,13 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (843 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (18477 bytes)
+- `HANDOFF.md` (19755 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (4772 bytes)
-- `build/CLIBS.md` (12003 bytes)
-- `build/Makefile` (7798 bytes)
+- `build/CLIBS.md` (12477 bytes)
+- `build/Makefile` (8664 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
