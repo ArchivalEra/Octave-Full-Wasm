@@ -1,0 +1,7 @@
+#!/bin/sh
+# pre-commit：重算 README AUTO 区块并暂存，再做白名单校验。
+set -e
+HOOK_DIR="$(dirname "$0")"
+python3 "$HOOK_DIR/update-readme.py"
+git add README.md
+python3 "$HOOK_DIR/check-whitelist.py"

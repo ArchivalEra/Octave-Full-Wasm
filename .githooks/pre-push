@@ -1,0 +1,5 @@
+#!/bin/sh
+# pre-push：README 不新鲜直接拒推（强制先提交再推，不自动改历史）。
+set -e
+HOOK_DIR="$(dirname "$0")"
+python3 "$HOOK_DIR/update-readme.py" --check

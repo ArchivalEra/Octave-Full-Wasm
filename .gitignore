@@ -1,0 +1,16 @@
+# 白名单 .gitignore：默认拒绝一切，逐项放行。
+# 目录先放行（只为能走进去），文件逐个点名。新增文件必须同步加白名单，
+# 否则 check-whitelist.py 在 pre-commit 直接拦下。
+*
+!*/
+!.gitignore
+!README.md
+!build/Makefile
+!build/main.cc
+!build/NOTES.md
+!vendor/MANIFEST.md
+!.githooks/install.sh
+!.githooks/pre-commit
+!.githooks/pre-push
+!.githooks/update-readme.py
+!.githooks/check-whitelist.py
