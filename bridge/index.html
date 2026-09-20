@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>Octave Web</title>
+  <pre id="output"></pre>
+</head>
+<body>
+<script type="text/javascript" src="assets-loader.js"></script>
+<script type="text/javascript">
+  var Module = {
+    postRun() {
+      // Module.FS.mkdir("/working");
+      // Module.FS.mount(Module.FS.filesystems["IDBFS"], {}, "/working");
+
+      function chk(rv) {
+        if (rv.err) console.error(rv.err);
+        if (rv.out) console.log(rv.out);
+      }
+      function callModule(method, req) {
+        let s = Module[method](JSON.stringify(req));
+        return JSON.parse(s)
+      }
+      function disp(resp) {
+        document.getElementById("output").innerText = JSON.stringify(resp, null, "  ");
+      }
+
+      Module["execute_interp"]();
+
+      Module["eval_string"]('strcat("foo", "baz")');
+      Module["feval"]("error", ["foo"], 0);
+      // disp(Module["feval"]("strcat", ["foo", "bar"], 1));
+      console.log(Module["last_error_message"]());
+
+      // 资产车道：读清单但不预先加载任何东西（能力资产用到哪个才 fetch 哪个）。
+      // 控制台里：await OctaveAssets.load('ode15s') / OctaveAssets.list()
+      window.OctaveAssets.init().then(function () {
+        console.log('[assets] 可用资产: ' + OctaveAssets.list().join(', '));
+        window.__octaveReady = true;
+      }).catch(function (e) {
+        console.warn('[assets] 清单未就绪（无 assets/ 目录时属正常）: ' + e.message);
+        window.__octaveReady = true;
+      });
+    }
+  }
+</script>
+<script type="text/javascript" src="octave.js"></script>
+<script type="text/javascript">
+  OCTAVE(Module);
+</script>
+</body>
+</html>

@@ -25,6 +25,9 @@
 !build/reconf-pic.sh
 !build/rebuild-pic-libs.sh
 !build/build_oct.sh
+!bridge/assets-loader.js
+!bridge/index.html
+!build/assets.py
 !bridge/octplot.html
 !bridge/plotbridge.js
 !vendor/MANIFEST.md
