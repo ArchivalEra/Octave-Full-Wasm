@@ -43,6 +43,10 @@
 | **1a** | zlib / libbz2 / RapidJSON / CCOLAMD + `gzip`/`bzip2` | `gzip`/`bzip2`/`jsonencode`/`jsondecode`/`save -v7` 全通 | `a4f2510` |
 | **1b** | libsndfile → `audioread`/`audiowrite`/`audioinfo`/`audioformats` | wav 往返：SampleRate=8000、8000 样点、峰值 1 | `4ed5392` |
 | **1d** | **真 `.oct` 动态装载**（`MAIN_MODULE=1` + wasm side module，已采用） | 8761 实测 **20/20**；`.oct` 装载 `dldprobe()`=42；convhulln 数值与静态注册逐位一致 | `a8bec25` |
+| **2** | **Forge 包体系**：10 个包懒加载 + 19 个编译件 `.oct` | 2A 21/21、2B 15/15；真数值（bfgsmin/editDistance/libsvm） | `7e3c1d6` `6a2fb38` |
+| **3** | **R1 SUNDIALS 6.1.1 → `ode15s`/`ode15i`** | 刚性方程对真解 `y=cos t` 误差 9.2e-05（收紧容差 1.1e-08）；**主 wasm 零改动** | `e559a7e` |
+| **4** | **R6 压缩/归档无 shell 化**（zip/unzip/tar/untar/gunzip/bunzip2） | 20/20，含二进制字节级往返与目录递归 | `346a516` |
+| **5** | **R4 图像 I/O**（stb_image → imread/imwrite/imfinfo） | 17/17，PNG/BMP/TGA 无损像素级一致、JPEG 有损往返 | `130ded5` |
 | **交付** | 整站 gzip 打包（可静态托管） | 包内 20/20 通过；用户实下 **10.96MB** | `dist/octave-full-wasm-site-20260920` |
 
 ### 2.1.1 交付包（不在 git 里，在磁盘上）
@@ -249,6 +253,16 @@ GitHub 直连基本不可用（45MB 的 cmake 下到一半断），**一律走�
 2. forge statistics 长尾：manifest 驱动注入（`anova/ttest2/ztest/kmeans/pca/`分布族）——**运行时 `.m` 注入零重编**（`Module.FS.writeFile` + `addpath`，可遮蔽 builtin）。
 3. 验证矩阵：覆盖率量尺（`exist` + 数值 + 图产物）。
 4. 候选：`help` doc-cache（`target/share/octave/7.2.0/etc/doc-cache`，2MB）运行时注入。
+
+### 本轮（2026-09-20 无人值守）已完成与剩余
+已完成：批次 1（HDF5+CXSparse，Lane B 重链）、2A/2B（Forge）、3（SUNDIALS，纯 .oct）、
+4（压缩归档）、5（图像）。**资产全部在站点 `assets/` 下，懒加载，主 wasm 自批次 1 后未再改动。**
+剩余（按计划）：
+- **R9 `print -dsvg`**（自写 SVG 生成器，纯 .m；注意 octave 内是同步调用而 gnuplot 桥在 JS 侧）
+- **R8 WebAudio**（18 个 `__player_*` 符号，AudioBufferSourceNode，上下文推迟到 play）
+- **R5-A fetch 桥 → R5-B 同步 urlread**（Asyncify + MAIN_MODULE=1 有已知破坏，需实测）
+- **R10 O0/O1/O2 基准矩阵**
+- nan/tsa 的 MEX 源、miscellaneous 的 sample/text_waitbar：已论证不可行或未过，记录在案
 
 ### 后续（本轮不做）
 - 桥接 fetch/`urlread`（需 Asyncify，编译期）、xls、WebAudio、image。
