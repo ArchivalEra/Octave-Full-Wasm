@@ -18,7 +18,9 @@ def tracked_files():
     out = subprocess.run(
         ["git", "ls-files"], capture_output=True, text=True, check=True
     ).stdout.splitlines()
-    return sorted(f for f in out if f and f != ".git")
+    # README 自身不进清单：否则“清单含自身字节数”永远收敛不了，
+    # pre-push 的 --check 将永不过。
+    return sorted(f for f in out if f and f != ".git" and f != "README.md")
 
 
 def render_block(root="."):
@@ -33,7 +35,8 @@ def render_block(root="."):
             size = -1
         lines.append(f"- `{f}` ({size} bytes)")
     lines.append(END)
-    return "\n".join(lines) + "\n"
+    # 注意：末尾不加换行，由原文 END 之后的 post 原样提供换行，保证幂等。
+    return "\n".join(lines)
 
 
 def main():

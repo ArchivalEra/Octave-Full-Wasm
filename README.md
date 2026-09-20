@@ -34,14 +34,14 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `.githooks/install.sh` (239 bytes)
 - `.githooks/pre-commit` (215 bytes)
 - `.githooks/pre-push` (182 bytes)
-- `.githooks/update-readme.py` (1859 bytes)
+- `.githooks/update-readme.py` (2110 bytes)
 - `.gitignore` (444 bytes)
-- `README.md` (1883 bytes)
 - `build/Makefile` (7331 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/main.cc` (14258 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)
 <!-- /AUTO -->
+
 
 
 ## 钩子
