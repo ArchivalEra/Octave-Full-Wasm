@@ -284,3 +284,33 @@
    读不到才退化为启发式。
 7. **`.oct` 必须挂到 path 上**：`kind=octdir` 资产把文件写进 `<包根>/oct/` 并 `addpath` 它；
    包自身的 `PKG_ADD`（含 `## PKG_ADD:` 抽取）负责子目录。
+
+## 批次 3（2026-09-20）：SUNDIALS 6.1.1 → `ode15s`/`ode15i`（R1）
+
+**主 wasm 一个字节没动**——这是"`.oct` 架构"最漂亮的一次兑现：SUNDIALS 的静态码
+全部打进 `.oct` 内部，主模块零增长、零重链。
+
+- 取包：`https://github.com/LLNL/sundials/releases/download/v6.1.1/sundials-6.1.1.tar.gz`（81.8MB，走代理）
+- 构建：`emcmake cmake` + `SUNDIALS_PRECISION=double`、`SUNDIALS_INDEX_SIZE=32`、
+  `BUILD_IDA=ON`/`BUILD_IDAS=OFF`、`BUILD_SHARED_LIBS=OFF`、`EXAMPLES_ENABLE_*=OFF`、
+  `BUILD_TESTING=OFF`、**`BUILD_FORTRAN_MODULE_INTERFACE=OFF`**（f2c 约束在这里天然绕开）、`CMAKE_C_FLAGS=-fPIC`
+- **坑 1：`check_type_size` 在交叉编译下全空** → 报 `No integer type of size 4 was found`。
+  解：直接预置它的判据缓存变量 `-DHAS_int32_t=4 -DHAS_int=4 -DHAS_long=4`
+  （源码 `cmake/SundialsIndexSize.cmake` 正是读 `HAS_<type> EQUAL 4`）。
+- **坑 2：`-lsundials_ida` 已自带全部依赖**（35 个成员含 nvector/sunlinsol/sunmatrix/generic）——
+  再叠加 `-lsundials_nvecserial` 会 `duplicate symbol: N_VGetVectorID_Serial`。**只链 ida 一个库**。
+- **不开 configure 也能编 `__ode15__.cc`**：它的门禁宏在 `config.h` 里全是 `/* #undef */`（纯注释），
+  所以编译时用命令行 `-D` 打开即可：
+  `HAVE_SUNDIALS{, _IDA, _NVECSERIAL, _SUNCONTEXT, _SUNLINSOL_DENSE}` +
+  头门禁 `HAVE_{NVECTOR_NVECTOR_SERIAL_H, IDA_IDA_H, IDA_IDA_DIRECT_H, SUNLINSOL_SUNLINSOL_DENSE_H}` +
+  新 API shim `HAVE_IDASETJACFN`/`HAVE_IDASETLINEARSOLVER`/`HAVE_SUNLINSOL_DENSE`
+  （**不要**定义 `HAVE_SUNDIALS_SUNLINSOL_KLU`/`HAVE_SUNKLU`，KLU 第一版关掉）。
+- 产物 `__ode15__.oct` 568KB（自包含），作为 `kind=oct` 资产懒加载。
+
+**实测（浏览器）**：装载前 `exist("__ode15__")=0`、装载后 `=3`；
+- `y' = -1000(y-cos t) - sin t`（**精确解 y=cos t**）：默认容差 max 误差 9.2e-05，
+  收紧到 RelTol=1e-8 后 **1.1e-08**；
+- Van der Pol μ=1000 跑通且解有界；
+- `ode15i` 隐式求解误差 1.75e-04（默认）/ <1e-6（收紧）；
+- `ode45`/`ode23`/`lsode` 无回归。
+验收 14/14：`test/browser/accept-ode15.mjs`。
