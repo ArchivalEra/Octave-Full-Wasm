@@ -71,7 +71,7 @@ await ev('disp(exist("clipPolygon"))', 'geometry: exist clipPolygon=2', '2');
 // 这里如实断言"接口在、实现待编译"，并把 2B 的依赖留成可回归的证据。
 await ev('disp(exist("bfgsmin"))', 'optim: exist bfgsmin=2（__bfgsmin 待 2B）', '2');
 await ev('disp(exist("cg_min"))', 'optim: exist cg_min=2（纯 .m 接口）', '2');
-await ev('disp(exist("numgradient"))', 'optim: numgradient 未编译 → exist=0（2B 目标）', '0');
+await ev('disp(exist("numgradient"))', 'optim: numgradient 已由批次 2B 编译 → exist=3', '3');
 await ev('disp(exist("getfields"))', 'struct: exist getfields=2（调用需编译件，见 2B）', '2');
 await ev('disp(exist("setfields"))', 'struct: exist setfields=2', '2');
 

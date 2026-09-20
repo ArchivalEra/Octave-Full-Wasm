@@ -338,3 +338,25 @@ wasm 里必失败。现在换成**进程内实现**：`build/webio.cc` 编成 `w
 **实测**（浏览器 20/20）：gzip/gunzip、bzip2/bunzip2 内容往返正确；
 zip/unzip 与 tar/untar 的**二进制文件字节级一致**（`isequal(fileread(…))` 为 1）；
 目录递归打包可用。验收：`test/browser/accept-archive.mjs`。
+
+## 批次 5（2026-09-20）：R4 图像 I/O（stb_image 后端）
+
+`imread`/`imwrite`/`imfinfo` 在本构建里原本走到 ImageMagick 分支直接报
+"support for ImageMagick was unavailable"。现在换成 **stb_image / stb_image_write**
+（单头文件，public domain/MIT）：`build/webimage.cc` → `webimage-oct.oct`（151KB，
+stb 编进去，自包含），经 **`imformats("add", …)` 注册**进正常分派链——这是关键，
+不改 `imread.m`/`imwrite.m` 一行，`imageIO` 会照常按扩展名找到我们的 read/write/info 句柄。
+
+- 支持：PNG/JPEG/BMP/TGA/GIF/PNM/HDR/PSD 读，PNG/JPEG/BMP/TGA 写。
+- **坑 1（通用，影响所有 PKG_ADD 型资产）**：Octave 在 `addpath` 时会**自己执行**目录里的
+  `PKG_ADD`；loader 起初又手动 `run()` 了一遍 → 注册两次 → `imformats("png")` 返回两条 →
+  `imwrite` 里 `fmt.write(varargin{:})` 报 `a cs-list cannot be further indexed`。
+  **解**：loader 不再手动 run（Octave 本来就会跑），且注册写成幂等。
+- **坑 2**：`imwrite` 的分派是 `fmt.write (varargin{:})`，即 **(图像, 文件名, …)** 顺序——
+  与 `imread` 的 (文件名, …) 相反。写句柄里按类型自适应最省事。
+- **坑 3**：本构建 `__magick_formats__` 返回空表，所以默认格式表本来就是空的，
+  我们注册的就是唯一后端（这也是为什么注册路径这么干净）。
+
+**实测**（浏览器 17/17）：PNG 灰度/彩色**像素级一致**、BMP/TGA 无损一致、JPEG 有损往返、
+`imfinfo` 出 Width/Height/NumberOfChannels、读回的图能参与数值运算再写回。
+验收：`test/browser/accept-image.mjs`。

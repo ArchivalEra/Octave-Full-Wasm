@@ -175,8 +175,10 @@
           if (!bundle) throw new Error('JS 包 ' + a.url + ' 没声明 __OCT_ASSETS__["' + name + '"]');
           var n = writeFiles(bundle.files || {});
           addPaths(bundle.addpath || []);
-          // PKG_ADD：包自带的一次性初始化（原版由 pkg load 执行）
-          (bundle.run || []).forEach(function (p) { evalSafe('run("' + p + '")'); });
+          // 注意：**不要**在这里手动 run PKG_ADD —— Octave 在 addpath 时会自己执行
+          // 目录里的 PKG_ADD。手动再来一次会让幂等性差的注册（如 imformats("add")）
+          // 重复执行，典型症状是 `imformats("png")` 返回两条、imwrite 报
+          // "a cs-list cannot be further indexed"。
           loaded[name] = { files: n, addpath: bundle.addpath || [] };
           log(name + ' 就绪（' + n + ' 个文件）');
           return loaded[name];

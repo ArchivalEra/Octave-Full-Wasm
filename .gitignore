@@ -30,6 +30,7 @@
 !build/assets.py
 !build/recover.sh
 !build/webio.cc
+!build/webimage.cc
 !build/build_pkg_oct.sh
 !build/forge-fetch.py
 !build/forge-build.sh

@@ -45,11 +45,21 @@ def bundle_m(name, srcdir, mount_prefix, out_js):
             n += 1
     if not n:
         print(f"警告：{srcdir} 里没有 .m 文件", file=sys.stderr)
+    # PKG_ADD（若源目录里有）：加载时由 loader 执行，用于 imformats 注册这类一次性初始化
+    pkgadd_src = os.path.join(srcdir, "PKG_ADD")
+    run = []
+    if os.path.isfile(pkgadd_src):
+        with open(pkgadd_src, encoding="utf-8", errors="replace") as fh:
+            files[mount_prefix.rstrip("/") + "/PKG_ADD"] = fh.read()
+        run = [mount_prefix.rstrip("/") + "/PKG_ADD"]
     with open(out_js, "w", encoding="utf-8") as fh:
         fh.write("// 生成物，勿手改：由 build/assets.py bundle-m 产出\n")
         fh.write("window.__OCT_ASSETS__ = window.__OCT_ASSETS__ || {};\n")
         fh.write(f"window.__OCT_ASSETS__[{json.dumps(name)}] = ")
-        fh.write("{\n  addpath: [" + json.dumps(mount_prefix.rstrip("/")) + "],\n  files: ")
+        fh.write("{\n  addpath: [" + json.dumps(mount_prefix.rstrip("/")) + "],\n")
+        if run:
+            fh.write("  run: " + json.dumps(run) + ",\n")
+        fh.write("  files: ")
         fh.write(json.dumps(files, ensure_ascii=False))
         fh.write("\n};\n")
     size = os.path.getsize(out_js)
