@@ -35,7 +35,8 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `.githooks/pre-commit` (215 bytes)
 - `.githooks/pre-push` (182 bytes)
 - `.githooks/update-readme.py` (2110 bytes)
-- `.gitignore` (444 bytes)
+- `.gitignore` (453 bytes)
+- `LICENSE` (34523 bytes)
 - `build/Makefile` (7331 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/main.cc` (14258 bytes)
@@ -52,7 +53,9 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `pre-push`：校验 README 是新鲜的，不新鲜直接拒推（先提交再推）。
 - 安装：`bash .githooks/install.sh`（设 `core.hooksPath`）。
 
-## 许可（待定）
+## 许可
 
-暂未放 LICENSE。倾向 AGPL-3.0（与课程仓一致；含 GPL-3.0+ 的 forge 文件合入 AGPL 作品允许，整体按 AGPL）。
-`build/` 补丁源自 rwl/octave-wasm（BSD），见 build/NOTES.md。
+AGPL-3.0（见 LICENSE）。这种混合（GPLv3 Octave + GPLv3 forge/
+qrupdate + GPLv2+ FFTW + BSD/ permissive 件）没有 AGPL-3.0 以外的选择。
+`build/` 补丁源自 rwl/octave-wasm（BSD），见 build/NOTES.md；
+各 vendor 文件头保留原许可声明，来源见 vendor/MANIFEST.md。

@@ -5,6 +5,7 @@
 !*/
 !.gitignore
 !README.md
+!LICENSE
 !build/Makefile
 !build/main.cc
 !build/NOTES.md
