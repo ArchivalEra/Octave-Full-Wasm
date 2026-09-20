@@ -6,6 +6,7 @@
 !.gitignore
 !README.md
 !LICENSE
+!HANDOFF.md
 !build/Makefile
 !build/main.cc
 !build/NOTES.md
