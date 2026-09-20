@@ -65,9 +65,24 @@
 - `exist("__delaunayn__")=5`，`delaunay/glpk/voronoi` 全通。
 - 附带：`figure.m` 垫片改为返回假句柄 1（`voronoi` 内部 `hf=figure()` 不再炸）。
 
+## 批次 0（2026-09-20）：dldfcn 注册表 + convhulln + fftw()
+
+- **D3 表驱动注册表**：`main.cc` 顶部 `STATIC_DLD_FCNS(X)` 一行一个模块，
+  Phase 3 用同一宏生成声明与安装表。新增模块 = 加一行 + 编一个 `.o` +
+  在 `Makefile` EM_LDFLAGS 挂 `.o`。已登 5 个：
+  `__delaunayn__ / __glpk__ / __voronoi__ / convhulln / fftw`。
+- **A1 convhulln**：`build/build_dldfcn.sh convhulln fftw` 编 `.o`；
+  实测 `convhulln([0 0;1 0;0 1])` → `1 2 3`，四点方 → 4×2（正确）。
+- **A2 fftw()**：`planner`→`estimate`，`swisdom`/`dwisdom` 可用。
+- **已知偏差**：`fftw('threads',N)` 静默 no-op 而非报错——`fftw_init_threads`
+  桩必须返回成功（否则核心 `fft` 直接崩，见"FFTW 线程桩"节），Octave 因此
+  认为线程可用；数值不受影响。
+- wasm raw 19.75MB（批次 0 后）。
+
 ## 容器/镜像
 
 - `owasm`：线上旧构建（8757），别动。
 - `obuild`：构建容器（`sleep infinity`，重启 docker 后 `docker start obuild`）。
 - 镜像：`octave-wasm`（原始）、`octave-build:full`（工具链检查点）、
-  `octave-build:libs`（5 库编完）、`octave-build:shutdown`（关机快照，最新）。
+  `octave-build:libs`（5 库编完）、`octave-build:shutdown`（关机快照）、
+  `octave-build:final`（C 库长尾收官）、后续批次另打。

@@ -14,12 +14,21 @@
 #include <emscripten/bind.h>
 
 // Statically-linked dldfcn entry points: dldfcn/.oct modules can never
-// dlopen in wasm, so their G_ installers are called directly (Phase 3).
+// dlopen in wasm, so their G_ installers are driven by hand at startup
+// (Phase 3).  Add a module by appending ONE line to STATIC_DLD_FCNS.
 // C linkage (unmangled), C++ signatures.
+#define STATIC_DLD_FCNS(X)                              \
+  X ("__delaunayn__", G__delaunayn__)                   \
+  X ("__glpk__",      G__glpk__)                        \
+  X ("__voronoi__",   G__voronoi__)                     \
+  X ("convhulln",     Gconvhulln)                       \
+  X ("fftw",          Gfftw)
+
 extern "C" {
-octave_function *G__delaunayn__ (const octave::dynamic_library&, bool);
-octave_function *G__glpk__ (const octave::dynamic_library&, bool);
-octave_function *G__voronoi__ (const octave::dynamic_library&, bool);
+#define DECL_GETTER(name, getter) \
+  octave_function *getter (const octave::dynamic_library&, bool);
+STATIC_DLD_FCNS(DECL_GETTER)
+#undef DECL_GETTER
 }
 
 const std::string OBJ_TYPE_KEY = "$type";
@@ -410,6 +419,8 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
 
   // Phase 3: statically-linked dldfcn builtins (__delaunayn__ etc.).
   // .oct modules can't dlopen in wasm; drive their G_ installers by hand.
+  // The table comes from STATIC_DLD_FCNS — add a module by adding one
+  // line there, nothing here changes.
   {
     octave::dynamic_library no_shl;
     octave::symbol_table& symtab = interpreter->get_symbol_table ();
@@ -418,9 +429,9 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
       octave_function *(*getter)(const octave::dynamic_library&, bool);
     };
     static const static_fcn fcns[] = {
-      { "__delaunayn__", G__delaunayn__ },
-      { "__glpk__", G__glpk__ },
-      { "__voronoi__", G__voronoi__ },
+#define TABLE_ENTRY(name, getter) { name, getter },
+      STATIC_DLD_FCNS(TABLE_ENTRY)
+#undef TABLE_ENTRY
       { nullptr, nullptr }
     };
     for (int i = 0; fcns[i].name != nullptr; i++) {

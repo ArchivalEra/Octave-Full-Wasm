@@ -15,6 +15,7 @@
 !build/fftw_threads_stub.c
 !build/second_stub.f
 !build/normalize_arpack.py
+!build/build_dldfcn.sh
 !bridge/octplot.html
 !bridge/plotbridge.js
 !vendor/MANIFEST.md

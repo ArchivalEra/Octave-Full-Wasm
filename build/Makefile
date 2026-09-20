@@ -30,7 +30,9 @@ EM_LDFLAGS = -L$(PREFIX)/lib -L$(PREFIX)/lib/octave/$(OCTAVE_VER) -lf2c -lrefbla
 /usr/src/octave-wasm/target/lib/fftw_threads_stub.o \
 /usr/src/octave-wasm/target/lib/__delaunayn__.o \
 /usr/src/octave-wasm/target/lib/__glpk__.o \
-/usr/src/octave-wasm/target/lib/__voronoi__.o
+/usr/src/octave-wasm/target/lib/__voronoi__.o \
+/usr/src/octave-wasm/target/lib/convhulln.o \
+/usr/src/octave-wasm/target/lib/fftw.o
 EM_SFLAGS = -s WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 \
 -s FS_DEBUG=0
 
