@@ -20,6 +20,9 @@
 !build/second_stub.f
 !build/normalize_arpack.py
 !build/build_dldfcn.sh
+!build/reconf-pic.sh
+!build/rebuild-pic-libs.sh
+!build/build_oct.sh
 !bridge/octplot.html
 !bridge/plotbridge.js
 !vendor/MANIFEST.md

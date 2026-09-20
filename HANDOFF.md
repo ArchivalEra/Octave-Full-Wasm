@@ -59,12 +59,19 @@ audioread / audiowrite / audioinfo / audioformats`
 ### 3.1 容器 / 镜像 / 端口
 ```
 obuild   构建容器（sleep infinity）—— docker start obuild
+odld     .oct 实验容器（同 sleep infinity，独立；改它不影响 obuild）
 owasm    旧的线上构建，端口 8757，别动
-镜像     octave-build:b2-snapshot（最新快照，4.27GB）
+镜像     octave-build:pre-dldfcn（= 批次 1b 可用态快照，做实验前打的，4.27GB）
+         octave-build:b2-snapshot（相近快照）
          octave-build:final / :shutdown / :libs / :full（更早的检查点）
          octave-wasm:latest（最原始镜像）
-端口     8757=旧构建  8761=最新构建（改这里）  8758/8760=历史
+端口     8757=旧构建  8761=基线（改这里）  8763=MAIN_MODULE 实验版  8762=dlopen PoC
+         8758/8760=历史
 ```
+
+> 实验容器/端口是临时的：不需要时 `docker stop odld`（镜像留着，随时可
+> `docker run -d --name odld octave-build:pre-dldfcn sleep infinity` 重来）。
+> 8763/8762 的静态服务在 /tmp（tmpfs），重启即空。
 - 容器内源码/产物：`/usr/src/octave-wasm/{src,target,third_party}`
 - `src/Makefile` = 仓库 `build/Makefile`；`src/main.cc` = 仓库 `build/main.cc`（每次改完要 `docker cp` 进容器 + 重编 octave.o）
 
@@ -127,10 +134,23 @@ docker cp obuild:/usr/src/octave-wasm/src/web/octave.{js,wasm,data} /tmp/opencod
   `error: /tmp/probeoct.oct is not a valid shared library`（rc=2）。这正是 `is_open()` 恒 false 后由
   `libinterp/corefcn/dynamic-ld.cc:171` 抛的那句。探针脚本：`/tmp/opencode/octave-accept/octprobe.mjs`（备份见 §3.4）。
 
-**推论**：`STATIC_DLD_FCNS` 不是绕路，是这套 fork 架构下的**正解**，不必再怀疑。
-要走真 dlopen 需同时满足：`MAIN_MODULE=1` + 全树 `-fPIC` 重编（Octave 本体 + 所有第三方库）+ `.oct` 编成 `-sSIDE_MODULE` wasm + 恢复 `oct-shlib.cc`。
-风险极高（MAIN_MODULE=1 不做 DCE、间接调用变多、f2c/ARPACK 那些手工库能否 `-fPIC` 编过未知），收益≈0：
-Octave 自带 dldfcn 全都能静态编 `.o` 注册；**唯一真损失是"用户自带 `.oct`/`.mex` 无法加载"**，而浏览器场景本就由 `.m` 运行时注入覆盖。
+**推论**：`STATIC_DLD_FCNS` 是现基线（8761）架构下的正解。
+
+**但是 —— 2026-09-20 当天已把真 dlopen 做通并实测通过（实验构建在 8763，独立容器 `odld`，基线未动）**：
+`.oct` **能用**。四件事缺一不可，全部配方与实测见 `build/CLIBS.md`「真 .oct 动态装载」节：
+1. 恢复 `oct-shlib.cc`（上游 `release-7-2-0` 同名文件覆盖，diff 只有 3 处 hunk）；
+2. 全树 `-fPIC`：`build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`（只有 glpk/arpack/sndfile/qhull/fftw3+3f 这 5 个库需要，`.so` 系零报错不用动）；
+3. 主链 `-s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1`（另需 `embuilder build --pic zlib bzip2`）；
+4. `.oct` 用 `build/build_oct.sh` 编成 `-sSIDE_MODULE=1` 的 wasm，**不链任何库**。
+
+实测（8763）：自写 `dldprobe.oct` → `dldprobe()`=42；把 `gzip`/`convhulln` 从静态表摘掉后
+只能靠 `.oct` 活，功能正常且**数值与静态注册逐位一致**；回归对照与 8761 无差异。
+
+**代价（决定是否采用的关键）**：gzip 后总交付 6.18MB → **11.05MB（+79%）**
+（wasm 4.94→8.05MB，js 51KB→1.81MB——`MAIN_MODULE=1` 不做 DCE，JS 里那份 29.8MB 的
+dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
+未做的优化：`MAIN_MODULE=2` + 显式导出清单，应能同时压缩两份。
+**采用与否属产品取舍，需人工拍板；未改基线。**
 
 **解**：`main.cc` 顶部 `STATIC_DLD_FCNS(X)` 宏表登记 `{name, G_installer}`，Phase 3 里逐个 `getter(no_shl,false)` → `symtab.install_built_in_function`。
 - 新增模块 = 加一行 + 编 `.o` + 在 `Makefile` 的 `EM_LDFLAGS` 挂 `.o`。
@@ -239,3 +259,7 @@ Octave 自带 dldfcn 全都能静态编 `.o` 注册；**唯一真损失是"用�
 
 ## 8. 一句话接续
 **冻结的可用基线在 8761（批次 0/1a/1b）**；下一步是**批次 2（SUNDIALS 6.1.x → ode15s/ode15i）**，配零编译车道并行；每批自动验证、通过才覆盖 8761、提交推送。只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild` 容器内工作。
+
+**待人工拍板的一件事**：真 `.oct` 动态装载已做通（8763 实验版，见 §4.1 与 `build/CLIBS.md`），
+功能达标、数值与静态注册逐位一致，代价是交付 gzip 体积 6.18MB → 11.05MB。
+采用与否影响后续所有批次的架构选择（静态 `.o` 注册 vs `.oct`），需用户决定后再动 8761。

@@ -121,3 +121,52 @@
 - 终链补 `-lsndfile`。
 - 配方：`build/reconf-batch1b.sh`（去掉 `--without-sndfile`）。
 - wasm raw 19.98MB。
+
+## 真 .oct 动态装载（2026-09-20）：MAIN_MODULE=1 + wasm side module
+
+结论：**`.oct` 能用**，但代价明确。实验在独立容器 `odld`（镜像 `octave-build:pre-dldfcn`，
+= 批次 1b 快照）里做完，`obuild`/8761 全程未动。实验构建在 **8763**。
+
+### 四件事缺一不可
+1. **恢复 `oct-shlib.cc`**：fork 把 `octave_dlopen_shlib` 的 `dlopen`/`dlsym`/`dlclose`
+   全删了（详见 HANDOFF §4.1）。用上游同名文件覆盖即可，diff 只有 3 处 hunk：
+   `m_library = dlopen (m_file.c_str (), flags);` + 失败报错、析构里的 `dlclose`、
+   `search()` 里的 `dlsym (m_library, …)`。取法：
+   `curl -sSL https://raw.githubusercontent.com/gnu-octave/octave/release-7-2-0/liboctave/util/oct-shlib.cc`
+   （`dynamic-ld.cc` 与上游**逐字节相同**，不用动。）
+2. **全树 `-fPIC`**：`build/reconf-pic.sh`（= reconf-batch1b.sh + 三个 `-fPIC`）
+   + **5 个静态库** `build/rebuild-pic-libs.sh`（glpk/arpack/sndfile/qhull/fftw3+3f）。
+   重编前务必 `emmake make clean`。
+3. **主链加 `-s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1`**（`src/Makefile` 的 `EM_SFLAGS`），
+   `EM_CFLAGS` 加 `-fPIC`，`octave.o`/dldfcn `.o`/`fftw_threads_stub.o` 也要 `-fPIC`。
+   另需 `embuilder build --pic zlib bzip2`（PIC sysroot 里没有这两个端口库）。
+4. **`.oct` 编成 side module**：`build/build_oct.sh <name>`，链接用 `-sSIDE_MODULE=1`，
+   **不链任何库**——符号由主模块在 dlopen 时解析。
+
+### 实测（浏览器，8763）
+- `Module._dlopen`/`_dlsym` 是 function；`dldprobe.oct`（自写探针）→ `dldprobe()` = 42。
+- 把 `gzip`/`convhulln` **从 STATIC_DLD_FCNS 摘掉**后：`exist` 从 5 变 0；
+  放入 `.oct` + `addpath` → `exist` = 3，`gzip`/`convhulln` 功能正常。
+- **数值与静态注册逐位一致**：`convhulln` 三角形/正方形两种输入，8763(.oct) 与
+  8761(静态) 输出字符串完全相同（`3 2 1 3 2 2 1 3` / `4 2 1 2 3 4 1 2 3 4`）。
+- 回归对照（8761 vs 8763）：`det`/`delaunay`/`eigs`/`fft`/`glpk`/`save -v7`/`class(1i)`/
+  `jsonencode` 全部一致；`disp(bzip2)` 的 `built-in-docstrings` 报错**两边都有**，
+  是既有的，与本次改动无关。
+- `gunzip` 仍报 `system: unable to start subprocess`（§批次 1a 已知偏差，与 .oct 无关）。
+
+### 代价（必须权衡）
+| | 基线 8761 | MAIN_MODULE 8763 |
+|---|---|---|
+| octave.wasm | 20.5MB / gzip 4.94MB | 37.9MB / gzip 8.05MB |
+| octave.js | 230KB / gzip 51KB | 29.8MB / gzip 1.81MB |
+| octave.data | 6.17MB / gzip 1.19MB | 同 |
+| 合计 gzip | **6.18MB** | **11.05MB**（+79%） |
+- 体积来源：`MAIN_MODULE=1` 不做 DCE（所有符号保留并导出）；那 29.8MB 的 JS 是
+  dylink 符号表，几乎全是 C++ mangled 名，压缩率极高（→1.81MB）。
+- 首帧 ready：863ms → 1136ms。
+- **可选优化（未做）**：`MAIN_MODULE=2`（DCE 版）+ 显式 `EXPORTED_FUNCTIONS` 只留
+  .oct 需要的符号，应能同时压缩两份；代价是要维护导出清单。
+
+### 没有采用为基线的理由
+功能上完全达标，但交付体积翻近一倍（gzip 6.2→11.1MB），属于产品取舍，
+需人工拍板。基线 8761 保持批次 1b 不变。
