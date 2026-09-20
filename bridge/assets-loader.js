@@ -137,7 +137,15 @@
             var mount = a.mount || (OCTAVE_M + '/oct/' + name + '.oct');
             mkdirp(mount.replace(/\/[^/]*$/, ''));
             fs().writeFile(mount, new Uint8Array(buf));
-            var dirs = a.addpath ? [a.addpath] : [mount.replace(/\/[^/]*$/, '')];
+            var dir = mount.replace(/\/[^/]*$/, '');
+            // Octave 按**文件名**找 .oct 模块：一个模块导出的函数若与文件名不同名，
+            // 必须像桌面版那样给每个函数名建符号链接（例如 bzip2.oct -> gzip.oct）。
+            // 否则 exist()/which() 都找不到——这是 webio.oct 六个内建第一次全失联的原因。
+            (a.aliases || []).forEach(function (fn) {
+              var link = dir + '/' + fn + '.oct';
+              try { fs().symlink(mount, link); } catch (e) { /* 已存在 */ }
+            });
+            var dirs = a.addpath ? [a.addpath] : [dir];
             addPaths(dirs);
             loaded[name] = { files: 1, addpath: dirs };
             log(name + ' 就绪（' + buf.byteLength + ' 字节 → ' + mount + '）');

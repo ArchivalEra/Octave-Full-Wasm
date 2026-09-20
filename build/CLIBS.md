@@ -314,3 +314,27 @@
 - `ode15i` 隐式求解误差 1.75e-04（默认）/ <1e-6（收紧）；
 - `ode45`/`ode23`/`lsode` 无回归。
 验收 14/14：`test/browser/accept-ode15.mjs`。
+
+## 批次 4（2026-09-20）：R6 压缩/归档，无 shell 化
+
+原来 `zip/unzip/tar/untar/gunzip/bunzip2` 全是 `.m` 包装，最终调 `system("unzip …")` ——
+wasm 里必失败。现在换成**进程内实现**：`build/webio.cc` 编成 `webio.oct`（44KB，
+自包含，只用 zlib/libbz2 的符号——由主模块在 dlopen 时解析），上层的 6 个 `.m` 覆写
+（`webshell` 资产）保持原接口契约。
+
+- zip/tar 格式**自己实现**：zip 走 zlib 的 raw deflate/inflate + 中央目录 + EOCD；
+  tar 走 ustar（含 prefix 分裂与 GNU long name）。
+- gzip/bzip2 内建本来就可用（进程内），坏的只是 gunzip/bunzip2 包装。
+
+### 两个坑
+
+1. **Octave 按文件名找 `.oct` 模块**：一个模块里导出的函数若与文件名不同名，
+   必须像桌面版那样建**符号链接**（桌面版 `bzip2.oct -> gzip.oct`）。
+   `webio.oct` 里 6 个内建第一次全部失联就是这个原因。loader 已支持 `aliases`
+   （manifest 里声明 → 加载时 `FS.symlink`）。
+2. **`octave_value(string_vector)` 得到的是字符矩阵**（等长填充），不是 cellstr；
+   上层 .m 契约要 cellstr（`numel == 文件数`）→ 必须显式构造 `Cell`。
+
+**实测**（浏览器 20/20）：gzip/gunzip、bzip2/bunzip2 内容往返正确；
+zip/unzip 与 tar/untar 的**二进制文件字节级一致**（`isequal(fileread(…))` 为 1）；
+目录递归打包可用。验收：`test/browser/accept-archive.mjs`。
