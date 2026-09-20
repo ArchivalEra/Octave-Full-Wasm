@@ -28,6 +28,8 @@
 !bridge/assets-loader.js
 !bridge/index.html
 !build/assets.py
+!build/recover.sh
+!test/browser/*.mjs
 !bridge/octplot.html
 !bridge/plotbridge.js
 !vendor/MANIFEST.md
