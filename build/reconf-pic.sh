@@ -30,6 +30,7 @@ emconfigure ./configure \
     CXX=em++ \
     AR=emar \
     RANLIB=emranlib \
+    CPPFLAGS="-I$INCDIR" \
     CFLAGS="-I$INCDIR -O0 -fPIC" \
     CXXFLAGS="-std=c++11 -I$INCDIR -O0 -fwasm-exceptions -fPIC" \
     FFLAGS="-I$INCDIR -O0 -E -fPIC" \
@@ -43,13 +44,14 @@ emconfigure ./configure \
     --enable-shared --disable-static \
     --disable-threads --disable-openmp \
     --without-qt --disable-java --enable-fortran-calling-convention=f2c --disable-cross-tools \
-    --disable-readline --disable-64 --disable-docs --without-curl --without-hdf5 \
+    --disable-readline --disable-64 --disable-docs --without-curl \
+    --with-hdf5-includedir=$INCDIR --with-hdf5-libdir=$LIBDIR \
     --without-opengl --without-framework-carbon --without-framework-opengl --without-x \
     --with-blas=-lrefblas --with-lapack=-lclapack \
     --without-portaudio --without-freetype --without-fontconfig --without-fltk \
     --without-sundials_ida --without-sundials_nvecserial --without-sundials_sunlinsolklu \
     --with-pcre-includedir=$INCDIR --with-pcre-libdir=$LIBDIR \
-    --without-cxsparse \
+    --with-cxsparse --with-cxsparse-includedir=$INCDIR --with-cxsparse-libdir=$LIBDIR \
     --without-magick --without-spqr
 echo "=== configure exit=$? ==="
 grep -E "define HAVE_(ZLIB|BZ2|RAPIDJSON|CCOLAMD|SNDFILE)" config.h || true

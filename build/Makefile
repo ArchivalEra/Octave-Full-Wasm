@@ -27,7 +27,7 @@ EM_CFLAGS = -O2 -fPIC -Wall -std=c++11 -fwasm-exceptions
 EM_CXXFLAGS = -I. -I$(PREFIX)/include -I$(PREFIX)/include/octave-$(OCTAVE_VER)/octave/.. -I$(PREFIX)/include/octave-$(OCTAVE_VER)/octave
 EM_LDFLAGS = -L$(PREFIX)/lib -L$(PREFIX)/lib/octave/$(OCTAVE_VER) -lf2c -lrefblas -lclapack -lpcre \
 -lsuitesparseconfig -lcxsparse -lamd -lcamd -lcolamd -lccolamd -lcholmod -lumfpack -loctave -loctinterp \
--lqrupdate -larpack -lfftw3 -lfftw3f -lqhull_r -lglpk -lsndfile -lf2c -lz -lbz2 -lm \
+-lqrupdate -larpack -lfftw3 -lfftw3f -lqhull_r -lglpk -lsndfile -lhdf5 -lf2c -lz -lbz2 -lm \
 /usr/src/octave-wasm/target/lib/fftw_threads_stub.o \
 /usr/src/octave-wasm/target/lib/__delaunayn__.o \
 /usr/src/octave-wasm/target/lib/__glpk__.o \

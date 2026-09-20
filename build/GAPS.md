@@ -129,9 +129,13 @@
 - **可复用资产**：`.oct` 装载已验证；zlib/bz2/sndfile/qhull/glpk/fftw/arpack/suitesparse
   的符号已在主 wasm 里（`.oct` 可直接 import）。
 
-### R3 · HDF5 → `save/load -hdf5`
+### R3 · HDF5 → `save/load -hdf5`　✅ **已完成（2026-09-20，批次 1）**
 
-- **目标**：`save -hdf5` / `load -hdf5` 可用（与 MATLAB `.mat` v7.3 互操作的关键）。
+- **目标**：`save -hdf5` / `load -hdf5` 可用。
+- **⚠️ 能力边界（已确认）**：这是 **Octave 原生 HDF5**，**不等于 MATLAB v7.3 `.mat` 互操作**——
+  Octave 7.2 本身就没实现 v7.3。需求书据此修订。
+- **结果**：HDF5 1.14.2 静态 PIC 编入主链（wasm +7.1MB），往返/压缩/`whos -file` 全通，
+  文件头为真 HDF5 魔数。配方与两个坑见 `build/CLIBS.md`「批次 1」。
 - **现状证据**：`save("-hdf5",…)` → `support for HDF5 was unavailable or disabled`。
 - **要搜的问题**：
   1. 有 wasm/Emscripten 先例的 HDF5 版本（1.10.x / 1.12.x / 1.14.x）。
@@ -182,7 +186,7 @@
 - **验收标准**：`zip("/tmp/a.zip",{"/tmp/a.txt"})` 与 `unzip("/tmp/a.zip","/tmp/out")` 往返成功；
   `gunzip` 不再走 `system`。
 
-### R7 · CXSparse + SPQR（configure 门禁未解）
+### R7 · CXSparse + SPQR　✅ **CXSparse 已完成（2026-09-20，批次 1 顺带）；SPQR 仍缺**
 
 - **目标**：打开 `--with-cxsparse` 与 SPQR，补齐稀疏 QR / 迭代求解。
 - **现状证据**：去掉 `--without-cxsparse` 后 configure 报
@@ -190,11 +194,12 @@
   `cs.h` 在 `target/include/cs.h`（`CS_VER=3, CS_SUBVER=1`）。判定逻辑是
   `m4/acinclude.m4` 的 `OCTAVE_CHECK_CXSPARSE_VERSION_OK`，依赖
   `HAVE_CS_H` / `HAVE_SUITESPARSE_CS_H` / `HAVE_CXSPARSE_CS_H` 之一被定义。**为何未定义需查清**。
-- **要搜的问题**：
-  1. Octave 7.2 的 `OCTAVE_CHECK_CXSPARSE_VERSION_OK` 具体探测路径与头文件命名期望；
+- **已查明（不必再搜）**：所谓「too old」是**假失败**——该探测走 `AC_PREPROC_IFELSE`，只读 `CPPFLAGS`，
+  而本仓 `-I target/include` 只在 `CFLAGS/CXXFLAGS` 里 → 头找不到 → 误判。加 `CPPFLAGS="-I$INCDIR"` 即过。
+- **仍要搜的问题**（只剩 SPQR）：
+  1. SPQR 从 `suitesparse-full-5.4.0.tar.gz` 单独编译的配方（含 `-fPIC`）；
      交叉编译下是否需要预置 `octave_cv_*` 缓存变量（本仓已有预置 ARPACK 的先例）。
-  2. SPQR 从 `suitesparse-full-5.4.0.tar.gz` 单独编译的配方（含 `-fPIC`）。
-- **验收标准**：configure 全绿（无 `--without-cxsparse`），稀疏 QR 数值与稠密对照一致。
+ - **验收标准**：~~configure 全绿~~（已达成：`HAVE_CXSPARSE_VERSION_OK=1`）、稀疏 QR 待与稠密对照。
 
 ### R8 · 音频播放 → WebAudio 桥
 

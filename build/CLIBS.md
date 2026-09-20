@@ -194,3 +194,49 @@
 全部列进去。可自动生成：编完所有 `.oct` 后从其 `dylink.0` 段读出 imported symbols，
 去重加下划线前缀喂给主链。**这是一份需要维护的清单**（每加一个 dldfcn 模块都要重生成），
 所以这是「用维护成本换 15MB 体积」的取舍，本轮未做。
+
+## 批次 1（2026-09-20）：HDF5 → `save/load -hdf5`，并顺带解决 CXSparse「too old」
+
+一批两个成果。主链：wasm 37.9→45.1MB、js 29.8→30.8MB；8761 验收 19/19 回归 + 16/16 专项。
+
+### HDF5 1.14.2（静态 PIC，zlib 支持）
+
+- 取包：`https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.14/hdf5-1.14.2/src/hdf5-1.14.2.tar.gz`
+  （**GitHub releases 的命名是 `hdf5-1_14_3.tar.gz` 下划线风格且没有 1.14.2**；官方 FTP 才有 1.14.2。
+  1.14.5+ 有 `FE_INVALID` 破坏 wasm 浮点环境的问题，故钉 1.14.2。）
+- **坑 1：cmake ≥ 3.18**。发行版自带 3.16.3，HDF5 1.14 直接拒。
+  装法：cmake.org 官方包 → `/opt/cmake-3.27.9-linux-x86_64` + `/usr/local/bin/cmake` 软链（**已烘进镜像 `pic-oct2`**）。
+- **坑 2（最关键）：`H5Tinit.c` / `H5lib_settings.c` 是构建期"运行程序"生成的**，
+  而 emscripten 的 node 运行时用 **MEMFS**——`H5detect.js H5Tinit.c` 退出码 0、却什么都没留下。
+  现象是 `make` 报 `No rule to make target 'src/H5Tinit.c'`。
+  **解**：这两个程序**不带参数时写 stdout**，所以先手工预生成，cmake 的
+  `if (NOT EXISTS "${HDF5_GENERATED_SOURCE_DIR}/H5Tinit.c")` 就会跳过生成分支：
+  ```sh
+  cd /tmp/h5build/src
+  node /tmp/h5build/bin/H5detect.js           > H5Tinit.c          # 8327 字节 / 244 行
+  node /tmp/h5build/bin/H5make_libsettings.js > H5lib_settings.c   # 1320 字节
+  # 然后重跑一次 cmake（让 EXISTS 检查生效）再 make
+  ```
+- 配置（`emcmake cmake`）：`BUILD_SHARED_LIBS=OFF`、`HDF5_ENABLE_Z_LIB_SUPPORT=ON`、
+  `BUILD_TESTING/HDF5_BUILD_TOOLS/HDF5_BUILD_EXAMPLES/HDF5_BUILD_CPP_LIB/HDF5_BUILD_FORTRAN=OFF`、
+  `CMAKE_C_FLAGS=-fPIC`、`CMAKE_CROSSCOMPILING_EMULATOR=<node>`。
+  zlib 自动从 emsdk sysroot 找到（`libz.a` 1.2.12）。
+- 终链：`build/Makefile` 的 `EM_LDFLAGS` 加 **`-lhdf5`**；产物 `libhdf5.a`(23.5MB) + `libhdf5_hl.a`。
+- 验收实据：`save -hdf5` 往返（矩阵/字符串/struct）、`whos -file`、带 `-z` 压缩的 100×100、
+  且**文件头是真 HDF5 魔数 `89 48 44 46 0d 0a 1a 0a`**。
+- ⚠️ 能力边界（写进需求书修订）：这是 **Octave 原生 HDF5**，**不等于 MATLAB v7.3 `.mat` 互操作**——
+  Octave 7.2 本身就没实现 v7.3。
+
+### CXSparse：configure 的「too old」是假失败，一行修好
+
+- 现象：`--with-cxsparse` 时报 `CXSparse library is too old (< version 2.2)`，
+  而 `target/include/cs.h` 明明是 `CS_VER=3 / CS_SUBVER=1`、`target/lib/libcxsparse.so.3.2.0` 也在。
+- 真因：`m4/acinclude.m4` 的 `OCTAVE_CHECK_CXSPARSE_VERSION_OK` 用 **`AC_PREPROC_IFELSE`（纯预处理）**，
+  而它只吃 **`CPPFLAGS`**；本仓的 `-I target/include` 一直只写在 `CFLAGS/CXXFLAGS` 里 →
+  预处理时 `#include <cs.h>` 找不到头 → 判为"版本太老"。
+- 修：`build/reconf-pic.sh` 里加一行 **`CPPFLAGS="-I$INCDIR"`**，并恢复
+  `--with-cxsparse --with-cxsparse-includedir/-libdir`。**一次 configure 即过**
+  （`HAVE_CS_H` / `HAVE_CXSPARSE` / `HAVE_CXSPARSE_VERSION_OK` 全部 define）。
+- 实测：稀疏反斜杠、稀疏 LU、稀疏 QR 全部工作。两个**行为边界**（非缺陷，桌面版同）：
+  1. `qr(s,0)` 经济模式在 CXSparse 后端不支持（报 `sparse-qr: economy mode with CXSparse not supported`）；
+  2. `[Q,R,P]=qr(s)` 的 `P` 返回空——但恒等式 **`s = Q*R` 成立（残差 7e-15）**，这才是实质判据。
