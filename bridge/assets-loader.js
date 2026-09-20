@@ -145,6 +145,22 @@
           });
         });
       }
+      if (a.kind === 'octdir') {
+        var dir = a.mount_dir || (OCTAVE_M + '/forge/' + name + '/oct');
+        mkdirp(dir);
+        var base = a.base_url || a.url;
+        return Promise.all((a.files || []).map(function (f) {
+          return fetchBinary(base + '/' + f).then(function (buf) {
+            fs().writeFile(dir + '/' + f, new Uint8Array(buf));
+            return f;
+          });
+        })).then(function (names) {
+          addPaths([dir]);
+          loaded[name] = { files: names.length, addpath: [dir] };
+          log(name + ' 就绪（' + names.length + ' 个 .oct → ' + dir + '）');
+          return loaded[name];
+        });
+      }
       if (a.kind === 'js') {
         return loadScript(a.url).then(function () {
           var bundle = (global.__OCT_ASSETS__ || {})[name];

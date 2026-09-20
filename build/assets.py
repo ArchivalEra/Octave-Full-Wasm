@@ -155,6 +155,26 @@ def gen_manifest(site):
             entry.update(meta.get(name, {}))
             entries.append(entry)
 
+    octdir_root = os.path.join(assets_dir, "octdir")
+    if os.path.isdir(octdir_root):
+        for name in sorted(os.listdir(octdir_root)):
+            d = os.path.join(octdir_root, name)
+            if not os.path.isdir(d):
+                continue
+            octs = sorted(f for f in os.listdir(d) if f.endswith(".oct"))
+            if not octs:
+                continue
+            entry = {
+                "name": name + "-oct",
+                "kind": "octdir",
+                "base_url": f"assets/octdir/{name}",
+                "files": octs,
+                "mount_dir": f"{OCTAVE_M}/forge/{name}/oct",
+                "deps": [],
+            }
+            entry.update(meta.get(name, {}))
+            entries.append(entry)
+
     for sub, kind in (("pkg", "js"), ("m", "js")):
         d = os.path.join(assets_dir, sub)
         if not os.path.isdir(d):
@@ -172,6 +192,15 @@ def gen_manifest(site):
             }
             entry.update(meta.get(name, {}))
             entries.append(entry)
+
+    # 包的编译件资产自动成为该包的依赖：load("struct") 会先装 struct-oct
+    oct_ids = {e["name"] for e in entries if e["kind"] == "octdir"}
+    for e in entries:
+        if e["kind"] == "js" and (e["name"] + "-oct") in oct_ids:
+            deps = list(e.get("deps", []))
+            if (e["name"] + "-oct") not in deps:
+                deps.append(e["name"] + "-oct")
+            e["deps"] = deps
 
     manifest = {"version": 1, "assets": entries}
     out = os.path.join(assets_dir, "manifest.json")

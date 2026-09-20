@@ -240,3 +240,47 @@
 - 实测：稀疏反斜杠、稀疏 LU、稀疏 QR 全部工作。两个**行为边界**（非缺陷，桌面版同）：
   1. `qr(s,0)` 经济模式在 CXSparse 后端不支持（报 `sparse-qr: economy mode with CXSparse not supported`）；
   2. `[Q,R,P]=qr(s)` 的 `P` 返回空——但恒等式 **`s = Q*R` 成立（残差 7e-15）**，这才是实质判据。
+
+## 批次 2B（2026-09-20）：Forge 包的**编译件** → wasm side module
+
+19 个 `.oct` 进入懒加载车道，5 个包因此完整可用；验收 15/15（含真数值）。
+
+| 包 | 编出 | 关键函数 |
+|---|---|---|
+| struct | 4 | fields2cell/fieldempty/structcat/cell2fields → `getfields` 可用 |
+| optim | 5 | __bfgsmin 等 → `bfgsmin`/`fminunc` 真收敛（实测到 [1 2] 与 3） |
+| statistics | 7 | libsvmread/write、svmtrain/predict、fcnntrain/predict、editDistance |
+| geometry | 1 | polybool_mrf |
+| miscellaneous | 2 | cell2cell、partint |
+| tsa / nan | 0 | 源是 **MEX**（`mexFunction`），需 mex 运行时 → 明确不做 |
+
+工具：`build/build_pkg_oct.sh <包目录> <输出目录>`（容器内跑），产物由
+`assets.py` 收成 `kind=octdir` 资产，并**自动成为该包的依赖**（`load("struct")` 会先装 `struct-oct`）。
+
+### 七个坑（挨个踩过，照抄别再踩）
+
+1. **autoconf 在容器里跑不了编译器自检**：包的 configure 会编译并**运行**一个探针，
+   wasm 产物在 Node 14 下跑不动 → `C++ compiler cannot create executables`。
+   `--host=` 无效（这些包的 `configure.ac` 没有 `AC_CANONICAL_HOST`），
+   `EMCONFIGURE_JS` 在 emsdk 3.1.24 已废弃 → 给生成的 `configure` 打一行补丁：
+   `cross_compiling=${CROSS_COMPILING:-no}`，再用 `CROSS_COMPILING=yes` 跑。交叉模式下 autoconf 跳过所有 run-test。
+2. **emcc 不带 `-o` 时产出 `a.out.js`**，而 autoconf 找的是 `a.out` → 加 CXX 包装器
+   `emxx`（跑完 em++ 后补一个 `a.out` 壳脚本）。
+3. **包的 configure 会用 `mkoctfile -p CXX` 覆盖你传的 CXX** → `mkoctfile` 垫片必须
+   返回**包装器路径**而不是 `em++`，否则坑 1 复发。
+4. **包 configure 要 `mkoctfile`/`octave-config`**，而我们装出来的那两个是坏脚本
+   （变量没替换，跑起来 `//: Is a directory`）→ 垫片只回答 `-p` 查询。
+   `miscellaneous` 还要宿主 `units` 程序（走代理 `apt-get install units` 真装上了）。
+5. **交叉模式下版本自适应宏全判错**：包的 `config.h` 里 `OCTAVE__*`/`OV_*` 会选到老式符号。
+   按本仓头文件实测纠正（附行号证据）：`feval`→`octave::interpreter::the_interpreter ()->feval`
+   （interpreter.h:381-400）、`isnan`→`octave::math::isnan`（lo-mappers.h:178-182）、
+   `identity_matrix`→`octave::identity_matrix`（utils.h）、
+   `symbol_table::find_function`→`...->get_symbol_table ().find_function`（symtab.h:105-115）、
+   `is_cell/is_map/is_numeric`→`iscell/isstruct/isnumeric`、`rand_uniform`→`octave::rand_uniform`。
+   configure 仍失败时按这套值**合成 config.h**（兜底已内建在脚本里）。
+6. **别把 `src/` 里所有非 DEFUN 源都当 helper**：`statistics` 的 `svm.cpp` 只能并进
+   `svmtrain/svmpredict` 两个模块，无脑并进所有模块会 `duplicate symbol`。
+   解：**优先读包自带的 `src/Makefile` 的分组**（`$(MKOCTFILE) a.cc b.cc` 那一行就是作者的意图），
+   读不到才退化为启发式。
+7. **`.oct` 必须挂到 path 上**：`kind=octdir` 资产把文件写进 `<包根>/oct/` 并 `addpath` 它；
+   包自身的 `PKG_ADD`（含 `## PKG_ADD:` 抽取）负责子目录。
