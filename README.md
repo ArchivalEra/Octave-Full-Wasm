@@ -7,6 +7,31 @@
 上游：`rwl/octave-wasm`（BSD）+ Emscripten 3.1.24。构建产物（wasm/data/js）
 体积大，走 Release 分发，不进 git。
 
+## 为什么是网页版
+
+省磁盘空间只是它最不重要的一个意义。真正区分度在于：
+
+1. **零安装零配置**——桌面 Octave 的使用链是：下载→安装→摸清路径→装包→配
+   gnuplot/图形，每一步劝退一批人；网页版是**一个链接**。对"考前冲刺"场景，
+   安装成本直接等于放弃率。
+2. **手机能用**——桌面版永远做不到。通勤/课间用手机跑一段矩阵、看一眼图。
+3. **可分享、可复现、版本钉死**——URL 即环境；Octave 7.2.0 + 具体 BLAS/包版本
+   全打包，所有人算出的数字一致。桌面版是"在我机器上能跑"。
+4. **示例可以内嵌成"活的"**——教材解析里的例子不再需要"自己复制到 Octave 试"，
+   点一下就跑，输出长在讲解旁边。文字/符号气泡/可执行代码是**同一个产物**。
+   plot 桥（Octave 算→SVG 上屏）正是靠这个接缝才成立。
+5. **沙箱与确定性**——用户代码跑在隔离 wasm 里：碰不到文件系统、发不了进程
+   （`system()` 清晰报错）。做自动评测/作业批改不必起 Octave 服务器。
+6. **分发边际成本为零**——纯静态资源上 CDN，算力在用户浏览器；用户数从 1 涨到
+   1 万，服务端成本不变。
+7. **教学上"受限"反而可能是优点**——能精确定义哪些可用、哪些明确报错；受控子集
+   比"什么都能装、装完就崩"更适合初学者。
+
+一句话：桌面版是「**一台装着 Octave 的电脑**」，网页版是「**一个能算、能画、
+能被链接和嵌入的 Octave**」。前者拼功能完整性，后者拼**分发与集成**。
+代价也要认清：慢（-O0 + wasm）、无工具箱生态、无 GUI 工具链、内存受限——
+它不是取代桌面版，是**另一个产品**。
+
 ## 架构
 
 ```text
@@ -24,9 +49,28 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 | 线代/微积分/优化/ODE45/多项式 | ✅ 全对 |
 | 统计分布 + ttest/regress + fft 后备 | ✅ 全对 |
 | `plot/hold/scatter/stem/semilogx/bar` 翻译桥 v1 | ✅ SVG 通，marker 表待锁 |
-| C 库 5 件（qrupdate/arpack/fftw双单/qhull/glpk） | ✅ 库编过符号全，Octave 重编中断待续（见 build/CLIBS.md） |
-| 绘图显示 | 经 gnuplot-wasm 出 SVG（静态，无交互） |
-| C 库长尾（FFTW/ARPACK/QHull/…） | ⬜ 待 GPT 回复后排期 |
+| C 库 5 件（qrupdate/arpack/fftw双单/qhull/glpk） | ✅ 全部编入并验数 |
+| 批次 0：dldfcn 静态注册表 + convhulln + fftw() | ✅ 表驱动注册，实测通过 |
+| 批次 1a：zlib/bz2/RapidJSON/CCOLAMD + gzip/bzip2 | ✅ 实测通过 |
+| 批次 1b：libsndfile → audioread/audiowrite/audioinfo/audioformats | ✅ wav 往返通过 |
+| 待办：CXSparse/SPQR、SUNDIALS(ode15s)、HDF5、桥接 | ⬜ 见 build/CLIBS.md 与本文件"下一步" |
+
+### 已装 dldfcn（`main.cc` 的 `STATIC_DLD_FCNS`，一行一模块）
+`__delaunayn__ / __glpk__ / __voronoi__ / convhulln / fftw / gzip / bzip2
+/ audioread / audiowrite / audioinfo / audioformats`
+
+### 已知偏差
+- `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
+- `gunzip`/`bunzip2`（`.m` 包装）调 `system("gzip -d …")` → 无 shell，清晰报错。
+  符合"宿主专属功能=明确报错"的口径。
+
+## 下一步（待排期）
+
+- **批次 1c**：CXSparse（`OCTAVE_CHECK_CXSPARSE_VERSION_OK` 的 `HAVE_CS_H` 头宏链坑）、
+  SPQR（源码需从 `suitesparse-full-5.4.0.tar.gz` 单独取）。
+- **批次 2**：SUNDIALS 5.8.x（IDA + serial NVector + dense + KLU）→ `ode15s`/`ode15i`。
+- **批次 3**：HDF5（C-only 静态 + zlib）→ `save/load -hdf5`。
+- **桥接**：fetch→`urlread`/`webread`；xls/xlsx→`xlsread`；Web Audio→`audioplayer`；image→`imread`。
 
 ## 目录
 
