@@ -74,6 +74,10 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 
 ## 下一步（待排期）
 
+> **差距审计与需求书**：`build/GAPS.md`。里面是实测出来的缺口清单（含原文错误信息）、
+> 硬约束汇总、以及可直接交给外部检索模型搜罗方案的分条需求（R1–R11）+ 验收标准。
+
+
 - **批次 1c**：CXSparse（`OCTAVE_CHECK_CXSPARSE_VERSION_OK` 的 `HAVE_CS_H` 头宏链坑）、
   SPQR（源码需从 `suitesparse-full-5.4.0.tar.gz` 单独取）。
 - **批次 2**：SUNDIALS 5.8.x（IDA + serial NVector + dense + KLU）→ `ode15s`/`ode15i`。
@@ -88,14 +92,15 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `.githooks/pre-commit` (378 bytes)
 - `.githooks/pre-push` (337 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (843 bytes)
+- `.gitignore` (858 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (19755 bytes)
+- `HANDOFF.md` (19875 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (4772 bytes)
 - `build/CLIBS.md` (12477 bytes)
+- `build/GAPS.md` (16231 bytes)
 - `build/Makefile` (8664 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)

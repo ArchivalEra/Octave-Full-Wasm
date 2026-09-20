@@ -16,6 +16,7 @@
 !build/reconf-batch1b.sh
 !build/reconf-batch1.sh
 !build/CLIBS.md
+!build/GAPS.md
 !build/plotbridge/*
 !build/fftw_threads_stub.c
 !build/second_stub.f

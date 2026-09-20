@@ -251,6 +251,7 @@ dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
 | `build/plotbridge/*.m` | plot 翻译桥垫片（plot/hold/legend/xlim/… 20 个） |
 | `bridge/octplot.html` | PoC 验证页（含运行时注入胶水 + 4 个 demo 按钮） |
 | `bridge/plotbridge.js` | spec→gnuplot 脚本 + marker 表（marker 表已按肉眼锁定） |
+| `build/GAPS.md` | **差距审计 + 需求书**（实测缺口、硬约束、R1–R11 分条需求与验收标准） |
 | `build/CLIBS.md` | **C 库长尾全部配方与坑**（最重要的一手记录） |
 | `vendor/forge/*.m` | forge 统计纯 `.m`（16 个） |
 | `vendor/extra/*.m` | 自研 fft/ifft/ttest + asciiplot |
