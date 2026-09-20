@@ -86,3 +86,22 @@
 - 镜像：`octave-wasm`（原始）、`octave-build:full`（工具链检查点）、
   `octave-build:libs`（5 库编完）、`octave-build:shutdown`（关机快照）、
   `octave-build:final`（C 库长尾收官）、后续批次另打。
+
+## 批次 1a（2026-09-20）：zlib / libbz2 / RapidJSON / CCOLAMD
+
+- **zlib + libbz2**：用 Emscripten ports（`embuilder build zlib bzip2`），
+  免源码；头/库进 sysroot（`zlib.h`/`bzlib.h`/`libz.a`/`libbz2.a`）。
+- **RapidJSON 1.1.0**：header-only，vendor 到 `target/include/rapidjson/`。
+- **CCOLAMD**：SuiteSparse 已编（`libccolamd.so`），configure 去掉
+  `--without-ccolamd` 并**在终链补 `-lccolamd`**（否则 undefined ccolamd/csymamd）。
+- **CXSparse 暂缓**：去掉 `--without-cxsparse` 触发 configure 报
+  "CXSparse library is too old (< 2.2)"（安装头版本宏不匹配）→ 本批保持
+  `--without-cxsparse`，留批次 1b 处理。
+- **gzip/bzip2** 是 dldfcn（`gzip.cc` 一个 .o 出 `Ggzip`+`Gbzip2`），
+  经 STATIC_DLD_FCNS 注册后可用：`gzip("f")`/`bzip2("f")` 走进程内压缩。
+- **gunzip/bunzip2**（`.m` 包装）调 `system("gzip -d …")` → wasm 无 shell，
+  清晰报 `system: unable to start subprocess`；符合"宿主专属=明确报错"口径。
+- 实测：`jsonencode`/`jsondecode`、`gzip`/`bzip2`、`save -v7`、稀疏均通；
+  convhulln/fftw/eigs/delaunay/plot 桥无回归。
+- wasm raw 19.9MB（gzip 4.52MB）。
+- 配方：`build/reconf-batch1.sh`（去掉 z/bz2/ccolamd/rapidjson 的 without）。

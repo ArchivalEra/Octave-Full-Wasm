@@ -22,7 +22,9 @@
   X ("__glpk__",      G__glpk__)                        \
   X ("__voronoi__",   G__voronoi__)                     \
   X ("convhulln",     Gconvhulln)                       \
-  X ("fftw",          Gfftw)
+  X ("fftw",          Gfftw)                            \
+  X ("gzip",          Ggzip)                            \
+  X ("bzip2",         Gbzip2)
 
 extern "C" {
 #define DECL_GETTER(name, getter) \
