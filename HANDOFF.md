@@ -70,56 +70,60 @@ audioread / audiowrite / audioinfo / audioformats`
 
 ### 3.1 容器 / 镜像 / 端口
 ```
-obuild   构建容器（sleep infinity）—— docker start obuild
-odld     .oct 实验容器（同 sleep infinity，独立；改它不影响 obuild）
+obuild   最早的构建容器（批次 1b 非 PIC 态）—— 留着当最远回退点
+odld     **当前主力**：PIC 全树 + MAIN_MODULE=1 主链 + cmake 3.27.9
 owasm    旧的线上构建，端口 8757，别动
-镜像     octave-build:pre-dldfcn（= 批次 1b 可用态快照，做实验前打的，4.27GB）
-         octave-build:b2-snapshot（相近快照）
-         octave-build:final / :shutdown / :libs / :full（更早的检查点）
-         octave-wasm:latest（最原始镜像）
-端口     8757=旧构建  8761=基线（改这里）  8763=同一份构建的副本
-         8764=交付包验证用（跑的就是 dist/ 里那包）  8762=dlopen PoC  8758/8760=历史
+镜像     octave-build:pic-oct2（**当前检查点**，含 cmake 3.27.9，5.56GB）
+         octave-build:pic-oct（PIC 全树，无 cmake，5.25GB）
+         octave-build:pre-dldfcn（批次 1b 可用态，4.27GB）
+         octave-build:b2-snapshot / :final / :shutdown / :libs / :full / octave-wasm:latest
+端口     8757=旧构建  8761=基线（改这里）  8762/8763/8764=实验与包验证
 ```
+- 容器内源码/产物：`/usr/src/octave-wasm/{src,target,third_party}`，第三方源码树在容器 `/tmp/`
+- `src/Makefile` = 仓库 `build/Makefile`；`src/main.cc` = 仓库 `build/main.cc`
+- **新容器从检查点起**：`docker run -d --name odld2 octave-build:pic-oct2 sleep infinity`
 
-> 实验容器/端口是临时的：不需要时 `docker stop odld`（镜像留着，随时可
-> `docker run -d --name odld octave-build:pre-dldfcn sleep infinity` 重来）。
-> 8763/8762 的静态服务在 /tmp（tmpfs），重启即空。
-- 容器内源码/产物：`/usr/src/octave-wasm/{src,target,third_party}`
-- `src/Makefile` = 仓库 `build/Makefile`；`src/main.cc` = 仓库 `build/main.cc`（每次改完要 `docker cp` 进容器 + 重编 octave.o）
-
-### 3.2 起构建容器与预览
+### 3.2 起服务与预览（**断电后一条命令**）
 ```bash
-sudo docker start obuild
-# 8761 预览（/tmp 是 tmpfs，重启即空；先从备份恢复）
-#   备份在 /mnt/hdd/persist-octave/opencode-20260920/ 与 /mnt/hdd/persist-octave/RESUME.md
-cp -r /mnt/hdd/persist-octave/opencode-20260920/. /tmp/opencode/
-cd /tmp/opencode/oweb3 && setsid nohup python3 -m http.server 8761 --bind 127.0.0.1 --protocol HTTP/1.1 &
-# 本机 curl 一律加 --noproxy '*'
+sh build/recover.sh          # 起容器 → 站点缺失则从 odld 重建 → harness → 8761 → 自动验收
 ```
+- 站点根：**`/mnt/hdd/octave-wasm-build/site`**（持久盘；旧的 /tmp/opencode/oweb3 已废弃）
+- 测试 harness：**`/mnt/hdd/octave-wasm-build/harness`**（含 playwright-core + `run.sh`）
+- 验收套件在仓库 `test/browser/accept-full.mjs`，跑法：
+  `/mnt/hdd/octave-wasm-build/harness/run.sh <仓库里的脚本> [URL]`
+- 本机 curl 一律加 `--noproxy '*'`（**只对 127.0.0.1 直连有效**；外网要走代理，见 3.6）
 
 ### 3.3 构建一条龙（在容器内）
 ```bash
-# 环境
-export PATH=/usr/src/emsdk:/usr/src/emsdk/upstream/emscripten:/usr/src/emsdk/node/14.18.2_64bit/bin:$PATH
-# 1) 重 configure（见 build/reconf-batchN.sh 模板，改掉对应 --without-*）
-# 2) 全量 make（~45-50 分钟）
+export PATH=/opt/cmake/bin:/usr/src/emsdk:/usr/src/emsdk/upstream/emscripten:/usr/src/emsdk/node/14.18.2_64bit/bin:$PATH
+# 1) 重 configure：build/reconf-pic.sh（PIC 是硬要求，见 §4.1）
+# 2) 全量 make（-O0 + -j24 约 12 分钟）
 cd /usr/src/octave-wasm/third_party/octave-7.2.0 && emmake make -j24 && emmake make install
 # 3) 重链 web 端（分钟级）
 cd /usr/src/octave-wasm/src && rm -f web/octave.{js,wasm,data} && make web/octave.js
-# 4) 拷出部署
-docker cp obuild:/usr/src/octave-wasm/src/web/octave.{js,wasm,data} /tmp/opencode/oweb3/
+# 4) 拷出部署到持久站点
+sudo docker cp odld:/usr/src/octave-wasm/src/web/octave.js /mnt/hdd/octave-wasm-build/site/
 ```
 
 ### 3.4 浏览器自动验证（无人值守唯一验收手段）
-- Node + `playwright-core`，可执行 `/usr/bin/chromium`，参数 `--no-proxy-server --no-sandbox --disable-dev-shm-usage`
-- 测试脚本在 `/tmp/opencode/octave-accept/*.mjs`（**tmpfs，会丢**；备份见 3.2）
-- 模式：`page.goto('http://127.0.0.1:8761/')` → 轮询 `Module.feval('strcat',['a','b'],1)` 等就绪 → `Module.eval_string(expr)` + 抓 `Module.last_error_message()` 与 console
+- Node + `playwright-core`（在 harness 里），可执行 `/usr/bin/chromium`，
+  参数 `--no-proxy-server --no-sandbox --disable-dev-shm-usage`
+- 套件：`test/browser/accept-full.mjs`（19 项：核心回归 + `.oct` 装载 + 资产懒加载）
+- 模式：`goto` → 轮询 `Module.feval('strcat',['a','b'],1)` 等就绪 → `Module.eval_string(expr)`
+  + 抓 `Module.last_error_message()` 与 console
 - **数值/行为只认实测输出**；不要凭"应该对"
 
 ### 3.5 git 推送
 - 重启后 git 可能推不动：`gh auth setup-git`（keyring 重启失效）
 - 仓内 hooks：pre-commit 重算 README 的 `AUTO:FILES` 区块 + 校验白名单；pre-push 校验 README 新鲜
 - **禁用 `--no-verify`**
+
+### 3.6 网络与代理（**新**）
+- 宿主/容器直连境外极慢 → **走本机 HTTP 代理**：
+  - 宿主：`curl -x http://127.0.0.1:2080 …`（实测 3.9MB/s）
+  - 容器：`curl -x http://192.168.137.1:2080 …`（网关地址用 `ip route | awk '/default/{print $3}'` 查，会变）
+- GitHub 直连基本不可用（45MB 的 cmake 下到一半就断）；**大件一律走代理**
+- 容器内下载也可用代理（已验证 200），SUNDIALS / Forge 包都靠这条
 
 ---
 
@@ -198,6 +202,21 @@ dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
 - 终链只剩 `cgejsv_`/`zgejsv_` 两个良性未定义警告。
 - 容器内 Node 14 太旧：**任何需要在 configure 期“运行”的测试都可能假失败**（`unexpected section <Exception>`）。对策：预置对应 `octave_cv_*` 缓存变量。
 - 容器有网络；`docker cp` 会重置可执行位。
+
+### 4.8 断电（2026-09-20 真发生过一次，代价与教训）
+- **宿主机 `/tmp` 是 tmpfs**：站点、浏览器测试脚本、node_modules 全丢，恢复靠人肉拼。
+  已改正：站点 → `/mnt/hdd/octave-wasm-build/site`；harness → `.../harness`；
+  **验收套件进仓库** `test/browser/accept-full.mjs`；一键恢复 `build/recover.sh`。
+- **容器内的最近写入也可能损坏**：断电后容器里的 cmake 报
+  `exec /opt/cmake/bin/cmake: exec format error`（tar 解压没落盘）。教训：
+  **关键工具装完立刻 `docker commit` 打检查点**（`pic-oct` → `pic-oct2` 就是这么来的）。
+- 但容器是 `Exited` 不是删除 → **内部既有文件基本全幸存**（PIC 产物、主 wasm 37.9MB、
+  5 个 PIC 库、.oct、源码树都在），`docker start` 即可，不必重建。
+- **恢复后必须重跑验收再继续**：本次恢复后 19/19 全绿才接着干。
+
+### 4.9 境外下载（见 §3.6）
+GitHub 直连基本不可用（45MB 的 cmake 下到一半断），**一律走本机 2080 代理**；
+容器内走网关（`192.168.137.1:2080`，会变，用 `ip route` 查）。
 
 ---
 
