@@ -12,6 +12,11 @@
 !build/reconf.sh
 !build/CLIBS.md
 !build/plotbridge/*
+!build/fftw_threads_stub.c
+!build/second_stub.f
+!build/normalize_arpack.py
+!bridge/octplot.html
+!bridge/plotbridge.js
 !vendor/MANIFEST.md
 !vendor/forge/*
 !vendor/extra/*

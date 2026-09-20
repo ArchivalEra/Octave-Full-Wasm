@@ -26,17 +26,44 @@
 4. Qhull：`emcmake` 静态编，产物改名 `libqhullstatic_r.a → libqhull_r.a`
   （Octave 认 reentrant 名）。
 
-## Octave 重编状态：未完成（关机中断）
+## Octave 重编状态：完成（第四轮 configure 全绿）
 
 - `build/reconf.sh`：与 Dockerfile 同 flag，去掉 5 个 `--without`，
   外加 `octave_cv_lib_arpack_ok_1=yes` 预置。
 - 预置原因：ARPACK 的“C++ 跑起来 crash 否”测试在容器 Node 14 下挂
   （`unexpected section <Exception>`，环境老旧非库问题）；链接测试本身已过。
-  数值正确性以后用 `eigs` 对 `eig` 逐项比数证明（比冒烟测试更强）。
-- 第一轮 configure 结果：FFTW/GLPK/QHULL/QRUPDATE 已 `HAVE_*=1`，
-  ARPACK 当时因第 2 条挂掉；`-fcommon` 修好后开了第三轮，中断于 configure 阶段。
-- **开机后：直接重跑 `/tmp/reconf.sh`（configure+make+install 全套约 50 分钟），
-  不要续跑 make**。参考日志：容器内 `/tmp/reconf-full*.log`（快照里有）。
+- **ARPACK 三连坑**（全部修完，见下）。
+- **FFTW 线程桩**：`build/fftw_threads_stub.c`（`init_threads→1`，
+  Octave 把返回 0 当 fatal；`plan_with_nthreads` 空实现，照样串行跑）。
+  真 FFTW 已验：`fft([1 0 0 0])=[1 1 1 1]`，正弦谱峰 32 正确。
+- **dldfcn 静态直装**：`__delaunayn__/__glpk__/__voronoi__` 三个 `.cc`
+  手工编进终链（见下），`delaunay/voronoi/glpk` 全通。
+- `build/normalize_arpack.py`：arpack-ng 源码 F77 净化器（`!` 注释→`c`，
+  `&` 续行→定式续行）。
+
+### ARPACK 三连坑
+
+1. `duplicate symbol: debug_/timing_`：F2C 公共块多文件重复定义，
+   wasm-ld 严格拒收。**注意反直觉结论**：`emcc -fcommon` 在此工具链下把
+   定义直接变 `U`（未定义）而不是合并——禁用，只能单定义。
+2. vs-arpack 是 MKL 口味 ABI（`dlacpy("A",...)` 前导字符参数），与
+   reference LAPACK 不兼容 → 弃用，改 arpack-ng 3.7.0 Fortran 源
+   （3.9.x 有 f2c-2016 啃不动的语法；3.7.0 经净化器后 66/66 一次过）。
+3. 最终方案：**全源 cat 进单个 TU 编译**（公共块天然单定义），
+   `second()` 桩返回 0（计时统计无人在意），`emar` 重建 `libarpack.a`。
+   `eigs` 对 `eig` 残差 1e-14/1e-15，`svds` 正确。
+
+### dldfcn 静态直装（delaunay/glpk/voronoi）
+
+- 背景：dldfcn=`.oct` 动态模块，wasm 无 dlopen 从未建成；
+  `__delaunayn__.cc` 等躺在源码树里从没进包。
+- 路径：`em++` 手工编译（FLAGS 照搬 liboctinterp CPPFLAGS）→ `.o` 直挂终链。
+- 坑：显式 `.o` 会被链接器 GC 整件扫掉（strings 验证 0 残留）。
+  解：`main.cc` Phase 3 直接调三者的 `G_ installer`
+  （`octave_dld_function::create` + `install_built_in_function`），
+  机制见 `libinterp/corefcn/dynamic-ld.cc` 的 `load_oct`。
+- `exist("__delaunayn__")=5`，`delaunay/glpk/voronoi` 全通。
+- 附带：`figure.m` 垫片改为返回假句柄 1（`voronoi` 内部 `hf=figure()` 不再炸）。
 
 ## 容器/镜像
 

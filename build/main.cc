@@ -8,9 +8,19 @@
 #include <parse.h>
 #include <interpreter.h>
 #include <builtin-defun-decls.h>
+#include <oct-shlib.h>
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
+
+// Statically-linked dldfcn entry points: dldfcn/.oct modules can never
+// dlopen in wasm, so their G_ installers are called directly (Phase 3).
+// C linkage (unmangled), C++ signatures.
+extern "C" {
+octave_function *G__delaunayn__ (const octave::dynamic_library&, bool);
+octave_function *G__glpk__ (const octave::dynamic_library&, bool);
+octave_function *G__voronoi__ (const octave::dynamic_library&, bool);
+}
 
 const std::string OBJ_TYPE_KEY = "$type";
 
@@ -395,6 +405,35 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
       interpreter->handle_exception(ex);
       std::cerr << "warning: skipping path dir " << extra_dirs[i]
                 << ": " << interpreter->get_error_system().last_error_message() << std::endl;
+    }
+  }
+
+  // Phase 3: statically-linked dldfcn builtins (__delaunayn__ etc.).
+  // .oct modules can't dlopen in wasm; drive their G_ installers by hand.
+  {
+    octave::dynamic_library no_shl;
+    octave::symbol_table& symtab = interpreter->get_symbol_table ();
+    struct static_fcn {
+      const char *name;
+      octave_function *(*getter)(const octave::dynamic_library&, bool);
+    };
+    static const static_fcn fcns[] = {
+      { "__delaunayn__", G__delaunayn__ },
+      { "__glpk__", G__glpk__ },
+      { "__voronoi__", G__voronoi__ },
+      { nullptr, nullptr }
+    };
+    for (int i = 0; fcns[i].name != nullptr; i++) {
+      try {
+        octave_function *fcn = fcns[i].getter (no_shl, false);
+        if (fcn)
+          symtab.install_built_in_function (fcns[i].name, octave_value (fcn));
+        else
+          std::cerr << "warning: null installer result for "
+                    << fcns[i].name << std::endl;
+      } catch (...) {
+        std::cerr << "warning: failed to install " << fcns[i].name << std::endl;
+      }
     }
   }
 
