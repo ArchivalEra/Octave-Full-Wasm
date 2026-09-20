@@ -105,3 +105,19 @@
   convhulln/fftw/eigs/delaunay/plot 桥无回归。
 - wasm raw 19.9MB（gzip 4.52MB）。
 - 配方：`build/reconf-batch1.sh`（去掉 z/bz2/ccolamd/rapidjson 的 without）。
+
+## 批次 1b（2026-09-20）：libsndfile → audioread/audiowrite/audioinfo/audioformats
+
+- **libsndfile 1.2.2**：`emcmake cmake` 静态构建，`-DENABLE_EXTERNAL_LIBS=OFF
+  -DENABLE_MPEG=OFF`（只要内置 WAV 等编解码，免 flac/ogg/vorbis）。
+- **audioread.cc** 是 dldfcn，出 4 个 installer：
+  `Gaudioread/Gaudiowrite/Gaudioinfo/Gaudioformats`，经 STATIC_DLD_FCNS 注册。
+- **坑（重要）**：dldfcn 的 `.o` 必须在 **config.h 反映该 feature 之后**再编，
+  否则 `#if defined(HAVE_SNDFILE)` 走 else 分支，函数装上却报
+  "support ... was unavailable or disabled"。本批踩过一次：先用旧 config.h
+  编了 audioread.o → 报 disabled → 新 config.h 下重编 + 重链即通。
+- 实测：`audiowrite("/tmp/t.wav", y, 8000)` → 文件生成；
+  `audioinfo` SampleRate=8000；`audioread` → [8000 样点, 峰值 1]；`audioformats` 出表。
+- 终链补 `-lsndfile`。
+- 配方：`build/reconf-batch1b.sh`（去掉 `--without-sndfile`）。
+- wasm raw 19.98MB。

@@ -40,7 +40,7 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `LICENSE` (34523 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (4772 bytes)
-- `build/CLIBS.md` (6699 bytes)
+- `build/CLIBS.md` (7722 bytes)
 - `build/Makefile` (7798 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/build_dldfcn.sh` (1256 bytes)
