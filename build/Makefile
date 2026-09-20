@@ -26,14 +26,15 @@ EM_CFLAGS = -O2 -Wall -std=c++11 -fwasm-exceptions
 EM_CXXFLAGS = -I. -I$(PREFIX)/include -I$(PREFIX)/include/octave-$(OCTAVE_VER)/octave/.. -I$(PREFIX)/include/octave-$(OCTAVE_VER)/octave
 EM_LDFLAGS = -L$(PREFIX)/lib -L$(PREFIX)/lib/octave/$(OCTAVE_VER) -lf2c -lrefblas -lclapack -lpcre \
 -lsuitesparseconfig -lcxsparse -lamd -lcamd -lcolamd -lccolamd -lcholmod -lumfpack -loctave -loctinterp \
--lqrupdate -larpack -lfftw3 -lfftw3f -lqhull_r -lglpk -lf2c -lz -lbz2 -lm \
+-lqrupdate -larpack -lfftw3 -lfftw3f -lqhull_r -lglpk -lsndfile -lf2c -lz -lbz2 -lm \
 /usr/src/octave-wasm/target/lib/fftw_threads_stub.o \
 /usr/src/octave-wasm/target/lib/__delaunayn__.o \
 /usr/src/octave-wasm/target/lib/__glpk__.o \
 /usr/src/octave-wasm/target/lib/__voronoi__.o \
 /usr/src/octave-wasm/target/lib/convhulln.o \
 /usr/src/octave-wasm/target/lib/fftw.o \
-/usr/src/octave-wasm/target/lib/gzip.o
+/usr/src/octave-wasm/target/lib/gzip.o \
+/usr/src/octave-wasm/target/lib/audioread.o
 EM_SFLAGS = -s WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 \
 -s FS_DEBUG=0
 

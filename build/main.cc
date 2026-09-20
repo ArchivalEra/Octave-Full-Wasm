@@ -24,7 +24,11 @@
   X ("convhulln",     Gconvhulln)                       \
   X ("fftw",          Gfftw)                            \
   X ("gzip",          Ggzip)                            \
-  X ("bzip2",         Gbzip2)
+  X ("bzip2",         Gbzip2)                           \
+  X ("audioread",     Gaudioread)                       \
+  X ("audiowrite",    Gaudiowrite)                      \
+  X ("audioinfo",     Gaudioinfo)                       \
+  X ("audioformats",  Gaudioformats)
 
 extern "C" {
 #define DECL_GETTER(name, getter) \
