@@ -87,7 +87,7 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (4772 bytes)
-- `build/CLIBS.md` (10963 bytes)
+- `build/CLIBS.md` (12003 bytes)
 - `build/Makefile` (7798 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)

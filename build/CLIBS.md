@@ -170,3 +170,21 @@
 ### 没有采用为基线的理由
 功能上完全达标，但交付体积翻近一倍（gzip 6.2→11.1MB），属于产品取舍，
 需人工拍板。基线 8761 保持批次 1b 不变。
+
+### 附：MAIN_MODULE=2（DCE 版）实测 —— 体积能压回来，但会崩
+
+`-s MAIN_MODULE=1` 换成 `-s MAIN_MODULE=2` 重链，体积立刻回到基线水平：
+
+| | MAIN_MODULE=1 | MAIN_MODULE=2 | 基线(非 LINKABLE) |
+|---|---|---|---|
+| octave.wasm | 37.9MB | **22.8MB** | 20.5MB |
+| octave.js | 29.8MB | **248KB** | 230KB |
+
+**但跑不起来**：浏览器里 `Starting GNU Octave interpreter...` 之后直接
+`RuntimeError: null function`，主线程随后卡死（`page.evaluate` 不再返回）。
+原因就是 M2 的定义——正常做 DCE，不在导出清单里的函数被删掉，dylink 解析到空槽。
+
+**要让它可用**：得给主链显式 `-sEXPORTED_FUNCTIONS`，把 `.oct` 会 import 的符号
+全部列进去。可自动生成：编完所有 `.oct` 后从其 `dylink.0` 段读出 imported symbols，
+去重加下划线前缀喂给主链。**这是一份需要维护的清单**（每加一个 dldfcn 模块都要重生成），
+所以这是「用维护成本换 15MB 体积」的取舍，本轮未做。
