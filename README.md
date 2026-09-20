@@ -136,7 +136,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `build/reconf-batch1b.sh` (2101 bytes)
 - `build/reconf-pic.sh` (2671 bytes)
 - `build/reconf.sh` (3004 bytes)
-- `build/recover.sh` (3108 bytes)
+- `build/recover.sh` (4439 bytes)
 - `build/second_stub.f` (358 bytes)
 - `test/browser/accept-full.mjs` (4470 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)

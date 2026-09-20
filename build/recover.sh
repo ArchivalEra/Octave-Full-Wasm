@@ -25,7 +25,27 @@ for c in obuild odld; do
   fi
 done
 
-echo "== 2) 站点目录 =="
+echo "== 2) 工具链体检（断电后容器内最近写入可能损坏）=="
+CMAKE_TGZ=/mnt/hdd/octave-wasm-build/third_party/cmake-3.27.9-linux-x86_64.tar.gz
+if sudo docker exec odld /usr/local/bin/cmake --version >/dev/null 2>&1; then
+  echo "  cmake: $(sudo docker exec odld /usr/local/bin/cmake --version | head -1)"
+else
+  echo "  cmake 不可用（可能是 exec format error），从持久包重装…"
+  [ -f "$CMAKE_TGZ" ] || { echo "  缺 $CMAKE_TGZ —— 需先下载（见 HANDOFF §3.6 代理）"; exit 1; }
+  sudo docker cp "$CMAKE_TGZ" odld:/tmp/cmake.tgz
+  sudo docker exec odld bash -c 'rm -rf /opt/cmake-3.27.9-linux-x86_64 /opt/cmake /usr/local/bin/cmake && \
+    tar xzf /tmp/cmake.tgz -C /opt && ln -sfn /opt/cmake-3.27.9-linux-x86_64 /opt/cmake && \
+    ln -sfn /opt/cmake/bin/cmake /usr/local/bin/cmake && rm -f /tmp/cmake.tgz'
+  sudo docker exec odld /usr/local/bin/cmake --version | head -1
+fi
+# 主产物是否还在（不在说明容器层受损，需从镜像检查点另起容器）
+if sudo docker exec odld test -s /usr/src/octave-wasm/src/web/octave.wasm; then
+  echo "  主 wasm: $(sudo docker exec odld stat -c%s /usr/src/octave-wasm/src/web/octave.wasm) 字节"
+else
+  echo "  ⚠ 主 wasm 缺失 —— 从检查点另起：docker run -d --name odld2 octave-build:pic-oct2 sleep infinity"
+fi
+
+echo "== 3) 站点目录 =="
 if [ -f "$SITE/octave.wasm" ]; then
   echo "  $SITE 已在（$(du -sh "$SITE" | cut -f1)）"
 else
@@ -43,12 +63,12 @@ else
   sudo chown -R "$(id -u):$(id -g)" "$SITE"
 fi
 
-echo "== 3) 资产清单 =="
+echo "== 4) 资产清单 =="
 if [ -d "$SITE/assets" ]; then
   python3 "$REPO/build/assets.py" gen-manifest "$SITE" | head -3
 fi
 
-echo "== 4) 测试 harness =="
+echo "== 5) 测试 harness =="
 if [ ! -d "$HARNESS/node_modules/playwright-core" ]; then
   echo "  装 playwright-core…"
   mkdir -p "$HARNESS" && cd "$HARNESS"
@@ -58,7 +78,7 @@ fi
 [ -f "$HARNESS/run.sh" ] || printf '#!/bin/sh\nset -e\nH=/mnt/hdd/octave-wasm-build/harness\ncp "$1" "$H/_run.mjs"\nshift\ncd "$H" && exec node _run.mjs "$@"\n' > "$HARNESS/run.sh"
 chmod +x "$HARNESS/run.sh"
 
-echo "== 5) 起静态服务（端口 $PORT）=="
+echo "== 6) 起静态服务（端口 $PORT）=="
 if curl -s --noproxy '*' -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null; then
   echo "  $PORT 已在服务"
 else
@@ -68,6 +88,6 @@ else
   curl -s --noproxy '*' -o /dev/null -w "  http=%{http_code}\n" "http://127.0.0.1:$PORT/"
 fi
 
-echo "== 6) 验收 =="
+echo "== 7) 验收 =="
 "$HARNESS/run.sh" "$REPO/test/browser/accept-full.mjs" "http://127.0.0.1:$PORT/" 2>&1 | tail -5
 echo "RECOVER DONE"
