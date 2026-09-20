@@ -24,6 +24,7 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 | 线代/微积分/优化/ODE45/多项式 | ✅ 全对 |
 | 统计分布 + ttest/regress + fft 后备 | ✅ 全对 |
 | `plot/hold/scatter/stem/semilogx/bar` 翻译桥 v1 | ✅ SVG 通，marker 表待锁 |
+| C 库 5 件（qrupdate/arpack/fftw双单/qhull/glpk） | ✅ 库编过符号全，Octave 重编中断待续（见 build/CLIBS.md） |
 | 绘图显示 | 经 gnuplot-wasm 出 SVG（静态，无交互） |
 | C 库长尾（FFTW/ARPACK/QHull/…） | ⬜ 待 GPT 回复后排期 |
 
@@ -35,12 +36,54 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `.githooks/pre-commit` (215 bytes)
 - `.githooks/pre-push` (182 bytes)
 - `.githooks/update-readme.py` (2110 bytes)
-- `.gitignore` (453 bytes)
+- `.gitignore` (538 bytes)
 - `LICENSE` (34523 bytes)
+- `build/CLIBS.md` (2878 bytes)
 - `build/Makefile` (7331 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/main.cc` (14258 bytes)
+- `build/plotbridge/__pb_add__.m` (2731 bytes)
+- `build/plotbridge/__pb_emit__.m` (1966 bytes)
+- `build/plotbridge/__pstate__.m` (589 bytes)
+- `build/plotbridge/bar.m` (636 bytes)
+- `build/plotbridge/clf.m` (328 bytes)
+- `build/plotbridge/figure.m` (122 bytes)
+- `build/plotbridge/grid.m` (357 bytes)
+- `build/plotbridge/hold.m` (357 bytes)
+- `build/plotbridge/legend.m` (496 bytes)
+- `build/plotbridge/loglog.m` (758 bytes)
+- `build/plotbridge/plot.m` (1072 bytes)
+- `build/plotbridge/scatter.m` (614 bytes)
+- `build/plotbridge/semilogx.m` (747 bytes)
+- `build/plotbridge/semilogy.m` (747 bytes)
+- `build/plotbridge/stem.m` (753 bytes)
+- `build/plotbridge/title.m` (146 bytes)
+- `build/plotbridge/xlabel.m` (152 bytes)
+- `build/plotbridge/xlim.m` (271 bytes)
+- `build/plotbridge/ylabel.m` (139 bytes)
+- `build/plotbridge/ylim.m` (271 bytes)
+- `build/reconf.sh` (2843 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)
+- `vendor/extra/asciiplot.m` (940 bytes)
+- `vendor/extra/fft.m` (1736 bytes)
+- `vendor/extra/ifft.m` (881 bytes)
+- `vendor/extra/ttest.m` (3147 bytes)
+- `vendor/forge/betacdf.m` (7159 bytes)
+- `vendor/forge/betainv.m` (6572 bytes)
+- `vendor/forge/betapdf.m` (6641 bytes)
+- `vendor/forge/chi2cdf.m` (5463 bytes)
+- `vendor/forge/fcdf.m` (7449 bytes)
+- `vendor/forge/fpdf.m` (7974 bytes)
+- `vendor/forge/gamcdf.m` (13475 bytes)
+- `vendor/forge/gaminv.m` (7365 bytes)
+- `vendor/forge/gampdf.m` (6795 bytes)
+- `vendor/forge/normcdf.m` (10379 bytes)
+- `vendor/forge/norminv.m` (6120 bytes)
+- `vendor/forge/normpdf.m` (5930 bytes)
+- `vendor/forge/regress.m` (7261 bytes)
+- `vendor/forge/tcdf.m` (9315 bytes)
+- `vendor/forge/tinv.m` (5467 bytes)
+- `vendor/forge/tpdf.m` (4730 bytes)
 <!-- /AUTO -->
 
 

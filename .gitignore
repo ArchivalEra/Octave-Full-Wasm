@@ -9,7 +9,12 @@
 !build/Makefile
 !build/main.cc
 !build/NOTES.md
+!build/reconf.sh
+!build/CLIBS.md
+!build/plotbridge/*
 !vendor/MANIFEST.md
+!vendor/forge/*
+!vendor/extra/*
 !.githooks/install.sh
 !.githooks/pre-commit
 !.githooks/pre-push
