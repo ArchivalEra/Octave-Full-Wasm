@@ -29,6 +29,8 @@
 !bridge/index.html
 !build/assets.py
 !build/recover.sh
+!build/forge-fetch.py
+!build/forge-build.sh
 !test/browser/*.mjs
 !bridge/octplot.html
 !bridge/plotbridge.js
