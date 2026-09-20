@@ -82,7 +82,7 @@ Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
 - `.githooks/update-readme.py` (2110 bytes)
 - `.gitignore` (751 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (13835 bytes)
+- `HANDOFF.md` (16821 bytes)
 - `LICENSE` (34523 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (4772 bytes)

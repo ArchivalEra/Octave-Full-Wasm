@@ -25,7 +25,7 @@
 
 - 远程：`https://github.com/ArchivalEra/Octave-Full-Wasm`（私有）
 - 许可：AGPL-3.0（`LICENSE`）；混合体无其他选择
-- 当前 HEAD：`709fe6b`（README 补"为什么是网页版"）
+- 当前 HEAD：以 `git log -1` 为准（本文档自身也随每次提交更新；勿在文档里写死哈希，容易过期）
 - 产物体积：wasm raw ~20MB / gzip ~4.5MB；加 data+js+gp 合计 raw ~28MB
 
 ---
@@ -106,8 +106,32 @@ docker cp obuild:/usr/src/octave-wasm/src/web/octave.{js,wasm,data} /tmp/opencod
 
 ## 4. 血泪坑（照抄，别重踩）
 
-### 4.1 dldfcn 不能 dlopen（A 组根因）
-`.oct` 模块在 wasm 里无法加载 → 很多函数明明库有却 `exist=0`。
+### 4.1 dldfcn 不能 dlopen（A 组根因）—— 2026-09-20 已亲手核实
+`.oct` 模块无法加载 → 很多函数明明库有却 `exist=0`。**结论：`.oct` 确实用不了，但根因不是"wasm 做不到"，是三层叠加，其中第一层是上游 fork 自己挖的。**
+
+1. **上游 fork 掏空了装载代码**（决定性）。`third_party/octave-7.2.0/liboctave/util/oct-shlib.cc` 里
+   `octave_dlopen_shlib` 的**构造函数不调用 `dlopen`**、`search()` **不调用 `dlsym`**（`void *function = nullptr; return function;`）。
+   该文件在 `rwl/octave-wasm` 的 git 里**被跟踪且工作区干净**（commit `e584306c`）→ 是 fork 的既定行为，**不是本项目会话改的**。
+   旁证：fork 里还留着一份 octave-4.4.1，同处代码是**被 `//` 注释掉**的（上游原样），7.2.0 里连注释都删净了；
+   fork 镜像构建日志 `/mnt/hdd/octave-wasm-build/build.log:27635` 有 `oct-shlib.cc:210:9: warning: variable 'flags' set but not used`，印证镜像里就是这个版本。
+   注意：构造函数里 `flags` 算了却没用，就是 dlopen 调用被删掉的直接后果。
+2. **Emscripten 侧本就要求可重定位构建**。`dlopen` 的 JS 实现 `src/library_dylink.js` **整个被 `#if RELOCATABLE` 包住**；
+   `RELOCATABLE` 只由 `MAIN_MODULE`/`SIDE_MODULE` 自动开启（`settings.js:1015`）。非该模式下 dlopen 只有一句
+   `"To use dlopen, you need enable dynamic linking"`。且 `emcc.py:837` 在 `RELOCATABLE` 时**自动追加 `-fPIC`** → 走这条路要**全树重编**。
+3. **dldfcn 从来不在构建里**。`libinterp/dldfcn/Makefile` 不存在（automake 没生成 = 该目录没进构建），容器内 `find / -name "*.oct"` **一个都没有**。
+
+**实测（浏览器，8761 基线，2026-09-20）**：
+- `WebAssembly.Module.customSections(mod,'dylink.0')` → `0`；导入表 85 项、**无任何 dl 符号**；`Module._dlopen` → `undefined`。
+  （wasm 里唯一那处 "dlopen" 字样来自 RTTI 名 `N6octave19octave_dlopen_shlibE`，不是符号。）
+- 往 wasm FS 丢假 `probeoct.oct` 再 addpath：`exist("probeoct")` → **3**（路径**认** `.oct`），调用 `probeoct(1)` →
+  `error: /tmp/probeoct.oct is not a valid shared library`（rc=2）。这正是 `is_open()` 恒 false 后由
+  `libinterp/corefcn/dynamic-ld.cc:171` 抛的那句。探针脚本：`/tmp/opencode/octave-accept/octprobe.mjs`（备份见 §3.4）。
+
+**推论**：`STATIC_DLD_FCNS` 不是绕路，是这套 fork 架构下的**正解**，不必再怀疑。
+要走真 dlopen 需同时满足：`MAIN_MODULE=1` + 全树 `-fPIC` 重编（Octave 本体 + 所有第三方库）+ `.oct` 编成 `-sSIDE_MODULE` wasm + 恢复 `oct-shlib.cc`。
+风险极高（MAIN_MODULE=1 不做 DCE、间接调用变多、f2c/ARPACK 那些手工库能否 `-fPIC` 编过未知），收益≈0：
+Octave 自带 dldfcn 全都能静态编 `.o` 注册；**唯一真损失是"用户自带 `.oct`/`.mex` 无法加载"**，而浏览器场景本就由 `.m` 运行时注入覆盖。
+
 **解**：`main.cc` 顶部 `STATIC_DLD_FCNS(X)` 宏表登记 `{name, G_installer}`，Phase 3 里逐个 `getter(no_shl,false)` → `symtab.install_built_in_function`。
 - 新增模块 = 加一行 + 编 `.o` + 在 `Makefile` 的 `EM_LDFLAGS` 挂 `.o`。
 - 编 `.o` 用 `build/build_dldfcn.sh <name>`（容器内跑；`docker cp` 后要再 `chmod +x`）。
