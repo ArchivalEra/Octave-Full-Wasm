@@ -73,7 +73,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 | plot 桥 | ✅ v2：2D（含 subplot/figure(n)/axis）+ 3D（plot3/mesh/surf/contour）+ 中文标签 |
 | **官方 `.oct` 装载** | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
 | 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260921`，首包 gzip ≈11.6MB |
-| 验收 | ✅ **14 套 402 项全绿** |
+| 验收 | ✅ **19 套 475 项全绿**（含需求级 `accept-requirements` + T 批次专项） |
 
 ### 已知偏差（如实）
 - ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
@@ -94,14 +94,33 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 ~~**T1** `help`~~ ✅ **已完成**（构建期 makeinfo 预渲染，`accept-help` 12/12 绿；
 详见 `HANDOFF.md` §5.6 与 `build/CLIBS.md` 批次 T1）→
 **T2** graphics 句柄半真化（写薄 toolkit，渲染仍走现有 plot 桥）→
-**T3** `copyfile`/`movefile`/`ls` → **T4** `pkg` 语义（生成 `.octave_packages`）→
-**T5** `input()`（同步 `window.prompt`）→ **T6** `audiodevinfo`/`doc` →
+~~**T3** `copyfile`/`movefile`/`ls`~~ ✅ **已完成**（进程内纯 `.m`，`accept-fileops` 20/20 绿，无 shell）
+~~**T4** `pkg` 语义~~ ✅ **已完成**（还原被 fork 删掉的 `installed_packages.m` + 生成数据库，
+`accept-pkg` 16/16 绿）→ ~~**T5** `input()`~~ ✅ **已完成**（本就可用，只需官方 `Module.stdin`
+扩展点让验收可测，`accept-input` 9/9 绿）→ **T6** `audiodevinfo`/`doc` →
 **T7** `audiorecorder` → **T8** `uigetfile` → **T9** `MAIN_MODULE=2`（体积优化）→
 **T10** Asyncify 最小实验。
 
 依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
 （外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
 以及 A1 的核心建议——**不复活 gnuplot 后端，改写薄 toolkit 复用现有桥**）。
+
+## 第四轮：换基线到 **Octave 11.3.0** + 重构图形线
+
+已决定换到 **11.3.0**（决策与闸门见 `HANDOFF.md` §9，**事实依据
+`build/BASELINE-11.3.md`**）。要点：
+
+- **收益**：11.x 的卷积快 10%–150×、`randi` 4.5×、logical 求和最高 6×；MATLAB 兼容
+  有一整节（稀疏/对角 broadcasting、一大批函数的 `"all"`/`vecdim`/`nanflag`、
+  `qr` 单输出只返回 R…）。且**与本机参照版 Octave 同版**，验收可逐位对照。
+- **代价比原估小得多**：原以为 19 个 patch 要全部重推，**实测 16/19 直接可用**
+  （1 个已进上游该删、2 个局部重做，共 4 个文件）。
+- **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
+  Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
+- **图形**：第三方已把「薄 toolkit」写成并在 11.1.0 上验证能跑，撞墙点与我们记录一致，
+  同样推荐 **OSMesa** —— 这一轮把图形线真正做成官方实现。
+- **纪律**：7.2 基线（`http://127.0.0.1:8761/`）在 11.3.0 通过等价验收前**不动**；
+  11.3.0 全程在独立容器 `o113` 内做。
 
 > **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
 > `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
