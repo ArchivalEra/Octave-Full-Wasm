@@ -122,6 +122,55 @@
 - 配方：`build/reconf-batch1b.sh`（去掉 `--without-sndfile`）。
 - wasm raw 19.98MB。
 
+## 批次 13（2026-09-20）：dldfcn **回归官方装载路径**（摘掉静态注册）
+
+**背景**：批次 0–1b 期间，`.oct` 看起来在 wasm 里不可能装载（fork 掏空了
+`oct-shlib.cc`、且 `libinterp/module.mk:115` 的 dldfcn include 被注释、从不产出 .oct），
+于是发明了 `main.cc` 的 `STATIC_DLD_FCNS`：手工驱动每个模块的 `G_` installer、
+用 `symtab.install_built_in_function` **装成内建**。
+
+**问题**：批次 1d 之后真 dlopen 已经做通，但这 11 个没跟着搬。结果是**语义偏离**——
+`exist()` 返回 5、`which()` 报 "built-in function"，而桌面版是 3 + 文件路径。
+（这也是为什么当时 `pkg`/`autoload` 类机制看到的行为与桌面版不一致。）
+
+**已改**：11 个函数 → 7 个 `.oct` 资产，走与 Forge 包/自研模块同一条官方车道。
+
+| | 原先 | 现在 |
+|---|---|---|
+| 装载 | `main.cc` 静态表 + `install_built_in_function` | 运行时 dlopen（`assets/oct/*.oct`） |
+| `exist()` | 5 | **3** |
+| `which()` | `built-in function` | **`/usr/src/octave/m/oct/<name>.oct`** |
+| 加新模块 | 改 main.cc + 重链 46MB 主 wasm | 编 `.oct` + 加 manifest 条目 |
+| wasm/js 体积 | — | **−120KB / −80KB**（少了 7 个模块的代码） |
+
+模块与函数名的对应（**一个模块导出多个函数时，必须靠 `aliases` 符号链接**，
+否则 Octave 按文件名找不到——见 §4.11）：
+
+| .oct | 导出函数 | aliases |
+|---|---|---|
+| `gzip.oct` | gzip | `bzip2` |
+| `audioread.oct` | audioread | `audiowrite` `audioinfo` `audioformats` |
+| `convhulln.oct` | convhulln | —（文件名即函数名） |
+| `__delaunayn__.oct` / `__voronoi__.oct` / `__glpk__.oct` / `fftw.oct` | 同名 | — |
+
+**两条不可删的东西**（摘静态表时最容易误删）：
+1. **`-lqhull_r -lglpk -lsndfile -lz -lbz2 -lfftw3 -lfftw3f` 全部保留** ——
+   `.oct` 不链任何库，它们的 qhull/glpk/sndfile/zlib 符号要**从主模块解析**。
+2. **`fftw_threads_stub.o` 保留** —— 它是给**核心 `fft`/`ifft`** 用的
+   （`liboctave/numeric/oct-fftw.cc` 的 `fftw_planner` 要 `fftw_init_threads`），
+   与 dldfcn 的 `fftw()` 模块**无关**。FFTW 是 `--disable-threads` 编的、不提供
+   这个符号，而 Octave 把它当致命错误 → 删了任何 `fft` 调用都会崩。
+
+**为什么阶段化做**（这是本次能低风险落地的原因）：Octave 的函数查找顺序是
+autoload → **path 上的函数** → package → builtin（`fcn-info.cc:811-834`）。
+所以先把 `.oct` 资产铺好，**path 就自动压过了静态注册的 builtin**；
+确认全绿之后再摘表，摘表那一步就只是删死代码，没有行为变化。
+
+**验收**：`test/browser/accept-dldfcn.mjs` 68/68（官方语义 11 项 ×2 + 真数值 +
+核心 .m 包装层协同 + 回归）；8761 全量 **14 套 400 项**全绿。
+
+---
+
 ## 真 .oct 动态装载（2026-09-20）：MAIN_MODULE=1 + wasm side module
 
 结论：**`.oct` 能用**，但代价明确。实验在独立容器 `odld`（镜像 `octave-build:pre-dldfcn`，

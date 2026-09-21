@@ -43,9 +43,15 @@ await page.evaluate(() => {
   Module.FS.writeFile('/work/sub/gamma.txt', 'gamma\n');
 });
 
-console.log('--- 懒加载 webio + webshell ---');
+console.log('--- 懒加载 webio + webshell + dldfcn 的 gzip ---');
+// gzip/bzip2 的**压缩**侧来自 dldfcn 模块（批次 13 起是 .oct 资产，不再是内建）；
+// 解压侧来自 webio/web shell 的进程内覆写。两边都要装。
 const lr = await page.evaluate(async () => {
-  try { await window.OctaveAssets.load('webshell'); return window.OctaveAssets.loaded().join(' '); }
+  try {
+    await window.OctaveAssets.load('webshell');
+    await window.OctaveAssets.load('gzip');
+    return window.OctaveAssets.loaded().join(' ');
+  }
   catch (e) { return 'ERR ' + String(e).slice(0, 140); }
 });
 console.log('  已加载:', lr);

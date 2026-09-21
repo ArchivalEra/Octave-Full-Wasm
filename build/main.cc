@@ -8,34 +8,27 @@
 #include <parse.h>
 #include <interpreter.h>
 #include <builtin-defun-decls.h>
-#include <oct-shlib.h>
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
 
-// Statically-linked dldfcn entry points: dldfcn/.oct modules can never
-// dlopen in wasm, so their G_ installers are driven by hand at startup
-// (Phase 3).  Add a module by appending ONE line to STATIC_DLD_FCNS.
-// C linkage (unmangled), C++ signatures.
-#define STATIC_DLD_FCNS(X)                              \
-  X ("__delaunayn__", G__delaunayn__)                   \
-  X ("__glpk__",      G__glpk__)                        \
-  X ("__voronoi__",   G__voronoi__)                     \
-  X ("convhulln",     Gconvhulln)                       \
-  X ("fftw",          Gfftw)                            \
-  X ("gzip",          Ggzip)                            \
-  X ("bzip2",         Gbzip2)                           \
-  X ("audioread",     Gaudioread)                       \
-  X ("audiowrite",    Gaudiowrite)                      \
-  X ("audioinfo",     Gaudioinfo)                       \
-  X ("audioformats",  Gaudioformats)
-
-extern "C" {
-#define DECL_GETTER(name, getter) \
-  octave_function *getter (const octave::dynamic_library&, bool);
-STATIC_DLD_FCNS(DECL_GETTER)
-#undef DECL_GETTER
-}
+// dldfcn modules (__delaunayn__/convhulln/__glpk__/fftw/gzip/audioread/…) are
+// NOT registered here any more: they are ordinary .oct side modules loaded at
+// runtime by dlopen — the same mechanism desktop Octave uses, and the same one
+// this build already used for the Forge packages and the web* modules.
+//
+// History, because this is the first place to look when a function goes
+// missing: an earlier version kept a STATIC_DLD_FCNS table here that drove each
+// module's G_installer by hand and installed it as a *built-in*
+// (symtab.install_built_in_function).  That was invented when dlopen looked
+// impossible in wasm — the upstream fork had gutted oct-shlib.cc and never
+// built dldfcn at all.  Once the real dlopen path was restored (see
+// build/CLIBS.md「真 .oct 动态装载」) the hand-registration became both
+// unnecessary and wrong: it made exist() report 5 and which() say
+// "built-in function", where desktop Octave reports 3 and a file path.
+//
+// The modules now ship as lazy assets; bridge/index.html loads the core group
+// at startup, so the out-of-the-box experience is unchanged.
 
 const std::string OBJ_TYPE_KEY = "$type";
 
@@ -423,36 +416,9 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
     }
   }
 
-  // Phase 3: statically-linked dldfcn builtins (__delaunayn__ etc.).
-  // .oct modules can't dlopen in wasm; drive their G_ installers by hand.
-  // The table comes from STATIC_DLD_FCNS — add a module by adding one
-  // line there, nothing here changes.
-  {
-    octave::dynamic_library no_shl;
-    octave::symbol_table& symtab = interpreter->get_symbol_table ();
-    struct static_fcn {
-      const char *name;
-      octave_function *(*getter)(const octave::dynamic_library&, bool);
-    };
-    static const static_fcn fcns[] = {
-#define TABLE_ENTRY(name, getter) { name, getter },
-      STATIC_DLD_FCNS(TABLE_ENTRY)
-#undef TABLE_ENTRY
-      { nullptr, nullptr }
-    };
-    for (int i = 0; fcns[i].name != nullptr; i++) {
-      try {
-        octave_function *fcn = fcns[i].getter (no_shl, false);
-        if (fcn)
-          symtab.install_built_in_function (fcns[i].name, octave_value (fcn));
-        else
-          std::cerr << "warning: null installer result for "
-                    << fcns[i].name << std::endl;
-      } catch (...) {
-        std::cerr << "warning: failed to install " << fcns[i].name << std::endl;
-      }
-    }
-  }
+  // No Phase 3 any more.  dldfcn modules arrive as .oct assets and are dlopen'd
+  // on demand — see the note at the top of this file for why the old
+  // hand-registration was removed.
 
   return 0;
 }

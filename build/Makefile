@@ -25,17 +25,22 @@ EM_CFLAGS = -O2 -fPIC -Wall -std=c++11 -fwasm-exceptions
 #EM_CFLAGS = -O2 --closure 1 -Wall -std=c++11 -fwasm-exceptions
 #EM_CFLAGS = -O3 --closure 1 -Wall -std=c++11 -fwasm-exceptions
 EM_CXXFLAGS = -I. -I$(PREFIX)/include -I$(PREFIX)/include/octave-$(OCTAVE_VER)/octave/.. -I$(PREFIX)/include/octave-$(OCTAVE_VER)/octave
+# dldfcn 模块（__delaunayn__/convhulln/__glpk__/fftw/gzip/audioread/…）不再
+# 静态入链：它们编成 .oct side module，由运行时 dlopen 装载（见 main.cc 顶部注释）。
+# 那些符号现在**必须留在库里**——.oct 不链任何库，装载时靠主模块解析：
+#   qhull ← convhulln/__delaunayn__/__voronoi__      glpk ← __glpk__
+#   sndfile ← audioread 系列                         zlib/bz2 ← gzip/bzip2
+#   fftw3/3f ← 核心 fft 与 fftw() 都要
+# 所以下面这一串 -l 一个都不能删。
+#
+# fftw_threads_stub.o 必须保留，且与 dldfcn 的 fftw() 模块**无关**：
+# 它是给核心 fft/ifft（liboctave 的 oct-fftw.cc）用的。FFTW 是 --disable-threads
+# 编的，不提供 fftw_init_threads，而 Octave 把它当致命错误——没有这个桩，
+# 任何 fft 调用都会崩在 "Error initializing FFTW threads"。
 EM_LDFLAGS = -L$(PREFIX)/lib -L$(PREFIX)/lib/octave/$(OCTAVE_VER) -lf2c -lrefblas -lclapack -lpcre \
 -lsuitesparseconfig -lcxsparse -lamd -lcamd -lcolamd -lccolamd -lcholmod -lumfpack -loctave -loctinterp \
 -lqrupdate -larpack -lfftw3 -lfftw3f -lqhull_r -lglpk -lsndfile -lhdf5 -lf2c -lz -lbz2 -lm \
-/usr/src/octave-wasm/target/lib/fftw_threads_stub.o \
-/usr/src/octave-wasm/target/lib/__delaunayn__.o \
-/usr/src/octave-wasm/target/lib/__glpk__.o \
-/usr/src/octave-wasm/target/lib/__voronoi__.o \
-/usr/src/octave-wasm/target/lib/convhulln.o \
-/usr/src/octave-wasm/target/lib/fftw.o \
-/usr/src/octave-wasm/target/lib/gzip.o \
-/usr/src/octave-wasm/target/lib/audioread.o
+/usr/src/octave-wasm/target/lib/fftw_threads_stub.o
 # MAIN_MODULE=1：主模块做成可重定位，运行时能 dlopen 真 .oct（wasm side module）。
 # 这一条把三件事绑在一起，动一个就得动全部：
 #   1. 本文件的 EM_SFLAGS（MAIN_MODULE + ALLOW_TABLE_GROWTH）

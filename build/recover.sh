@@ -46,20 +46,23 @@ else
 fi
 
 echo "== 3) 站点目录 =="
+# 注意：站点必须从**检查点镜像对应的容器**重建才有意义。dldfcn 核心组
+# （convhulln/gzip/… 7 个 .oct）现在走 assets/oct/ 的懒加载车道，所以这里
+# 只要把三大件拿回来；资产目录整体从持久盘已有的 site/ 复制即可。
+# 旧的 site/oct/ 影子目录（早期 dlopen 实验的遗留）已废弃——那批 .oct 现在
+# 在 assets/oct/ 里、由 manifest 管理（批次 13）。
 if [ -f "$SITE/octave.wasm" ]; then
   echo "  $SITE 已在（$(du -sh "$SITE" | cut -f1)）"
 else
-  echo "  站点缺失，从 odld 容器重建…"
-  mkdir -p "$SITE/oct" "$SITE/assets/oct" "$SITE/assets/m"
+  echo "  站点缺失，从容器重建（三大件 + 桥 + 资产）…"
+  mkdir -p "$SITE/assets/oct" "$SITE/assets/m" "$SITE/assets/pkg" "$SITE/assets/data"
   D=/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920
   cp -a "$D"/gp "$D"/plotbridge "$D"/plotbridge.js "$D"/octplot.html "$D"/vendor "$SITE/" 2>/dev/null || true
-  sudo docker cp odld:/usr/src/octave-wasm/src/web/octave.js "$SITE/"
-  sudo docker cp odld:/usr/src/octave-wasm/src/web/octave.wasm "$SITE/"
-  sudo docker cp odld:/usr/src/octave-wasm/src/web/octave.data "$SITE/"
-  sudo docker cp odld:/octs/dldprobe.oct "$SITE/"
-  sudo docker cp odld:/octs/gzip.oct "$SITE/oct/"
-  sudo docker cp odld:/octs/convhulln.oct "$SITE/oct/"
-  cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" "$SITE/"
+  # 三大件从 **obench**（-O1 检查点，当前基线）取；odld 仍是 -O0 的库
+  sudo docker cp obench:/usr/src/octave-wasm/src/web/octave.js "$SITE/"
+  sudo docker cp obench:/usr/src/octave-wasm/src/web/octave.wasm "$SITE/"
+  sudo docker cp obench:/usr/src/octave-wasm/src/web/octave.data "$SITE/"
+  cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" "$REPO/bridge/webaudio.js" "$REPO/bridge/webnet.js" "$SITE/"
   sudo chown -R "$(id -u):$(id -g)" "$SITE"
 fi
 
