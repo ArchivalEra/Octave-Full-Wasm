@@ -44,16 +44,35 @@ export FLIBS="-L$DEPS/lib -lf2c"
 export BLAS_LIBS="-lrefblas -lf2c"
 export LAPACK_LIBS="-llapack"
 
-# ---- 头/库搜索路径 ---------------------------------------------------------
+# ---- 头搜索路径（LDFLAGS/CFLAGS/CXXFLAGS 在下面统一设） ---------------------
 export CPPFLAGS="-I$DEPS/include"
-export LDFLAGS="-L$DEPS/lib"
-# ⚠️ 必须设：Octave 11 是用 pkg-config 找 pcre2 的（`--with-pcre2*` 那套，
-# configure 里有 ac_octave_pcre2_pkg_check）。不设这个，就算
-# libpcre2-8.pc 装好了也找不到 → configure 报
-# "you must have the PCRE or PCRE2 library and header files installed"，
-# 而它探的库名是 -lpcre2（我们装的是 libpcre2-8.a），很有迷惑性。
-# Edge-Tools 的 Dockerfile 第一行就设了它，我们漏过一次。
+# ⚠️ pcre2 的探测（走过的弯路，记下来）：
+# configure 里默认 `ac_octave_pcre2_pkg_check=yes` 且 `PCRE2_LIBS="-lpcre2"`，
+# 然后用 `if test -n "$PKG_CONFIG" && $PKG_CONFIG --exists "libpcre2-8"` 去试 pkg-config；
+# 这一步一旦不成立，就落到 `-lpcre2` 回退——而我们装的是 **libpcre2-8.a**，
+# 于是报 "you must have the PCRE or PCRE2 library and header files installed"，
+# 明明头文件已找到（`checking for pcre2.h... yes`），很有迷惑性。
+#
+# 先按 Edge-Tools 的做法设 PKG_CONFIG_PATH（给 pkg-config 找 .pc 用）。
 export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+export PKG_CONFIG=/usr/bin/pkg-config
+# 但更稳的是**直接绕过探测**：configure 的 case 分支里，`--with-pcre2` 的值若以
+# `-` 开头（如 -lpcre2-8）会**原样**当作 PCRE2_LIBS，且因为 ac_octave_pcre2_pkg_check
+# 只被 `yes|""` 分支置为 yes，走这条路时 pkg-config 分支根本不会执行。
+# 所以下面 configure 行里显式给了 `--with-pcre2=-lpcre2-8`。
+# （pcre2 的 8 位宽变体就是这个库名；上游 PCRE2 装出来的 .a 叫 libpcre2-8.a。）
+
+# ---- 编译/链接口径（取 Edge-Tools 在 11.x 上验证过的组合 + 我们的 PIC 要求） --
+# `-fPIC` 是 `.oct` 车道的前提：主链走 MAIN_MODULE=1 时 wasm-ld 用
+# `--experimental-pic -pie`，任何非 PIC 对象都会链接失败
+# （R_WASM_MEMORY_ADDR_LEB ... recompile with -fPIC）。
+# 依据：build/CLIBS.md「真 .oct 动态装载」+ 闸门二探针已实测通过
+# （build/113/probe-side-module.sh，emsdk 5.0.7 上 MAIN_MODULE/SIDE_MODULE 可用）。
+export CFLAGS="-O2 -fPIC"
+export CXXFLAGS="-O2 -fexceptions -fPIC"
+export FFLAGS="-O2 -fPIC"
+export LDFLAGS="-L$DEPS/lib -fPIC -s ERROR_ON_UNDEFINED_SYMBOLS=0"
+export EMCC_FORCE_STDLIBS=1
 
 # ---- ccache：让整棵树的编译都进缓存（LAPACK 那种量重跑时省的是整段） --------
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
@@ -79,13 +98,35 @@ export gl_cv_const_PTHREAD_PROCESS_SHARED=no
 export ac_octave_suitesparseconfig_pkg_check=no
 export ac_octave_spqr_check_for_lib=no
 
-echo "=== configure $SRCDIR → $PREFIX"
+echo "=== configure 前置：Edge-Tools 在 11.x 上验证过的两处 configure 处理"
 cd "$SRCDIR"
+# 1) -fexceptions → -fwasm-exceptions（emsdk 5.x 下后者才是原生 wasm 异常）
+if grep -q -- '-fexceptions' configure; then
+  n_before=$(grep -c -- '-fexceptions' configure || true)
+  sed -i 's/-fexceptions/-fwasm-exceptions/g' configure
+  n_after=$(grep -c -- '-fexceptions' configure || true)
+  echo "  [1] -fexceptions → -fwasm-exceptions：$n_before 处 → 剩 $n_after 处"
+  [ "$n_after" -lt "$n_before" ] || { echo "FATAL: 替换没生效" >&2; exit 1; }
+else
+  echo "  [1] 已处理（跳过）"
+fi
+# 2) 清掉 postdeps_CXX：某些 configure 测试会顺带拖进编译器库里的 legacy 异常实现
+if grep -qE "^postdeps_CXX='.+'$" configure; then
+  sed -i "s/^postdeps_CXX=.*/postdeps_CXX=''/" configure
+  grep -qE "^postdeps_CXX=''$" configure || { echo "FATAL: postdeps_CXX 未清空" >&2; exit 1; }
+  echo "  [2] postdeps_CXX 已清空"
+else
+  echo "  [2] 已处理（跳过）"
+fi
+
+echo "=== configure $SRCDIR → $PREFIX"
 emconfigure ./configure \
   --host=wasm32-unknown-emscripten \
   --prefix="$PREFIX" \
-  --disable-shared --enable-static \
   --enable-fortran-calling-convention=f2c \
+  --with-pcre2=-lpcre2-8 \
+  --with-blas=-lrefblas --with-lapack=-llapack \
+  --enable-shared --disable-static \
   --disable-readline --disable-docs --disable-java \
   --disable-threads \
   --without-qt --without-fltk \
