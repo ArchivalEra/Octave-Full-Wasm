@@ -38,6 +38,8 @@
 !bridge/assets-loader.js
 !bridge/index.html
 !build/assets.py
+!build/render-docstrings.py
+!build/check_m.py
 !build/recover.sh
 !build/webio.cc
 !build/webimage.cc

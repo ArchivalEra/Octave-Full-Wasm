@@ -76,8 +76,10 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 | 验收 | ✅ **14 套 402 项全绿** |
 
 ### 已知偏差（如实）
-- **`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）。`.m` 文件的 docstring
-  直接可读，texinfo 渲染路径不行。**已实测修不了**（doc-cache 注入无效）。
+- ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
+  构建期用**真 makeinfo 预渲染** `built-in-docstrings`（与 Octave 自己的
+  `mk-doc-cache.pl` 同一技术），运行时零新代码。`help sin`/`help sqrt`/`help disp` 可用。
+  **仍缺**：`help ode45` 这类 `.m` 的 docstring 走运行时路径，不吃该表，仍报 makeinfo 错误。
 - `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
 - `system`/`unix`/`popen` 清晰报错（有意保持）。
 - **control 包的 SLICOT 编译件未发布**：side module 引用主模块 Fortran 符号时
@@ -86,14 +88,16 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 
 ## 下一步（第三轮，已排好序）
 
-R1–R10 已全部落地。第三轮做的是**浏览器环境语义**——剩下的缺口不是数学能力，
+R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩下的缺口不是数学能力，
 而是"宿主 API 怎么换成浏览器原生"（`HANDOFF.md` §5.5 有完整计划）：
 
-**T1** `help`（覆写 `__makeinfo__` 做简化 texinfo 渲染）→ **T2** graphics 句柄半真化
-（写薄 toolkit，渲染仍走现有 plot 桥）→ **T3** `copyfile`/`movefile`/`ls` →
-**T4** `pkg` 语义（生成 `.octave_packages`）→ **T5** `input()`（同步 `window.prompt`）→
-**T6** `audiodevinfo`/`doc` → **T7** `audiorecorder` → **T8** `uigetfile` →
-**T9** `MAIN_MODULE=2`（体积优化）→ **T10** Asyncify 最小实验。
+~~**T1** `help`~~ ✅ **已完成**（构建期 makeinfo 预渲染，`accept-help` 12/12 绿；
+详见 `HANDOFF.md` §5.6 与 `build/CLIBS.md` 批次 T1）→
+**T2** graphics 句柄半真化（写薄 toolkit，渲染仍走现有 plot 桥）→
+**T3** `copyfile`/`movefile`/`ls` → **T4** `pkg` 语义（生成 `.octave_packages`）→
+**T5** `input()`（同步 `window.prompt`）→ **T6** `audiodevinfo`/`doc` →
+**T7** `audiorecorder` → **T8** `uigetfile` → **T9** `MAIN_MODULE=2`（体积优化）→
+**T10** Asyncify 最小实验。
 
 依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
 （外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
@@ -110,19 +114,19 @@ R1–R10 已全部落地。第三轮做的是**浏览器环境语义**——剩�
 - `.githooks/pre-commit` (378 bytes)
 - `.githooks/pre-push` (337 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (1279 bytes)
+- `.gitignore` (1325 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (42236 bytes)
+- `HANDOFF.md` (45241 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
-- `bridge/index.html` (3286 bytes)
+- `bridge/index.html` (4198 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (6457 bytes)
 - `bridge/webaudio.js` (6864 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/BENCH.md` (5640 bytes)
-- `build/CLIBS.md` (41591 bytes)
+- `build/CLIBS.md` (49092 bytes)
 - `build/GAPS-2.md` (23986 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
@@ -132,6 +136,7 @@ R1–R10 已全部落地。第三轮做的是**浏览器环境语义**——剩�
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
 - `build/build_pkg_oct.sh` (11790 bytes)
+- `build/check_m.py` (4166 bytes)
 - `build/fftw_threads_stub.c` (553 bytes)
 - `build/forge-build.sh` (2117 bytes)
 - `build/forge-fetch.py` (5109 bytes)
@@ -194,6 +199,7 @@ R1–R10 已全部落地。第三轮做的是**浏览器环境语义**——剩�
 - `build/reconf-pic.sh` (2810 bytes)
 - `build/reconf.sh` (3004 bytes)
 - `build/recover.sh` (4930 bytes)
+- `build/render-docstrings.py` (8474 bytes)
 - `build/second_stub.f` (358 bytes)
 - `build/webaudio/__pba_enqueue__.m` (828 bytes)
 - `build/webaudio/__pba_get__.m` (606 bytes)
@@ -243,6 +249,7 @@ R1–R10 已全部落地。第三轮做的是**浏览器环境语义**——剩�
 - `test/browser/accept-forge2.mjs` (7666 bytes)
 - `test/browser/accept-full.mjs` (5734 bytes)
 - `test/browser/accept-hdf5.mjs` (4146 bytes)
+- `test/browser/accept-help.mjs` (3589 bytes)
 - `test/browser/accept-image.mjs` (4098 bytes)
 - `test/browser/accept-net.mjs` (7994 bytes)
 - `test/browser/accept-ode15.mjs` (4890 bytes)

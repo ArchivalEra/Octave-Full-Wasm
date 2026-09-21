@@ -367,10 +367,12 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | R9 图形导出 | `print -dsvg`（2D+3D 都能出） | 纯 `.m` SVG 生成器；gnuplot 路线要 Asyncify 才有同步通道，故不采用 |
 | R10 编译级别 | **采纳 `-O1`** | 解释器密集代码快 5–10×，体积还小 7.5MB；wasm64 不碰 |
 
-### ⬜ 第三轮（**待执行**，GPT 审核已就位）
+### ⬜ 第三轮（**进行中**，GPT 审核已就位）
 
 **来源**：`build/GAPS-2.md`（缺口清单 v2，逐条实测）→ `build/GPT-REVIEW-2.md`
 （外部审核，含纠错与路线建议）→ 下面是消化后的可执行计划。
+
+**T1 已完成（见 §5.6）**：`help` 走**构建期 makeinfo 预渲染**，零覆写、零运行时代码。
 
 **GPT 的两处纠错（已核对，采纳）**：
 - **`spqr` 不是缺口**：该函数 Octave 3.6.0 就被 `qr` 取代（官方 obsolete 表）；
@@ -395,7 +397,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 
 | # | 批次 | 内容 | 工作量估计 | 车道 |
 |---|---|---|---|---|
-| 1 | **T1** | **D1 `help`**：覆写 `__makeinfo__.m` 做**简化 texinfo→纯文本**（去标记、保正文）。路线与本项目已验证 6 次的覆写模式同型。可选加"离线预转换核心函数帮助" | 0.5–3 d | 资产（零重链） |
+| ~~1~~ | ~~**T1**~~ | ✅ **已完成**：`help` 走**构建期 makeinfo 预渲染**（不是覆写渲染器）。见 §5.6 | — | 资产（零重链） |
 | 2 | **T2** | **A1/A2 图形句柄半真化**：写 `__init_web__.cc` → `web_graphics_toolkit`（`initialize` 允许 figure、`redraw_figure` 先 no-op、`get_canvas_size` 给默认值）。**目标只是救活 `gca/gcf/get/set/figure` 的语义**，不碰绘图重构 | 1–3 d | Lane B（重链） |
 | 3 | **T3** | **C1 文件操作**：覆写 `copyfile`/`movefile`/`ls`，基于 `dir/glob/fopen/mkdir/unlink` 纯 `.m` | 1–2 d | 资产 |
 | 4 | **T4** | **G3 pkg 语义**：**不改 `pkg`**，而是让资产装载时生成 `.octave_packages` 数据库，让 `pkg list`/`pkg load` 天然看到 | 0.5–2 d | 资产 |
@@ -410,9 +412,43 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 （等 Asyncify）、`H3 getframe/movie`（等 graphics 成熟）、`H4`、`H1 voronoi 单输出`
 （A1 的派生收益，不单独改）。
 
+### 5.6 T1 已完成（2026-09-21）——`help` 可读
+
+**结论：`help` 不需要自研渲染器。** makeinfo 是 Perl 程序、wasm 里跑不了，
+但**它的输出是确定性的**，所以渲染挪到**构建期**用真 GNU makeinfo 做。
+**这是 Octave 自己的做法**（`doc/interpreter/mk-doc-cache.pl:102` 就是构建期调
+makeinfo 生成 doc-cache）。
+
+**让 `help` 用上它：零覆写、零运行时代码。** 靠 Octave 自己的格式判定——
+`help.cc:141` 的 `looks_like_texinfo()` **只检查第一行有没有 `-*- texinfo -*-`**；
+去掉这行 → 格式判成 `plain text` → `help` 直接打印、不调 makeinfo。
+
+- 工具：**`build/render-docstrings.py`**（构建期，宿主侧）
+- 实测：**894/896** 条渲染成功；2 条失败的是 `methods`/`properties`（源码里本就是
+  `@c #` 注释状态，桌面版也拿不到）
+- 验收：**`test/browser/accept-help.mjs` 12/12 绿**，含"`which __makeinfo__` 必须指向
+  核心文件"这条**官方性护栏**；全量 `accept-requirements` 仍 14/14
+- 装载：`built-in-docstrings` + `doc-cache` 改为**随页面启动装载**（约 2.5MB），
+  因为 `help` 属于"开箱就该能用"
+
+**⚠️ 走过弯路，别再走**：先做过一版**自研 texinfo→纯文本渲染器**（覆写
+`__makeinfo__.m`，7 个文件约 700 行），**已全部删除**。错在把"宿主组件不可用"
+当成"要重新实现宿主组件"，而不是"把它挪到构建期"——官方 `mk-doc-cache.pl` 就在
+仓库里示范了后一条。详见 `CLIBS.md` 批次 T1 节。
+
+**剩余缺口（如实）**：只覆盖**内建**。`help ode45` 这类 `.m` 文件的 docstring 是
+运行时从 `.m` 里读的，**不吃 `built-in-docstrings`**，仍会报 makeinfo 错误。
+要覆盖得预渲染 1010 个 `.m` 的 docstring（侵入性大得多）。
+
+**顺手留下的工具**：`build/check_m.py`（宿主 Octave 秒级 `.m` 语法预检，含括号平衡
+与"多函数同文件"检查）。**注意**：宿主是 11.x、目标是 7.2，**通过不代表 7.2 通过；
+失败几乎一定是真失败**——它是"过滤器"，验收仍以浏览器实测为准。
+
 **其它遗留（非 GPT 清单内，仍挂着）**：
 - **control 的 SLICOT 编译件**：见 §4.12，需先做静态注册的小实验。
-- **`help` 的 doc-cache 注入无效**（已实测）——T1 走 `__makeinfo__` 覆写才是正路。
+- **`help` 对 `.m` 文件仍不可用**（§5.6 的剩余缺口）：内建已修好（构建期预渲染），
+  但 `help ode45` 走的是运行时从 `.m` 读 docstring 的路，不吃 `built-in-docstrings`。
+  **别再试 `doc-cache` 注入**（已实测无效：错误只是从"文件缺失"变成"makeinfo 不可用"）。
 
 ### ❌ 已论证不做（别再试）
 - **`spqr`**：该函数 Octave **3.6.0 就被 `qr` 取代**（官方 obsolete 表）。
@@ -445,6 +481,8 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `build/build_oct.sh` | 编 dldfcn `.cc` → `.oct` **side module**（动态装载车道，不挂终链） |
 | `build/build_pkg_oct.sh` | 编 **Forge 包** `src/*.cc` → `.oct`（内含 3 个垫片 + config.h 纠正表/合成兜底） |
 | `build/assets.py` | 资产工具：`bundle-m` / `bundle-pkg` / `gen-manifest` |
+| `build/render-docstrings.py` | **T1**：构建期用**真 makeinfo** 预渲染 `built-in-docstrings`（去 texinfo 标记 → `help` 走 plain text 分支）。宿主侧跑 |
+| `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
@@ -489,10 +527,11 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
   全部改成进程内实现（`webio.oct` + `webshell` 覆写），二进制往返字节级一致。
   仍存在的同类：任何**其它**调 `system()` 的 `.m`（全树共 34 个文件）——本构建里会清晰报错。
 - `system`/`unix`/`popen` 清晰报错（本就达标，且是**有意**保持）。
-- **`help` 对非平凡输入会报 `makeinfo` 子进程错误**：wasm 无 shell。`.m` 文件的
-  docstring 直接可读（`help plot` 可用），但走 texinfo 渲染的路径（含所有内建）必然失败。
-  注入 `doc-cache` + `built-in-docstrings` **无效**（实测：错误只是从"文件缺失"变成
-  "makeinfo 不可用"）——**但 T1 有解**：覆写 `__makeinfo__.m` 做简化渲染（见 §5.5）。
+- ~~**`help` 对非平凡输入会报 `makeinfo` 子进程错误**~~ → **T1 已修复（内建）**：
+  构建期用真 makeinfo 预渲染 + 去掉 `-*- texinfo -*-` 标记，`help sin`/`help sqrt`/
+  `help disp` 全部可用（见 §5.6）。**仍存在的部分**：`help ode45` 这类 `.m` 文件的
+  docstring 走运行时路径，仍会报 makeinfo 错误——这是剩余缺口，不是已解决项。
+  （`doc-cache` 注入**已实测无效**，别再试。）
 - **图形句柄是"半死"状态**（实测分界）：`gcf()` 可用；`gca()` 报 `invalid handle`；
   `figure()` 返回假句柄。**T2 的目标**（见 §5.5）。
 - **control 包的 SLICOT 编译件未发布**（§4.12）：`ss`/`step`/`tf2ss` 不可用；
@@ -504,16 +543,18 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 ---
 
 ## 8. 一句话接续
-**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13**，
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **15 套 418 项全绿**（含需求级
-`accept-requirements`），交付包在
+**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1**，
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **16 套 430 项全绿**（含需求级
+`accept-requirements` 与新的 `accept-help`），交付包在
 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
 
-**R1–R10 全部落地。下一轮（第三轮）的计划在 §5.5** —— 已按外部审核排好序：
-**T1 `help` → T2 图形句柄半真化 → T3 文件操作 → T4 pkg 语义 → T5 `input()` →
-T6 audiodevinfo/doc → T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
+**R1–R10 全部落地**；**第三轮 T1 已完成**（`help` 可读，构建期 makeinfo 预渲染，见 §5.6）。
+**下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
+其余顺序：**T3 文件操作 → T4 pkg 语义 → T5 `input()` → T6 audiodevinfo/doc →
+T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
+**改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
 只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild`/`odld`/`obench` 容器内工作。
 
 **恢复流程（断电/新会话第一条命令）**：

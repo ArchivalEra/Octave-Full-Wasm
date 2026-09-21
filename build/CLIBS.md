@@ -633,3 +633,136 @@ TypeError: Cannot read properties of undefined (reading 'apply')
 **将来若要修**：先做一次最小实验——把某个 SLICOT `.oct` 改成**静态注册**
 （进 `STATIC_DLD_FCNS`）看是否可用。若可用，说明结论是"side module 的符号签名
 不可靠"，那么所有需要主链 Fortran 符号的包都要走静态注册（要重链主 wasm）。
+
+---
+
+## 批次 T1（2026-09-21）：`help` 可读 —— 构建期 makeinfo 预渲染（第三轮）
+
+**需求**：`help NAME` 要能看。这是学生第一个会打的命令。
+
+**问题**：`help NAME` 对所有走 texinfo 渲染的输入都报
+`system: unable to start subprocess for 'makeinfo …'`。上游 `__makeinfo__.m:155`
+最后一步是 `system()` 起 makeinfo 子进程，而本构建**没有 shell**（有意为之，
+见 HANDOFF §7）。只有 `.m` 文件的 plain-text docstring 能看（`help plot`）；
+内建函数的 docstring 在 C++ `DOCSTRINGS` 表里、标记为 texinfo，全部失败。
+
+### 关键认识：makeinfo 不该被"替代"，而该被"提前调用"
+
+**`help` 的文本就是 makeinfo 的输出** —— 这是官方行为，不是实现细节：
+
+- `scripts/help/help.m:100-115`：docstring 格式为 `texinfo` 就调 `__makeinfo__`
+- `scripts/help/__makeinfo__.m:155`：执行
+  `makeinfo --no-headers --no-warn --no-validate --plaintext --output=- FILE`
+
+makeinfo 是 **Perl 程序**，wasm 里没有 Perl，也没有那个可执行文件 —— 但**它的输出是
+确定性的**：同一份 docstring + 同一份 `macros.texi`，在任何机器上渲染结果一致
+（实测宿主 texi2any 7.3 与容器 6.7 输出**逐字相同**）。所以渲染挪到**构建期**用真
+GNU makeinfo 做，运行时只读结果。
+
+**这不是本项目发明的招数**：Octave 自己就这么干。`doc/interpreter/mk-doc-cache.pl:102`
+在构建期调 makeinfo，把渲染好的纯文本写进 `doc-cache`。本批次是同一技术用在
+`built-in-docstrings` 上。
+
+### 怎么让 `help` 用上它：不加一行运行时代码
+
+不改 `.m`、不覆写任何函数，靠的是 Octave **自己的格式判定**：
+`libinterp/corefcn/help.cc:141` 的 `looks_like_texinfo()` **只检查第一行是否含
+`-*- texinfo -*-`**：
+
+```cpp
+std::size_t p2 = t.find ("-*- texinfo -*-");
+return (p2 != std::string::npos);
+```
+
+把这行标记去掉，格式（`help.cc:400`）就判成 `plain text` → `help` **直接打印、
+根本不调 makeinfo**。也就是说：**渲染由 makeinfo 做（官方产物），只是提前做了**。
+
+### 产物与工具
+
+- **`build/render-docstrings.py`**（新，进仓库）：宿主侧构建期渲染。
+  与上游 `__makeinfo__.m:130-132` 同序：`\input texinfo` → macros → 正文 → `@bye`
+  （顺序错了 makeinfo 会把 `\input texinfo` 当普通文本印出来），
+  渲染后做与上游 `:161-174` 相同的收尾（`" -- : "` → `" -- "`、去尾部空行）。
+  失败的条目**保留原文并去标记**（宁可印得难看，也不能让函数没 help），并报数。
+- **实测**：**894/896 条**渲染成功，2 条失败的是 `methods`/`properties`
+  —— 它们在源文件里就是 `@c #` 注释状态（被真正的同名函数 docstring 覆盖），
+  桌面版也拿不到，保留原文是正确行为。
+- 体积 641321 → 577573 字节。
+
+### 让它在浏览器里生效
+
+`built-in-docstrings` 原本是**按需**懒加载资产；而 `help` 属于"开箱就该能用"，
+所以 `bridge/index.html` 的启动序列里加了一组随页面装载
+（`built-in-docstrings` + `doc-cache`，约 2.5MB）。装不上不算致命（有清晰告警）。
+
+### 验收
+
+`test/browser/accept-help.mjs`（**12 项，12/12 绿**），关键几条：
+
+- `which("__makeinfo__")` **必须**指向核心文件 —— 证明没有覆写（官方性护栏）
+- `help sin` 出正文且**不含** `@deftypefn`/`@var{`/`@seealso` 原始标记
+- `help disp` 的 `@example` 块变成正文（`the value of pi is` 可见），无 `@print{}`
+- `help("sin")` 返回字符串、`help 未知函数` 清晰报错
+- 回归护栏：`help plot`（.m 路径）、`lookfor`、`get_first_help_sentence`、`disp(@sin)`
+
+### 走的弯路的记录（**下个会话别重试**）
+
+**先试过"自研 texinfo→纯文本渲染器"**（覆写 `__makeinfo__.m`，7 个 `.m` 文件、约
+700 行）。**这条路是错的，已全部删除**。错在：把"宿主组件不可用"当成"要重新实现
+宿主组件"，而不是"把它挪到构建期"。官方 `mk-doc-cache.pl` 就在仓库里示范了后一条。
+
+代价：那一版踩了 4 个坑（下面两个新坑 + 括号失配 + 多函数同文件），
+而且自研渲染器**永远是另一个需要维护的实现**——真 makeinfo 的输出才是标准。
+
+**教训**：遇到"宿主能力在 wasm 里不可用"时，先问**这件事能不能提前做**，
+再问"要不要自己写一个"。前者往往有官方先例。
+
+### 坑 12：两个"静默不报错"的 Octave 语言特性
+
+**12a. `case {...}` / 函数实参里的 cell 字面量不能跨行。**
+```octave
+case {"code", "qcode",          # ← 这行没有闭 }
+      "key", "var"}             # ← 被当成**另一条语句**
+```
+不是 parse error：`case` 拿到的是**第一行那个不完整的 cell**，匹配失败后静默走
+`otherwise`；若在 `strcmpi` 实参里，`any(strcmpi('x', {...跨行...}))` 会返回一个
+**逻辑向量而不是标量**，于是 `if` 的行为错乱。症状是"处理结果莫名其妙不全"，
+与括号无关，极难归因。**规则**：cell 字面量一律写成一行。
+
+**12b. Octave 的 regexp 不支持 `\b`。**
+```octave
+regexp (line, '^@deftype(fn|fnx)\>')   # ✔ 词尾边界
+regexp (line, '^@deftype(fn|fnx)\b')   # ✘ 恒不匹配，且不报错
+```
+`\b` 在这里**没有任何含义**（不报错、不匹配）。代价：`@deftypefn` 分支整块不触发，
+docstring 原样吐出，而**当时的自测全过**——因为自测只断言了"不是 makeinfo 错误"，
+没断言"正文对不对"。**教训：断言要检查正文内容，不能只检查"没报错"。**
+
+### 顺手留下的工具：`build/check_m.py`
+
+宿主 Octave 上做 `.m` 语法预检，含**括号平衡**检查与**多函数同文件**检查。
+宿主 Octave 启动只要 0.6s，且报错**位置精确**——wasm 里那句
+`syntax error near line N` 的行号经常指向块首而非真凶（本次在
+`__tf_texinfo_to_plain__.m` 上为一行报错 bisect 了十几轮，最后靠括号计数一次定位：
+`if (regexp(...)` 少了一个 `)`）。
+
+**用法**：`python3 build/check_m.py <文件或目录>`
+**注意**：宿主是 11.x、目标是 7.2，**通过不代表 7.2 通过；失败几乎一定是真失败**。
+所以它是"过滤器"，验收仍以浏览器实测为准。
+
+### 另一个实测坑：`built-in-docstrings` 的尾随分隔符会让 `help` 死循环
+
+`built-in-docstrings` 用 `0x1d` 分隔条目。若输出比输入**多一个**分隔符（例如生成
+脚本给最后一条也补了一个，产生一个空尾条目），`help.cc:626-660` 的解析循环会在空
+条目上**不推进文件位置**，外层 `while (! file.eof())` 于是死循环——症状是
+`help sin` 整个挂住、浏览器测试超时，**没有任何报错**。
+**规则**：生成脚本必须断言"输出的分隔符数 == 输入的分隔符数"。
+`render-docstrings.py` 已内建这条自检。
+
+### 已知边界（如实）
+
+- 只覆盖**内建**函数（`help sin` / `help sqrt` / `help disp`）。
+- **`help ode45` 这类 `.m` 文件的 docstring 不走这条路**：它运行时从 `.m` 文件里读
+  docstring（不是从 `built-in-docstrings`），格式为 texinfo 时仍会调 makeinfo。
+  要覆盖它得预渲染 1010 个 `.m` 的 docstring（侵入性大得多），或另行处理。
+  **这是剩余缺口，不是已解决项。**
