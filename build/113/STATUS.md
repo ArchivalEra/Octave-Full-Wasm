@@ -73,16 +73,80 @@ typedef → 默认配置下编不过。`pow_qq.c`/`qbitbits.c`/`qbitshft.c` 同�
 4. freetype 未构建（无头数值阶段可能不需要；P5 图形再说）。
 5. 三条闸门一条未过。
 
+## P0 续：configure 卡在 pcre2 —— 根因已定位（2026-09-21 收尾时）
+
+### 已走到的步骤
+
+解包 `/src/work/octave-11.3.0` → 跑 `apply-platform-patches.sh`（**改动 4 处，容器内复核
+4/4 落地**）→ 跑 `configure-113.sh`。configure 走完全程，只在最后一步失败。
+
+### 确切错误（原文）
+
+```
+checking for pcre2.h... yes
+checking for pcre2_compile_8 in -lpcre2... no
+checking for pcre.h... no
+checking for pcre/pcre.h... no
+configure: error: to build Octave, you must have the PCRE or PCRE2 library and header files installed
+```
+
+**有迷惑性**：头文件明明找到了（`pcre2.h... yes`），错误却说「缺库和头」。
+
+### 根因（读 `configure` 源码 + 实测确认）
+
+`configure` 第 94136 行起那段的分支是：
+
+```sh
+yes | "")
+  ac_octave_pcre2_pkg_check=yes
+  PCRE2_LIBS="-lpcre2"          # ← 默认先给 -lpcre2
+...
+if test $ac_octave_pcre2_pkg_check = yes; then
+  if test -n "$PKG_CONFIG" && \
+     $PKG_CONFIG --exists --print-errors "libpcre2-8"; then    # ← 关键
+```
+
+**`emconfigure` 之下 `$PKG_CONFIG` 是空的**（实测：`emconfigure bash -c 'echo $PKG_CONFIG'`
+输出空行）→ `test -n "$PKG_CONFIG"` 为**假** → 整个 pkg-config 分支被跳过 →
+落到 `-lpcre2` 回退 → 我们装的是 `libpcre2-8.a`，没有 `libpcre2.a` → 失败。
+
+所以**不是 pcre2 没装好**：pkg-config 手工查得到（`pkg-config --libs libpcre2-8` →
+`-L/usr/local/lib -lpcre2-8`），`libpcre2-8.pc` 也在 `/usr/local/lib/pkgconfig/`。
+**唯一的缺口是 `PKG_CONFIG` 变量没被设上。**
+
+（Edge-Tools 的 Dockerfile 设了 `PKG_CONFIG_PATH` 与 `EM_PKG_CONFIG_PATH` 两个，
+但那是给 pkg-config 找 `.pc` 用的；`PKG_CONFIG` 这个变量本身他们也没显式设——
+他们能过是因为用的**不是** emconfigure 包装过的 pkg-config，或者他们的
+`PKG_CONFIG` 非空。我们这边实测是空的。）
+
+### 尚未验证的修法（**下一步先验这个**）
+
+在 `configure-113.sh` 里加一行：
+
+```sh
+export PKG_CONFIG=/usr/bin/pkg-config
+```
+
+然后重跑。**未验证**——只验证过「`PKG_CONFIG` 为空」与「pkg-config 手工可用」这两件事，
+两者合起来足以解释现象，但加变量后 configure 是否就过，还没有实测。
+
+若仍不过，次选：显式传库名，绕开探测——
+`--with-pcre2=-lpcre2-8`（`configure` 里 `-*` 分支会把它直接当 `PCRE2_LIBS`）。
+
 ## 下一步（P0 续）
 
 ```bash
 # 容器内
 export PATH=/src/bin:$PATH
-tar xf /src/probe11/octave-11.3.0.tar.xz -C /src/work
-bash /src/bin/apply-platform-patches.sh /src/work/octave-11.3.0
-cd /src/work/octave-11.3.0   # 然后按 Edge-Tools 的开关 configure，
-                             # 去掉 --without-x、加 --disable-threads
+# 1) 先验证 pcre2 的修法
+export PKG_CONFIG=/usr/bin/pkg-config
+bash /src/bin/configure-113.sh
+# 2) configure 过了再 make（Edge-Tools 用 emmake make EXEEXT=.mjs）
 ```
 
-**注意 ccache**：构建目录路径必须逐字固定（绝对 `-I` 进 hash；实测见
-`BASELINE-11.3.md` §7.1），否则缓存整片失效。
+**注意两条**：
+- 构建目录路径必须逐字固定（绝对 `-I` 进 ccache 的 hash；实测见 `BASELINE-11.3.md` §7.1），
+  否则缓存整片失效。
+- `make` 之后才轮到三条闸门；`DLDFCN_LIBS=` 与 `MAIN_MODULE=1` 是闸门二（`.oct` 车道）
+  的关键，Edge-Tools 那条路线**没有**这部分，要我们自己接。
+
