@@ -1,40 +1,25 @@
 ## Headless plot() for the wasm bridge (own code, repo license).
-## plot(Y) | plot(X,Y) | plot(X,Y,S) | plot(X1,Y1,S1,...) — records series
-## into the bridge state; rendering happens in JS (gnuplot-wasm).
+## SPDX-License-Identifier: AGPL-3.0-or-later
+##
+## plot(Y) | plot(Y,SPEC) | plot(X,Y) | plot(X,Y,SPEC) | plot(X1,Y1,S1,X2,Y2,S2,…)
+##
+## Records series into the bridge state; rendering happens in JS (gnuplot-wasm)
+## and/or in __svg_render__.m for print -dsvg.
 
 function h = plot (varargin)
 
   s = __pstate__ ();
   if (! s.hold)
-    s.series = {};
-    s.title = ""; s.xlabel = ""; s.ylabel = "";
-    s.xlim = []; s.ylim = []; s.grid = false;
-    s.legend = {}; s.legloc = "";
-    s.logx = false; s.logy = false;
+    s = __pb_clear_series__ (s);
   endif
 
-  i = 1;
-  n = numel (varargin);
-  while (i <= n)
-    if (i == n)
-      x = []; y = varargin{i}; spec = "";
-      i += 1;
-    elseif (i + 1 < n && ischar (varargin{i+2}) && ! isempty (varargin{i+2}) ...
-            && isdata (varargin{i}) && isdata (varargin{i+1}))
-      x = varargin{i}; y = varargin{i+1}; spec = varargin{i+2};
-      i += 3;
-    else
-      x = varargin{i}; y = varargin{i+1}; spec = "";
-      i += 2;
-    endif
-    s = __pb_add__ (s, x, y, spec, "lines");
-  endwhile
+  ser = __pb_parse_series__ (varargin);
+  for k = 1:numel (ser)
+    t = ser{k};
+    s = __pb_add__ (s, t{1}, t{2}, t{3}, "lines");
+  endfor
 
   __pstate__ (s);
   h = [];
 
-endfunction
-
-function tf = isdata (a)
-  tf = isnumeric (a) && ! ischar (a);
 endfunction

@@ -67,10 +67,30 @@ export function specToScript(spec) {
       clauses.push(`${base} with points pt ${ptOf(sr.marker === 'none' ? 'o' : sr.marker)} ps 1.0 ${lc} ${ptitle}`);
     } else if (sr.style === 'boxes') {
       clauses.push(`${base} with boxes fillstyle solid 0.5 ${lc} ${title}`);
+    } else if (sr.style === 'hboxes') {
+      // barh: Octave stored (category, length); the box runs along x, so swap
+      // the columns and use the boxxyerrorbars style that spans a rectangle.
+      clauses.push(`"${sr.file}" using 2:1:($2-$2):(1.4/2.0) with boxxyerrorbars fillstyle solid 0.5 ${lc} ${title}`.replace(/\s+/g, ' ').trim());
+    } else if (sr.style === 'area') {
+      // closed polygon (Octave emitted top edge then baseline back)
+      clauses.push(`${base} with filledcurves closed fs solid 0.45 ${lc} ${title}`.replace(/\s+/g, ' ').trim());
+    } else if (sr.style === 'ebars') {
+      // triples (x,ylo) (x,y) (x,yhi) — one bar per triple, no legend entry
+      clauses.push(`${base} with yerrorbars pt 0 ps 0 ${lc} notitle`.replace(/\s+/g, ' ').trim());
     }
   }
+
+  // subplot panels: gnuplot's multiplot needs explicit size/origin per panel,
+  // which the flat spec does not carry, so panels are rendered as separate
+  // invocations by the page (see specToRender).
   L.push('plot ' + (clauses.length ? clauses.join(', \\\n     ') : 'NaN notitle'));
   return L.join('\n');
+}
+
+// Panels → one {script, data} per panel, for pages that want a multiplot grid.
+export function specToPanelRenders(spec, readFile) {
+  if (!spec.panels || spec.panels.length < 2) return [specToRender(spec, readFile)];
+  return spec.panels.map((p) => specToRender(p, readFile));
 }
 
 // readFile: (octaveFsPath) -> text. data files live in octave's MEMFS.

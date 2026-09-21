@@ -1,25 +1,19 @@
 ## semilogx for the plot bridge (own code, repo license).
+## SPDX-License-Identifier: AGPL-3.0-or-later
+##
+## Same argument forms as plot(); the only difference is the x axis scaling.
+
 function h = semilogx (varargin)
   s = __pstate__ ();
   if (! s.hold)
-    s.series = {};
-    s.title = ""; s.xlabel = ""; s.ylabel = "";
-    s.xlim = []; s.ylim = []; s.grid = false;
-    s.legend = {}; s.legloc = "";
-    s.logx = false; s.logy = false;
+    s = __pb_clear_series__ (s);
   endif
   s.logx = true;
-  i = 1; n = numel (varargin);
-  while (i <= n)
-    if (i == n)
-      x = []; y = varargin{i}; spec = ""; i += 1;
-    elseif (i + 1 < n && ischar (varargin{i+2}))
-      x = varargin{i}; y = varargin{i+1}; spec = varargin{i+2}; i += 3;
-    else
-      x = varargin{i}; y = varargin{i+1}; spec = ""; i += 2;
-    endif
-    s = __pb_add__ (s, x, y, spec, "lines");
-  endwhile
+  ser = __pb_parse_series__ (varargin);
+  for k = 1:numel (ser)
+    t = ser{k};
+    s = __pb_add__ (s, t{1}, t{2}, t{3}, "lines");
+  endfor
   __pstate__ (s);
   h = [];
 endfunction

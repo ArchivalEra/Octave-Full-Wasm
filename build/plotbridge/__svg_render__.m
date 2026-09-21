@@ -9,10 +9,12 @@
 ## eval_string returns — there is no sync channel without Asyncify. So
 ## print -dsvg generates its own SVG here instead of round-tripping JS.
 ##
-## Supported: lines / linespoints / points / stem / boxes, all eight colour
-## letters + RGB triples, dashtype patterns, the full marker table, log axes,
-## xlim/ylim, grid, legend (18 locations), title/xlabel/ylabel (CJK included —
-## the browser supplies the font, we only name the family).
+## Supported:
+##   styles  lines / linespoints / points / stem / boxes / hboxes / area / ebars
+##   axes    linear + logx/logy, xlim/ylim, grid, axis equal/tight/off
+##   layout  subplot panels (multiplot grid) via the `panels` field
+##   text    title/xlabel/ylabel/legend — CJK included, because the browser
+##           supplies the font and we only name the family.
 ##
 ## Usage: svg = __svg_render__ ();  svg = __svg_render__ (width, height);
 
@@ -28,9 +30,67 @@ function svg = __svg_render__ (varargin)
     H = max (150, round (varargin{2}));
   endif
 
-  ML = 84; MR = 28; MT = 56; MB = 66;
-  PW = W - ML - MR;
-  PH = H - MT - MB;
+  ## Panel layout: either one plot filling the canvas, or a subplot grid.
+  ## Every entry is itself a {x, y, w, h} cell so the loop below is uniform.
+  ## panels{active} may be stale (it is only written on a subplot switch), so
+  ## refresh it from the live flat fields before drawing.
+  if (isfield (s, "panels") && numel (s.panels) > 1)
+    if (isfield (s, "active") && s.active >= 1 && s.active <= numel (s.panels))
+      s.panels{s.active} = __pb_panel_fields__ (s);
+    endif
+    boxes = __svg_panel_boxes__ (s, W, H);
+  else
+    boxes = {{0, 0, W, H}};
+  endif
+
+  npan = numel (boxes);
+  out = {};
+  out{end+1} = sprintf ('<?xml version="1.0" encoding="UTF-8"?>\n');
+  out{end+1} = sprintf ('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="%d" height="%d" viewBox="0 0 %d %d">\n', W, H, W, H);
+  out{end+1} = sprintf ('<rect x="0" y="0" width="%d" height="%d" fill="#ffffff"/>\n', W, H);
+
+  for pi = 1:npan
+    if (npan > 1)
+      spec = s.panels{pi};
+    else
+      spec = s;
+    endif
+    bx = boxes{pi};
+    frag = __svg_one_panel__ (spec, bx{1}, bx{2}, bx{3}, bx{4});
+    out{end+1} = sprintf ('<g>\n');
+    for kk = 1:numel (frag)
+      out{end+1} = frag{kk};
+    endfor
+    out{end+1} = sprintf ('</g>\n');
+  endfor
+
+  out{end+1} = sprintf ('</svg>\n');
+  svg = [out{:}];
+
+endfunction
+
+## NOTE: __svg_panel_boxes__ intentionally lives in its own file.  Octave only
+## resolves a file's *first* function by name, so a second entry point here
+## would be invisible to callers outside this file (CLIBS.md 批次 6 坑 3).
+
+## Render one panel into its box.  Returns a cell of SVG fragments.
+function out = __svg_one_panel__ (s, BX, BY, BW, BH)
+
+  out = {};
+
+  ## margins scale with the panel so a 2x2 grid still has readable ticks
+  ML = 76; MR = 22; MT = 44; MB = 52;
+  if (BW < 400), ML = 58; MR = 16; MB = 44; endif
+  if (BH < 300), MT = 34; MB = 38; endif
+  PW = BW - ML - MR;
+  PH = BH - MT - MB;
+  if (PW < 40 || PH < 40)
+    return;
+  endif
+  ML = ML + BX;
+  MT = MT + BY;
+
+  axis_off = (isfield (s, "axis") && strcmp (s.axis, "off"));
 
   ## ---- load series data ----
   n = numel (s.series);
@@ -85,52 +145,69 @@ function svg = __svg_render__ (varargin)
 
   ## ---- degenerate ranges ----
   if (! (isfinite (xlo) && isfinite (xhi)) || xhi <= xlo)
-    xlo = min (xlo, 0); xhi = xlo + 1;
-    if (! isfinite (xlo)), xlo = 0; xhi = 1; endif
+    if (isfinite (xlo)), xhi = xlo + 1; else, xlo = 0; xhi = 1; endif
   endif
   if (! (isfinite (ylo) && isfinite (yhi)) || yhi <= ylo)
-    ylo = min (ylo, 0); yhi = ylo + 1;
-    if (! isfinite (ylo)), ylo = 0; yhi = 1; endif
+    if (isfinite (ylo)), yhi = ylo + 1; else, ylo = 0; yhi = 1; endif
   endif
-  xlo = __svg_loose__ (xlo, xhi);  xhi = __svg_hiloose__ (xlo, xhi);
-  ylo = __svg_loose__ (ylo, yhi);  yhi = __svg_hiloose__ (ylo, yhi);
+
+  ## axis tight → no padding; otherwise a small margin so markers aren't clipped
+  if (isfield (s, "axis") && strcmp (s.axis, "tight"))
+    ## keep the data ranges untouched
+  else
+    xlo = __svg_loose__ (xlo, xhi);  xhi = __svg_hiloose__ (xlo, xhi);
+    ylo = __svg_loose__ (ylo, yhi);  yhi = __svg_hiloose__ (ylo, yhi);
+  endif
+
+  ## axis equal → make one unit the same number of pixels on both axes
+  if (isfield (s, "axis") && strcmp (s.axis, "equal") && PW > 0 && PH > 0)
+    ux = PW / (xhi - xlo);       # px per x unit
+    uy = PH / (yhi - ylo);       # px per y unit
+    u = min (ux, uy);
+    if (u > 0 && isfinite (u))
+      ## re-centre the shorter dimension
+      cx = (xlo + xhi) / 2; cy = (ylo + yhi) / 2;
+      xlo = cx - (PW / u) / 2; xhi = cx + (PW / u) / 2;
+      ylo = cy - (PH / u) / 2; yhi = cy + (PH / u) / 2;
+    endif
+  endif
 
   ## ---- ticks ----
   [xt, xtl] = __svg_ticks__ (xlo, xhi, s.logx, 7);
   [yt, ytl] = __svg_ticks__ (ylo, yhi, s.logy, 6);
 
-  ## ---- header ----
   FONT = "Helvetica, Arial, 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif";
-  out = {};
-  out{end+1} = sprintf ('<?xml version="1.0" encoding="UTF-8"?>\n');
-  out{end+1} = sprintf ('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="%d" height="%d" viewBox="0 0 %d %d">\n', W, H, W, H);
-  out{end+1} = sprintf ('<defs><clipPath id="pa"><rect x="%.2f" y="%.2f" width="%.2f" height="%.2f"/></clipPath></defs>\n', ML, MT, PW, PH);
-  out{end+1} = sprintf ('<rect x="0" y="0" width="%d" height="%d" fill="#ffffff"/>\n', W, H);
 
   ## ---- grid ----
-  if (s.grid)
-    g = {};
+  if (s.grid && ! axis_off)
     for k = 1:numel (xt)
       xp = __svg_mapx__ (xt(k), s.logx, xlo, xhi, ML, PW);
-      g{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#d9d9d9" stroke-width="1"/>\n', xp, MT, xp, MT + PH);
+      out{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#d9d9d9" stroke-width="1"/>\n', xp, MT, xp, MT + PH);
     endfor
     for k = 1:numel (yt)
       yp = __svg_mapy__ (yt(k), s.logy, ylo, yhi, MT, PH);
-      g{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#d9d9d9" stroke-width="1"/>\n', ML, yp, ML + PW, yp);
+      out{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#d9d9d9" stroke-width="1"/>\n', ML, yp, ML + PW, yp);
     endfor
-    out = [out, g];
   endif
 
   ## ---- series (clipped to the axes box) ----
   ## NOTE: never write `[out, f (args)]` with a space before the paren — inside
   ## brackets Octave parses `f (args)` as *indexing*, not a call, and a function
   ## name cannot be indexed, so the file fails to parse. Bind the result first.
-  out{end+1} = sprintf ('<g clip-path="url(#pa)">\n');
+  cid = sprintf ("pc%d", round (ML * 1000 + MT));
+  out{end+1} = sprintf ('<defs><clipPath id="%s"><rect x="%.2f" y="%.2f" width="%.2f" height="%.2f"/></clipPath></defs>\n', cid, ML, MT, PW, PH);
+  out{end+1} = sprintf ('<g clip-path="url(#%s)">\n', cid);
   for i = 1:n
     frag = __svg_series__ (s, s.series{i}, D{i}, xlo, xhi, ylo, yhi, ML, MT, PW, PH);
-    out = [out, frag];
+    for kk = 1:numel (frag)
+      out{end+1} = frag{kk};
+    endfor
   endfor
   out{end+1} = sprintf ('</g>\n');
+
+  if (axis_off)
+    return;
+  endif
 
   ## ---- axes frame ----
   out{end+1} = sprintf ('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="none" stroke="#333333" stroke-width="1.2"/>\n', ML, MT, PW, PH);
@@ -149,23 +226,22 @@ function svg = __svg_render__ (varargin)
 
   ## ---- title / axis labels ----
   if (! isempty (s.title))
-    out{end+1} = sprintf ('<text x="%.2f" y="%.2f" font-family="%s" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">%s</text>\n', ML + PW/2, MT - 22, FONT, __svg_esc__ (s.title));
+    out{end+1} = sprintf ('<text x="%.2f" y="%.2f" font-family="%s" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">%s</text>\n', ML + PW/2, MT - 16, FONT, __svg_esc__ (s.title));
   endif
   if (! isempty (s.xlabel))
-    out{end+1} = sprintf ('<text x="%.2f" y="%.2f" font-family="%s" font-size="13" text-anchor="middle" fill="#222222">%s</text>\n', ML + PW/2, MT + PH + 46, FONT, __svg_esc__ (s.xlabel));
+    out{end+1} = sprintf ('<text x="%.2f" y="%.2f" font-family="%s" font-size="13" text-anchor="middle" fill="#222222">%s</text>\n', ML + PW/2, MT + PH + 42, FONT, __svg_esc__ (s.xlabel));
   endif
   if (! isempty (s.ylabel))
-    out{end+1} = sprintf ('<text x="%.2f" y="%.2f" font-family="%s" font-size="13" text-anchor="middle" fill="#222222" transform="rotate(-90 %.2f %.2f)">%s</text>\n', 20, MT + PH/2, FONT, 20, MT + PH/2, __svg_esc__ (s.ylabel));
+    out{end+1} = sprintf ('<text x="%.2f" y="%.2f" font-family="%s" font-size="13" text-anchor="middle" fill="#222222" transform="rotate(-90 %.2f %.2f)">%s</text>\n', BX + 18, MT + PH/2, FONT, BX + 18, MT + PH/2, __svg_esc__ (s.ylabel));
   endif
 
   ## ---- legend ----
   if (! isempty (s.legend))
     lgfrag = __svg_legend__ (s, FONT, ML, MT, PW, PH);
-    out = [out, lgfrag];
+    for kk = 1:numel (lgfrag)
+      out{end+1} = lgfrag{kk};
+    endfor
   endif
-
-  out{end+1} = sprintf ('</svg>\n');
-  svg = [out{:}];
 
 endfunction
 
@@ -224,7 +300,9 @@ function [t, lab] = __svg_ticks__ (lo, hi, uselog, want)
     endfor
     if (isempty (t))
       t = [lo hi];
-      lab = {__svg_num__ (10^lo), __svg_num__ (10^hi)};
+      a = __svg_num__ (10^lo);
+      b = __svg_num__ (10^hi);
+      lab = {a, b};
     endif
     return;
   endif
@@ -251,7 +329,9 @@ function [t, lab] = __svg_ticks__ (lo, hi, uselog, want)
   endfor
   if (isempty (t))
     t = [lo hi];
-    lab = {__svg_num__ (lo), __svg_num__ (hi)};
+    a = __svg_num__ (lo);
+    b = __svg_num__ (hi);
+    lab = {a, b};
   endif
 endfunction
 
@@ -266,7 +346,6 @@ function s = __svg_num__ (v)
   else
     s = sprintf ("%.6g", v);
     if (index (s, ".") > 0)
-      s = strrep (s, "0", "0");   # keep, only trim below
       while (numel (s) > 1 && s(end) == "0"), s(end) = []; endwhile
       if (numel (s) > 0 && s(end) == "."), s(end) = []; endif
     endif
@@ -355,7 +434,7 @@ function t = __svg_ngon__ (x, y, r, k, col, sw)
   t = sprintf ('<polygon points="%s" fill="#ffffff" stroke="%s" stroke-width="%.2f"/>\n', pts, col, sw);
 endfunction
 
-## One series -> SVG fragment (already clipped by the caller's group).
+## One series -> cell of SVG fragments (already clipped by the caller's group).
 function out = __svg_series__ (s, sr, d, xlo, xhi, ylo, yhi, ML, MT, PW, PH)
 
   out = {};
@@ -393,12 +472,22 @@ function out = __svg_series__ (s, sr, d, xlo, xhi, ylo, yhi, ML, MT, PW, PH)
         out{end+1} = __svg_marker__ (mk, X(k), Y(k), 3.2, col);
       endfor
     endif
+
+  elseif (strcmp (st, "area"))
+    pts = "";
+    for k = 1:numel (X)
+      if (k > 1), pts = [pts " "]; endif
+      pts = sprintf ("%s%.2f,%.2f", pts, X(k), Y(k));
+    endfor
+    out{end+1} = sprintf ('<polygon points="%s" fill="%s" fill-opacity="0.45" stroke="%s" stroke-width="1.2"%s stroke-linejoin="round"/>\n', pts, col, col, da);
+
   elseif (strcmp (st, "points"))
     mkp = mk;
     if (strcmp (mkp, "none")), mkp = "o"; endif
     for k = 1:numel (X)
       out{end+1} = __svg_marker__ (mkp, X(k), Y(k), 3.4, col);
     endfor
+
   elseif (strcmp (st, "stem"))
     if (s.logy)
       ybase = MT + PH;
@@ -413,6 +502,18 @@ function out = __svg_series__ (s, sr, d, xlo, xhi, ylo, yhi, ML, MT, PW, PH)
     for k = 1:numel (X)
       out{end+1} = __svg_marker__ (mkp, X(k), Y(k), 3.2, col);
     endfor
+
+  elseif (strcmp (st, "ebars"))
+    ## triples: (x, ylo) (x, y) (x, yhi) — draw stem + both caps
+    capw = 5;
+    k = 1;
+    while (k + 2 <= numel (X))
+      out{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="%s" stroke-width="1.3"/>\n', X(k), Y(k), X(k+2), Y(k+2), col);
+      out{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="%s" stroke-width="1.3"/>\n', X(k) - capw, Y(k), X(k) + capw, Y(k), col);
+      out{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="%s" stroke-width="1.3"/>\n', X(k+2) - capw, Y(k+2), X(k+2) + capw, Y(k+2), col);
+      k += 3;
+    endwhile
+
   elseif (strcmp (st, "boxes"))
     xs = sort (d(:,1));
     if (numel (xs) > 1)
@@ -434,6 +535,30 @@ function out = __svg_series__ (s, sr, d, xlo, xhi, ylo, yhi, ML, MT, PW, PH)
       hh = abs (yy - ybase);
       out{end+1} = sprintf ('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s" fill-opacity="0.55" stroke="%s" stroke-width="1.1"/>\n', xl, top, max (0.6, xr - xl), max (0.6, hh), col, col);
     endfor
+
+  elseif (strcmp (st, "hboxes"))
+    ## data was stored as (category, value) by barh.m — swap back here.
+    ys = sort (d(:,1));
+    if (numel (ys) > 1)
+      dy = min (diff (ys));
+      if (! (dy > 0)), dy = 1; endif
+    else
+      dy = 1;
+    endif
+    if (s.logx)
+      xbase = ML;
+    else
+      xbase = __svg_mapx__ (0, false, xlo, xhi, ML, PW);
+    endif
+    for k = 1:size (d, 1)
+      yb = __svg_mapy__ (d(k,1) - 0.4*dy, s.logy, ylo, yhi, MT, PH);
+      yt = __svg_mapy__ (d(k,1) + 0.4*dy, s.logy, ylo, yhi, MT, PH);
+      ## the value axis is x for barh
+      xx = __svg_mapx__ (d(k,2), s.logx, xlo, xhi, ML, PW);
+      left = min (xx, xbase);
+      ww = abs (xx - xbase);
+      out{end+1} = sprintf ('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s" fill-opacity="0.55" stroke="%s" stroke-width="1.1"/>\n', left, yt, max (0.6, ww), max (0.6, yb - yt), col, col);
+    endfor
   endif
 
 endfunction
@@ -446,7 +571,7 @@ function out = __svg_legend__ (s, FONT, ML, MT, PW, PH)
   m = numel (labels);
   if (m == 0), return; endif
 
-  sw = 26; sh = 20;
+  sh = 20;
   fs = 12.5;
   maxlen = 0;
   for i = 1:m
@@ -456,18 +581,12 @@ function out = __svg_legend__ (s, FONT, ML, MT, PW, PH)
   lh = m * sh + 10;
 
   loc = lower (strrep (s.legloc, " ", ""));
-  outside = ! isempty (strfind (loc, "outside")) || ! isempty (strfind (loc, "eastoutside")) || ! isempty (strfind (loc, "westoutside"));
-  if (outside)
-    lh = m * sh + 10;   # drawn inside anyway (no canvas growth in v1)
-    outside = false;
-  endif
 
-  ## anchors: default north-east inside
   if (isempty (loc))
     ax = ML + PW - lw - 10; ay = MT + 10;
-  elseif (! isempty (strfind (loc, "northwest")) || strcmp (loc, "northwestoutside"))
+  elseif (! isempty (strfind (loc, "northwest")))
     ax = ML + 10; ay = MT + 10;
-  elseif (! isempty (strfind (loc, "north")) )
+  elseif (! isempty (strfind (loc, "north")))
     ax = ML + (PW - lw)/2; ay = MT + 10;
   elseif (! isempty (strfind (loc, "southwest")))
     ax = ML + 10; ay = MT + PH - lh - 10;
@@ -485,9 +604,19 @@ function out = __svg_legend__ (s, FONT, ML, MT, PW, PH)
 
   out{end+1} = sprintf ('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="#ffffff" fill-opacity="0.88" stroke="#666666" stroke-width="1"/>\n', ax, ay, lw, lh);
 
-  for i = 1:min (m, n)
+  ## one legend row per *labelled* series: error bars are decoration, not a
+  ## separate entry, so skip them when pairing labels to series.
+  real = {};
+  for i = 1:n
+    if (! (isfield (s.series{i}, "ebdir") && ischar (s.series{i}.ebdir) ...
+           && ! isempty (s.series{i}.ebdir)))
+      real{end+1} = s.series{i};
+    endif
+  endfor
+
+  for i = 1:min (m, numel (real))
     yy = ay + 5 + (i - 0.5) * sh;
-    sr = s.series{i};
+    sr = real{i};
     col = sr.color;
     if (isempty (col)), col = "#0072BD"; endif
     mk = "none";
@@ -499,7 +628,7 @@ function out = __svg_legend__ (s, FONT, ML, MT, PW, PH)
 
     if (strcmp (st, "points"))
       out{end+1} = __svg_marker__ (mk, ax + 16, yy, 3.4, col);
-    elseif (strcmp (st, "boxes"))
+    elseif (strcmp (st, "boxes") || strcmp (st, "hboxes") || strcmp (st, "area"))
       out{end+1} = sprintf ('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s" fill-opacity="0.55" stroke="%s"/>\n', ax + 7, yy - 5, 18, 10, col, col);
     else
       out{end+1} = sprintf ('<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="%s" stroke-width="1.6"%s/>\n', ax + 7, yy, ax + 25, yy, col, da);

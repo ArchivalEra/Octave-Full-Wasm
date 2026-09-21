@@ -400,3 +400,47 @@ out = [out, frag];
 `__pb_emit__.m` 的 series JSON 漏了 `marker` 字段，而 `bridge/plotbridge.js` 读 `sr.marker`
 → `ptOf(undefined)` 恒为 6 → **所有 `'s'/'d'/'^'/...` 静默退化成空心圆**（`'--ro'` 恰好是 `o`
 所以一直没暴露）。现在 emit 补上 `"marker":%s`，gnuplot 路线与 SVG 路线同时受益。
+
+---
+
+## 批次 7a（2026-09-20）：plot 桥 v2 —— 2D 图型 + subplot/figure(n)/axis
+
+新增 `build/plotbridge/{barh,stairs,area,errorbar,pie,subplot,axis}.m`，
+`figure.m`/`clf.m` 重写为真多图，`__svg_render__.m` 重写为支持 panel 网格。
+验收：`test/browser/accept-plotv2.mjs`（54 项，含 v1 全图型回归）。
+
+- **barh/stairs/area/pie 在 Octave 侧把几何算好**（水平条=矩形、阶梯=折线、
+  面积=闭合多边形、饼图=扇形多边形），下游两个渲染器（gnuplot SVG、纯 .m SVG）
+  都不用加新图元——**能在一侧归一化的，就不要在两个渲染器里各实现一遍**。
+- **errorbar** 走三元组约定：(x,ylo) (x,y) (x,yhi) 三个连续点 = 一根带帽的竖线，
+  分组信息藏在点序里，省掉 JSON schema 变更。
+- **subplot/figure(n) 用"活动项镜像在平铺字段、非活动项存 panels{}/figs{}"**：
+  所有既有垫片照旧读写平铺字段，无需知道 panel 的存在。
+  坑：`panels{active}` 只在切换时写入，**画完就过期** → emit/render 前必须先
+  `__pb_panel_fields__` 刷新一次（否则活动 panel 画的还是上一次的内容）。
+
+### 坑 3（**Octave 语言级，与坑 1 同源但更隐蔽**）：`{}`/`[]` 字面量内的带空格调用
+```octave
+boxes{k} = {round (p(1) * W), round (p(3) * W)};   # ← 运行时报错，不是 parse error
+```
+和坑 1 是同一条规则（字面量里 `f (x)` 被当索引），但在 `{}` 里表现为**运行时**
+失败，且错误信息指向 `print_usage`/docstrings 一类完全无关的地方：
+```
+failed to open docstrings file: …/etc/built-in-docstrings
+error: called from print_usage at line 62 → __svg_panel_boxes__ at line 27
+```
+定位花了很久。**规则**：`[]`/`{}` 字面量里出现的每一个函数调用，要么去掉空格
+（`round(x)`），要么先绑定到临时变量。已在 `__svg_panel_boxes__.m` 里注释标记。
+
+### 坑 4：Octave 只按文件名解析**第一个**函数
+一个 `.m` 文件里写多个 `function`，**只有第一个能被外部按文件名调用**，其余是
+文件私有子函数。把 `__pb_stash_panel__` 之类的辅助函数和主函数写在同一个文件里，
+调用方会得到 `'xxx' undefined`。**规则**：所有需要跨文件调用的函数各占一个文件，
+文件名 = 函数名。`__svg_render__.m` 里的 15 个内部子函数（`__svg_mapx__` 等）
+保持私有是有意的——它们只在该文件内用。
+
+### 坑 5（旧 bug，v2 顺手修）：`plot (Y, SPEC)` 解析错
+四个 shim（plot/semilogx/semilogy/loglog）各有一份手写的参数循环，都写成
+"倒数第二个参数是 X、最后一个是 Y"，于是 `plot (y, "-r")` 变成 `x=y, y='-r'`
+→ `horizontal dimensions mismatch (5x1 vs 2x1)`。现在统一走
+`__pb_parse_series__.m`：**尾随字符串是它前面那条曲线的 line spec，绝不是数据**。

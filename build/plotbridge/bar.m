@@ -4,11 +4,7 @@
 function h = bar (varargin)
   s = __pstate__ ();
   if (! s.hold)
-    s.series = {};
-    s.title = ""; s.xlabel = ""; s.ylabel = "";
-    s.xlim = []; s.ylim = []; s.grid = false;
-    s.legend = {}; s.legloc = "";
-    s.logx = false; s.logy = false;
+    s = __pb_clear_series__ (s);
   endif
   if (numel (varargin) >= 2 && isnumeric (varargin{2}))
     x = varargin{1}; y = varargin{2};
