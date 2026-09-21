@@ -40,6 +40,18 @@
       // 控制台里：await OctaveAssets.load('ode15s') / OctaveAssets.list()
       window.OctaveAssets.init().then(function () {
         console.log('[assets] 可用资产: ' + OctaveAssets.list().join(', '));
+        // dldfcn 核心组：convhulln/delaunayn/voronoi/glpk/fftw/gzip/audioread 系列。
+        // 走官方 dlopen 装载（与桌面版同一机制、同一 exist/which 语义）。
+        // 这一组对应"开箱就该能用"的基础几何/压缩/音频，随页面一起装；
+        // 其余资产仍按需懒加载。
+        // 装不上不算致命——页面照常可用，只是这些函数不存在（会清晰报错）。
+        var CORE_DLDFCN = ['convhulln', '__delaunayn__', '__voronoi__',
+                           '__glpk__', 'fftw', 'gzip', 'audioread'];
+        return OctaveAssets.load(CORE_DLDFCN).catch(function (e) {
+          console.warn('[assets] dldfcn 核心组装载失败（这些函数将不可用）: ' + e.message);
+          return null;
+        });
+      }).then(function () {
         window.__octaveReady = true;
       }).catch(function (e) {
         console.warn('[assets] 清单未就绪（无 assets/ 目录时属正常）: ' + e.message);
