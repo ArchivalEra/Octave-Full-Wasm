@@ -13,6 +13,49 @@
 <script type="text/javascript" src="webaudio.js"></script>
 <script type="text/javascript">
   var Module = {
+    // stdin：Emscripten 的**官方扩展点**（`/dev/stdin` 的设备回调）。
+    //
+    // 必须在**启动前**定义：`library_fs.js` 只在 `FS.init()` 时做
+    //     FS.createDevice('/dev', 'stdin', Module['stdin'])
+    // 启动之后再给 Module.stdin 赋值是**无效的**（已实测：注入后 input() 仍走 TTY）。
+    //
+    // 不定义它也能用：`/dev/stdin` 会软链到 `/dev/tty`，而 TTY 的默认实现是
+    //     result = window.prompt('Input: ')
+    // （见 emscripten/library_tty.js 的 default_tty_ops.get_char）。
+    // 所以 `input()` **本来就能工作**，弹出的就是浏览器原生对话框。
+    //
+    // 这里定义它是为了两件事：
+    //   1. **可测**：playwright 的 dialog 处理是异步的，而 window.prompt 是同步阻塞，
+    //      两者交错会让连续多次 input() 拿到**错位**的答案（实测：答案为上一次的）。
+    //      给宿主一个可注入的队列，验收才能确定性地断言数值。
+    //   2. **可编排**：宿主页可以预先喂输入，不必弹窗。
+    // 空闲时回退到 window.prompt，所以对真人用户的体验与默认行为完全一致。
+    //
+    // 语义与 Emscripten 的 TTY 实现一致：每次调用返回**一个字符码**，行尾给 `\n`，
+    // 无输入时返回 `null` 表示 EOF（Octave 侧表现为 "input: reading user-input failed!"，
+    // 与本机 `octave-cli < /dev/null` 的行为一字不差）。
+    stdin: (function () {
+      var buf = "";
+      function nextLine() {
+        var q = window.__octaveStdin;
+        if (q && q.length) { return String(q.shift()); }
+        if (typeof window.prompt === "function") {
+          var r = window.prompt("Input: ");
+          return r === null ? null : r;
+        }
+        return null;
+      }
+      return function () {
+        if (!buf) {
+          var line = nextLine();
+          if (line === null || line === undefined) { return null; }
+          buf = line + "\n";
+        }
+        var c = buf.charCodeAt(0);
+        buf = buf.slice(1);
+        return c;
+      };
+    })(),
     postRun() {
       // Module.FS.mkdir("/working");
       // Module.FS.mount(Module.FS.filesystems["IDBFS"], {}, "/working");

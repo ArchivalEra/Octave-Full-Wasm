@@ -917,3 +917,58 @@ fullfile (user_config_dir(), "octave", __octave_config_info__("api_version"), "o
 - `pkg("list")` 带输出返回非空 cell；`pkg describe statistics` 有内容
 - `pkg load` 未安装的包 → 清晰报错（官方文本 `package X is not installed`）
 - 回归：包内函数（`normpdf`）仍可用、核心内建（`sin`）不受影响
+
+---
+
+## 批次 T5（2026-09-21）：`input()` —— **不需要代码**（第三轮）
+
+**结论：`input()` 在本构建里本来就是可用的，不需要覆写、不需要桥。**
+
+### 事实链（全部读源码 + 实测，不靠推断）
+
+1. Emscripten 侧：不定义 `Module.stdin` 时，`library_fs.js` 把 `/dev/stdin`
+   **软链到 `/dev/tty`**；而 TTY 的默认输入实现（`library_tty.js` 的
+   `default_tty_ops.get_char`）就是
+   ```js
+   result = window.prompt('Input: ');
+   ```
+   → 所以 `input()` 弹的是**浏览器原生对话框**。
+2. Octave 侧：`input.cc` 经 `command_editor` 读一行，走的就是这条 stdin。
+3. 之前观察到的 `error: input: reading user-input failed!` **不是缺陷**：
+   那是把对话框**取消**了（返回 `null` = EOF）。**本机对照**：
+   ```sh
+   octave-cli --eval "v=input('x? ')" < /dev/null
+   # → error: input: reading user-input failed!     ← 一字不差
+   ```
+   本机语义对照（判据来源）：
+   ```sh
+   printf '2+3\n'   | octave-cli --eval "v=input('x? ')"       # v = 5        (double)
+   printf 'hello\n' | octave-cli --eval "v=input('s? ','s')"   # v = "hello"  (char)
+   ```
+
+### 唯一加的一点点东西：`Module.stdin`（Emscripten **官方扩展点**）
+
+`bridge/index.html` 里给 `Module` 一个字面量 `stdin`（**必须在启动前定义**——
+`FS.init()` 时才做 `FS.createDevice('/dev','stdin',Module.stdin)`，
+**启动后再赋值无效**，实测如此）。它：
+
+- 优先从 `window.__octaveStdin` **队列**取行（宿主可预置输入）；
+- 队列空时回退 `window.prompt` —— 对真人用户的体验与默认行为**完全一致**。
+
+**为什么需要它**：不是为了功能，是为了**可测**。playwright 的 dialog 处理是
+**异步**的、而 `window.prompt` 是**同步阻塞**，两者交错会让连续多次 `input()`
+拿到**错位**的答案（实测：拿到的总是上一次的）。队列让验收可以确定性断言数值。
+
+### ⚠️ 坑：EOF 是**粘性**的
+
+`std::cin` 读到一次 EOF 之后**永久**停在 EOF（本机同理）。所以：
+- 一旦用户取消过一次对话框，**此后所有 `input()` 都会失败**——与本机
+  `</dev/null` 之后的行为一致，不是浏览器特有。
+- **测试顺序因此有意义**：EOF 那条断言必须放在**最后**，否则会污染后面全部断言。
+  第一版就踩了，症状是"第一条过、其余全 EOF"，看起来像 stdin 桥坏了。
+
+### 验收
+
+`test/browser/accept-input.mjs`（**9 项，9/9 绿**）：表达式模式（含在 caller 的
+workspace 里求值 `k*2 → 42`）、字符串模式（不求值）、连续两次 `input()` 各拿各的、
+无对话框时 `eval` 不残留状态、以及最后一条"EOF 报错与本机一字不差"。

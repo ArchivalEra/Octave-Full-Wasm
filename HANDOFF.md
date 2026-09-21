@@ -1,7 +1,7 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：2026-09-21（第三轮计划已就位，见 §5.5）。
+> 最后更新：2026-09-21（第三轮 T1/T3/T4 已落地；**第四轮换基线 10.3 的方向与计划见 §9**）。
 
 ---
 
@@ -401,7 +401,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | 2 | **T2** | **A1/A2 图形句柄半真化**：写 `__init_web__.cc` → `web_graphics_toolkit`（`initialize` 允许 figure、`redraw_figure` 先 no-op、`get_canvas_size` 给默认值）。**目标只是救活 `gca/gcf/get/set/figure` 的语义**，不碰绘图重构 | 1–3 d | Lane B（重链） |
 | ~~3~~ | ~~**T3**~~ | ✅ **已完成**：`copyfile`/`movefile`/`ls` 进程内实现（`build/webfile/`，纯 `.m`）。见 §5.7 | — | 资产 |
 | ~~4~~ | ~~**T4**~~ | ✅ **已完成**：还原被 fork 删掉的 `installed_packages.m` + 生成 pkg 数据库（`build/pkgfix/`）。见 §5.8 | — | 资产 |
-| 5 | **T5** | **E1 `input()`**：同步 `window.prompt()` 桥（**注意**：要保留"按表达式求值"语义，`input(x,"s")` 不同） | 0.5–1.5 d | 资产/内建 |
+| ~~5~~ | ~~**T5**~~ | ✅ **已完成**：`input()` **本来就能用**（Emscripten 默认 stdin → `/dev/tty` → `window.prompt`），只加了官方扩展点 `Module.stdin` 让验收可确定性断言。见 §5.9 | — | 无需代码 |
 | 6 | **T6** | **B2 `audiodevinfo`** 最小 shim（浏览器默认设备）+ **D2a `doc`**（help → DOM） | <1 d | 资产 |
 | 7 | **T7** | **B1 `audiorecorder`**：`record/stop/getaudiodata` 先做（**不需 Asyncify**），`recordblocking` 后做 | 1–4 d | 资产+B 桥 |
 | 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS（同步性要靠 Asyncify 或改非标准异步 API） | 1–2 d | 需 G2 先验 |
@@ -539,6 +539,7 @@ makeinfo 生成 doc-cache）。
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
 | `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
+| `build/BASELINE-10.3.md` | **第四轮依据**：10.3 wasm recipe 原文摘录（19 patch、Flang 工具链、他们关掉的库）+ edgetools.io 图形撞墙记录 |
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
@@ -599,13 +600,17 @@ makeinfo 生成 doc-cache）。
 ---
 
 ## 8. 一句话接续
-**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1 + T3 + T4**，
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **18 套 466 项全绿**（含需求级
-`accept-requirements`、新的 `accept-help`/`accept-fileops`/`accept-pkg`），交付包在
+**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1 + T3 + T4 + T5**，
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **19 套 475 项全绿**（含需求级
+`accept-requirements` 与新增的 `accept-help`/`accept-fileops`/`accept-pkg`/`accept-input`），交付包在
 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
 
-**R1–R10 全部落地**；**第三轮 T1 + T3 + T4 已完成**（`help` §5.6；文件操作 §5.7；pkg 语义 §5.8）。
+**R1–R10 全部落地**；**第三轮 T1 + T3 + T4 + T5 已完成**（`help` §5.6；文件操作 §5.7；pkg 语义 §5.8；`input()` §5.9）。
 **下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
+
+**⚠️ 新方向：第四轮换基线到 Octave 10.3 + 重构图形线（OSMesa），见 §9。**
+计划是 P0 复现 10.3 recipe → P1 接站点 → P2 长尾回归 → P3 `.oct` 车道 → P4 宿主层 →
+P5 OSMesa 图形 → P6 收尾。**7.2 基线（8761）在 10.3 通过等价验收前不动。**
 其余顺序：T5 `input()` → T6 audiodevinfo/doc →
 T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
 
@@ -631,3 +636,139 @@ sudo docker start obuild odld obench && sh /mnt/hdd/zcode-projects/Octave-Full-W
 - 新增资产流程：写源码 → 编 `.oct`（`build/build_oct.sh` 或 `build_pkg_oct.sh`）→
   进站点 `assets/` → `build/assets.py gen-manifest` → 写验收脚本进 `test/browser/`。
   多函数模块记得在 meta 里声明 `aliases`（§4.11）。
+
+---
+
+## 9. 第四轮（**新方向，待执行**）：换基线到 Octave 10.3 + 重构图形线
+
+> **事实依据全文见 `build/BASELINE-10.3.md`**（recipe 原文、19 个 patch 名单、
+> 工具链变量、他们关掉的库清单、以及 edgetools.io 的图形撞墙记录）。
+> 本节只写**决策与计划**。
+
+### 9.1 三个决定性事实（先看这三条，再谈计划）
+
+1. **没有"官方 wasm Octave"**。`octave.org` 主页/下载页/news 无 wasm 字样；
+   upstream `release-10-3-0` 的 `configure.ac`（116KB）里 wasm/emscripten/WebAssembly
+   **出现 0 次**。10.3.0 的 wasm 能力来自**社区封装**（emscripten-forge recipe + 定制 LLVM）。
+   **我们不会被官方版取代。**
+2. **10.3.0 的 recipe 真实可用**（`emscripten-forge/recipes` →
+   `recipes_emscripten/octave`），且**链接模型与本项目相同**：
+   主模块 `-sMAIN_MODULE=1`、`.oct` 走 `-sSIDE_MODULE=1`。
+   工具链是 **Emscripten + 定制 LLVM 20.1.7 的 Flang**（含 Fortran common-symbol 补丁）。
+   → 我们的 `.oct` 资产车道能续，且 **Fortran 从 f2c 路线换成真编译器**，
+   消掉整类 f2c 问题。
+3. **它的能力面比我们窄得多**：长尾库几乎全关
+   （`--without-glpk/qhull_r/fftw3/qrupdate/hdf5/cxsparse/curl` +
+   SuiteSparse 全家 + `--without-opengl`）。**我们补的长尾正是他们没有的。**
+
+**所以这一轮不是"换成别人的东西"，而是"取它的工具链与平台 patch，
+叠加我们的 C 库长尾与宿主层"。**
+
+### 9.2 目标版本选择：**10.3.0**（不是 11.x）
+
+| 候选 | 取舍 |
+|---|---|
+| **10.3.0** | ✅ 有**现成的 19 个 patch + 验证过的 Flang 工具链**，可复现 |
+| 11.1.0 / 11.3.0 | ❌ 无 wasm recipe；19 个 patch 要**重新推导**一遍（10.3→11.x 的 API 漂移） |
+
+**决定：先把 10.3.0 做通**（复用其 patch 集），11.x 作为**后续一步**再评估。
+理由：迁移的成本主要在 patch 集与工具链，而不是版本号本身。
+
+### 9.3 阶段与闸门
+
+每阶段都必须过闸门才进下一阶段；**7.2 基线（8761）在 10.3 通过等价验收之前不动**。
+
+**P0 · 复现**（独立容器，别碰 obuild/odld 基线）
+- 取 `git clone https://github.com/emscripten-forge/recipes`，读
+  `recipes_emscripten/octave/{recipe.yaml,build.sh,patches/*}`
+- 取定制 LLVM：`github.com/IsabelParedes/llvm-project` release
+  `v20.1.7_emscripten-wasm32` 的 `llvm_emscripten-wasm32-20.1.7-h2e33cc4_5.tar.bz2`
+- 容器内按他们的 `build.sh` 造一遍，冒烟：`node octave-cli --version` + 一句矩阵解
+- **闸门**：`octave-cli.wasm` 能起、`disp(A\b)` 出正确数值
+- **风险**：他们的 recipe 依赖 conda-forge 的 host 包（libblas/liblapack/pcre2/freetype/
+  imagemagick<7）。容器里没有 conda，要么装 micromamba，要么改用系统库
+  （注意 imagemagick<7 与新版不兼容，可能要退到 ImageMagick 6）
+
+**P1 · 接上我们的站点接口**
+- 目标：产出**我们能用的 `octave.wasm + octave.js`**（`Module.eval_string` 可用），
+  而不是直接采用 Xeus/JupyterLite（那是另一套集成模型，我们的静态站点是自己的资产）
+- 复用他们 `0004-Custom-link-octave-cli` / `0008-Set-octave-cli-flags` 的做法
+- **闸门**：现成的 `accept-requirements.mjs` 里**至少解释器与 eval 两条**能跑
+
+**P2 · 长尾回归（本轮的命脉，也是最贵的一段）**
+- 在他们关掉的库里逐个重新打开，**每个都要在 10.3 + Flang 下重新验证**：
+  `glpk` / `qhull_r`(delaunay/convhulln) / `fftw3`+`fftw3f` / **ARPACK**(eigs) /
+  `cxsparse` / SuiteSparse(amd/colamd/cholmod/umklm/...) / `hdf5` / `curl`
+- **Flang 的收益在这一段兑现**：7.2 时为 ARPACK 公共块重复定义做的
+  "全源 cat 进单 TU"（CLIBS.md 批次 0）在 Flang 下应当不需要
+- 逐个过：编得过 → 数值对（照抄现有验收的判据：`eigs` 残差、`delaunay` 顶点、
+  `glpk` 最优值、`fft` 谱峰）
+- **闸门**：每开一个库，该库对应的**单条数值断言**必须过；过不了就**如实关回去并记录**
+- **风险**：这一段可能发现某些库在 Flang 下需要新 patch；**允许部分回退**，
+  回退的代价是能力面变窄（但比 7.2 基线窄不了，因为 7.2 是全开）
+
+**P3 · `.oct` 资产车道移植**
+- `.oct` 按 10.3 头文件重编（`build_oct.sh` / `build_pkg_oct.sh` 移植）
+- manifest / loader / `aliases` 符号链接机制**原样复用**（架构相同，见 9.1）
+- **闸门**：`exist('convhulln')==3` 且 `which` 指向 `.oct`（即批次 13 的官方装载语义）
+
+**P4 · 宿主层移植**
+- 把已完成的三批搬过来并重跑验收：
+  - **T1 help**：`build/render-docstrings.py` 生成 + 去标记
+    （**注意 10.3 的 `help.cc` 判定逻辑要重新核对**，别假设与 7.2 相同）
+  - **T3 文件操作**：`build/webfile/`（纯 `.m`，应当直接可用，除非 10.3 已有对应实现）
+  - **T4 pkg**：`build/pkgfix/` + `build/pkgrestore/installed_packages.m`
+    （**先核对 10.3 有没有同样的 fork 删改**）
+  - **T5 input**：已验证"不需要代码"（Emscripten TTY → `window.prompt`），
+    只要确认 10.3 下行为一致
+- **闸门**：`accept-help` / `accept-fileops` / `accept-pkg` **三套全绿**
+
+**P5 · 图形线重构（你要的"真正的完整版"）**
+- **方向：OSMesa**（Mesa 软件光栅化）。这是**唯一可信的"完整"路径**，依据：
+  edgetools.io 走 `LEGACY_GL_EMULATION` + Octave 自己的 `opengl_renderer`，
+  死在 `glEnd: numVertices must be an integer`，并自述 emscripten 那段模拟
+  *"do not expect it to work"*；**两支外部团队都没做出浏览器内图形**。
+- OSMesa 建成后：Octave 的 `opengl_renderer` **原样运行**，
+  `print -dpng/-dsvg/-dpdf`、屏幕渲染、`getframe` 全都回到官方实现
+- **过渡与回退**：现有 plot 桥 + `print -dsvg`（纯 `.m` SVG）**保留**，
+  在 OSMesa 未就绪时是可靠方案；两者不冲突（一个走 toolkit，一个走桥）
+- **闸门**（分步，别一步到位）：
+  1. OSMesa 在 wasm 里渲出一张纯色/三角到内存缓冲（最小验证）
+  2. 薄 toolkit 的 `redraw_figure` 接上 OSMesa（**T2 的目标**在 10.3 上重做）
+  3. `plot/surf/mesh/contour` 逐个出图，与 7.2 桥的产物对照
+- **风险（如实）**：Mesa 是大依赖（meson 构建、swrast 软件路径），
+  这是本轮**最大的一块不确定性**；所以它排在最后，且**允许只完成第 1 步并如实记录**
+
+**P6 · 收尾**：全量验收、重打交付包、文档、逐阶段提交 + `docker commit`
+
+### 9.4 纪律（沿用并加强）
+
+- **8761 永不退化**：10.3 全程在**独立容器 + 独立端口**（8762/8764）上做，
+  7.2 基线在 10.3 通过等价验收前不替换
+- **每阶段 `docker commit` 一个检查点**，命名 `octave-build:<phase>`；断电只认镜像
+- **改 `.m` 前先跑** `python3 build/check_m.py <目录>`
+- **事实优先**：本轮的每个"能/不能"都要有实测或源码引用；
+  尤其 **10.3 与 7.2 的差异（`help.cc` 判定、`installed_packages.m` 是否同样被删改、
+  `.oct` ABI）不许假设，必须重查**
+- 新文件同步 `.gitignore` 白名单；文档只用 Read/Edit 改
+
+### 5.9 T5 已完成（2026-09-21）——`input()` **不需要代码**
+
+**结论：`input()` 本来就是可用的。** Emscripten 不定义 `Module.stdin` 时把
+`/dev/stdin` 软链到 `/dev/tty`，而 TTY 默认输入就是 `window.prompt('Input: ')`
+（读 `library_tty.js` 的 `default_tty_ops.get_char` 确认）→ 弹浏览器原生对话框。
+
+之前看到的 `input: reading user-input failed!` **不是缺陷**：那是对话框被**取消**
+（=EOF）。本机 `octave-cli --eval "v=input('x? ')" < /dev/null` 报**一字不差**的同一句。
+
+唯一加的：`bridge/index.html` 的 `Module.stdin`（Emscripten **官方扩展点**，
+**必须在启动前定义**，启动后赋值无效——`FS.init()` 时才做 `createDevice`）。
+它优先从 `window.__octaveStdin` 队列取行，队列空回退 `window.prompt`，
+**真人用户体验不变**；加它只为**可测**（playwright 的 dialog 是异步的，
+与同步阻塞的 `window.prompt` 交错会让连续 `input()` 拿到错位答案）。
+
+**⚠️ EOF 是粘性的**：`std::cin` 读到一次 EOF 就永久 EOF（本机同理）→
+用户取消过一次对话框后，此后所有 `input()` 都会失败（与桌面一致）。
+**测试顺序因此有意义**：EOF 断言必须放最后，否则污染后面全部断言。
+
+**验收**：`accept-input.mjs` **9/9 绿**。
