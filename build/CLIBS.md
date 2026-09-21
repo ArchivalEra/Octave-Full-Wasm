@@ -491,6 +491,41 @@ error: called from print_usage at line 62 → __svg_panel_boxes__ at line 27
 （本套件用 10 秒），否则测的是别的东西。同理：验收要先 `clearInterval` 掉
 `OctaveAudio.init()` 的轮询，否则后台 drain 会抢在断言之前消费队列。
 
+## 批次 9（2026-09-20）：R5 —— **真·同步 urlread/urlwrite/webread/websave（无 Asyncify）**
+
+原计划分两步：R5-A 只做页面侧异步 fetch 桥，R5-B 才去试 Asyncify 换同步。
+**实际一步到位**：同步 XHR 在 wasm 里就能做，Asyncify 用不上了。
+
+- **后端** `build/webnet.cc` → `webnet-oct.oct`（9.4KB side module，零主链改动）：
+  `__web_fetch_sync__` 用 `XMLHttpRequest` 的**同步模式**（`open(..., false)`），
+  响应体写进 MEMFS（`/tmp/webnet_last`），状态码/Content-Type/错误各写一个文件。
+- **前端** `build/webnet/*.m`（9 个）：`urlread`/`urlwrite`/`webread`/`websave`
+  **压过 builtin**——Octave 的查找顺序是 autoload → **path 上的函数** → package →
+  builtin（`fcn-info.cc:811-834`），所以同名 `.m` 放在 path 上就接管了，
+  与 plot 桥压 `print` 同一机制。
+- **页面侧** `bridge/webnet.js`：`OctaveNet.prefetch/get/getBytes` 走原生 `fetch`，
+  写进**同一组 MEMFS 路径**，所以 prefetch 过的 URL 之后被 `urlread` 命中暖数据。
+- 验收：`test/browser/accept-net.mjs` 30/30（同源硬断言 + 1MB 二进制字节完整 +
+  POST + 404 路径 + JSON 解码）；外网访问只作信息性检查（跨域取决于对方 CORS）。
+
+### 坑 9：`EM_ASM` 在 side module 里**不可用**
+```
+error: EM_ASM is not supported in side modules
+```
+原因：EM_ASM 的 JS 体会在**链接期**被拼进主模块的胶水，而 side module 没有那个阶段。
+**替代**：`emscripten_run_script()` 是主模块导出的普通库函数，从 side module 可调用；
+JS 以字符串传入。参数传递用**写 MEMFS + JS 读回**（一个 `const char*` 装不下
+URL+method+body 三样，硬塞进 JS 字面量还要做转义）。
+
+### 坑 10：同步 XHR **不能设 `responseType`**
+```
+InvalidAccessError: Failed to set the 'responseType' property on 'XMLHttpRequest':
+The response type cannot be changed for synchronous requests made from a document
+```
+要拿字节就用 `overrideMimeType('text/plain; charset=x-user-defined')` +
+`responseText`，再 `charCodeAt(i) & 0xFF` 逐字节还原。这样二进制（wasm 魔数等）
+完整无损——已用 1MB 的 `octave.wasm` 实测。
+
 ### 坑 6：循环边界变量被内层分支覆盖
 `plot3 (Y)` 单参数分支里写了 `n = numel (z);` —— 而 `n` 正是驱动外层
 `while (i <= n)` 的参数个数。赋值后循环跑过数组尾端，报

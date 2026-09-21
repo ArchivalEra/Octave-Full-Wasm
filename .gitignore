@@ -19,6 +19,8 @@
 !build/GAPS.md
 !build/plotbridge/*
 !build/webaudio/*
+!build/webnet/*
+!build/webnet.cc
 !build/fftw_threads_stub.c
 !build/second_stub.f
 !build/normalize_arpack.py
@@ -39,6 +41,7 @@
 !bridge/octplot.html
 !bridge/plotbridge.js
 !bridge/webaudio.js
+!bridge/webnet.js
 !vendor/MANIFEST.md
 !vendor/forge/*
 !vendor/extra/*
