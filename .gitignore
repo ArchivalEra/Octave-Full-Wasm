@@ -17,6 +17,8 @@
 !build/reconf-batch1.sh
 !build/CLIBS.md
 !build/GAPS.md
+!build/BENCH.md
+!build/reconf-bench.sh
 !build/plotbridge/*
 !build/webaudio/*
 !build/webnet/*

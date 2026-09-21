@@ -163,12 +163,50 @@
             return f;
           });
         })).then(function (names) {
+          // aliases：模块文件名与它导出的函数名不同时，Octave 按**文件名**
+          // 找不到那个函数（见 §4.11）。control 包的 lti_input_idx.oct 导出
+          // __lti_input_idx__，就是这种情况。
+          // 值可以是字符串（函数名与文件名只差下划线包裹）或 {file, names}。
+          (a.aliases || []).forEach(function (al) {
+            var file, fns;
+            if (typeof al === 'string') {
+              file = al;
+              fns = [al.indexOf('__') === 0 ? al : '__' + al + '__'];
+            } else {
+              file = al.file; fns = al.names || [];
+            }
+            fns.forEach(function (fn) {
+              try { fs().symlink(dir + '/' + file + '.oct', dir + '/' + fn + '.oct'); }
+              catch (e) { /* 已存在 */ }
+            });
+          });
           addPaths([dir]);
           loaded[name] = { files: names.length, addpath: [dir] };
           log(name + ' 就绪（' + names.length + ' 个 .oct → ' + dir + '）');
           return loaded[name];
         });
       }
+      // kind=file：把一份**数据文件**放到指定 mount 路径，不 addpath。
+      // 用来补 Octave 运行时需要、但构建时没打进 octave.data 的文件
+      // （最典型的是 doc-cache：没有它，disp(函数对象)/help 会去调
+      // makeinfo 子进程，而本构建无 shell，于是清晰报错）。
+      if (a.kind === 'file') {
+        return fetchBinary(a.url).then(function (buf) {
+          return sha256Hex(buf).then(function (hex) {
+            if (a.sha256 && hex && hex !== a.sha256) {
+              throw new Error('资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+            }
+            var mount = a.mount;
+            if (!mount) throw new Error('资产 ' + name + ' 缺少 mount 路径');
+            mkdirp(mount.replace(/\/[^/]*$/, ''));
+            fs().writeFile(mount, new Uint8Array(buf));
+            loaded[name] = { files: 1, mount: mount };
+            log(name + ' 就绪（' + buf.byteLength + ' 字节 → ' + mount + '）');
+            return loaded[name];
+          });
+        });
+      }
+
       if (a.kind === 'js') {
         return loadScript(a.url).then(function () {
           var bundle = (global.__OCT_ASSETS__ || {})[name];

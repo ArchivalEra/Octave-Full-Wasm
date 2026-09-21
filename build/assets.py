@@ -185,6 +185,30 @@ def gen_manifest(site):
             entry.update(meta.get(name, {}))
             entries.append(entry)
 
+    # kind=file：assets/data/ 下的数据文件，按 meta 里的 mount 路径投放。
+    # 用来补 Octave 运行时需要但没进 octave.data 的文件（doc-cache 等）。
+    # meta 键是文件名（含扩展名），因为一个站点可能有多份同名不同用途的文件。
+    data_dir = os.path.join(assets_dir, "data")
+    if os.path.isdir(data_dir):
+        for fn in sorted(os.listdir(data_dir)):
+            if fn.startswith("."):
+                continue
+            m = meta.get(fn, {})
+            if "mount" not in m:
+                # 没声明 mount 就拿不到去处 —— 跳过而不是猜，免得把文件投到
+                # 一个 Octave 不会去看的位置（那种失败在浏览器里极难定位）
+                print(f"gen-manifest: 跳过 assets/data/{fn}（meta 里没有 mount）")
+                continue
+            entry = {
+                "name": fn,
+                "kind": "file",
+                "url": f"assets/data/{fn}",
+                "sha256": sha256(os.path.join(data_dir, fn)),
+                "deps": [],
+            }
+            entry.update(m)
+            entries.append(entry)
+
     for sub, kind in (("pkg", "js"), ("m", "js")):
         d = os.path.join(assets_dir, sub)
         if not os.path.isdir(d):
