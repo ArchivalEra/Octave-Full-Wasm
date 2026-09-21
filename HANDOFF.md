@@ -383,7 +383,8 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `bridge/octplot.html` | plot 桥 PoC 页（含运行时注入胶水 + 4 个 demo 按钮） |
 | `bridge/plotbridge.js` | spec→gnuplot 脚本 + marker 表（marker 表已按肉眼锁定） |
-| `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：14 套 402 项 — `full`(20) `hdf5`(16) `forge`(22) `forge-oct`(15) `forge2`(42) `dldfcn`(68) `ode15`(14) `archive`(20) `image`(17) `print`(43) `plotv2`(54) `plot3d`(34) `audio`(47) `net`(30) |
+| `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：15 套 418 项 — `full`(20) `hdf5`(16) `forge`(22) `forge-oct`(15) `forge2`(42) `dldfcn`(68) `ode15`(14) `archive`(20) `image`(17) `print`(43) `plotv2`(54) `plot3d`(34) `audio`(47) `net`(30) `requirements`(16) |
+| `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
 | `build/BENCH.md` | **R10 结论**：O0/O1/O2 矩阵与采纳依据（取 O1） |
 | `build/build_oct.sh` | 编 dldfcn `*.cc` → `.oct`（官方装载车道，不挂终链） |
@@ -425,9 +426,11 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 
 ## 8. 一句话接续
 **当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13**，
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **14 套 402 项全绿**，交付包在
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **15 套 418 项全绿**（含需求级
+`accept-requirements`），交付包在
 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
 **R1–R10 全部落地**；剩下只有 SPQR、control 的 SLICOT、`help` 三件非阻塞事项（见 §5 剩余）。
+**起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild`/`odld`/`obench` 容器内工作。
 
 **恢复流程（断电/新会话第一条命令）**：
