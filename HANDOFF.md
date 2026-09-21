@@ -26,9 +26,13 @@
 - 远程：`https://github.com/ArchivalEra/Octave-Full-Wasm`（私有）
 - 许可：AGPL-3.0（`LICENSE`）；混合体无其他选择
 - 当前 HEAD：以 `git log -1` 为准（本文档自身也随每次提交更新；勿在文档里写死哈希，容易过期）
-- 产物体积（**已采用 MAIN_MODULE=1 / 真 .oct 版**）：wasm raw 37.9MB / gzip 7.98MB；
-  js 29.8MB / gzip 1.80MB；data 6.17MB / gzip 1.18MB。**三大件 gzip 合计 10.96MB**
-  （采用前是 6.18MB，+79% 是 .oct 能力的代价）。
+- 产物体积（**当前：MAIN_MODULE=1 + HDF5**；gzip 数值供参考，交付走 EdgeOne 自动压缩）：
+  wasm raw 45.1MB / gzip 9.46MB；js raw 30.8MB / gzip 1.89MB；data raw 6.17MB / gzip 1.18MB。
+  **三大件 gzip 合计 ≈12.5MB**（批次 1 前是 10.96MB，+1.5MB 是 HDF5）。
+  另加**按需懒加载资产 12MB / 37 个文件**（谁用到谁下载，不计入首包）。
+  历史：`MAIN_MODULE=1` 本身让 gzip 从 6.18MB 涨到 10.96MB（不做 DCE）；
+  `MAIN_MODULE=2` 能把体积压回基线但 **DCE 会删掉 `.oct` 要 import 的函数**（运行时 `null function` 崩），
+  未采用——要吃得维护一份导出清单（见 `CLIBS.md`）。
 
 ---
 
@@ -51,22 +55,39 @@
 
 ### 2.1.1 交付包（不在 git 里，在磁盘上）
 ```
-/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920/      # 84MB，可直接 rsync 上静态托管
-/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920.tar.zst  # 18.8MB 归档
+/mnt/hdd/octave-wasm-build/site/                     # **站点源**（8761 服务的就是它，含 assets/ 懒加载资产）
+/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920/   # 交付包，可直接 rsync 上静态托管
+/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920.tar.zst  # 归档 + .sha256
   └─ serve.py（wasm MIME + gzip_static）、DEPLOY.md（nginx 配置）、MANIFEST.sha256
 ```
-包内 `oct/*.oct` 是运行时动态装载的示例；装法（纯浏览器端）见 `DEPLOY.md`。
+- 交付包的 `assets/` 已同步（21 个资产 / 37 个文件）。**注意**：`.tar.zst` 是批次 5 之前打的，
+  重打一次即可（`tar -cf - <目录> | zstd -19 -T24`），清单用
+  `build/assets.py gen-manifest` + `sha256sum` 重生成。
+- 包内 `oct/*.oct` 是运行时动态装载的示例；装法（纯浏览器端）见 `DEPLOY.md`。
 
 ### 2.2 已装 dldfcn（`main.cc` 的 `STATIC_DLD_FCNS`，一行一模块，共 11 个）
 `__delaunayn__ / __glpk__ / __voronoi__ / convhulln / fftw / gzip / bzip2 /
 audioread / audiowrite / audioinfo / audioformats`
 
 ### 2.3 未完成（下一批）
-- **批次 1c**：CXSparse（configure 报 "too old"）+ SPQR（源码不在，需另下）
-- **批次 2**：SUNDIALS → `ode15s`/`ode15i`
-- **批次 3**：HDF5 → `save/load -hdf5`
-- **桥接**：fetch/urlread（需 Asyncify）、xls、WebAudio、image
-- **零编译车道**：plot 桥 v2、forge 统计长尾、验证矩阵、`help` 文档注入
+见 §5「⬜ 剩余」。四批剩余：**R9 `print -dsvg`**（建议先做，零依赖）、**R8 WebAudio**、
+**R5 网络**（fetch 桥 → 同步 urlread）、**R10 O0/O1/O2 基准矩阵**；另有 plot 桥 v2 与 doc-cache 注入。
+已论证不可行/未过：nan 与 tsa 的源是 MEX（需 mex 运行时）、miscellaneous 的
+`sample.cc`/`text_waitbar.cc`、SPQR（Suitesparse 里可取但本轮未做）。
+
+### 2.4 资产懒加载车道（**本轮建立，后续所有新能力都走它**）
+站点 `assets/` 下按需 fetch，**主 wasm 自批次 1 后未再改动**：
+```
+assets/manifest.json          21 个资产：kind=oct | octdir | js
+assets/oct/*.oct              单文件模块（__ode15__ / webio / webimage-oct）
+assets/octdir/<pkg>/*.oct     一个包的多个 .oct（struct/optim/statistics/geometry/miscellaneous）
+assets/m/**/*.js              .m 包（Forge 10 包 + webshell 覆写 + webimage 注册）
+```
+- 生成：`build/assets.py bundle-m|bundle-pkg|gen-manifest`；取包：`build/forge-fetch.py`
+  （按 Octave 版本过滤 + 依赖递归 + sha256 校验）；一键：`build/forge-build.sh`
+- 加载：`bridge/assets-loader.js` → `OctaveAssets.load('__ode15__')`
+- **两个必须知道的机制**（踩过，见 §4.10/4.11）：Octave 会自己执行目录里的 `PKG_ADD`；
+  `.oct` 按**文件名**查找，多函数模块要建符号链接（manifest 里 `aliases`）。
 
 ---
 
@@ -75,17 +96,22 @@ audioread / audiowrite / audioinfo / audioformats`
 ### 3.1 容器 / 镜像 / 端口
 ```
 obuild   最早的构建容器（批次 1b 非 PIC 态）—— 留着当最远回退点
-odld     **当前主力**：PIC 全树 + MAIN_MODULE=1 主链 + cmake 3.27.9
+odld     **当前主力**：PIC 全树 + MAIN_MODULE=1 主链 + HDF5 + SUNDIALS + 全部 .oct 目标文件
 owasm    旧的线上构建，端口 8757，别动
-镜像     octave-build:pic-oct2（**当前检查点**，含 cmake 3.27.9，5.56GB）
-         octave-build:pic-oct（PIC 全树，无 cmake，5.25GB）
+镜像     octave-build:b5-image（**最新检查点**，批次 5 后全状态，5.97GB）
+         octave-build:b1-hdf5（批次 1 后，5.67GB）
+         octave-build:pic-oct2（PIC 全树 + cmake 3.27.9，5.56GB）
+         octave-build:pic-oct（PIC 全树，5.25GB）
          octave-build:pre-dldfcn（批次 1b 可用态，4.27GB）
          octave-build:b2-snapshot / :final / :shutdown / :libs / :full / octave-wasm:latest
-端口     8757=旧构建  8761=基线（改这里）  8762/8763/8764=实验与包验证
+端口     8757=旧构建  8761=基线（改这里）  8762=staging/实验  8764=交付包验证
 ```
-- 容器内源码/产物：`/usr/src/octave-wasm/{src,target,third_party}`，第三方源码树在容器 `/tmp/`
+- **每批跑完就 `docker commit odld octave-build:<批次名>`**——断电后容器内的"最近写入"
+  可能损坏（`exec format error` 就是这么来的），镜像检查点是唯一可靠的落盘（§4.8）。
+- 容器内源码/产物：`/usr/src/octave-wasm/{src,target,third_party}`；第三方源码树在容器 `/tmp/`
+  （SUNDIALS/HDF5/Forge 解包都在那儿，**容器重建会丢，需要时可从 `/mnt/hdd/.../third_party/` 重解**）
 - `src/Makefile` = 仓库 `build/Makefile`；`src/main.cc` = 仓库 `build/main.cc`
-- **新容器从检查点起**：`docker run -d --name odld2 octave-build:pic-oct2 sleep infinity`
+- **新容器从检查点起**：`docker run -d --name odld2 octave-build:b5-image sleep infinity`
 
 ### 3.2 起服务与预览（**断电后一条命令**）
 ```bash
@@ -197,9 +223,14 @@ dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
 - zlib/bz2 用 Emscripten ports：`embuilder build zlib bzip2`（头/库进 sysroot），终链补 `-lz -lbz2`。
 - RapidJSON：header-only，解包到 `target/include/rapidjson/`；configure 去掉 `--disable-rapidjson`。
 
-### 4.6 CXSparse "too old"（未解）
-去掉 `--without-cxsparse` 后 configure 报 `CXSparse library is too old (< 2.2)`。
-`m4/acinclude.m4` 的 `OCTAVE_CHECK_CXSPARSE_VERSION_OK` 是 preprocess 检查，依赖 `HAVE_CS_H`/`HAVE_SUITESPARSE_CS_H`/`HAVE_CXSPARSE_CS_H` 之一被定义；当前 `cs.h` 在 `target/include/cs.h`（`CS_VER=3,CS_SUBVER=1`）。需查清为何该宏未定义。
+### 4.6 CXSparse "too old" —— **已解决（批次 1）**，是假失败
+报错文本骗人：库和头都好好的（`cs.h` 里 `CS_VER=3/CS_SUBVER=1`，`libcxsparse.so.3.2.0` 也在）。
+真因：`OCTAVE_CHECK_CXSPARSE_VERSION_OK` 走 **`AC_PREPROC_IFELSE`（纯预处理）**，而它**只吃 `CPPFLAGS`**；
+本仓的 `-I target/include` 一直只写在 `CFLAGS/CXXFLAGS` 里 → 预处理时找不到 `cs.h` → 判成"太老"。
+**修法一行**：configure 时加 `CPPFLAGS="-I$INCDIR"`（已内建在 `build/reconf-pic.sh`），
+并恢复 `--with-cxsparse --with-cxsparse-includedir/-libdir` → `HAVE_CXSPARSE_VERSION_OK=1`。
+两个行为边界（非缺陷，桌面版同）：`qr(s,0)` 经济模式 CXSparse 不支持；`[Q,R,P]=qr(s)` 的 P 为空
+（但 `s=Q*R` 恒等式成立，残差 7e-15——验收用这个判据）。SPQR 本轮未做。
 
 ### 4.7 其它
 - `-lz -lbz2 -lccolamd -lsndfile` 都要手工进 `Makefile` 的 `EM_LDFLAGS`（Octave 自己的链接行不管我们的 web 终链）。
@@ -224,49 +255,67 @@ GitHub 直连基本不可用（45MB 的 cmake 下到一半断），**一律走�
 
 ---
 
-## 5. 下一阶段计划（~~2 小时*无人值守*，已获用户批准：编译允许）
+### 4.10 Octave 会**自己执行**目录里的 `PKG_ADD`（批次 5 踩到）
+`addpath` 一个含 `PKG_ADD` 的目录时，Octave 自动 run 它。加载器起初又手动 run 了一遍
+→ `imformats("add", …)` 执行两次 → `imformats("png")` 返回两条 →
+`imwrite` 里 `fmt.write(varargin{:})` 报 **`a cs-list cannot be further indexed`**。
+**解**：不要手动 run `PKG_ADD`（Octave 本就会跑），且注册类代码写成幂等。
+这条对所有 `PKG_ADD` 型资产都成立（Forge 包也受影响）。
 
-**优先级与决策（用户已拍板"全部按我的倾向"）**
-1. SUNDIALS 版本：**主选 6.1.x**（有 wasm 先例；`__ode15__.cc` 含 `HAVE_SUNDIALS_SUNCONTEXT` 分支支持 6.x），**备选 5.8.x**。
-2. 零编译车道**与构建并行**（会抢 CPU，构建略慢，总产能更高）。
-3. 失败策略：每批重试 ≤2 次；仍失败→回滚镜像、记 `CLIBS.md`、转下一批。
-4. **底线：8761 永远是最近一次通过验收的构建**（任何新批失败不许让它退化）。
+### 4.11 `.oct` 按**文件名**查找；多函数模块要建符号链接（批次 4 踩到）
+`webio.oct` 里导出 6 个函数（`__web_zip__` 等），但 `exist("__web_zip__")` 恒为 0——
+因为 Octave 找的是**与函数同名的 `.oct` 文件**。桌面版就是这么解决的：
+`bzip2.oct -> gzip.oct` 是符号链接。**解**：manifest 里给模块声明 `aliases`，
+loader 在挂载后对每个函数名 `FS.symlink` 到该模块。
 
-### 批次 2 · SUNDIALS → `ode15s`/`ode15i`（首位）
-- 源：`sundials-6.1.1.tar.gz`（**待下载**到 `/mnt/hdd/octave-wasm-build/third_party/`）
-- 构建：`emcmake cmake`，`-DSUNDIALS_PRECISION=double -DSUNDIALS_INDEX_SIZE=32 -DEXAMPLES_ENABLE*=OFF -DKLU_ENABLE=ON -DKLU_INCLUDE_DIR=target/include -DKLU_LIBRARY_DIR=target/lib`，静态
-- Octave：去掉 `--without-sundials_ida --without-sundials_nvecserial --without-sundials_sunlinsolklu`
-- dldfcn：编 `__ode15__.cc` → `.o`（**在 config.h 之后**）+ 注册 `X("__ode15__", G__ode15__)`
-- 终链：`-lsundials_ida -lsundials_nvecserial -lsundials_sunlinsolklu -lsundials_sunlinsoldense [-lsundials_core]`
-- 验收：`ode15s` 跑刚性方程（Van der Pol / `y'=-1000(y-cos t)-sin t`）与参考一致；`ode15i` exist=5；回归无退化
+## 5. 计划与进度
 
-### 批次 1c · CXSparse + SPQR
-- CXSparse：先解 4.6 的头宏问题；SPQR：从 `suitesparse-full-5.4.0.tar.gz`（已在 third_party）取 `SPQR/` 单独编。
-- 验：稀疏 QR 数值对照。
+**底线**：8761 永远是最近一次通过验收的构建（任何新批失败不许让它退化）。
+**失败策略**：每批重试 ≤2 次；仍失败 → 回滚镜像、记 `CLIBS.md`、转下一批。
 
-### 批次 3 · HDF5（另起一轮，风险最高）
-- 选有 wasm 先例的版本；先独立 smoke test 再接 Octave；`FE_INVALID` 是已知 Emscripten 冲突点。
-- 验：`save -hdf5`/`load` 往返。
+### ✅ 已完成（本轮 2026-09-20 无人值守，全部已浏览器实测 + 已推送）
 
-### 零编译车道（与构建并行）
-1. plot 桥 v2：`barh/errorbar/stairs/area/pie/plot3/scatter3/mesh/surf/contour`、`subplot`→`set multiplot`、`figure(n)`、`axis equal/tight`、`print -dsvg`、中文标签。
-2. forge statistics 长尾：manifest 驱动注入（`anova/ttest2/ztest/kmeans/pca/`分布族）——**运行时 `.m` 注入零重编**（`Module.FS.writeFile` + `addpath`，可遮蔽 builtin）。
-3. 验证矩阵：覆盖率量尺（`exist` + 数值 + 图产物）。
-4. 候选：`help` doc-cache（`target/share/octave/7.2.0/etc/doc-cache`，2MB）运行时注入。
+| 批次 | 内容 | 验收 | 关键结论（别重做） |
+|---|---|---|---|
+| 1 | HDF5 1.14.2 → `save/load -hdf5`；CXSparse 假失败修复 | 回归 19/19 + 专项 16/16 | HDF5 是**唯一**需要重链主 wasm 的批（wasm +7.1MB）；CXSparse 只需 `CPPFLAGS` 一行（§4.6） |
+| 2A | Forge 10 包纯 `.m` 懒加载（1482 个 `.m`） | 21/21 | 版本必须按 Octave 过滤（1.7.7 要 ≥8.1 用不了，选中 1.7.3）；PKG_ADD 机制见 §4.10 |
+| 2B | Forge 编译件 19 个 `.oct` | 15/15 | 工具 `build/build_pkg_oct.sh`；**优先读包自带 src/Makefile 的每目标分组**，否则 duplicate symbol |
+| 3 | SUNDIALS 6.1.1 → `ode15s`/`ode15i` | 14/14 | **主 wasm 零改动**（SUNDIALS 静态码全在 .oct 内）；不开 configure 也能编，`-D` 开宏即可 |
+| 4 | 压缩/归档无 shell 化（6 个函数） | 20/20 | zip 走 zlib raw deflate + 自实现中央目录；tar 自实现 ustar；§4.11 的别名坑 |
+| 5 | stb_image → `imread`/`imwrite`/`imfinfo` | 17/17 | 走 `imformats("add")` 注册，`imread.m` 零改动；§4.10 的双重注册坑 |
 
-### 本轮（2026-09-20 无人值守）已完成与剩余
-已完成：批次 1（HDF5+CXSparse，Lane B 重链）、2A/2B（Forge）、3（SUNDIALS，纯 .oct）、
-4（压缩归档）、5（图像）。**资产全部在站点 `assets/` 下，懒加载，主 wasm 自批次 1 后未再改动。**
-剩余（按计划）：
-- **R9 `print -dsvg`**（自写 SVG 生成器，纯 .m；注意 octave 内是同步调用而 gnuplot 桥在 JS 侧）
-- **R8 WebAudio**（18 个 `__player_*` 符号，AudioBufferSourceNode，上下文推迟到 play）
-- **R5-A fetch 桥 → R5-B 同步 urlread**（Asyncify + MAIN_MODULE=1 有已知破坏，需实测）
-- **R10 O0/O1/O2 基准矩阵**
-- nan/tsa 的 MEX 源、miscellaneous 的 sample/text_waitbar：已论证不可行或未过，记录在案
+**资产全部在站点 `assets/` 下按需懒加载；主 wasm 自批次 1 之后未再改动**——
+新增能力优先做成 `.oct`/`.m` 资产（`build/build_oct.sh` / `build/build_pkg_oct.sh` /
+`build/assets.py`），只有动了 Octave 本体或必须静态进主链才走 Lane B（`build/reconf-pic.sh`）。
 
-### 后续（本轮不做）
-- 桥接 fetch/`urlread`（需 Asyncify，编译期）、xls、WebAudio、image。
-- 托管/UI：**已明确后置**。用户倾向：解耦成两个静态端点（如 `/cli`、`/gui`）+ 共享 core 运行时；**不要 R2/Worker**（纯静态托管即可，服务端零计算）；Service Worker 可离线。GUI 用 JupyterLite + 自研 kernel 适配器（`jupyterlite/kernel` 接口，模板见 `jupyterlite/javascript-kernel`）；`xeus-octave` 是原生内核、未 wasm 化，仅参考。
+### ⬜ 剩余（按计划的优先级）
+
+1. **R9 `print -dsvg`**（零依赖、最快出成果）
+   自写 SVG 生成器、纯 `.m`。注意：Octave 内是同步调用，而 gnuplot 桥在 JS 侧——
+   没有 Asyncify 就没有同步通道，所以 v1 走自写生成器，gnuplot 质量路线留 v2。
+   PNG 可由页面侧 canvas 转换，不必占 `print -dpng`。
+2. **R8 WebAudio**（播放侧）
+   共 18 个 `__player_*` 符号；最小可用集合＝构造 + `play` + `isplaying` + 8 个 getter（占位）+ 3 个 setter。
+   用 `AudioBufferSourceNode`（**不用 AudioWorklet**，符合无真线程）；音频上下文创建**必须推迟到 play**
+   （原版构造期要求设备数 ≥1）。验收现实：只能保证"无错 + 状态正确"，出声需用户手势（浏览器 autoplay 策略）。
+3. **R5-A fetch 桥 → R5-B 同步 `urlread`**
+   先做浏览器原生 fetch 桥；同步 `urlread` 单独作为 runtime 架构实验。
+   已知 `Asyncify + MAIN_MODULE=1` 有运行时破坏的公开报告 → **必须实测，不许推断**。
+4. **R10 O0/O1/O2 基准矩阵**：O0/O1/O2 × link-O2，跑回归 + 计时套件（矩阵/FFT/ODE/稀疏/循环/classdef/plot 桥）。
+   wasm64 明确不碰。
+5. **plot 桥 v2**（零编译车道）：`barh/errorbar/stairs/area/pie/plot3/scatter3/mesh/surf/contour`、
+   `subplot`→`set multiplot`、`figure(n)`、`axis equal/tight`、中文标签。
+6. **`help` doc-cache 注入**（候选）：`target/share/octave/7.2.0/etc/doc-cache`（2MB）运行时注入，
+   可修掉 `disp(函数)` 触发的 `makeinfo` 子进程报错。
+
+### ❌ 已论证不做（别再试，见 §7 与 `build/GAPS.md`）
+- nan / tsa 的源是 **MEX**（`mexFunction`），需 mex 运行时；miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未过。
+- ImageMagick / PortAudio / Ghostscript / libarchive / OpenGL / Java / FLTK-Qt / `system`-`popen`
+  （各有替代或有意保持"清晰报错"）。
+- 托管/UI：**已明确后置**。用户倾向：解耦成两个静态端点（如 `/cli`、`/gui`）+ 共享 core 运行时；
+  **不要 R2/Worker**（纯静态托管即可，服务端零计算）；Service Worker 可离线。
+  GUI 用 JupyterLite + 自研 kernel 适配器（`jupyterlite/kernel` 接口，模板见 `jupyterlite/javascript-kernel`）；
+  `xeus-octave` 是原生内核、未 wasm 化，仅参考。
 
 ---
 
@@ -276,14 +325,26 @@ GitHub 直连基本不可用（45MB 的 cmake 下到一半断），**一律走�
 |---|---|
 | `build/Makefile` | 构建主 Makefile（含 `EM_LDFLAGS` 全库清单 + dldfcn `.o` 挂载 + `STATIC_DLD_FCNS` 相关） |
 | `build/main.cc` | wasm 入口；`STATIC_DLD_FCNS` 注册表 + Phase 3 安装 + addpath 两段式 + feval/eval_string 绑定 |
-| `build/reconf*.sh` | 各批次 configure 配方（当前：`reconf.sh` 基线、`reconf-batch1.sh`、`reconf-batch1b.sh`） |
-| `build/build_dldfcn.sh` | 编 dldfcn `.cc` → `.o`（容器内跑） |
+| `build/reconf*.sh` | configure 配方。**当前基线是 `reconf-pic.sh`**（含 `-fPIC` 与 `CPPFLAGS` 两处关键）；`reconf-batch1*.sh`/`reconf.sh` 是历史 |
+| `build/rebuild-pic-libs.sh` | 5 个静态库的 `-fPIC` 重建（glpk/arpack/sndfile/qhull/fftw3+3f）——**重编 Octave 时必须一起走** |
+| `build/build_dldfcn.sh` | 编 dldfcn `.cc` → `.o`（**静态直装**车道，挂终链） |
+| `build/build_oct.sh` | 编 dldfcn `.cc` → `.oct` **side module**（动态装载车道，不挂终链） |
+| `build/build_pkg_oct.sh` | 编 **Forge 包** `src/*.cc` → `.oct`（内含 3 个垫片 + config.h 纠正表/合成兜底） |
+| `build/assets.py` | 资产工具：`bundle-m` / `bundle-pkg` / `gen-manifest` |
+| `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
+| `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
+| `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
+| `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
+| `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
 | `build/fftw_threads_stub.c` | FFTW 线程桩（必须） |
 | `build/normalize_arpack.py` | ARPACK F77 源净化器 |
 | `build/second_stub.f` | ARPACK `second()` 计时桩 |
 | `build/plotbridge/*.m` | plot 翻译桥垫片（plot/hold/legend/xlim/… 20 个） |
-| `bridge/octplot.html` | PoC 验证页（含运行时注入胶水 + 4 个 demo 按钮） |
+| `bridge/assets-loader.js` | **资产懒加载器**（manifest → fetch → 写 FS → addpath；支持 `aliases` 符号链接） |
+| `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
+| `bridge/octplot.html` | plot 桥 PoC 页（含运行时注入胶水 + 4 个 demo 按钮） |
 | `bridge/plotbridge.js` | spec→gnuplot 脚本 + marker 表（marker 表已按肉眼锁定） |
+| `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：`full`(19) `hdf5`(16) `forge`(21) `forge-oct`(15) `ode15`(14) `archive`(20) `image`(17) |
 | `build/GAPS.md` | **差距审计 + 需求书**（实测缺口、硬约束、R1–R11 分条需求与验收标准） |
 | `build/CLIBS.md` | **C 库长尾全部配方与坑**（最重要的一手记录） |
 | `vendor/forge/*.m` | forge 统计纯 `.m`（16 个） |
@@ -297,20 +358,36 @@ GitHub 直连基本不可用（45MB 的 cmake 下到一半断），**一律走�
 
 ## 7. 已知偏差（如实）
 - `fftw('threads',N)` 静默 no-op（4.3）。
-- `gunzip`/`bunzip2`（`.m` 包装）调 `system("gzip -d …")` → 无 shell，**清晰报错**；符合"宿主专属=明确报错"口径。
-- `system/unix/popen` 已清晰报错（本就达标）。
-- `audioformats` 输出正确，仅测试脚本预期字符串不符。
+- ~~`gunzip`/`bunzip2` 调 `system` 报错~~ → **批次 4 已修复**：`zip/unzip/tar/untar/gunzip/bunzip2`
+  全部改成进程内实现（`webio.oct` + `webshell` 覆写），二进制往返字节级一致。
+  仍存在的同类：任何**其它**调 `system()` 的 `.m`（全树共 34 个文件）——本构建里会清晰报错。
+- `system`/`unix`/`popen` 清晰报错（本就达标，且是**有意**保持）。
+- `disp(函数对象)` 触发 docstring 渲染时会调 `makeinfo` 子进程 → 清晰报错；
+  不影响函数调用本身。候选修法见 §5 第 6 条（doc-cache 注入）。
+- nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入（§5「已论证不做」）。
 
 ---
 
 ## 8. 一句话接续
-**当前基线 8761 = 批次 0/1a/1b + 真 `.oct` 动态装载（MAIN_MODULE=1）**，实测 20/20；
-交付包已打在 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920/`（+ `.tar.zst`），
-用户实下 10.96MB。下一步是**批次 2（SUNDIALS 6.1.x → ode15s/ode15i）**，配零编译车道并行；
+**当前基线 8761 = 批次 0/1a/1b/1d + 1(HDF5+CXSparse) + 2A/2B(Forge) + 3(SUNDIALS) +
+4(压缩归档) + 5(图像)**，各套验收全绿（19/21/16/15/14/20/17），交付包在
+`/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260920/`。
+下一步从 **§5 的「剩余」第 1 条（R9 `print -dsvg`）** 开始，按优先级往下做；
 每批自动验证、通过才覆盖 8761、提交推送。只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm`
 及 `obuild`/`odld` 容器内工作。
 
-**注意架构已变**：主链是 `-s MAIN_MODULE=1` + 全树 `-fPIC`。这带来一个直接好处——
-**新 dldfcn 模块可以只编成 `.oct` 用运行时加载，不必重链那 38MB 主 wasm**
-（`build/build_oct.sh`）。但任何"重编 Octave 本体/静态库"的操作都必须走
-`build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`，否则非 PIC 对象会让主链链接失败。
+**恢复流程（断电/新会话第一条命令）**：
+```bash
+sudo docker start obuild odld && sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover.sh
+```
+它会起容器、体检工具链（cmake 曾因断电损坏）、必要时重建站点、起 8761、跑验收。
+最近的镜像检查点是 **`octave-build:b5-image`**（容器全状态，含 SUNDIALS/HDF5/所有 `.oct` 目标文件）。
+
+**架构要点（别再走弯路）**：
+- 主链是 `-s MAIN_MODULE=1` + 全树 `-fPIC` → **新能力优先做成 `.oct`/`.m` 资产懒加载**，
+  不必重链那 45MB 主 wasm（批次 3/4/5 都是这么零改动落地的）。
+- 任何"重编 Octave 本体或静态库"的操作必须走 `build/reconf-pic.sh` +
+  `build/rebuild-pic-libs.sh`，否则非 PIC 对象会让主链链接失败。
+- 新增资产流程：写源码 → 编 `.oct`（`build/build_oct.sh` 或 `build_pkg_oct.sh`）→
+  进站点 `assets/` → `build/assets.py gen-manifest` → 写验收脚本进 `test/browser/`。
+  多函数模块记得在 meta 里声明 `aliases`（§4.11）。

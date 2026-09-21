@@ -94,7 +94,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (1060 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (22929 bytes)
+- `HANDOFF.md` (29752 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (9203 bytes)
