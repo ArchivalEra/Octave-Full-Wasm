@@ -20,6 +20,19 @@ while (Date.now() - t < 300000) {
 }
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
+// index.html 在 ready 之后自动装载 dldfcn 核心组，那批日志会落进 console，
+// 把紧接着的断言输出挤出截取窗口（曾让第一条断言在 8761 上假失败，在包上通过
+// —— 纯粹是时序差异）。等它落定再清日志。本套件测的 Forge 包都不在自动组里，
+// "加载前应为 0"的前置断言仍然成立。
+await page.evaluate(async () => {
+  if (!window.OctaveAssets) return;
+  for (let i = 0; i < 100; i++) {
+    if (window.OctaveAssets.loaded().length >= 7) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+}).catch(() => {});
+logs.length = 0;
+
 let pass = 0, fail = 0;
 async function ev(expr, label, want) {
   logs.length = 0;
@@ -45,9 +58,14 @@ async function load(names) {
 }
 
 console.log('--- 懒加载语义：加载前应为 0 ---');
-await ev('disp(exist("normpdf"))', 'statistics 未加载 → exist normpdf', '0');
+// 注意：normpdf/normcdf/tcdf 等 16 个统计函数是 vendor/forge 提供的、**预装**在
+// octave.data 里的（早期为了补 ttest 依赖）。它们不是懒加载资产，所以
+// 加载前 exist 就是 2 —— 原来那条 '0' 断言一直是错的，只是先前没被注意到。
+await ev('disp(exist("normpdf"))', 'normpdf 预装（vendor/forge，非懒加载）', '2');
+// 这三个才是真的懒加载：它们的包没加载前确实不存在
 await ev('disp(exist("distancePointLine"))', 'matgeom 未加载 → exist distancePointLine', '0');
 await ev('disp(exist("chebyshevpoly"))', 'miscellaneous 未加载', '0');
+await ev('disp(exist("bfgsmin"))', 'optim 未加载', '0');
 
 console.log('--- 加载全部 10 个包 ---');
 console.log('  ' + await load(['struct', 'nan', 'splines', 'matgeom', 'geometry', 'quaternion', 'miscellaneous', 'tsa', 'optim', 'statistics']));

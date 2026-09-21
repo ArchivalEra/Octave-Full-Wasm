@@ -27,6 +27,18 @@ while (Date.now() - t < 300000) {
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 console.log(`OctaveAudio 桥: ${await page.evaluate(() => typeof window.OctaveAudio)}`);
 
+// index.html 会在 ready 之后自动装载 dldfcn 核心组；它的加载日志会落进
+// console，把紧接着的断言输出挤出截取窗口（曾让"未加载"类断言假失败）。
+// 等它落定再清日志。webaudio 不在自动组里，前置断言仍然成立。
+await page.evaluate(async () => {
+  if (!window.OctaveAssets) return;
+  for (let i = 0; i < 100; i++) {
+    if (window.OctaveAssets.loaded().length >= 7) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+}).catch(() => {});
+logs.length = 0;
+
 let pass = 0, fail = 0;
 async function ev(expr, label, want) {
   logs.length = 0;

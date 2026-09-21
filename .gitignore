@@ -30,6 +30,9 @@
 !build/reconf-pic.sh
 !build/rebuild-pic-libs.sh
 !build/build_oct.sh
+!build/make-dist.sh
+!dist/DEPLOY.md
+!dist/serve.py
 !bridge/assets-loader.js
 !bridge/index.html
 !build/assets.py

@@ -20,6 +20,20 @@ while (Date.now() - t < 300000) {
 }
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
+// index.html 会在 ready 之后自动装载 dldfcn 核心组，那批日志（资产清单、
+// 逐个资产的加载消息）会落进 console，把紧接着的断言输出挤出截取窗口。
+// 等它落定再清一次日志，断言才稳定。__ode15__ 不在自动组里，所以下面的
+// "未加载 → exist=0" 前置断言仍然成立。
+await page.evaluate(async () => {
+  if (!window.OctaveAssets) return;
+  for (let i = 0; i < 100; i++) {
+    const got = window.OctaveAssets.loaded().length;
+    if (got >= 7) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+}).catch(() => {});
+logs.length = 0;
+
 let pass = 0, fail = 0;
 async function ev(expr, label, want) {
   logs.length = 0;
@@ -28,6 +42,8 @@ async function ev(expr, label, want) {
     r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 120)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 700));
+  // 断言从 console 输出里找子串。为了不让页面启动日志（资产清单、404 等）
+  // 挤掉断言输出，main 里在断言开始前会把 logs 清空一次——见下面那行。
   const out = [...logs].join(' ').replace(/\s+/g, ' ').trim().slice(0, 180);
   const ok = r.rc === 0 && (!want || out.includes(want));
   ok ? pass++ : fail++;

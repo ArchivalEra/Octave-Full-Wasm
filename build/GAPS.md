@@ -1,5 +1,10 @@
 # 差距审计与需求书（2026-09-20）
 
+> **状态更新（2026-09-21 收尾）**：本文第 3 节的 **R1–R10 已全部落地**，
+> R11（有意不做）保持。各条的最终结果与"别重做"结论见 `HANDOFF.md` §5，
+> 实现细节与坑见 `build/CLIBS.md` 各批次小节，R10 的基准数据见 `build/BENCH.md`。
+> 下面保留需求书的原始形态，作为"当时为什么这么判断"的记录。
+>
 > 本文有两个用途：
 > 1. **审计**：离"完整版 Octave"还有多远——全部结论都带实测证据，不凭印象。
 > 2. **需求单**：第 3 节的每条需求可直接交给外部检索模型（GPT 等）去搜罗方案，
@@ -29,12 +34,16 @@
 
 - **真 `.oct` 动态装载**（2026-09-20 采用）：主链 `-s MAIN_MODULE=1`，`.oct` 编译成
   wasm side module 后运行时 `dlopen`。**加模块不必重链主 wasm**。
+  （2026-09-21 起 **dldfcn 也走这条路**，静态注册已摘除——见 §2.2 的更新说明。）
 - C 库：qrupdate / ARPACK(arpack-ng 3.7.0) / FFTW 3.3.10(双+单) / Qhull 8.0.2 /
-  GLPK 5.0 / zlib / libbz2 / RapidJSON / SuiteSparse 系 / libsndfile 1.2.2
-- dldfcn 已注册 11 个函数名（7 个模块）：`__delaunayn__ / __glpk__ / __voronoi__ /
+  GLPK 5.0 / zlib / libbz2 / RapidJSON / SuiteSparse 系 / libsndfile 1.2.2 / HDF5 1.14.2 / SUNDIALS 6.1.1
+- dldfcn 11 个函数名（7 个模块，**走官方 dlopen**）：`__delaunayn__ / __glpk__ / __voronoi__ /
   convhulln / fftw / gzip / bzip2 / audioread / audiowrite / audioinfo / audioformats`
-- plot 桥 v1（Octave 算 → spec → gnuplot-wasm → SVG）
-- 交付体积：整站 gzip **10.96MB**（wasm 7.98 + js 1.80 + data 1.18）
+- plot 桥 v2（2D + 3D，Octave 算 → spec → gnuplot-wasm → SVG）+ `print -dsvg`（纯 `.m` 生成器）
+- 其它已落地：Forge 包（statistics/optim/signal/control/…）、图像 I/O、压缩归档、WebAudio 播放、
+  **同步网络**（urlread 系列）、`-O1` 优化
+- 交付体积：整站首包 gzip **≈11.6MB**（wasm 9.07 + js 1.33 + data 1.15），
+  另加 20MB 懒加载资产（不进首包）
 
 ### 1.3 `config.h` 关掉的 12 项
 

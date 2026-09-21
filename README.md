@@ -35,54 +35,64 @@
 ## 架构
 
 ```text
-Octave 7.2 wasm（build/Makefile + build/main.cc 补丁）
+Octave 7.2 wasm（build/Makefile + build/main.cc 补丁；-O1 编译）
 ├── 全量核心 .m（plot/ode/signal/special-matrix/…，两段式 addpath）
 ├── vendor/forge：forge statistics 纯 .m（normpdf/tcdf/ttest 依赖…）
-├── vendor/plotbridge：自研 plot 翻译桥垫片（plot/hold/legend/…）
-├── 真 .oct 动态装载：主模块 -s MAIN_MODULE=1，新模块编成 wasm side module
-│   即可运行时 dlopen（与桌面版插件模型一致，不必重链那 38MB 主 wasm）
-└── gnuplot-wasm（MIT）：render(script,{data}) → SVG（另见 PoC 页）
+├── 真 .oct 动态装载：主模块 -s MAIN_MODULE=1，模块编成 wasm side module
+│   运行时 dlopen —— 与桌面版插件模型一致，加模块不必重链那 44MB 主 wasm。
+│   连 dldfcn（convhulln/gzip/glpk/fftw/audioread/…）也走这条路。
+├── 资产懒加载车道：站点 assets/ 下按需 fetch → 写 wasm FS → addpath
+│   （Forge 包、SUNDIALS、图像、音频、网络、plot 桥覆写全在这里）
+├── plot 桥 v2：Octave 算 → spec → gnuplot-wasm → SVG（2D + 3D）
+└── print -dsvg：纯 .m SVG 生成器（不依赖 gnuplot，也不需 Asyncify）
 ```
 
 构建命令里 `-s MAIN_MODULE=1` 与 `-fPIC` 是一对：主链带 MAIN_MODULE 时，
 Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`
-重编，否则 wasm-ld 报 `recompile with -fPIC`。配方与坑见 `build/CLIBS.md`。
+重编，否则 wasm-ld 报 `recompile with -fPIC`。换 O 级走 `build/reconf-bench.sh`。
+配方与坑见 `build/CLIBS.md`。
 
-## 状态（2026-09-20 实测）
+## 状态（2026-09-21 实测）
+
+**R1–R10 需求全部落地**（见 `build/GAPS.md` 的需求书与 `HANDOFF.md` §5 的结论表）。
 
 | 项 | 结果 |
 |---|---|
 | 线代/微积分/优化/ODE45/多项式 | ✅ 全对 |
 | 统计分布 + ttest/regress + fft 后备 | ✅ 全对 |
-| `plot/hold/scatter/stem/semilogx/bar` 翻译桥 v1 | ✅ SVG 通，marker 表待锁 |
-| C 库 5 件（qrupdate/arpack/fftw双单/qhull/glpk） | ✅ 全部编入并验数 |
-| 批次 0：dldfcn 静态注册表 + convhulln + fftw() | ✅ 表驱动注册，实测通过 |
-| 批次 1a：zlib/bz2/RapidJSON/CCOLAMD + gzip/bzip2 | ✅ 实测通过 |
-| 批次 1b：libsndfile → audioread/audiowrite/audioinfo/audioformats | ✅ wav 往返通过 |
-| **真 `.oct` 动态装载**（`MAIN_MODULE=1` + wasm side module） | ✅ **已采用为基线**，8761 实测 20/20 |
-| 交付包（整站 gzip，可静态托管） | ✅ `dist/octave-full-wasm-site-20260920`，用户实下 10.96MB |
-| 待办：CXSparse/SPQR、SUNDIALS(ode15s)、HDF5、桥接 | ⬜ 见 build/CLIBS.md 与本文件"下一步" |
+| R1 SUNDIALS → `ode15s`/`ode15i` | ✅ 刚性方程误差 9.2e-05（收紧容差 1.1e-08） |
+| R2 Forge 包（statistics/optim/signal/control/…） | ✅ 懒加载，真数值验证 |
+| R3 HDF5 → `save/load -hdf5` | ✅ 往返/压缩/`whos -file` 全通 |
+| R4 图像 → `imread`/`imwrite`/`imfinfo` | ✅ PNG/BMP/TGA 像素级无损 |
+| R5 网络 → `urlread`/`urlwrite`/`webread`/`websave` | ✅ **真同步**（同步 XHR，无需 Asyncify） |
+| R6 压缩归档（6 个函数无 shell 化） | ✅ 二进制字节级往返 |
+| R7 CXSparse | ✅ 已开（SPQR 未做，非阻塞） |
+| R8 WebAudio → `audioplayer` | ✅ 18 个符号纯 `.m` 实现，真实 AudioContext 调度 |
+| R9 图形导出 → `print -dsvg` | ✅ 2D + 3D 都能出，不依赖 gnuplot |
+| R10 编译级别 | ✅ **采纳 `-O1`**：解释器密集代码快 5–10×，体积还小 7.5MB |
+| plot 桥 | ✅ v2：2D（含 subplot/figure(n)/axis）+ 3D（plot3/mesh/surf/contour）+ 中文标签 |
+| **官方 `.oct` 装载** | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
+| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260921`，首包 gzip ≈11.6MB |
+| 验收 | ✅ **14 套 402 项全绿** |
 
-### 已装 dldfcn（`main.cc` 的 `STATIC_DLD_FCNS`，一行一模块）
-`__delaunayn__ / __glpk__ / __voronoi__ / convhulln / fftw / gzip / bzip2
-/ audioread / audiowrite / audioinfo / audioformats`
-
-### 已知偏差
+### 已知偏差（如实）
+- **`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）。`.m` 文件的 docstring
+  直接可读，texinfo 渲染路径不行。**已实测修不了**（doc-cache 注入无效）。
 - `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
-- `gunzip`/`bunzip2`（`.m` 包装）调 `system("gzip -d …")` → 无 shell，清晰报错。
-  符合"宿主专属功能=明确报错"的口径。
+- `system`/`unix`/`popen` 清晰报错（有意保持）。
+- **control 包的 SLICOT 编译件未发布**：side module 引用主模块 Fortran 符号时
+  签名不匹配会整页崩，故 `ss`/`step`/`tf2ss` 不可用（`tf`/`dcgain`/`bode` 等正常）。
+- `voronoi` 单输出形式（要画图）不可用；两输出形式正常。
 
-## 下一步（待排期）
+## 下一步
 
-> **差距审计与需求书**：`build/GAPS.md`。里面是实测出来的缺口清单（含原文错误信息）、
-> 硬约束汇总、以及可直接交给外部检索模型搜罗方案的分条需求（R1–R11）+ 验收标准。
+**没有阻塞项**。剩下的都是可选：
+- SPQR（R7 尾巴，需单独编 Suitesparse 的 SPQR + `--with-spqr`）
+- control 的 SLICOT（需先做静态注册的最小实验验证可行性，见 `HANDOFF.md` §4.12）
+- 托管/UI（JupyterLite kernel 适配器等，已明确后置）
 
-
-- **批次 1c**：CXSparse（`OCTAVE_CHECK_CXSPARSE_VERSION_OK` 的 `HAVE_CS_H` 头宏链坑）、
-  SPQR（源码需从 `suitesparse-full-5.4.0.tar.gz` 单独取）。
-- **批次 2**：SUNDIALS 5.8.x（IDA + serial NVector + dense + KLU）→ `ode15s`/`ode15i`。
-- **批次 3**：HDF5（C-only 静态 + zlib）→ `save/load -hdf5`。
-- **桥接**：fetch→`urlread`/`webread`；xls/xlsx→`xlsread`；Web Audio→`audioplayer`；image→`imread`。
+> **一手记录**：`build/CLIBS.md`（每个批次的配方与坑）、`build/BENCH.md`（O 级矩阵）、
+> `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md`（差距审计与需求书）。
 
 ## 目录
 
@@ -92,9 +102,9 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `.githooks/pre-commit` (378 bytes)
 - `.githooks/pre-push` (337 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (1188 bytes)
+- `.gitignore` (1239 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (29752 bytes)
+- `HANDOFF.md` (35251 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
@@ -105,7 +115,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `bridge/webnet.js` (4066 bytes)
 - `build/BENCH.md` (5640 bytes)
 - `build/CLIBS.md` (41591 bytes)
-- `build/GAPS.md` (16855 bytes)
+- `build/GAPS.md` (17674 bytes)
 - `build/Makefile` (9242 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/assets.py` (11273 bytes)
@@ -116,6 +126,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `build/forge-build.sh` (2117 bytes)
 - `build/forge-fetch.py` (5109 bytes)
 - `build/main.cc` (15572 bytes)
+- `build/make-dist.sh` (3226 bytes)
 - `build/normalize_arpack.py` (1861 bytes)
 - `build/plotbridge/__pb_add__.m` (2731 bytes)
 - `build/plotbridge/__pb_apply_panel__.m` (598 bytes)
@@ -212,17 +223,19 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `build/webnet/urlwrite.m` (2168 bytes)
 - `build/webnet/webread.m` (1573 bytes)
 - `build/webnet/websave.m` (1366 bytes)
+- `dist/DEPLOY.md` (6427 bytes)
+- `dist/serve.py` (2668 bytes)
 - `test/browser/accept-archive.mjs` (5665 bytes)
-- `test/browser/accept-audio.mjs` (11829 bytes)
+- `test/browser/accept-audio.mjs` (12365 bytes)
 - `test/browser/accept-dldfcn.mjs` (11012 bytes)
 - `test/browser/accept-forge-oct.mjs` (4473 bytes)
-- `test/browser/accept-forge.mjs` (5090 bytes)
+- `test/browser/accept-forge.mjs` (6161 bytes)
 - `test/browser/accept-forge2.mjs` (7666 bytes)
 - `test/browser/accept-full.mjs` (5734 bytes)
 - `test/browser/accept-hdf5.mjs` (4146 bytes)
 - `test/browser/accept-image.mjs` (4098 bytes)
 - `test/browser/accept-net.mjs` (7994 bytes)
-- `test/browser/accept-ode15.mjs` (4059 bytes)
+- `test/browser/accept-ode15.mjs` (4890 bytes)
 - `test/browser/accept-plot3d.mjs` (6607 bytes)
 - `test/browser/accept-plotv2.mjs` (9559 bytes)
 - `test/browser/accept-print.mjs` (9809 bytes)
