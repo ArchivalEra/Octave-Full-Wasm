@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# emf77 —— 给 emscripten 用的 Fortran「编译器」
+#
+# 为什么需要它：emscripten 带 clang，但没有 Fortran 前端，而 Octave 的数值核心是
+# Fortran（liboctave/external/ 下的 amos、quadpack、odepack、slatec、fftpack…）。
+# 本脚本让经典 f2c 翻译器加 emcc 组合起来，从 autoconf/automake 的角度看像
+# 一个普通的 Fortran 编译器：
+#
+#   .f 源码 --[ f2c ]--> C --[ emcc ]--> wasm 目标文件
+#
+# f2c 本身跑在**构建宿主**上（它只做文本改写，是原生程序），只有它产出的 C
+# 才被交叉编译到 wasm。翻译出的 C 会 #include "f2c.h" 并链接 libf2c，
+# 两者都由 build-deps.sh 装进 $F2C_PREFIX。
+#
+# 设计取自 Edge-Tools/octave-wasm 的 build/scripts/emf77（GPL-3.0-or-later，
+# 见 build/BASELINE-11.3.md §4.2），并按我们的用法做了调整：
+#   - 临时目录逐次独立（并行 make 各目录同名源不会互相踩）
+#   - EMF77_KEEP=1 时保留翻译出的 C，便于排查
+#   - f2c 没产出 C 时**明确报错**，不留给链接期一个空目标文件
+#
+# ⚠️ 终链必须带 -Wl,--allow-multiple-definition（重要，别漏）：
+#   f2c 把每个 Fortran COMMON 块渲染成「每个引用它的文件里各一份 tentative
+#   definition」。clang 默认 -fno-common 会把这些变成互相冲突的强定义
+#   （duplicate symbol: dls001_ 之类）；而 -fcommon **不能用** —— wasm-ld 根本
+#   没有 common symbol 链接（"common symbols are not yet implemented for Wasm"）。
+#   正解是在**最终链接**时用 -Wl,--allow-multiple-definition 合并：同一个块在每个
+#   f2c 产物里都是同样的 struct，解析到第一个是正确的。
+#   （归档 .a 阶段不受影响——重复定义在归档里是合法的，只在终链才需要这个标志。）
+#
+# 用法：
+#   编译：  emf77 [flags] -c foo.f -o foo.o
+#   链接：  emf77 [flags] a.o b.o -o prog      （自动追加 -lf2c）
+#
+set -euo pipefail
+
+F2C_PREFIX="${F2C_PREFIX:-/usr/local}"
+F2C_INCLUDE="${F2C_PREFIX}/include"
+F2C_LIBDIR="${F2C_PREFIX}/lib"
+
+command -v f2c >/dev/null 2>&1 || { echo "emf77: 找不到 f2c（先 apt-get install f2c）" >&2; exit 1; }
+command -v emcc >/dev/null 2>&1 || { echo "emf77: 找不到 emcc（先 source emsdk_env.sh）" >&2; exit 1; }
+
+# 允许给 emcc 套一层包装，例如 EMF77_EMCC="ccache emcc" —— LAPACK 那种量
+# （5000+ 个 .f）重跑时，缓存能省掉绝大部分时间。
+read -r -a EMCC_CMD <<< "${EMF77_EMCC:-emcc}"
+command -v "${EMCC_CMD[0]}" >/dev/null 2>&1 || { echo "emf77: 找不到 ${EMCC_CMD[0]}" >&2; exit 1; }
+
+emcc_args=()     # 非 Fortran 源的一切：标志、.o、-l…
+fortran_srcs=()  # 待翻译的 .f / .F
+out=""
+compile_only=0
+
+args=("$@")
+i=0
+while [ $i -lt ${#args[@]} ]; do
+  a="${args[$i]}"
+  case "$a" in
+    -c)             compile_only=1; emcc_args+=("-c") ;;
+    -o)             i=$((i+1)); out="${args[$i]:-}"
+                    [ -n "$out" ] || { echo "emf77: -o 后面缺文件名" >&2; exit 1; } ;;
+    -o*)            out="${a#-o}" ;;
+    *.f|*.F|*.f77|*.for|*.FOR)
+                    fortran_srcs+=("$a") ;;
+    *)              emcc_args+=("$a") ;;
+  esac
+  i=$((i+1))
+done
+
+[ ${#fortran_srcs[@]} -gt 0 ] || { echo "emf77: 没有 Fortran 源文件" >&2; exit 1; }
+
+workdir="$(mktemp -d)"
+if [ "${EMF77_KEEP:-0}" = "1" ]; then
+  trap 'echo "emf77: 保留翻译产物于 $workdir" >&2' EXIT
+else
+  trap 'rm -rf "$workdir"' EXIT
+fi
+
+gen_c=()
+for f in "${fortran_srcs[@]}"; do
+  base="$(basename "$f")"; base="${base%.*}"
+  src="$f"
+  # 大写扩展名是「需预处理的 Fortran」；f2c 没有 cpp，所以先自己跑一遍
+  case "$f" in
+    *.F|*.FOR)
+      cpp -traditional-cpp -P "$f" > "$workdir/$base.f"
+      src="$workdir/$base.f" ;;
+  esac
+  # -A: ANSI C（带原型）  -I: 认源码旁边的 INCLUDE  -d: 输出到私有临时目录
+  f2c -A -I"$(dirname "$f")" -d"$workdir" "$src" >/dev/null
+  [ -s "$workdir/$base.c" ] || { echo "emf77: f2c 没能为 $f 产出 C" >&2; exit 1; }
+  gen_c+=("$workdir/$base.c")
+done
+
+# f2c 给运行期内建函数产的是 K&R 风格声明，关掉 clang 对应的报错
+cmd=("${EMCC_CMD[@]}" -Wno-implicit-function-declaration -Wno-implicit-int
+     -I"$F2C_INCLUDE" "${emcc_args[@]}" "${gen_c[@]}")
+[ -n "$out" ] && cmd+=(-o "$out")
+# 非 -c（即链接）时，拉上翻译出的 C 会调用的 f2c 运行时
+[ "$compile_only" -eq 0 ] && cmd+=(-L"$F2C_LIBDIR" -lf2c)
+
+exec "${cmd[@]}"

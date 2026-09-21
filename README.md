@@ -145,6 +145,8 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `bridge/webaudio.js` (6864 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
+- `build/113/build-deps.sh` (9359 bytes)
+- `build/113/emf77` (4503 bytes)
 - `build/BASELINE-10.3.md` (8216 bytes)
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5640 bytes)
