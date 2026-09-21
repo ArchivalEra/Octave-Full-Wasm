@@ -399,7 +399,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 |---|---|---|---|---|
 | ~~1~~ | ~~**T1**~~ | ✅ **已完成**：`help` 走**构建期 makeinfo 预渲染**（不是覆写渲染器）。见 §5.6 | — | 资产（零重链） |
 | 2 | **T2** | **A1/A2 图形句柄半真化**：写 `__init_web__.cc` → `web_graphics_toolkit`（`initialize` 允许 figure、`redraw_figure` 先 no-op、`get_canvas_size` 给默认值）。**目标只是救活 `gca/gcf/get/set/figure` 的语义**，不碰绘图重构 | 1–3 d | Lane B（重链） |
-| 3 | **T3** | **C1 文件操作**：覆写 `copyfile`/`movefile`/`ls`，基于 `dir/glob/fopen/mkdir/unlink` 纯 `.m` | 1–2 d | 资产 |
+| ~~3~~ | ~~**T3**~~ | ✅ **已完成**：`copyfile`/`movefile`/`ls` 进程内实现（`build/webfile/`，纯 `.m`）。见 §5.7 | — | 资产 |
 | 4 | **T4** | **G3 pkg 语义**：**不改 `pkg`**，而是让资产装载时生成 `.octave_packages` 数据库，让 `pkg list`/`pkg load` 天然看到 | 0.5–2 d | 资产 |
 | 5 | **T5** | **E1 `input()`**：同步 `window.prompt()` 桥（**注意**：要保留"按表达式求值"语义，`input(x,"s")` 不同） | 0.5–1.5 d | 资产/内建 |
 | 6 | **T6** | **B2 `audiodevinfo`** 最小 shim（浏览器默认设备）+ **D2a `doc`**（help → DOM） | <1 d | 资产 |
@@ -444,6 +444,28 @@ makeinfo 生成 doc-cache）。
 与"多函数同文件"检查）。**注意**：宿主是 11.x、目标是 7.2，**通过不代表 7.2 通过；
 失败几乎一定是真失败**——它是"过滤器"，验收仍以浏览器实测为准。
 
+### 5.7 T3 已完成（2026-09-21）——文件操作进程内实现
+
+**问题**：`copyfile`/`movefile`/`ls` 原版**全部以 shell 命令收尾**
+（`system('cp -r …')` / `system('mv …')` / `system('ls -C -1 …')`），
+本构建无 shell → 三个函数全废。
+
+**做法**：`build/webfile/`（**10 个纯 `.m`，零编译**）同名覆写，
+用 Octave 自己就能读写的文件系统（`fopen`/`dir`/`glob`/`mkdir`/`rename`/`rmdir`）实现。
+**签名与返回约定照抄原版**（含 `[status,msg,msgid]`、status 与 `system()` 相反的
+口径、多源报错文本），不另创 API。
+
+**明确不同（如实）**：`ls` 的 `-l`/`-R` 等选项**不支持**——与其静默忽略选项返回
+一个看着正常但不是用户要的东西，不如**清晰报错**；`ls` 无输出参数时一行一个名字
+（非 shell 的多列布局）；不保留权限/时间戳（浏览器文件系统里没有可保留的）。
+
+**验收**：**`accept-fileops.mjs` 20/20 绿**。每条断言同时验证 (a) 功能对（含
+二进制 0..255 字节级一致、目录递归、`cp -r` 嵌套语义）与 (b) **没有走 shell**
+（负向匹配）。(b) 是这个批次的全部意义，只测 (a) 不够。
+
+**实测新坑**（4 条，详见 `CLIBS.md` 批次 T3）：`unlink` **不能删目录**（要用 `rmdir`）；
+`"\"` 是未终止字符串（要写 `"\\"`）；Octave 没有 `<<` 运算符；`error` 跨行拼接要 `...`。
+
 **其它遗留（非 GPT 清单内，仍挂着）**：
 - **control 的 SLICOT 编译件**：见 §4.12，需先做静态注册的小实验。
 - **`help` 对 `.m` 文件仍不可用**（§5.6 的剩余缺口）：内建已修好（构建期预渲染），
@@ -483,6 +505,7 @@ makeinfo 生成 doc-cache）。
 | `build/assets.py` | 资产工具：`bundle-m` / `bundle-pkg` / `gen-manifest` |
 | `build/render-docstrings.py` | **T1**：构建期用**真 makeinfo** 预渲染 `built-in-docstrings`（去 texinfo 标记 → `help` 走 plain text 分支）。宿主侧跑 |
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
+| `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
@@ -543,14 +566,14 @@ makeinfo 生成 doc-cache）。
 ---
 
 ## 8. 一句话接续
-**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1**，
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **16 套 430 项全绿**（含需求级
-`accept-requirements` 与新的 `accept-help`），交付包在
+**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1 + T3**，
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **17 套 450 项全绿**（含需求级
+`accept-requirements`、新的 `accept-help` 与 `accept-fileops`），交付包在
 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
 
-**R1–R10 全部落地**；**第三轮 T1 已完成**（`help` 可读，构建期 makeinfo 预渲染，见 §5.6）。
+**R1–R10 全部落地**；**第三轮 T1 + T3 已完成**（`help` 可读 §5.6；文件操作 §5.7）。
 **下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
-其余顺序：**T3 文件操作 → T4 pkg 语义 → T5 `input()` → T6 audiodevinfo/doc →
+其余顺序：T4 pkg 语义 → T5 `input()` → T6 audiodevinfo/doc →
 T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。

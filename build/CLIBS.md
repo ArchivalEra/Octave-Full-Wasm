@@ -766,3 +766,71 @@ docstring 原样吐出，而**当时的自测全过**——因为自测只断言
   docstring（不是从 `built-in-docstrings`），格式为 texinfo 时仍会调 makeinfo。
   要覆盖它得预渲染 1010 个 `.m` 的 docstring（侵入性大得多），或另行处理。
   **这是剩余缺口，不是已解决项。**
+
+---
+
+## 批次 T3（2026-09-21）：`copyfile` / `movefile` / `ls` 进程内实现（第三轮）
+
+**需求**：文件操作可用。原版实现全部**以 shell 命令收尾**，而本构建没有 shell：
+
+| 函数 | 原版最后一步 |
+|---|---|
+| `copyfile` | `system('cp -r "%s" "%s"')`（`copyfile.m:152`） |
+| `movefile` | `system('mv "%s" "%s"')`（`movefile.m:166`） |
+| `ls` | `system('ls -C -1 %s')`（`ls.m:113`） |
+
+浏览器里没有 `cp`/`mv`/`ls` 可执行文件，但**有 Octave 自己就能读写的文件系统**
+（`fopen`/`fread`/`fwrite`/`dir`/`glob`/`mkdir`/`rename`/`unlink`/`rmdir`），
+所以三个函数改成**进程内实现**，签名与返回约定完全照抄原版。
+
+### 产物（`build/webfile/`，10 个文件，纯 `.m` 零编译）
+
+- `copyfile.m` / `movefile.m` / `ls.m` —— 同名核心函数覆写（走已验证的覆写模式）
+- `__wf_copy_file__.m`（分块二进制复制，1MiB 一块）
+- `__wf_copy_dir__.m`（递归，`cp -r` 语义）
+- `__wf_rmtree__.m`（递归删除）
+- `__wf_try_rename__.m`（`rename` 的安全包装）
+- `__wf_basename__.m` / `__wf_list_dir__.m` / `__wf_fail__.m`（叶子工具）
+
+### 保真度（**照抄原版，不另创 API**）
+
+- 三个返回值 `[status, msg, msgid]` 与"status 与 `system()` 相反"的口径一致
+- 多源 + 非目录目标 → **同样的报错文本**（`when copying multiple files, F2 must be a directory`），
+  好让匹配它的调用方行为不变
+- 源不存在 → **返回 status=0 而不是抛异常**（原版在 `nargout>0` 时也是返回而非抛）
+- 递归复制是 `cp -r` 语义：目标不存在 → 装**内容**；目标存在 → 装**同名子目录**
+- `'f'`（force）标志**接受但无事可做**：这里不可能有交互提示，可观察行为相同
+
+### 明确不做 / 明确不同（如实）
+
+- **`ls` 的选项不支持**：原版把 `-l`/`-R` 传给 shell 的 `ls`，这里没有 shell。
+  与其**静默忽略**选项、返回一个看起来正常但不是用户要的东西，不如**清晰报错**并说明。
+- **`ls` 无输出参数时一行一个名字**，不是 shell `ls` 的多列布局（列布局是装饰性的，
+  且本构建没有 pager；一行一个正是原版 `-1` 形式）。
+- **不保留权限/时间戳**：浏览器文件系统里没有可保留的 POSIX mode，本项目与 Forge
+  的流程也不依赖它。
+
+### 实测踩到的坑（新）
+
+1. **`unlink` 不能删目录**：即使空目录也报 `operation failed: 是一个目录`，
+   要用 **`rmdir`**。第一版 `__wf_rmtree__` 全用 `unlink`，于是每个目录删除都失败——
+   而 `movefile` 的"重命名失败 → 复制+删源"回退路径正好依赖它。
+2. **`"\"` 是未终止字符串**：Windows 分隔符必须写 `"\\"`。`find (p == "/" | p == "\")`
+   报的是**这一行**的语法错误，但看起来像别的问题。
+3. **Octave 没有 `<<` 运算符**：`1 << 20` 要写 `2 ^ 20`。
+4. **`error` 的跨行拼接要写 `...`**：`error ("a" "b")` 被当成两条语句。
+5. **`ls` 的返回值是 char 矩阵**（`strvcat` 形状，与原版一致）：`strfind(r, "q1.txt")`
+   会**按列**搜索，在 2×22 的矩阵上可能与预期不符。测试里先
+   `strjoin(cellstr(r), " ")` 再断言。（这是**我自己的测试写错**，不是实现 bug——
+   但值得记，因为下次还会踩。）
+
+### 验收
+
+`test/browser/accept-fileops.mjs`（**20 项，20/20 绿**）。每条断言都同时验证
+(a) 功能对（字节/目录结构/状态码），(b) **没有走 shell**（负向匹配
+`unable to start subprocess|cp -r|mv |ls -C`）。只有 (a) 不够——这个批次的意义
+就是"不再依赖 shell"，所以要显式断言这一条。
+
+含回归护栏：`dir`、`imread`/`imwrite`（依赖 `fopen` 路径）、`gzip`（webio 路径）。
+**注意**：`imread` 需要先装载 `webimage` 资产（imformats 注册），否则会误报——
+懒加载车道的能力测试必须先按需装载，这是既有约定。
