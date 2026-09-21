@@ -29,9 +29,12 @@ function __pb_emit__ ()
   for i = 1:numel (__pb__.series)
     sr = __pb__.series{i};
     if (i > 1), fprintf (fid, ","); endif
-    fprintf (fid, '{"file":%s,"style":%s,"color":%s,"dt":%d,"pt":%d,"ps":%g,"title":%s}', ...
+    ## NOTE: "marker" must be emitted — the JS side reads sr.marker to pick the
+    ## gnuplot pointtype, and a missing field silently degrades every marker to
+    ## the default empty circle (pt 6).
+    fprintf (fid, '{"file":%s,"style":%s,"color":%s,"dt":%d,"pt":%d,"ps":%g,"marker":%s,"title":%s}', ...
              __pb_str__ (sr.file), __pb_str__ (sr.style), __pb_str__ (sr.color), ...
-             sr.dt, sr.pt, sr.ps, __pb_str__ (sr.title));
+             sr.dt, sr.pt, sr.ps, __pb_str__ (sr.marker), __pb_str__ (sr.title));
   endfor
   fprintf (fid, ']}');
   fclose (fid);

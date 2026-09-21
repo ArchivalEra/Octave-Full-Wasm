@@ -360,3 +360,43 @@ stb 编进去，自包含），经 **`imformats("add", …)` 注册**进正常�
 **实测**（浏览器 17/17）：PNG 灰度/彩色**像素级一致**、BMP/TGA 无损一致、JPEG 有损往返、
 `imfinfo` 出 Width/Height/NumberOfChannels、读回的图能参与数值运算再写回。
 验收：`test/browser/accept-image.mjs`。
+
+---
+
+## 批次 6（2026-09-20）：R9 `print -dsvg` + plot 桥 marker 修复
+
+`print`/`saveas` 由 `build/plotbridge/{print,saveas,__svg_render__}.m` 接管
+（plotbridge 在 path 最后 addpath，优先级高于 `m/plot/util/print.m`）。
+核心 `print.m` 在本构建必死：要么没有真 graphics handle，要么走
+`__gnuplot_print__` → `system(pipeline)`（无 shell）。**不引入 gnuplot、不引入 Asyncify**：
+`__svg_render__.m` 直接读全局 `__pb__` 状态与 `/tmp/pbN.dat`，同步产出完整 SVG 文档。
+
+- 支持：坐标框/刻度/网格、title/xlabel/ylabel、legend（18 个 Location）、
+  lines / linespoints / points / stem / boxes、8 色字母+RGB、dt 1–4 线型、
+  完整 marker 表（`.`/`o`/`s`/`d`/`^`/`v`/`>`/`<`/`p`/`h`/`+`/`x`/`*`）、
+  logx/logy（10 的幂刻度）、xlim/ylim、viewBox + 白底。
+- **CJK 无需字体资产**：SVG 的 `font-family` 交给浏览器解析（gnuplot 路线的字体短板在这里不存在）。
+- `-dpng/-dpdf/-deps` 等给**可操作报错**（不再是无从下手的 `'gs' binary is not available`），
+  并提示 `-dsvg` + 页面 canvas 转位图。
+- 验收：`test/browser/accept-print.mjs`（用浏览器自己的 `DOMParser` 严格解析，数图元）。
+
+### 坑 1（**Octave 语言级，值得单独记牢**）：方括号拼接里 `f (args)` 被当索引
+```octave
+out = [out, __svg_series__ (s, args...)];   # ← 解析失败：syntax error
+```
+在 `[ ]` 拼接上下文里，**标识符后带空格再接 `(`** 被 Octave 解析为**索引**而非函数调用；
+函数名不能被索引 → 整个文件 parse error。报错定位极具误导性（caret 指向实参中间，
+且位置随无关编辑漂移）。**解**：先绑定再拼接
+```octave
+frag = __svg_series__ (s, args...);
+out = [out, frag];
+```
+或去掉空格写 `f(args)`。已在 `__svg_render__.m` 注释里标记。
+
+### 坑 2：单引号与双引号字符串**不能**相邻拼接
+`x = '<g>' "\n";` 是 C 的写法，Octave 里是 parse error。用 `sprintf` 或 `[...]` 拼接。
+
+### 顺带修复：plot 桥 marker 从未传到 JS
+`__pb_emit__.m` 的 series JSON 漏了 `marker` 字段，而 `bridge/plotbridge.js` 读 `sr.marker`
+→ `ptOf(undefined)` 恒为 6 → **所有 `'s'/'d'/'^'/...` 静默退化成空心圆**（`'--ro'` 恰好是 `o`
+所以一直没暴露）。现在 emit 补上 `"marker":%s`，gnuplot 路线与 SVG 路线同时受益。
