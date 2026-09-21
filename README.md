@@ -239,6 +239,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `test/browser/accept-plot3d.mjs` (6607 bytes)
 - `test/browser/accept-plotv2.mjs` (9559 bytes)
 - `test/browser/accept-print.mjs` (9809 bytes)
+- `test/browser/accept-requirements.mjs` (4900 bytes)
 - `test/browser/bench-core.mjs` (5350 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)
 - `vendor/extra/asciiplot.m` (940 bytes)
