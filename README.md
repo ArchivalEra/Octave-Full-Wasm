@@ -84,15 +84,23 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
   签名不匹配会整页崩，故 `ss`/`step`/`tf2ss` 不可用（`tf`/`dcgain`/`bode` 等正常）。
 - `voronoi` 单输出形式（要画图）不可用；两输出形式正常。
 
-## 下一步
+## 下一步（第三轮，已排好序）
 
-**没有阻塞项**。剩下的都是可选：
-- SPQR（R7 尾巴，需单独编 Suitesparse 的 SPQR + `--with-spqr`）
-- control 的 SLICOT（需先做静态注册的最小实验验证可行性，见 `HANDOFF.md` §4.12）
-- 托管/UI（JupyterLite kernel 适配器等，已明确后置）
+R1–R10 已全部落地。第三轮做的是**浏览器环境语义**——剩下的缺口不是数学能力，
+而是"宿主 API 怎么换成浏览器原生"（`HANDOFF.md` §5.5 有完整计划）：
 
-> **一手记录**：`build/CLIBS.md`（每个批次的配方与坑）、`build/BENCH.md`（O 级矩阵）、
-> `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md`（差距审计与需求书）。
+**T1** `help`（覆写 `__makeinfo__` 做简化 texinfo 渲染）→ **T2** graphics 句柄半真化
+（写薄 toolkit，渲染仍走现有 plot 桥）→ **T3** `copyfile`/`movefile`/`ls` →
+**T4** `pkg` 语义（生成 `.octave_packages`）→ **T5** `input()`（同步 `window.prompt`）→
+**T6** `audiodevinfo`/`doc` → **T7** `audiorecorder` → **T8** `uigetfile` →
+**T9** `MAIN_MODULE=2`（体积优化）→ **T10** Asyncify 最小实验。
+
+依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
+（外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
+以及 A1 的核心建议——**不复活 gnuplot 后端，改写薄 toolkit 复用现有桥**）。
+
+> **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
+> `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
 
 ## 目录
 
@@ -102,9 +110,9 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `.githooks/pre-commit` (378 bytes)
 - `.githooks/pre-push` (337 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (1256 bytes)
+- `.gitignore` (1279 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (35576 bytes)
+- `HANDOFF.md` (42236 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
@@ -117,6 +125,7 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
 - `build/CLIBS.md` (41591 bytes)
 - `build/GAPS-2.md` (23986 bytes)
 - `build/GAPS.md` (17674 bytes)
+- `build/GPT-REVIEW-2.md` (24185 bytes)
 - `build/Makefile` (9242 bytes)
 - `build/NOTES.md` (1657 bytes)
 - `build/assets.py` (11273 bytes)

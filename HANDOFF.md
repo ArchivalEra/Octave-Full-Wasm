@@ -1,7 +1,7 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：2026-09-20（会话交接）。
+> 最后更新：2026-09-21（第三轮计划已就位，见 §5.5）。
 
 ---
 
@@ -22,6 +22,31 @@
 ## 1. 这是什么
 
 浏览器里跑**完整版 Octave 7.2**（Emscripten → wasm）。上游 `rwl/octave-wasm`（BSD）只预装 16 个 `.m` 目录，本仓把剩下的能力尽量补全：全量核心脚本、forge 统计、C 库长尾（qrupdate/ARPACK/FFTW/Qhull/GLPK/…）、plot 翻译桥（Octave 算 → gnuplot-wasm → SVG）。
+
+**架构定位**（外部审核给出的框架，指导第三轮）：本项目的价值不是"把 Octave 的桌面组件
+逐个搬进 wasm"，而是**把宿主层换成浏览器原生 API**：
+
+```text
+                  GNU Octave 7.2（数值核心一字不改）
+                            │
+        ┌───────────────────┼───────────────────┐
+     数值核心            graphics            系统 API
+   （C/Fortran，           objects          （文件/shell）
+    已全部可用）              │                   │
+                        Web toolkit          browser shim
+                            │                   │
+        └───────────────────┼───────────────────┘
+                            │
+                  browser-native layer
+        ┌──────────────┬────┴─────┬──────────────┐
+   gnuplot-wasm     WebAudio    DOM        MediaDevices
+```
+
+**含义**：桌面版那些"外部进程/设备"部件（gnuplot 进程、PortAudio、ImageMagick、
+Ghostscript、shell）**不移植**，而是**换成 JS 侧的等价物**。
+已按此路线落地的：图像（stb_image）、压缩（zlib/bz2 内建）、音频播放（WebAudio）、
+网络（同步 XHR）、绘图（plot 桥 + `print -dsvg`）。第三轮继续：help 渲染、
+graphics 对象、文件操作、pkg 语义、`input()`、录音、文件选择。
 
 - 远程：`https://github.com/ArchivalEra/Octave-Full-Wasm`（私有）
 - 许可：AGPL-3.0（`LICENSE`）；混合体无其他选择
@@ -81,10 +106,11 @@ audioread(+audiowrite/audioinfo/audioformats)`
 多函数模块靠 manifest 的 `aliases` 建符号链接（Octave 按**文件名**找 `.oct`）。
 
 ### 2.3 未完成
-见 §5「⬜ 剩余」。**R1–R10 全部落地**；剩下的都是收尾性质或已论证不做。
-已论证不可行/未过：nan 与 tsa 的源是 MEX（需 mex 运行时）、miscellaneous 的
-`sample.cc`/`text_waitbar.cc`、SPQR、control 的 SLICOT 编译件（崩页面，见 §4.12）、
-`help` 的 makeinfo 路径（无 shell，实测修不了）。
+**R1–R10 全部落地**；第三轮计划（T1–T10）见 **§5.5**，来源是
+`build/GAPS-2.md`（缺口清单）+ `build/GPT-REVIEW-2.md`（外部审核）。
+已论证不可行/不做：nan 与 tsa 的源是 MEX（需 mex 运行时）、miscellaneous 的
+`sample.cc`/`text_waitbar.cc`、control 的 SLICOT 编译件（崩页面，见 §4.12）、
+`publish`/`keyboard`/`getframe`（审核判定暂缓，见 §5.5）。
 
 ### 2.4 资产懒加载车道（**新能力一律走它**）
 站点 `assets/` 下按需 fetch，**主 wasm 只在改 Octave 本体时才重链**：
@@ -336,21 +362,70 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | R4 图像 | `imread`/`imwrite`/`imfinfo` | stb_image + `imformats("add")` 注册，`imread.m` 零改动 |
 | R5 网络 | **真同步** `urlread` 系列 | **不需要 Asyncify**：同步 XHR 可用（见 §4.13）；`EM_ASM` 在 side module 里不可用 |
 | R6 压缩归档 | 6 个函数进程内实现 | 无 shell 化；`.oct` 按文件名查找要建别名 |
-| R7 CXSparse | 已开 | SPQR 仍未做（P3，非阻塞） |
+| R7 CXSparse | 已开 | **SPQR 不是缺口**：`spqr` 函数在 Octave 3.6.0 就被 `qr` 取代（GPT 审核指出，已核对官方 obsolete 表）；稀疏 `qr` 走 CXSparse 后端，已实测可用 |
 | R8 WebAudio | `audioplayer` 全 18 个符号可用 | **纯 `.m` 就够**（句柄=struct，零编译）；不用 AudioWorklet |
 | R9 图形导出 | `print -dsvg`（2D+3D 都能出） | 纯 `.m` SVG 生成器；gnuplot 路线要 Asyncify 才有同步通道，故不采用 |
 | R10 编译级别 | **采纳 `-O1`** | 解释器密集代码快 5–10×，体积还小 7.5MB；wasm64 不碰 |
 
-### ⬜ 剩余（都是非阻塞的）
+### ⬜ 第三轮（**待执行**，GPT 审核已就位）
 
-1. **SPQR**（R7 的尾巴）：Suitesparse 里可取，需单独编 + `--with-spqr`。非阻塞。
-2. **control 的 SLICOT 编译件**：见 §4.12，需先做静态注册的小实验验证可行性。
-3. **`help` 的 makeinfo 路径**：**已实测修不了**（doc-cache 注入试过，见 §7）。保持清晰报错。
+**来源**：`build/GAPS-2.md`（缺口清单 v2，逐条实测）→ `build/GPT-REVIEW-2.md`
+（外部审核，含纠错与路线建议）→ 下面是消化后的可执行计划。
 
-### ❌ 已论证不做（别再试，见 §7 与 `build/GAPS.md`）
+**GPT 的两处纠错（已核对，采纳）**：
+- **`spqr` 不是缺口**：该函数 Octave 3.6.0 就被 `qr` 取代（官方 obsolete 表）；
+  稀疏 `qr` 走 CXSparse 后端且已实测可用。**永久删除 F1**。
+- **`record()` 本来就不阻塞**：只有 `recordblocking()` 才需要等待 →
+  B1 难度比原估低。
+
+**GPT 的核心架构建议（最重要的一条，采纳）**：
+> **A1 不要复活真 gnuplot 后端**（那必然撞 `system()`/pipe/同步输出），
+> 而是写一个**薄 toolkit**（`web_graphics_toolkit`），只提供 graphics object
+> 生命周期与属性系统；**渲染继续走已验证的 plot 桥**。
+>
+> ```
+> graphics.cc → 真 figure/axes/line 对象 → get/set/gca/gcf → Web toolkit
+>                                                        ↓
+>                                              现有 plot 桥 → gnuplot-wasm/SVG
+> ```
+> 官方 gnuplot toolkit 的 `redraw_figure()` 本就只是调 `__gnuplot_drawnow__`，
+> 说明 toolkit 层很薄 —— 我们把它换成自己的桥即可。
+
+**执行顺序（GPT 排定，逐批做，每批 staging 验证 → 上线 8761 → 提交推送）**：
+
+| # | 批次 | 内容 | 工作量估计 | 车道 |
+|---|---|---|---|---|
+| 1 | **T1** | **D1 `help`**：覆写 `__makeinfo__.m` 做**简化 texinfo→纯文本**（去标记、保正文）。路线与本项目已验证 6 次的覆写模式同型。可选加"离线预转换核心函数帮助" | 0.5–3 d | 资产（零重链） |
+| 2 | **T2** | **A1/A2 图形句柄半真化**：写 `__init_web__.cc` → `web_graphics_toolkit`（`initialize` 允许 figure、`redraw_figure` 先 no-op、`get_canvas_size` 给默认值）。**目标只是救活 `gca/gcf/get/set/figure` 的语义**，不碰绘图重构 | 1–3 d | Lane B（重链） |
+| 3 | **T3** | **C1 文件操作**：覆写 `copyfile`/`movefile`/`ls`，基于 `dir/glob/fopen/mkdir/unlink` 纯 `.m` | 1–2 d | 资产 |
+| 4 | **T4** | **G3 pkg 语义**：**不改 `pkg`**，而是让资产装载时生成 `.octave_packages` 数据库，让 `pkg list`/`pkg load` 天然看到 | 0.5–2 d | 资产 |
+| 5 | **T5** | **E1 `input()`**：同步 `window.prompt()` 桥（**注意**：要保留"按表达式求值"语义，`input(x,"s")` 不同） | 0.5–1.5 d | 资产/内建 |
+| 6 | **T6** | **B2 `audiodevinfo`** 最小 shim（浏览器默认设备）+ **D2a `doc`**（help → DOM） | <1 d | 资产 |
+| 7 | **T7** | **B1 `audiorecorder`**：`record/stop/getaudiodata` 先做（**不需 Asyncify**），`recordblocking` 后做 | 1–4 d | 资产+B 桥 |
+| 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS（同步性要靠 Asyncify 或改非标准异步 API） | 1–2 d | 需 G2 先验 |
+| 9 | **T9** | **G1 `MAIN_MODULE=2` + 自动 keep 清单**：读每个 `.oct` 的 wasm import 表 → 生成保活集 → 跑全量回归验证 | 1–3 d | Lane B |
+| 10 | **T10** | **G2 Asyncify 最小实验**（**只实验不采用**）：用 `ASYNCIFY_IMPORTS/ONLY/REMOVE` 限制插桩范围，测体积/性能/回归 | 0.5–1 d | 独立容器 |
+
+**明确暂缓（GPT 判断，采纳）**：`D2b publish`(2–4d)、`E2 keyboard/kbhit/pause`
+（等 Asyncify）、`H3 getframe/movie`（等 graphics 成熟）、`H4`、`H1 voronoi 单输出`
+（A1 的派生收益，不单独改）。
+
+**其它遗留（非 GPT 清单内，仍挂着）**：
+- **control 的 SLICOT 编译件**：见 §4.12，需先做静态注册的小实验。
+- **`help` 的 doc-cache 注入无效**（已实测）——T1 走 `__makeinfo__` 覆写才是正路。
+
+### ❌ 已论证不做（别再试）
+- **`spqr`**：该函数 Octave **3.6.0 就被 `qr` 取代**（官方 obsolete 表）。
+  `exist("spqr")==0` **不是缺口** —— 稀疏 `qr` 走 CXSparse 后端且已实测可用。
+  （`GAPS-2.md` 的 F1 已据此永久删除；外部审核的纠错。）
+- **`ichol`**：报"遇到零主元"是**正常数学错误**，不是后端缺失。已从缺口清单删除。
+- **真 gnuplot 后端**（`__init_gnuplot__` + `__gnuplot_drawnow__` 那套）：
+  必然撞 `system()`/pipe/同步输出。**改走"薄 toolkit + 复用现有 plot 桥"**（见 §5.5 T2）。
 - nan / tsa 的源是 **MEX**（`mexFunction`），需 mex 运行时；miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未过。
 - ImageMagick / PortAudio / Ghostscript / libarchive / OpenGL / Java / FLTK-Qt / `system`-`popen`
   （各有替代或有意保持"清晰报错"）。
+- **第三轮明确暂缓**（审核判定）：`publish`、`keyboard`/`kbhit`/`pause`（等 Asyncify）、
+  `getframe`/`movie`（等 graphics 成熟）。
 - 托管/UI：**已明确后置**。用户倾向：解耦成两个静态端点（如 `/cli`、`/gui`）+ 共享 core 运行时；
   **不要 R2/Worker**（纯静态托管即可，服务端零计算）；Service Worker 可离线。
   GUI 用 JupyterLite + 自研 kernel 适配器（`jupyterlite/kernel` 接口，模板见 `jupyterlite/javascript-kernel`）；
@@ -395,7 +470,9 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `build/webaudio/*.m` | R8：18 个 `__player_*` 纯 `.m` 实现（零编译） |
 | `bridge/webaudio.js` | R8 页面侧：队列 → AudioContext + AudioBufferSourceNode |
 | `bridge/webnet.js` | R5 页面侧：异步 fetch 桥（`OctaveNet.prefetch/get`） |
-| `build/GAPS.md` | **差距审计 + 需求书**（实测缺口、硬约束、R1–R11 分条需求与验收标准） |
+| `build/GAPS.md` | **第一轮需求书**（R1–R11；**R1–R10 已全部落地**），保留作为"当时怎么判断"的记录 |
+| `build/GAPS-2.md` | **第二轮缺口清单 v2**：全部剩余缺口（A–H 八组），每条带实测证据、要搜的问题、验收标准 |
+| `build/GPT-REVIEW-2.md` | **外部审核**（GPT 对 GAPS-2 的逐条审查）：两处纠错、A1 的核心架构建议、排好序的工作量表 |
 | `build/CLIBS.md` | **C 库长尾全部配方与坑**（最重要的一手记录） |
 | `vendor/forge/*.m` | forge 统计纯 `.m`（16 个） |
 | `vendor/extra/*.m` | 自研 fft/ifft/ttest + asciiplot |
@@ -414,13 +491,15 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 - `system`/`unix`/`popen` 清晰报错（本就达标，且是**有意**保持）。
 - **`help` 对非平凡输入会报 `makeinfo` 子进程错误**：wasm 无 shell。`.m` 文件的
   docstring 直接可读（`help plot` 可用），但走 texinfo 渲染的路径（含所有内建）必然失败。
-  **已实测修不了**——注入 `doc-cache` + `built-in-docstrings` 后错误只是从"文件缺失"
-  变成"makeinfo 不可用"，因为渲染那一步绕不过去。不影响函数调用本身。
+  注入 `doc-cache` + `built-in-docstrings` **无效**（实测：错误只是从"文件缺失"变成
+  "makeinfo 不可用"）——**但 T1 有解**：覆写 `__makeinfo__.m` 做简化渲染（见 §5.5）。
+- **图形句柄是"半死"状态**（实测分界）：`gcf()` 可用；`gca()` 报 `invalid handle`；
+  `figure()` 返回假句柄。**T2 的目标**（见 §5.5）。
 - **control 包的 SLICOT 编译件未发布**（§4.12）：`ss`/`step`/`tf2ss` 不可用；
   `tf`/`tfdata`/`dcgain`/`pole`/`zero`/`feedback`/`bode` 等纯 `.m` 面正常。
-- `voronoi` 的**单输出形式**（要画图，走 `gca`）不可用；两输出形式正常。
+- `voronoi` 的**单输出形式**（要画图，走 `gca`）不可用；两输出形式正常
+  —— **T2 的派生收益**，不单独修。
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
-- SPQR 未做（R7 尾巴，非阻塞）。
 
 ---
 
@@ -429,7 +508,11 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 `-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **15 套 418 项全绿**（含需求级
 `accept-requirements`），交付包在
 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
-**R1–R10 全部落地**；剩下只有 SPQR、control 的 SLICOT、`help` 三件非阻塞事项（见 §5 剩余）。
+
+**R1–R10 全部落地。下一轮（第三轮）的计划在 §5.5** —— 已按外部审核排好序：
+**T1 `help` → T2 图形句柄半真化 → T3 文件操作 → T4 pkg 语义 → T5 `input()` →
+T6 audiodevinfo/doc → T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
+
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild`/`odld`/`obench` 容器内工作。
 
