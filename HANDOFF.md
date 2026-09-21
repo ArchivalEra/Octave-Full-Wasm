@@ -1,7 +1,8 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：2026-09-21（第三轮 T1/T3/T4 已落地；**第四轮换基线 10.3 的方向与计划见 §9**）。
+> 最后更新：2026-09-21（第三轮 T1/T3/T4/T5 已落地；**第四轮换基线到
+> **Octave 11.3.0** 的决策与计划见 §9**，事实依据 `build/BASELINE-11.3.md`）。
 
 ---
 
@@ -153,6 +154,13 @@ owasm    旧的线上构建，端口 8757，别动
   （SUNDIALS/HDF5/Forge 解包都在那儿，**容器重建会丢，需要时可从 `/mnt/hdd/.../third_party/` 重解**）
 - `src/Makefile` = 仓库 `build/Makefile`；`src/main.cc` = 仓库 `build/main.cc`
 - **新容器从检查点起**：`docker run -d --name odld2 octave-build:b5-image sleep infinity`
+- **ccache 共享（第四轮起，已实测可用）**：宿主持久目录
+  `/mnt/hdd/octave-wasm-build/ccache/`（含 `ccache.conf`）。挂载方式：
+  `docker run -v /mnt/hdd/octave-wasm-build/ccache:/ccache -e CCACHE_DIR=/ccache …`。
+  用 `CC="ccache emcc"` / `CXX="ccache em++"` 包。
+  **⚠️ 构建目录的路径必须逐字固定**——绝对 `-I` 会进 hash，换路径就整片失效（实测）。
+  缓存不进镜像，`docker commit` 不会把它塞进 image。宿主已装 `meson 1.12.0` /
+  `ccache 4.13.6` / `ninja 1.13.2`；**但 OSMesa 要的 meson 是容器里那份**。
 
 ### 3.2 起服务与预览（**断电后一条命令**）
 ```bash
@@ -539,7 +547,8 @@ makeinfo 生成 doc-cache）。
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
 | `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
-| `build/BASELINE-10.3.md` | **第四轮依据**：10.3 wasm recipe 原文摘录（19 patch、Flang 工具链、他们关掉的库）+ edgetools.io 图形撞墙记录 |
+| `build/BASELINE-11.3.md` | **第四轮当前依据**：11.x 收益核实、19 patch 漂移实测、Edge-Tools 11.1.0 配方全文（5 处 sed / `emf77` / webgl toolkit / 接口 / COI 代价）、5 条 sed 对 11.3.0 命中实测、vanilla 11.3.0 三项核对、ccache 实测 |
+| `build/BASELINE-10.3.md` | 前一份（10.3 方向）依据：10.3 wasm recipe 原文摘录（19 patch、Flang 工具链、他们关掉的库）+ edgetools.io 图形撞墙记录。**保留作历史记录** |
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
@@ -608,11 +617,13 @@ makeinfo 生成 doc-cache）。
 **R1–R10 全部落地**；**第三轮 T1 + T3 + T4 + T5 已完成**（`help` §5.6；文件操作 §5.7；pkg 语义 §5.8；`input()` §5.9）。
 **下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
 
-**⚠️ 新方向：第四轮换基线到 Octave 10.3 + 重构图形线（OSMesa），见 §9。**
-计划是 P0 复现 10.3 recipe → P1 接站点 → P2 长尾回归 → P3 `.oct` 车道 → P4 宿主层 →
-P5 OSMesa 图形 → P6 收尾。**7.2 基线（8761）在 10.3 通过等价验收前不动。**
-其余顺序：T5 `input()` → T6 audiodevinfo/doc →
-T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
+**⚠️ 新方向：第四轮换基线到 **Octave 11.3.0** + 重构图形线（OSMesa），见 §9**
+（事实依据 `build/BASELINE-11.3.md`）。
+计划是 P0 建 `o113` 容器并复现 11.3.0 → P1 接站点 → P2 长尾回归 → P3 `.oct` 车道 →
+P4 宿主层 → P5 OSMesa 图形 → P6 收尾。
+**7.2 基线（8761）在 11.3.0 通过等价验收前不动。**
+其余顺序：T2 图形句柄 → T6 audiodevinfo/doc → T7 audiorecorder → T8 uigetfile →
+T9 MAIN_MODULE=2 → T10 Asyncify 实验（这些在 11.3.0 上重做，见 §5.5）。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 **改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
@@ -639,11 +650,16 @@ sudo docker start obuild odld obench && sh /mnt/hdd/zcode-projects/Octave-Full-W
 
 ---
 
-## 9. 第四轮（**新方向，待执行**）：换基线到 Octave 10.3 + 重构图形线
+## 9. 第四轮：换基线到 **Octave 11.3.0** + 重构图形线
 
-> **事实依据全文见 `build/BASELINE-10.3.md`**（recipe 原文、19 个 patch 名单、
-> 工具链变量、他们关掉的库清单、以及 edgetools.io 的图形撞墙记录）。
-> 本节只写**决策与计划**。
+> **事实依据全文见两份档案**（本节只写**决策与计划**，事实不在这里重复）：
+> - **`build/BASELINE-11.3.md`（当前依据）**：11.x 的收益、patch 漂移实测（19 个 patch
+>   对 10.3/11.3 逐个实打）、Edge-Tools 11.1.0 配方全文（5 处 sed / `emf77` /
+>   webgl toolkit / 接口形态 / COI 代价）、5 条 sed 对 11.3.0 的命中实测、
+>   **vanilla 11.3.0 三个月末核对**（`dlopen` 真在 / `looks_like_texinfo` 同机制 /
+>   `installed_packages.m` 未被动）、构建环境与 ccache 实测。
+> - **`build/BASELINE-10.3.md`**：10.3 recipe 原文、19 个 patch 名单、工具链变量、
+>   他们关掉的库、edgetools.io 图形撞墙记录。**保留作为「当时怎么判断」的记录。**
 
 ### 9.1 三个决定性事实（先看这三条，再谈计划）
 
@@ -664,35 +680,85 @@ sudo docker start obuild odld obench && sh /mnt/hdd/zcode-projects/Octave-Full-W
 **所以这一轮不是"换成别人的东西"，而是"取它的工具链与平台 patch，
 叠加我们的 C 库长尾与宿主层"。**
 
-### 9.2 目标版本选择：**10.3.0**（不是 11.x）
+### 9.2 目标版本：**11.3.0**（原定 10.3.0，**已实测证伪后改**）
 
-| 候选 | 取舍 |
+**原理由已不成立。** 原来拒 11.x 的理由是「无 wasm recipe，19 个 patch 要重新推导一遍」。
+实测结果（详见 `BASELINE-11.3.md` §3）：19 个 patch 按序实打到 11.3.0 上
+**16/19 直接干净应用**，失败 3 个且都不是坏消息——
+**0009 已经进上游（该删）**、0010 只是生成物 `Makefile.in`（在 `Makefile.am` 层重做）、
+**0016 只挂 1 个 hunk**。即「16 个直接用 + 1 个删除 + 2 个局部重做」，
+涉及 4 个文件、不到 25 个 hunk。
+
+**改用 11.3.0 的五条理由**（按权重）：
+
+1. **Fortran 路线保住**：Edge-Tools 建的就是 **11.1.0，且用 f2c**（`--enable-fortran-calling-convention=f2c`）。
+   走 f2c 则我们 13 个批次的积累（libf2c2、ARPACK 单 TU、5 个 PIC 库）**原样继承**；
+   走 emscripten-forge 的 Flang 则作废一大半。
+2. **补丁面小**：Edge-Tools 对源码的全部改动是 **5 处 sed**，且**实测 5/5 命中 11.3.0**
+   （含 `getlocalename_l-unsafe.c:659`、`cxx-signal-helpers.cc:195`、`interpreter.cc:756`）。
+3. **与本机参照同版**：本机 `octave` 就是 **11.3.0**。`render-docstrings.py`、
+   `check_m.py`、全部验收断言都能拿**逐位同版**的原生 Octave 对照。
+4. **收益正是 11.x 的**：卷积 10%–150×、`randi` 4.5×、logical 求和最高 6×、
+   打印 PDF 快 25%；MATLAB 兼容有一整节（稀疏/对角 broadcasting、一大批函数的
+   `"all"`/`vecdim`/`nanflag`/`ComparisonMethod`、`min`/`max` 的 `"linear"`、
+   `qr` 单输出只返回 R…）。用户动因，已核实成立。
+5. **toolkit 白拿**：Edge-Tools 的 `webgl-graphics-toolkit.cc` 就是 `§5.5 T2` 要写的
+   「薄 toolkit」，已在 11.1.0 上验证能注册能跑；P5 只剩 OSMesa 一件事。
+
+**要拿的与不要的（关键取舍）**：
+
+| 要素 | 取自 |
 |---|---|
-| **10.3.0** | ✅ 有**现成的 19 个 patch + 验证过的 Flang 工具链**，可复现 |
-| 11.1.0 / 11.3.0 | ❌ 无 wasm recipe；19 个 patch 要**重新推导**一遍（10.3→11.x 的 API 漂移） |
+| Octave | **11.3.0**（vanilla `ftp.gnu.org`） |
+| 工具链 | **emsdk 5.0.7** |
+| Fortran | **f2c**（`emf77` 那套） |
+| 平台补丁 | **Edge-Tools 的 5 处 sed**；emscripten-forge 的 19 个 patch 留作**已知坑清单**参考 |
+| 链接模型 / 长尾 / 宿主层 | **我们自己的**（`MAIN_MODULE=1` + `.oct` 走 `SIDE_MODULE=1`、C 库长尾、T1/T3/T4/T5） |
+| 图形 | Edge-Tools 的 `webgl` toolkit + **OSMesa**；现有 plot 桥与 `print -dsvg` 作过渡与回退 |
 
-**决定：先把 10.3.0 做通**（复用其 patch 集），11.x 作为**后续一步**再评估。
-理由：迁移的成本主要在 patch 集与工具链，而不是版本号本身。
+**明确不采用**：他们 `--without-*` 那一长串（那是**能力裁剪，不是平台要求**）、
+以及照抄会继承的 **pthread/COI 托管前提**（建议加 `--disable-threads`，需实测确认）。
+
+**三个利好核对（vanilla 11.3.0，详见 `BASELINE-11.3.md` §6）**：我们 7.2 的坑多来自上游
+fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分不存在**——
+`oct-shlib.cc:246` **真调 `dlopen`**（`§4.1` 根因消失，不必再覆盖该文件）、
+`help.cc:141` 的 `looks_like_texinfo` **同机制**（T1 原样成立）、
+`installed_packages.m` **167 行未被删改**（`§5.8` 的 fork 删除不存在，
+`build/pkgrestore/` 不需要，只要 `build/pkgfix/` 那一半）。
 
 ### 9.3 阶段与闸门
 
 每阶段都必须过闸门才进下一阶段；**7.2 基线（8761）在 10.3 通过等价验收之前不动**。
 
-**P0 · 复现**（独立容器，别碰 obuild/odld 基线）
-- 取 `git clone https://github.com/emscripten-forge/recipes`，读
-  `recipes_emscripten/octave/{recipe.yaml,build.sh,patches/*}`
-- 取定制 LLVM：`github.com/IsabelParedes/llvm-project` release
-  `v20.1.7_emscripten-wasm32` 的 `llvm_emscripten-wasm32-20.1.7-h2e33cc4_5.tar.bz2`
-- 容器内按他们的 `build.sh` 造一遍，冒烟：`node octave-cli --version` + 一句矩阵解
-- **闸门**：`octave-cli.wasm` 能起、`disp(A\b)` 出正确数值
-- **风险**：他们的 recipe 依赖 conda-forge 的 host 包（libblas/liblapack/pcre2/freetype/
-  imagemagick<7）。容器里没有 conda，要么装 micromamba，要么改用系统库
-  （注意 imagemagick<7 与新版不兼容，可能要退到 ImageMagick 6）
+**P0 · 建新容器并复现 11.3.0**（独立容器；**别碰 obuild/odld/obench 与 8761**）
+- 拉 `emscripten/emsdk:5.0.7`（1622MB，最后更新 2026-04-30）建容器，命名 `o113`
+- 容器内装 `ccache` + `meson`(1.x)——**现有容器装不了**（Ubuntu 20.04，meson 候选 0.53.2，
+  距 Mesa 要的 1.x 差得远；`emsdk:5.0.7` 的新基底能把 ccache 4.x + 可用 meson 一起带来）
+- 挂宿主持久 ccache：`-v /mnt/hdd/octave-wasm-build/ccache:/ccache -e CCACHE_DIR=/ccache`
+  **构建目录路径必须逐字固定**（绝对 `-I` 会进 hash，实测见 `BASELINE-11.3.md` §7.1）
+- 源码：`ftp.gnu.org/gnu/octave/octave-11.3.0.tar.xz`（27919604 字节；本地已有副本）
+- 补丁：**Edge-Tools 的 5 处 sed**（`BASELINE-11.3.md` §4.1 表）。**每处保留他们的
+  `! grep -q …` 守卫**——模式对不上就让构建**明确失败**，不要静默改错
+- configure 用他们的开关，但：**去掉 `--without-x`**（11.3.0 已移除该选项）、
+  **加 `--disable-threads`**（保持现在免 COI 的托管前提；需实测确认与
+  emsdk 5.0.7 + f2c 相容）
+- 冒烟：`node` 起 octave + 一句矩阵解
+- **闸门（三条，缺一不可）**：
+  1. configure + make 通过；能起；`disp(A\b)` 数值正确
+  2. **`.oct` side module 在 emsdk 5.0.7 下能装载**（`MAIN_MODULE=1` +
+     `ALLOW_TABLE_GROWTH` 的行为换代必验）——**这是本轮新引入的最大不确定性**，
+     我们批次 1d/13 是在 emsdk 3.1.24 上做的
+  3. **不引入 COI/SharedArrayBuffer 需求**（否则托管前提变了，`dist/DEPLOY.md` 要跟着改）
+- **失败就回滚**：`o113` 是独立容器，三个基线容器与 8761 全程不受影响
 
 **P1 · 接上我们的站点接口**
 - 目标：产出**我们能用的 `octave.wasm + octave.js`**（`Module.eval_string` 可用），
-  而不是直接采用 Xeus/JupyterLite（那是另一套集成模型，我们的静态站点是自己的资产）
-- 复用他们 `0004-Custom-link-octave-cli` / `0008-Set-octave-cli-flags` 的做法
+  而不是直接采用他们的接口或 Xeus/JupyterLite（那是别的集成模型，我们的静态站点是自己的资产）
+- **注意 Edge-Tools 的接口形态与我们不同**（`BASELINE-11.3.md` §4.3）：他们是
+  `MODULARIZE=1 INVOKE_RUN=0` + 页面侧 `callMain(['--norc','--quiet','--eval', script])`
+  的**一次性 CLI 调用**，运行时要靠 `octave-runtime.tar` 解到 MEMFS + `OCTAVE_HOME`。
+  我们要的是**可反复 eval 的常驻解释器** → 得把 `build/main.cc`（`feval`/`eval_string`
+  绑定 + 两段式 addpath）移植到 11.3.0，而不是照抄他们的 `callMain`
 - **闸门**：现成的 `accept-requirements.mjs` 里**至少解释器与 eval 两条**能跑
 
 **P2 · 长尾回归（本轮的命脉，也是最贵的一段）**
@@ -713,14 +779,19 @@ sudo docker start obuild odld obench && sh /mnt/hdd/zcode-projects/Octave-Full-W
 - **闸门**：`exist('convhulln')==3` 且 `which` 指向 `.oct`（即批次 13 的官方装载语义）
 
 **P4 · 宿主层移植**
-- 把已完成的三批搬过来并重跑验收：
-  - **T1 help**：`build/render-docstrings.py` 生成 + 去标记
-    （**注意 10.3 的 `help.cc` 判定逻辑要重新核对**，别假设与 7.2 相同）
-  - **T3 文件操作**：`build/webfile/`（纯 `.m`，应当直接可用，除非 10.3 已有对应实现）
-  - **T4 pkg**：`build/pkgfix/` + `build/pkgrestore/installed_packages.m`
-    （**先核对 10.3 有没有同样的 fork 删改**）
-  - **T5 input**：已验证"不需要代码"（Emscripten TTY → `window.prompt`），
-    只要确认 10.3 下行为一致
+- 把已完成的四批搬过来并重跑验收。**三处「要不要重查」已在 vanilla 11.3.0 上核对完
+  （`BASELINE-11.3.md` §6），结论都是利好**：
+  - **T1 help**：`help.cc:141` 的 `looks_like_texinfo` **机制与 7.2 相同**
+    （仍 `find ("-*- texinfo -*-")`）→ `build/render-docstrings.py` + 去标记**原样成立**
+  - **T3 文件操作**：`build/webfile/`（纯 `.m`）应当直接可用；
+    要确认 11.3.0 的 `copyfile`/`movefile`/`ls` 是否仍以 `system()` 收尾
+  - **T4 pkg**：`installed_packages.m` **167 行未被删改**（读库代码都在）→
+    **`build/pkgrestore/` 不需要**（那个坑是 fork 特有的），只需 `build/pkgfix/`
+    那半（从磁盘生成数据库），并核对 `api_version` 是否仍为 `api-v57`
+  - **T5 input**：已验证「不需要代码」（Emscripten TTY → `window.prompt`），
+    只需确认 11.3.0 + 新 emsdk 下行为一致，`Module.stdin` 扩展点仍在
+- **额外便利**：`oct-shlib.cc:246` 在 vanilla 11.3.0 里**真调 `dlopen`** →
+  `§4.1` 的根因不存在，**不需要**「用上游文件覆盖 `oct-shlib.cc`」这一步
 - **闸门**：`accept-help` / `accept-fileops` / `accept-pkg` **三套全绿**
 
 **P5 · 图形线重构（你要的"真正的完整版"）**
