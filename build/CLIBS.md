@@ -531,3 +531,56 @@ The response type cannot be changed for synchronous requests made from a documen
 `while (i <= n)` 的参数个数。赋值后循环跑过数组尾端，报
 `args(2): out of bound 1 (dimensions are 1x1)`。
 **规则**：参数解析循环里的循环上界变量，永不在循环体内复用同名。
+
+---
+
+## 批次 12（2026-09-20）：signal + control 包（R2 补完），以及 **SLICOT side module 崩溃**
+
+R2 的验收标准点名 statistics / optim / **signal** / **control** 四个包冒烟通过。
+前两个批次 2A/2B 已做，这里补后两个。
+
+- **signal 1.4.6**（181 个 .m，纯脚本）：**完全可用**。`butter`/`cheby1`/`fir1`/
+  `freqz`/`filtfilt`/`hilbert`/`kaiser` 等真算通，低通直流增益 = 1、高通 = 0
+  这类数值都对。
+- **control 4.1.3**：314 个 .m **可用**；56 个 SLICOT 编译件编出来了，但
+  **一调用就崩**（见下）。
+- 打包：`build/assets.py bundle-pkg`（signal 913KB / control 1.37MB js），
+  编译件走 `octdir`（`build/build_pkg_oct.sh`）。依赖链
+  `signal → control → control-oct` 由 gen-manifest 自动串起。
+
+### 坑 11：control 的 SLICOT `.oct` 在 `MAIN_MODULE=1` 下是**地雷**（架构级）
+
+现象：`ss(G)` / `step(G)` / `tf2ss(...)` 一调用，wasm 直接抛
+```
+TypeError: Cannot read properties of undefined (reading 'apply')
+    at stubs.<computed> (octave.js:9:127611)
+    at wasm://wasm/...:wasm-function[43]
+```
+整个页面死掉，后续 eval 全部不可用。
+
+根因链：
+1. 这些 `.oct` 链接时 `-sSIDE_MODULE=1` 且**不链库**（本项目的既定做法），
+   它们对主模块 Fortran 符号的引用按**自己的声明**编成了导入。
+2. 主模块里那些符号（`zdotu_` 等）的**实际签名不同** —— 这一点 `wasm-ld`
+   在每次主链链接时都警告过：`function signature mismatch: zdotu_`
+   `>>> defined as (i32,...) -> f64 in libqrupdate.a` vs
+   `>>> defined as (...) -> void in librefblas.so`。
+3. 静态注册表（`STATIC_DLD_FCNS`）那条路不受影响，因为它把 `.o` 编进主链、
+   走同一次链接——签名由链接器统一。**side module 这条路没有这个统一过程。**
+4. `emscripten` 的 dylink 对不匹配的导入不做保护，直接跳进错误签名 → `stubs.apply`
+   取到 undefined。
+
+**结论（不做什么）**：不试图修。要修得给 side module 链一份符号签名表，
+或让所有 Fortran 库的签名在主链里统一（那会动到已验证的 PIC 基线）。
+代价与收益不成比例。
+
+**已做的处置**：
+- signal 全量发布（纯 .m，无此问题）。
+- control 只发布**纯 .m 部分**（tf/tfdata/dcgain/pole/zero/feedback/bode/... 全都
+  正常）；**56 个 SLICOT `.oct` 不上线**，免得用户一调 `step` 就把页面弄崩。
+- 验收 `accept-forge2.mjs` 覆盖 signal 全量 + control 的可用面，
+  并把"哪些 control 函数不可用"写成断言（防止将来误以为好了）。
+
+**将来若要修**：先做一次最小实验——把某个 SLICOT `.oct` 改成**静态注册**
+（进 `STATIC_DLD_FCNS`）看是否可用。若可用，说明结论是"side module 的符号签名
+不可靠"，那么所有需要主链 Fortran 符号的包都要走静态注册（要重链主 wasm）。
