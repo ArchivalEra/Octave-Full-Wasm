@@ -17,6 +17,7 @@
 !build/reconf-batch1.sh
 !build/CLIBS.md
 !build/GAPS.md
+!build/GAPS-2.md
 !build/BENCH.md
 !build/reconf-bench.sh
 !build/plotbridge/*
