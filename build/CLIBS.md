@@ -834,3 +834,86 @@ docstring 原样吐出，而**当时的自测全过**——因为自测只断言
 含回归护栏：`dir`、`imread`/`imwrite`（依赖 `fopen` 路径）、`gzip`（webio 路径）。
 **注意**：`imread` 需要先装载 `webimage` 资产（imformats 注册），否则会误报——
 懒加载车道的能力测试必须先按需装载，这是既有约定。
+
+---
+
+## 批次 T4（2026-09-21）：pkg 语义 —— 还原 upstream + 生成数据库（第三轮）
+
+**需求**：`pkg list` / `pkg load` 能看到、能加载 Forge 包。
+
+### 关键发现：fork **删掉了**读数据库的代码
+
+`pkg list` 在本构建里**永远**返回 "no packages installed"，根因不是"数据库文件没生成"，
+而是本构建的上游 fork 把 upstream `scripts/pkg/private/installed_packages.m` 里读数据库的
+**16 行换成了 3 行空赋值**：
+
+```octave
+## upstream（release-7-2-0）:
+  try
+    local_packages = load (local_list).local_packages;
+  catch
+    local_packages = {};
+  end_try_catch
+  try
+    global_packages = load (global_list).global_packages;
+    ...
+## 本构建的 fork:
+  local_packages = {};
+  global_packages = {};
+```
+
+旁证：`expand_rel_paths.m` 仍在 `module.mk` 里挂着但**已无任何调用者**——它唯一的调用点
+就是被删的那段。捆在镜像里的 octave-4.4.1 副本是同一处改动的**更早形态**（用 `#` 注释掉）。
+所以这是 fork 的既定行为，不是本项目会话改的。
+
+**处置：把官方文件放回去**（`build/pkgrestore/installed_packages.m`，**与 upstream
+逐字节相同**——脚本里 `assert out == upstream` 硬校验）。不是另写实现。
+
+### 第二件事：数据库本身是空的
+
+Forge 包由本项目的资产加载器直接写进 FS 再 `addpath`，**从不经过 `pkg install`**，
+所以 `pkg` 的数据库文件根本不存在。补一个"描述磁盘现状"的生成器。
+
+**`build/pkgfix/`（5 个纯 `.m`）**：
+- `__pkgfix_sync_db__.m` —— 扫 forge 根目录，逐包建数据库
+- `__pkgfix_make_packinfo__.m` —— 造 `packinfo/` 子目录（见下）
+- `__pkgfix_local_list__.m` / `__pkgfix_forge_root__.m` / `__pkgfix_basename__.m`
+
+### 两个必须踩对的点
+
+1. **复用官方 `get_description`，不要自己解析 DESCRIPTION。**
+   第一版手写解析器只取值，建出来的 struct **没有 `depends` 字段** →
+   `pkg describe` 报 `structure has no member 'depends'`（`get_inverse_dependencies`
+   要索引它）。改成调 `get_description`（**私有函数**，位于 `m/pkg/private/`）后，
+   struct 就是 `pkg` 自己消费的那个形状，`depends` 已被 `fix_depends` 规范化。
+   **代价**：Octave 的私有函数按**调用者目录**解析，所以 `__pkgfix_sync_db__.m`
+   必须挂在 `m/pkg/` 下（不是它自己的目录），否则调不到 `get_description`。
+
+2. **`pkg install` 会造 `packinfo/` 子目录，资产包不会。**
+   `describe.m` 的 `parse_pkg_idx` 找的是 **`<dir>/packinfo/INDEX`**，而资产包把
+   `INDEX`/`DESCRIPTION`/`COPYING` 放在**包根**（它模拟的是 `inst/` 上提，不是
+   packinfo 那一步）。所以同步时要顺手把 `packinfo/` 造出来——
+   文件清单逐字照抄 `install.m:597-610` 的 `packinfo_copy_file` 调用。
+
+### 数据库路径（**别猜**）
+
+`pkg.m:420-422` 的原式（照抄，不硬编码）：
+
+```octave
+fullfile (user_config_dir(), "octave", __octave_config_info__("api_version"), "octave_packages")
+```
+
+实测落在 `/home/web_user/.config/octave/api-v57/octave_packages`。**注意文件名没有前导点**——
+`~/.octave_packages` 只出现在 `pkg` 自己的文档例句里（`local_list` setter 的示例），
+不是 7.2 的实际路径。
+
+### 验收
+
+`test/browser/accept-pkg.mjs`（**16 项，16/16 绿**）：
+- 数据库：找到 5 个包、版本正确、**不写 `loaded` 字段**（那个由 Octave 运行时按
+  "dir 是否在 path 上"判定）、落在 `pkg` 真正读的路径
+- `pkg list` 列出全部 5 个包 + 版本号，且**不再**说 "no packages installed"
+- `pkg load statistics` 成功；load 后 `list` 标 `*`
+- `pkg("list")` 带输出返回非空 cell；`pkg describe statistics` 有内容
+- `pkg load` 未安装的包 → 清晰报错（官方文本 `package X is not installed`）
+- 回归：包内函数（`normpdf`）仍可用、核心内建（`sin`）不受影响

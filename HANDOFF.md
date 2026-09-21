@@ -400,7 +400,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | ~~1~~ | ~~**T1**~~ | ✅ **已完成**：`help` 走**构建期 makeinfo 预渲染**（不是覆写渲染器）。见 §5.6 | — | 资产（零重链） |
 | 2 | **T2** | **A1/A2 图形句柄半真化**：写 `__init_web__.cc` → `web_graphics_toolkit`（`initialize` 允许 figure、`redraw_figure` 先 no-op、`get_canvas_size` 给默认值）。**目标只是救活 `gca/gcf/get/set/figure` 的语义**，不碰绘图重构 | 1–3 d | Lane B（重链） |
 | ~~3~~ | ~~**T3**~~ | ✅ **已完成**：`copyfile`/`movefile`/`ls` 进程内实现（`build/webfile/`，纯 `.m`）。见 §5.7 | — | 资产 |
-| 4 | **T4** | **G3 pkg 语义**：**不改 `pkg`**，而是让资产装载时生成 `.octave_packages` 数据库，让 `pkg list`/`pkg load` 天然看到 | 0.5–2 d | 资产 |
+| ~~4~~ | ~~**T4**~~ | ✅ **已完成**：还原被 fork 删掉的 `installed_packages.m` + 生成 pkg 数据库（`build/pkgfix/`）。见 §5.8 | — | 资产 |
 | 5 | **T5** | **E1 `input()`**：同步 `window.prompt()` 桥（**注意**：要保留"按表达式求值"语义，`input(x,"s")` 不同） | 0.5–1.5 d | 资产/内建 |
 | 6 | **T6** | **B2 `audiodevinfo`** 最小 shim（浏览器默认设备）+ **D2a `doc`**（help → DOM） | <1 d | 资产 |
 | 7 | **T7** | **B1 `audiorecorder`**：`record/stop/getaudiodata` 先做（**不需 Asyncify**），`recordblocking` 后做 | 1–4 d | 资产+B 桥 |
@@ -466,6 +466,38 @@ makeinfo 生成 doc-cache）。
 **实测新坑**（4 条，详见 `CLIBS.md` 批次 T3）：`unlink` **不能删目录**（要用 `rmdir`）；
 `"\"` 是未终止字符串（要写 `"\\"`）；Octave 没有 `<<` 运算符；`error` 跨行拼接要 `...`。
 
+### 5.8 T4 已完成（2026-09-21）——pkg 语义
+
+**两个根因，缺一不可**：
+
+1. **fork 删掉了读数据库的代码。** `pkg list` 永远返回 "no packages installed"，
+   根因是 fork 把 upstream `scripts/pkg/private/installed_packages.m` 里读
+   `load(local_list).local_packages` 的 **16 行换成了 3 行空赋值**。
+   旁证：`expand_rel_paths.m` 仍在 `module.mk` 里但**已无调用者**（唯一调用点就是被删那段）；
+   镜像里的 octave-4.4.1 副本是同一改动的更早形态（用 `#` 注释）。
+   **处置：把官方文件放回去**（`build/pkgrestore/installed_packages.m`，
+   **与 upstream 逐字节相同**，脚本里硬 `assert` 校验）。
+2. **数据库是空的**：Forge 包由资产加载器直接写 FS + `addpath`，**从不经过 `pkg install`**。
+   补 `build/pkgfix/`（5 个纯 `.m`）从**磁盘现状**生成数据库。
+
+**两个非显然的点（都踩过）**：
+- **复用官方 `get_description`，不要自己解析 DESCRIPTION**。手写解析器建的 struct
+  缺 `depends` → `pkg describe` 报 `structure has no member 'depends'`。
+  但它是**私有函数**，而 Octave 私有函数按**调用者目录**解析 ——
+  所以 `__pkgfix_sync_db__.m` 必须挂在 **`m/pkg/`** 下才能调到它。
+- **`pkg install` 会造 `packinfo/` 子目录，资产包不会**。`describe.m` 找的是
+  `<dir>/packinfo/INDEX`，而资产包把 INDEX 放**包根**（模拟的是 `inst/` 上提）。
+  同步时按 `install.m:597-610` 的清单把 `packinfo/` 造出来。
+
+**数据库路径（别猜）**：`pkg.m:420-422` 的原式
+`fullfile(user_config_dir(),"octave",__octave_config_info__("api_version"),"octave_packages")`
+→ 实测 `/home/web_user/.config/octave/api-v57/octave_packages`。
+**文件名没有前导点**（`~/.octave_packages` 只是 `pkg` 文档里 `local_list` setter 的例句）。
+
+**验收**：**`accept-pkg.mjs` 16/16 绿**（`pkg list` 列 5 个包带版本、`pkg load` 成功且
+`list` 标 `*`、`pkg describe` 有内容、未装包清晰报错、`normpdf` 等包内函数不回归）。
+
+
 **其它遗留（非 GPT 清单内，仍挂着）**：
 - **control 的 SLICOT 编译件**：见 §4.12，需先做静态注册的小实验。
 - **`help` 对 `.m` 文件仍不可用**（§5.6 的剩余缺口）：内建已修好（构建期预渲染），
@@ -506,6 +538,7 @@ makeinfo 生成 doc-cache）。
 | `build/render-docstrings.py` | **T1**：构建期用**真 makeinfo** 预渲染 `built-in-docstrings`（去 texinfo 标记 → `help` 走 plain text 分支）。宿主侧跑 |
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
+| `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
@@ -566,14 +599,14 @@ makeinfo 生成 doc-cache）。
 ---
 
 ## 8. 一句话接续
-**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1 + T3**，
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **17 套 450 项全绿**（含需求级
-`accept-requirements`、新的 `accept-help` 与 `accept-fileops`），交付包在
+**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1 + T3 + T4**，
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **18 套 466 项全绿**（含需求级
+`accept-requirements`、新的 `accept-help`/`accept-fileops`/`accept-pkg`），交付包在
 `/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
 
-**R1–R10 全部落地**；**第三轮 T1 + T3 已完成**（`help` 可读 §5.6；文件操作 §5.7）。
+**R1–R10 全部落地**；**第三轮 T1 + T3 + T4 已完成**（`help` §5.6；文件操作 §5.7；pkg 语义 §5.8）。
 **下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
-其余顺序：T4 pkg 语义 → T5 `input()` → T6 audiodevinfo/doc →
+其余顺序：T5 `input()` → T6 audiodevinfo/doc →
 T7 audiorecorder → T8 uigetfile → T9 MAIN_MODULE=2 → T10 Asyncify 实验**。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。

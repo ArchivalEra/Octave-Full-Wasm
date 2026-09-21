@@ -41,6 +41,8 @@
 !build/render-docstrings.py
 !build/check_m.py
 !build/webfile/*
+!build/pkgfix/*
+!build/pkgrestore/*
 !build/recover.sh
 !build/webio.cc
 !build/webimage.cc

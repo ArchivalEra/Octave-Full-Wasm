@@ -65,6 +65,32 @@
             return null;
           });
       }).then(function () {
+        // pkg 语义（T4）。两件事，缺一不可：
+        //   1. installed_packages.m —— **还原 upstream 的版本**。本构建的上游 fork
+        //      把「读 .octave_packages 数据库」的那 16 行换成了 3 行空赋值
+        //      （`local_packages = {}; global_packages = {};`），于是 pkg 永远
+        //      看不到任何包。我们没有另写实现，而是把官方文件放回去。
+        //   2. 生成数据库 —— Forge 包是由本加载器直接写进 FS + addpath 的，
+        //      pkg 的数据库文件因此是空的。写一份描述"磁盘上实际有什么"的库，
+        //      让 pkg list/load/describe 走**原生代码路径**。
+        // 先装 pkgfix（提供生成函数），再装还原文件，最后跑一次同步。
+        return OctaveAssets.load(['pkgfix', 'installed_packages.m'])
+          .then(function () {
+            try {
+              window.Module.eval_string(
+                "if (exist('__pkgfix_sync_db__')) " +
+                "  try; __pkgfix_sync_db__ (); catch e; " +
+                "    warning('pkg sync failed: %s', e.message); end; endif;");
+            } catch (e) {
+              console.warn('[pkg] 数据库同步失败: ' + e.message);
+            }
+            return null;
+          })
+          .catch(function (e) {
+            console.warn('[assets] pkg 支持装载失败（pkg list/load 将不可用）: ' + e.message);
+            return null;
+          });
+      }).then(function () {
         window.__octaveReady = true;
       }).catch(function (e) {
         console.warn('[assets] 清单未就绪（无 assets/ 目录时属正常）: ' + e.message);
