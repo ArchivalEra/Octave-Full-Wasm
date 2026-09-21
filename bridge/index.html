@@ -8,6 +8,9 @@
 </head>
 <body>
 <script type="text/javascript" src="assets-loader.js"></script>
+<!-- WebAudio 播放桥：Octave 侧把播放意图写进队列，这一侧真开 AudioContext。
+     浏览器要求用户手势才能出声，所以页面上任何一次点击都会尝试解锁。 -->
+<script type="text/javascript" src="webaudio.js"></script>
 <script type="text/javascript">
   var Module = {
     postRun() {
@@ -42,6 +45,17 @@
         console.warn('[assets] 清单未就绪（无 assets/ 目录时属正常）: ' + e.message);
         window.__octaveReady = true;
       });
+
+      // 音频：开始轮询播放队列；首次点击解锁 AudioContext（浏览器 autoplay 策略）
+      if (window.OctaveAudio) {
+        window.OctaveAudio.init().catch(function (e) {
+          console.warn('[audio] 桥未就绪: ' + e.message);
+        });
+        window.addEventListener('click', function once() {
+          window.OctaveAudio.resume();
+          window.removeEventListener('click', once);
+        });
+      }
     }
   }
 </script>

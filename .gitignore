@@ -18,6 +18,7 @@
 !build/CLIBS.md
 !build/GAPS.md
 !build/plotbridge/*
+!build/webaudio/*
 !build/fftw_threads_stub.c
 !build/second_stub.f
 !build/normalize_arpack.py
@@ -37,6 +38,7 @@
 !test/browser/*.mjs
 !bridge/octplot.html
 !bridge/plotbridge.js
+!bridge/webaudio.js
 !vendor/MANIFEST.md
 !vendor/forge/*
 !vendor/extra/*

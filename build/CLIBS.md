@@ -462,6 +462,35 @@ error: called from print_usage at line 62 → __svg_panel_boxes__ at line 27
 - **scatter3**：`SIZE`/`COLOR` 向量接受但只用首个（一条 series 一个标记尺寸）。
 - 验收：`test/browser/accept-plot3d.mjs`（34 项）。
 
+## 批次 8（2026-09-20）：R8 WebAudio 播放侧（**零编译**，纯 .m 资产）
+
+`audioplayer` 原本在 `libinterp/dldfcn/audiodevinfo.cc` 里（要 PortAudio），本构建关掉了。
+**18 个 `__player_*` 全部用纯 `.m` 重写**（`build/webaudio/*.m`，一个函数一个文件），
+打包成懒加载资产 `assets/m/webaudio.js`（22KB / 26 个 .m）——
+**不动主 wasm、不编 .oct、不引入 PortAudio**。
+
+为什么纯 .m 就够：这 18 个"内建"全都只是收一个**不透明句柄**再读写属性。
+句柄做成 `struct("Id", k)`（k 是全局表下标），Octave 的 `@audioplayer` classdef
+原样工作，`__get_properties__.m` 那 8 个 getter / `set.m` 那 3 个 setter 一次满足。
+
+- **播放交给页面**：`play` 把动作追加到 `/tmp/pba_queue.txt`（制表符分隔：
+  `id  action  from  to  rate  channels`），样本预先以**行交错 double** 落到
+  `/tmp/pba_<id>.f64`；`bridge/webaudio.js` 轮询队列 → `AudioContext` +
+  `AudioBufferSourceNode`（**不用 AudioWorklet**：本构建无真线程）。
+- **AudioContext 推迟到首次 drain**：浏览器要求用户手势，且原版构造期要求设备数 ≥1。
+- 通道数必须**随队列一起传**：页面只读得到裸 `.f64`，没有别的途径知道一帧几个值。
+
+### 坑 7：`Running` 属性只有 on/off，没有 paused
+`__get_properties__.m` 是 `if (__player_isplaying__ (…)) "on" else "off"`，
+所以暂停后 `p.Running` 显示 **off** 是**正确的**（与桌面版一致）。
+`"paused"` 只是内部状态（供 `resume` 判断），不要拿它去断言 `Running`。
+
+### 坑 8：短素材测状态机 = 测"播完了"
+验收里用 1 秒素材测 `isplaying`，而每次 `eval_string` 之间隔 550ms，
+跑到断言时音频早播完 —— `isplaying` 正确地返回 0。**状态机类断言要用长素材**
+（本套件用 10 秒），否则测的是别的东西。同理：验收要先 `clearInterval` 掉
+`OctaveAudio.init()` 的轮询，否则后台 drain 会抢在断言之前消费队列。
+
 ### 坑 6：循环边界变量被内层分支覆盖
 `plot3 (Y)` 单参数分支里写了 `n = numel (z);` —— 而 `n` 正是驱动外层
 `while (i <= n)` 的参数个数。赋值后循环跑过数组尾端，报
