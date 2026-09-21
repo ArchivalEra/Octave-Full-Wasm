@@ -77,6 +77,12 @@ export function specToScript(spec) {
     } else if (sr.style === 'ebars') {
       // triples (x,ylo) (x,y) (x,yhi) — one bar per triple, no legend entry
       clauses.push(`${base} with yerrorbars pt 0 ps 0 ${lc} notitle`.replace(/\s+/g, ' ').trim());
+    } else if (sr.style === 'mesh') {
+      // already projected to 2D by Octave; draw the cell outline
+      clauses.push(`${base} with lines ${lc} notitle`.replace(/\s+/g, ' ').trim());
+    } else if (sr.style === 'surf') {
+      // projected 2D quad, filled; painter order comes from the series order
+      clauses.push(`${base} with filledcurves closed fs solid 0.30 ${lc} notitle`.replace(/\s+/g, ' ').trim());
     }
   }
 

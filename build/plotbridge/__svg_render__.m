@@ -536,6 +536,28 @@ function out = __svg_series__ (s, sr, d, xlo, xhi, ylo, yhi, ML, MT, PW, PH)
       out{end+1} = sprintf ('<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s" fill-opacity="0.55" stroke="%s" stroke-width="1.1"/>\n', xl, top, max (0.6, xr - xl), max (0.6, hh), col, col);
     endfor
 
+  elseif (strcmp (st, "mesh"))
+    ## one projected grid cell: closed outline, no fill
+    if (size (d, 1) >= 2)
+      pts = "";
+      for k = 1:size (d, 1)
+        if (k > 1), pts = [pts " "]; endif
+        pts = sprintf ("%s%.2f,%.2f", pts, X(k), Y(k));
+      endfor
+      out{end+1} = sprintf ('<polyline points="%s" fill="none" stroke="%s" stroke-width="0.9"%s stroke-linejoin="round"/>\n', pts, col, da);
+    endif
+
+  elseif (strcmp (st, "surf"))
+    ## one projected grid cell: translucent quad + its outline
+    if (size (d, 1) >= 2)
+      pts = "";
+      for k = 1:size (d, 1)
+        if (k > 1), pts = [pts " "]; endif
+        pts = sprintf ("%s%.2f,%.2f", pts, X(k), Y(k));
+      endfor
+      out{end+1} = sprintf ('<polygon points="%s" fill="%s" fill-opacity="0.30" stroke="%s" stroke-width="0.9" stroke-opacity="0.55" stroke-linejoin="round"/>\n', pts, col, col);
+    endif
+
   elseif (strcmp (st, "hboxes"))
     ## data was stored as (category, value) by barh.m — swap back here.
     ys = sort (d(:,1));

@@ -444,3 +444,26 @@ error: called from print_usage at line 62 → __svg_panel_boxes__ at line 27
 "倒数第二个参数是 X、最后一个是 Y"，于是 `plot (y, "-r")` 变成 `x=y, y='-r'`
 → `horizontal dimensions mismatch (5x1 vs 2x1)`。现在统一走
 `__pb_parse_series__.m`：**尾随字符串是它前面那条曲线的 line spec，绝不是数据**。
+
+---
+
+## 批次 7b（2026-09-20）：plot 桥 v2 —— 3D（plot3/scatter3/mesh/surf/contour）
+
+**3D 在 Octave 侧投影成 2D**（`__pb_project3__`，固定方位角 -37.5°/仰角 30°，
+即 Octave 默认视角），下游两个渲染器（gnuplot SVG、纯 .m SVG）**一行都不用改**，
+`print -dsvg` 对 3D 天然可用。这是 v2 最省事的一步：能在一侧归一化的几何，
+不要在两个渲染器里各实现一遍。
+
+- **mesh/surf**：每格投影成一个闭合多边形；用**画家算法**（按视深排序）近似消隐，
+  远的先画。够教学用；不是 z-buffer，互相穿插的面片仍会看错。
+- **contour**：per-cell marching squares（找边交点连成线段），
+  `contour(Z)` / `contour(Z,N)` / `contour(Z,V)` / `contour(X,Y,Z,…)` 全支持。
+  默认 8 层，每层一个循环色（`__pb_cycle_color__`）。
+- **scatter3**：`SIZE`/`COLOR` 向量接受但只用首个（一条 series 一个标记尺寸）。
+- 验收：`test/browser/accept-plot3d.mjs`（34 项）。
+
+### 坑 6：循环边界变量被内层分支覆盖
+`plot3 (Y)` 单参数分支里写了 `n = numel (z);` —— 而 `n` 正是驱动外层
+`while (i <= n)` 的参数个数。赋值后循环跑过数组尾端，报
+`args(2): out of bound 1 (dimensions are 1x1)`。
+**规则**：参数解析循环里的循环上界变量，永不在循环体内复用同名。
