@@ -838,11 +838,13 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
   `§4.1` 的根因不存在，**不需要**「用上游文件覆盖 `oct-shlib.cc`」这一步
 - **闸门**：`accept-help` / `accept-fileops` / `accept-pkg` **三套全绿**
 
-**P5 · 图形线重构（你要的"真正的完整版"）**
+**P5 · 图形线重构（你要的"真正的完整版"）— ⚠️ 见下方更新：步骤① 已完成**
 - **方向：OSMesa**（Mesa 软件光栅化）。这是**唯一可信的"完整"路径**，依据：
   edgetools.io 走 `LEGACY_GL_EMULATION` + Octave 自己的 `opengl_renderer`，
   死在 `glEnd: numVertices must be an integer`，并自述 emscripten 那段模拟
   *"do not expect it to work"*；**两支外部团队都没做出浏览器内图形**。
+  **⚠️ 2026-09-22 实测更正**：那条结论只对**WebGL 模拟**路线成立。
+  **OSMesa + softpipe 这条路是通的，立即模式也正常** —— 见下面的"步骤① 已完成"。
 - OSMesa 建成后：Octave 的 `opengl_renderer` **原样运行**，
   `print -dpng/-dsvg/-dpdf`、屏幕渲染、`getframe` 全都回到官方实现
 - **过渡与回退**：现有 plot 桥 + `print -dsvg`（纯 `.m` SVG）**保留**，
@@ -853,6 +855,35 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
   3. `plot/surf/mesh/contour` 逐个出图，与 7.2 桥的产物对照
 - **风险（如实）**：Mesa 是大依赖（meson 构建、swrast 软件路径），
   这是本轮**最大的一块不确定性**；所以它排在最后，且**允许只完成第 1 步并如实记录**
+
+#### ✅ P5 步骤① 已完成（2026-09-22）—— OSMesa 在 wasm 里渲出了正确的三角形
+
+计划允许"只完成第 1 步并如实记录"，这一步已经做完且**断言是硬的**（读回像素比颜色）：
+
+```
+GL_VERSION  = 3.3 (Compatibility Profile) Mesa 24.0.9
+GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
+清屏红色 中心 = 255 0 0 255                 PASS
+立即模式绿三角：重心 = 0 255 0 255          PASS
+                左下/右上 = 黑底            PASS
+```
+
+- **意义**：**推翻"浏览器内图形做不出来"的前提** —— 失败的是 WebGL 模拟路线，
+  而 **OSMesa 支持立即模式（`glBegin/glEnd`）**，那正是 Octave `opengl_renderer` 要的。
+- **做的东西**：Mesa 24.0.9（`-Dosmesa=true -Dgallium-drivers=swrast -Dllvm=disabled`
+  + `default_library=static -Dshared-glapi=disabled`）建到 wasm，806 个目标全绿。
+  脚本/补丁/交叉文件/垫片都在 `build/113/`：
+  `patch-mesa-osmesa-static.sh`（两处平台补丁）、`emscripten-cross.ini`（emsdk 不自带）、
+  `osmesa-smoke.c` + `osmesa-smoke.sh`（步骤① 验证，node 里跑，无 canvas）、
+  `osmesa-stubs.c`（补 `sched_getcpu`/`pthread_setname_np`）。
+  完整记录见 **`build/113/NOTES-p5-osmesa.md`**（含 6 条踩坑：meson 单引号、
+  pkg-config 跨机器、meson 不用 CPPFLAGS、`shared-glapi` 是 shared 目标、
+  `detect_os.h` 看预编译宏、垫片）。
+- **体积代价（步骤②的决策依据）**：`libOSMesa.a` 20.1MB；最小 smoke 的 wasm 11.3MB。
+- **步骤②③ 还没做**：② 把 T2 薄 toolkit 的 `redraw_figure` 接上 OSMesa
+  （要 `--with-opengl` 重编主树 + 一个新的 toolkit 资产）；
+  ③ `plot/surf/mesh/contour` 逐个出图并与 7.2 桥产物对照。
+  **回退不变**：plot 桥 + `print -dsvg` 保持可用，两者不冲突。
 
 **P6 · 收尾**：全量验收、重打交付包、文档、逐阶段提交 + `docker commit`
 
@@ -1132,7 +1163,10 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    **资产车道、主 wasm 零改动**（计划原记的 Lane B 不需要）。
    `accept-t2-graphics` **26/26**；全量 **26 套 646 项全绿**。
    详见 **§5.5.1** 与 `build/113/NOTES-t2-graphics.md`（含 6 条踩坑记录）。
-9. （不在本轮范围）P5 OSMesa 图形线。
+9. **P5 OSMesa 图形线**：**步骤① 已完成并实测通过**（OSMesa 在 wasm 里渲出正确的
+   三角形、含立即模式；见 §9 的"步骤① 已完成"小节与 `build/113/NOTES-p5-osmesa.md`）。
+   **步骤②③（接进 toolkit + 逐图型对照）仍在本轮范围外** —— 它们要 `--with-opengl`
+   重编主树，是计划里写明的下一个阶段；计划本身也写明"允许只完成第 1 步并如实记录"。
 
 
 
