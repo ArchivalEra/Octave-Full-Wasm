@@ -296,9 +296,16 @@ do_suitesparse () {
   #   而我们没建 METIS（Octave 也不需要 CHOLMOD 的分区功能）。
   #   SuiteSparse 文档原文：-DNPARTITION "do not include the Partition module.
   #   also do not include METIS."
+  # ⚠️ SS_DEFS 必须在数组**之前**单独赋值：写在 `OV=( ... )` 里只会变成一个
+  #   数组元素（名字里带等号），变量本身未定义 → `set -u` 报 unbound（实测踩过）。
+  # 不要在这里强改 SuiteSparse_long 的宽度：**已实测证伪**那个假设 ——
+  #   Octave 这边 OCTAVE_IDX_TYPE 是 int32_t，而 wasm32 上 `long` 也是 32 位，
+  #   两边本来一致；强行改成 64 位反而制造了真错配（改完 lu 照样 trap）。
+  #   详见 build/113/NOTES-umfpack.md。
   local OV=( CC="$CCACHE_CC" CXX="$CCACHE_CXX" AR=emar RANLIB=emranlib
-             CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC" CFOPENMP=
+             CFOPENMP=
              CHOLMOD_CONFIG="-DNPARTITION"
+             CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC"
              BLAS="-lrefblas" LAPACK="-llapack" )
   # 用 **static** 目标，不用 library：后者末尾会 `make install` 去编 .so，
   # 而 SO_OPTS 里带 `-Wl,--no-undefined`（wasm-ld 不认识）→ 必失败。

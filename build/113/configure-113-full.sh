@@ -86,6 +86,12 @@ export FLIBS="-L$DEPS/lib -lf2c"
 export BLAS_LIBS="-lrefblas -lf2c"
 export LAPACK_LIBS="-llapack -lrefblas -lf2c"
 
+# ⚠️ 关键：SuiteSparse 的库是用 64 位 SuiteSparse_long 编的（见 build/113/ss-long64.h），
+#   **Octave 自己也必须用同一个口径**，否则 ABI 边界两边不一致 ——
+#   这正是稀疏 lu 走 UMFPACK 时整页 trap 的根因。
+#   只给 SuiteSparse 加是不够的（实测：那样 Octave 的两条
+#   "SuiteSparse_long and octave_idx_type have same size" 检测仍为假，lu 照样 trap）。
+#   加进 CPPFLAGS 后两边一致，那两条检测也会变真。
 export CPPFLAGS="-I$DEPS/include ${INCS[*]}"
 # `-Wl,--allow-multiple-definition` 必须**也在 configure 期**：
 #   ARPACK 的 f2c 产物里每个文件都带一份 COMMON 块定义（debug_/timing_），
