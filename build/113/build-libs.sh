@@ -58,8 +58,16 @@ do_zlibbz2 () {
   cd "$WORK/zlib-1.3.1"
   # ⚠️ zlib 的 configure **不是 autoconf**，不接受 `CC=...` 之类的参数
   #   （实测报 "unknown option: CC=ccache emcc"）。CC 必须走**环境变量**。
-  CC="$CCACHE_CC" emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
-  emmake make -j"$JOBS" CC="$CCACHE_CC" > "$WORK/zlib-make.log" 2>&1
+  # ⚠️ **必须 -fPIC**（实测漏了会怎样）：zlib 的 configure 是靠**环境变量**收 CFLAGS 的
+  #   （它不接受 CC=... 这种命令行参数），漏 -fPIC 时产物是非 PIC 对象 →
+  #   ① 想把它链进任何 PIC 目标（含 .oct side module）会报
+  #        relocation R_WASM_MEMORY_ADDR_LEB cannot be used against symbol
+  #        'crc_table'; recompile with -fPIC
+  #   ② 主模块是 PIC 构建，非 PIC 的 zlib 对象进不去，而 Octave 核心又没引用
+  #        zlib 的流式接口（deflate/inflate/gzopen）→ 那些对象根本不会被拉进主模块
+  #        → 依赖它们的 .oct（gzip/webio）导入解析不到 → **调用即整页 trap**。
+  CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
+  emmake make -j"$JOBS" CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" > "$WORK/zlib-make.log" 2>&1
   emmake make install > "$WORK/zlib-inst.log" 2>&1
   grep -q ' deflate$' <(emnm "$P/lib/libz.a") || { echo "FATAL: libz.a 缺 deflate" >&2; exit 1; }
   # bzip2：**绕开它的 Makefile**。实测两轮都失败：其 Makefile 里 `CC=gcc` 是

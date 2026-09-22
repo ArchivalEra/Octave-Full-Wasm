@@ -62,7 +62,22 @@ LIBS=(
   -L"$DEPS/lib"
   # 早期四个 + Octave 自己报的链接依赖（LIBOCTINTERP_LINK_DEPS / LIBOCTAVE_LINK_DEPS）
   -llapack -lrefblas -lf2c -lpcre2-8
-  -lhdf5 -lz -lbz2
+  -lhdf5
+  # ⚠️ zlib/bz2 必须 **--whole-archive**：`.oct`（gzip/webio）依赖 zlib 的
+  #   流式接口（deflate/inflate/gzopen/crc32），而 Octave 核心自己**不引用**它们
+  #   → 静态库按需拉取时那些对象不会被带进来 → 既不在主模块里、也不在导出表里
+  #   → .oct 导入解析不到 → 调用即整页 trap（实测）。
+  # ⚠️ 不要用 --whole-archive 整库拉 zlib/bz2：实测那样会把 convhulln 与 glpk
+  #   弄崩（整库引入的符号与 qhull/glpk 撞车 → `.oct` 的导入解析到错的东西 →
+  #   调用打到 emscripten 的 stub，报 "TypeError: resolved is not a function"）。
+  #   改用**定点拉取**：只 `-u` 出 `.oct` 真正需要的那几个符号，
+  #   链接器会只把定义它们的那些对象拉进来，没有附带损伤。
+  -Wl,-u,deflate -Wl,-u,deflateEnd -Wl,-u,deflateInit2_ -Wl,-u,deflateSetHeader
+  -Wl,-u,inflate -Wl,-u,inflateEnd -Wl,-u,inflateInit2_
+  -Wl,-u,gzopen -Wl,-u,gzclose -Wl,-u,gzread -Wl,-u,crc32
+  -Wl,-u,BZ2_bzCompress -Wl,-u,BZ2_bzCompressInit -Wl,-u,BZ2_bzCompressEnd
+  -Wl,-u,BZ2_bzDecompress -Wl,-u,BZ2_bzDecompressInit -Wl,-u,BZ2_bzDecompressEnd
+  -lz -lbz2
   -lcholmod -lumfpack -lamd -lcamd -lcolamd -lccolamd -lcxsparse -lsuitesparseconfig
   -lfftw3 -lfftw3f -larpack -lqrupdate
   # ⚠️ 这三个**不在** LIB*_LINK_DEPS 里（它们只被 dldfcn 用），但必须链进主模块：
