@@ -1050,12 +1050,26 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    `recover.sh` 与 `DEPLOY.md` 同步改完，7.2 快照留在 `site-72bak/`。
    清单见 `build/113/PROMOTION.md`。
 6. **`lsode` 调用即整页 trap**（**两代基线共有**：7.2 与 11.3.0 都复现，且不装载
-   `__ode15__` 时也复现 → 与 SUNDIALS 无关）。
-   详见 **`build/113/NOTES-lsode.md`**（证据表、排除过的五种解释、下一步定位路子）。
+   `__ode15__` 时也复现 → 与 SUNDIALS 无关）。**`lsode` 从来没在这个项目里工作过**，
+   不是本轮引入的。
+   详见 **`build/113/NOTES-lsode.md`**（证据表、排除过的解释、**第二轮诊断**）。
    已让 `accept-113-ode15` 第八节单独隔离复现它，且**不计入 PASS/FAIL**。
-   **下一步**：带 `--profiling-funcs` 重链一次（或在 `link-web.sh` 加 `-g`，输出到独立目录、
-   不动部署产物），把 `wasm-function[NNNNN]` 的索引符号化，定位到具体函数。
-7. **`dist/` 重打包**：`sh build/make-dist.sh`（含新资产 + `MANIFEST.sha256`）。
+   **第二轮把 trap 符号化了**（`link-web.sh` 新增 `DIAG_NAMES` / `DIAG_ASSERT` /
+   `EXTRA_LDFLAGS` 三个诊断开关，只写独立目录、不碰部署产物）：
+   - 位置：`LSODE::do_integrate(double)`，**栈里没有更深一帧** → trap 在该函数自身代码里；
+   - 开 `-s ASSERTIONS=1` **没有**可读原因 → 是裸 `unreachable`；
+   - 用三条错误路径夹逼（回调长度不匹配 / AbsTol 长度不匹配 / maxord 非法，
+     全部**干净报错**不炸）⇒ 回调与初始化检查都正常，**trap 夹在
+     `F77_XFCN(dlsode, DLSODE, …)` 那一步**；
+   - **否掉**"符号漏链"：`-Wl,-u,dlsode_` 重链后产物 sha256 **完全相同**，
+     说明链接器本已解析它（名字串缺失是命名表表现，不能当证据 —— 正是 §10.3 坑 5）；
+   - **下一步（精确）**：带 `-g -gsource-map` 重链把 wasm 偏移映射到源码行；
+     或在 `LSODE.cc` 的 `F77_XFCN` 前后加 `fprintf`；若确认在 `dlsode` 内，
+     重点查 **f2c 回调 `lsode_f`/`lsode_j` 的函数指针 ABI**（wasm 里走 `call_indirect`，
+     签名不匹配会直接 trap 且报在调用点）。
+7. ✅ **`dist/` 重打包**：`octave-full-wasm-site-20260922`（78M，187 文件；
+   `octave-full-wasm-site-20260922.tar.zst` 22.4MB）。重打：`sh build/make-dist.sh`。
 8. （不在本轮范围）P5 OSMesa 图形线；T2 图形句柄半真化（§5.5 表）。
+
 
 

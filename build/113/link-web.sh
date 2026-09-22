@@ -120,9 +120,29 @@ em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
 cd "$SRC"
+# DIAG_NAMES=1：加 `--profiling-funcs`，**产物里保留函数名**（name 段）。
+#   为什么要它：线上产物是 `--strip-debug` 的，wasm 里只有 `dylink.0` 一个 custom
+#   段，**没有 name 段** → 浏览器报的 `RuntimeError: unreachable at
+#   wasm-function[NNNNN]` 没法翻译成函数名（`lsode` 那个整页 trap 就卡在这）。
+#   诊断时这样链一次到独立目录，就能把索引符号化；**别拿它当部署产物**（更大）。
+#   用法：DIAG_NAMES=1 bash link-web.sh /src/websrc/diag
+DIAG=()
+[ "${DIAG_NAMES:-0}" = "1" ] && { DIAG=( --profiling-funcs ); echo "== DIAG_NAMES=1：保留函数名（name 段）"; }
+# DIAG_ASSERT=1：打开 emscripten 的运行时断言（-s ASSERTIONS=1）。
+#   为什么需要：浏览器只给一句 `RuntimeError: unreachable`，看不出 abort 的原因。
+#   开了断言之后，多数 abort 会在 console 里打出可读原因（越界、未捕获异常、
+#   栈溢出……）。和 DIAG_NAMES 一起用，就能"有名字 + 有原因"。
+[ "${DIAG_ASSERT:-0}" = "1" ] && { DIAG+=( -s ASSERTIONS=1 ); echo "== DIAG_ASSERT=1：打开运行时断言"; }
+
 set -x
+# EXTRA_LDFLAGS：诊断/定点补救用（空格分隔的链接旗标）。
+#   当前用途：`-Wl,-u,dlsode_` —— 强制把 odepack 的入口从归档里拉进主模块
+#   （`lsode` 整页 trap 的候选根因：dlsode_ 没被链进来，调用落到空导入 → trap；
+#    与 HANDOFF §10.3 坑 3 的 zlib 完全同一类问题、同一个修法）。
 em++ --bind \
+  "${DIAG[@]}" \
   "${SFLAGS[@]}" \
+  ${EXTRA_LDFLAGS:-} \
   -s EXPORTED_FUNCTIONS='["_main"]' \
   -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS"]' \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
