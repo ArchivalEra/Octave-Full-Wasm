@@ -36,8 +36,11 @@
 > 3. **H2 `uigetfile`**：走**非标准异步 API**（如 `web_uigetfile()` 两段式/Promise），
 >    并如实标注"与 MATLAB 语义不同"。
 >
-> **不属于本清单的非图形长尾**：control 包 SLICOT 编译件（`ss`/`step`/`tf2ss`，
-> 见 `HANDOFF.md` §4.12 —— 处置是先做一次"静态注册最小实验"，且要重链主 wasm）。
+> **不属于本清单的非图形长尾**：control 包 SLICOT 编译件（`ss`/`step`/`tf2ss`）。
+> **2026-09-22 探针更正**（见 `build/113/NOTES-slicot.md`）：不是"签名不匹配"而是那些符号
+> **根本不存在**；库**能编**（f2c 614/614、emcc 613/613）；真正卡点是控制包手写声明 vs
+> f2c 生成的 **CHARACTER 隐藏长度参数**分歧，**static 与 side 都会撞**。做法 = 逐个对齐
+> 声明（粗查 47 个候选符号），估 1–3 天。
 
 ---
 

@@ -630,7 +630,11 @@ TypeError: Cannot read properties of undefined (reading 'apply')
 - 验收 `accept-forge2.mjs` 覆盖 signal 全量 + control 的可用面，
   并把"哪些 control 函数不可用"写成断言（防止将来误以为好了）。
 
-**将来若要修**：先做一次最小实验——把某个 SLICOT `.oct` 改成**静态注册**
+**将来若要修**（⚠️ **2026-09-22 探针更正，见 `build/113/NOTES-slicot.md`**：
+本节上面的"签名不匹配"根因**写错了** —— 真因是那些符号**根本不存在**（库从未编过）；
+库**能编**（f2c 614/614、emcc 613/613）；真正的卡点是控制包手写声明与 f2c 生成之间在
+**CHARACTER 隐藏长度参数**上的分歧，**静态注册同样会撞**。做法是逐个对齐声明，估 1–3 天）
+——原先记的做法：把某个 SLICOT `.oct` 改成**静态注册**
 （进 `STATIC_DLD_FCNS`）看是否可用。若可用，说明结论是"side module 的符号签名
 不可靠"，那么所有需要主链 Fortran 符号的包都要走静态注册（要重链主 wasm）。
 

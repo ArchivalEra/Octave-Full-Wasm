@@ -331,7 +331,25 @@ loader 在挂载后对每个函数名 `FS.symlink` 到该模块。
 （`octdir` 分支也要支持 `aliases` —— control 包的 `lti_input_idx.oct` 导出
 `__lti_input_idx__`，就是靠它才挂上的。）
 
-### 4.12 **side module 引用主模块 Fortran 符号时签名不匹配会整页崩**（批次 12 踩到）
+### 4.12 ~~side module 引用主模块 Fortran 符号时签名不匹配会整页崩~~（批次 12 踩到）
+
+> #### 🚨 **2026-09-22 探针更正：下面这段的根因写错了，别再照它去修。**
+> 完整实测见 **`build/113/NOTES-slicot.md`**。三条更正：
+> 1. **不是"签名不匹配"，是"那些符号根本不存在"** —— `__control_slicot_functions__.oct`
+>    导入 48 个 SLICOT 例程，逐个查主 wasm 的符号表：**定义了 0 个**。
+>    所以调用落到空导入 → 整页崩。文档里那句 `signature mismatch: zdotu_` 警告是
+>    **另一件事**（libqrupdate vs librefblas），与本项无关。
+> 2. **库能编**：`slicotlibrary.a` **从未编过**，本次编出来了 ——
+>    f2c **614/614 成功**、emcc **613/613 成功**（5,019,126 字节），关键符号自检全 T。
+> 3. **真正的卡点是另一个 ABI 分歧，而且 static/side 都会撞**：把库静态打进调度模块时
+>    `wasm-ld` 报 `function signature mismatch: dggev_` —— 控制包手写的
+>    `F77_FUNC(dggev,DGGEV)`（17 参，LAPACK 原样）与 f2c 生成的（19 参，多两个
+>    **CHARACTER 隐藏长度参数**）不一致。原生链接器不查类型所以"能跑"，wasm-ld 查。
+>    **⇒ 当年那句"静态注册不受影响"就本项而言不成立**（错误发生在链接期）。
+> 4. **做法**（1–3 天，不是"半小时的小实验"）：按 `patch-odepack-callback-arity.sh`
+>    的同型做法，逐个把冲突声明对齐（粗查潜在冲突面 **47 个符号**），逐个重链，
+>    最后验 `ss`/`step`/`tf2ss` 的数值。**本轮已探针到此为止并如实记录。**
+
 control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层直接抛
 `TypeError: Cannot read properties of undefined (reading 'apply')`，**整个页面死掉**。
 根因：`.oct` 以 side module 形式链接（本项目既定做法：`-sSIDE_MODULE=1`、不链库），
