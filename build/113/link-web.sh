@@ -62,7 +62,7 @@ LIBS=( "$OCT/libinterp/.libs/liboctinterp.a"
 #     AssertionError: invoke_ functions exported but exceptions and longjmp are both disabled
 #  所以**编译 main.cc 与最终链接都用 `-fexceptions`**，与 configure 时给
 #  CXXFLAGS 的口径一致。
-EXC_FLAGS=( -O2 -fPIC -std=c++17 -fexceptions )
+EXC_FLAGS=( -O2 -fPIC -std=c++17 -fwasm-exceptions )
 
 echo "== 编 main.cc"
 em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \

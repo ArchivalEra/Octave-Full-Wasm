@@ -86,9 +86,21 @@ export PKG_CONFIG=/usr/bin/pkg-config
 #
 # 结论：本脚本的 configure 配方是**实测通过过的那一版**（见 STATUS.md），
 # 加任何东西之前先跑一遍确认没破，再改。
-export CFLAGS="-O2 -fPIC"
-export CXXFLAGS="-O2 -fexceptions -fPIC"
-export LDFLAGS="-L$DEPS/lib -fPIC"
+# ⚠️ 异常模式必须是 **-fwasm-exceptions（原生 wasm 异常）**，不能是 -fexceptions
+#    （emscripten 的 JS 式异常）。这是 `.oct` 车道能否成立的关键，实测证据：
+#      JS 式异常会给整棵树引入 `invoke_*` / `__cxa_throw` / `__cxa_begin_catch`
+#      这些**只存在于 JS 胶水里的运行时符号**；而 side module（.oct）装载时是靠
+#      主模块的**导出表**解析导入的，这些符号不在导出表里 →
+#        could not load dynamic lib: …miniprobe.oct
+#        TypeError: Cannot read properties of undefined (reading 'value')
+#      （用解析 wasm 导入/导出段的方式核对过：side 的 30 个导入里，16 个 Octave/
+#        C++/libc 符号主模块都导出了，缺的 14 个全是 invoke_*/__cxa_*。）
+#    改用原生 wasm 异常后，根本不产生这些依赖。
+#    → 与两份公开配方一致（emscripten-forge 的 10.3 与 Edge-Tools 的 11.1 都是
+#      -fwasm-exceptions），也解释了我们 7.2 的 .oct 为何能装。
+export CFLAGS="-O2 -fwasm-exceptions -fPIC"
+export CXXFLAGS="-O2 -fwasm-exceptions -fPIC"
+export LDFLAGS="-L$DEPS/lib -fPIC -fwasm-exceptions"
 
 # ---- ccache：让整棵树的编译都进缓存 ----------------------------------------
 # ⚠️ 实测坑（第一版就是错的）：**`emconfigure` 会把 CC/CXX 覆盖掉**——
