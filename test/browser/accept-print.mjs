@@ -18,6 +18,19 @@ while (Date.now() - t < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
   if (ok) break; await new Promise(r => setTimeout(r, 800));
 }
+// ⚠️ 光等解释器能 eval 是**不够**的：`plotbridge` 是**页面启动装载清单**里的资产，
+//    在它挂上之前，`plot`/`figure` 走的是核心路径 → 报 "no graphics toolkits are
+//    available!"，`which('print')` 也会指到核心的 plot/util/print.m。
+//    这会让最前面几条断言假失败（实测：8762 上 4 条 FAIL 全是这个原因，
+//    而同一套后面那些断言全过 —— 因为那时资产已经装好了）。
+//    所以这里必须等到站点自己置的 ready 标志。
+await page.evaluate(async () => {
+  for (let i = 0; i < 300; i++) {
+    if (window.__octaveReady === true) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+}).catch(() => {});
+await new Promise(r => setTimeout(r, 500));
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
 let pass = 0, fail = 0;
