@@ -146,7 +146,7 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
-- `build/113/NOTES-lsode.md` (7601 bytes)
+- `build/113/NOTES-lsode.md` (9460 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
 - `build/113/PROMOTION.md` (5310 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)

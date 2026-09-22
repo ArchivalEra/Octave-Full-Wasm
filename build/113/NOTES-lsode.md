@@ -97,24 +97,55 @@ A/B/C 之所以不炸，是因为它们在 `dlsode` 之前就 `return` 了。
 ⇒ 所以"漏链"**不成立**；名字串缺失是**命名表的表现**，不能当证据。
 （HANDOFF §10.3 坑 5 早就写过这条教训：**别用"符号在不在"推断 trap**。）
 
+### 结果 5：**插桩把 trap 夹死在 `dlsode` 调用内部**（决定性）
+在 `LSODE.cc` 的 `F77_XFCN (dlsode, …)` **前后各插一句 `fprintf(stderr,…)`**，
+重编 `liboctave` + 重链到独立目录（`/src/websrc/diag4`，走 8765，**不碰部署产物**）。
+实测 console：
+
+```
+LSODE-DIAG-BEFORE n=1 lrw=32 liw=21 mf=22      ← 打出来了
+（LSODE-DIAG-AFTER 始终没打出来）
+RuntimeError: unreachable at wasm-function[27711]
+```
+
+⇒ 代码**走到了调用前那一行**，trap 发生在 `F77_XFCN (dlsode, …)` **内部**。
+
+**顺带确认工作区大小是对的**（不是"给的空间不够"这类错）：
+`n=1`，方法 `mf=22`（stiff + 内部生成满 Jacobian），
+DLSODE 对 MF=22 的要求是 `LRW ≥ 22 + 9n + n² = 32`、`LIW ≥ 20 + n = 21` ——
+**实测给的正好是 lrw=32 / liw=21**，一个不多一个不少。
+
+### 插桩的善后（**别把改动留在树上**）
+1. 插桩前先存了 `LSODE.cc.orig`；测完 `cp -f LSODE.cc.orig LSODE.cc` 还原。
+2. 重编 `liboctave`，确认 `emnm liboctave.a | grep -c LSODE-DIAG` = **0**。
+3. **重链一次并与部署产物比 sha256**：`/src/websrc/verify/octave.wasm` =
+   `11f6175ac9b6a3e5`，与站点上正在服务的**逐字节相同**
+   ⇒ 树已完全还原，且**这个构建是可复现的**。
+
 ### 下一步（精确版，还没做）
-1. **带 `-g -gsource-map` 重链**（复用 `DIAG_NAMES` 那套开关），把
-   `octave.wasm:wasm-function[NNNN]:0x1344e1d` 里那个 **wasm 偏移**映射到
-   源码行 —— 这样就能直接看出是 `rwdata()` 还是 `F77_XFCN` 那一行。
-2. 或者在 `LSODE.cc` 的 `F77_XFCN (dlsode, …)` **前后各加一句 `fprintf(stderr,…)`**，
-   重建 `liboctave` 后看它停在哪一边（代价：改一行 + 重编 1 个文件 + 重链，
-   别把改动留在树上）。
-3. 若确认在 `dlsode` 内部：重点查 f2c 回调 ABI —— `lsode_f`/`lsode_j` 是作为
-   **函数指针**传给 Fortran 的，在 wasm 里走 `call_indirect`；**签名不匹配会直接
-   trap 且报在调用点**。可对照 `liboctave/numeric/LSODE.cc` 里两个回调的签名与
+trap 已确认在 `dlsode` 内部（f2c 转出来的 odepack），且输入工作区大小正确。
+剩下的方向按可能性排序：
+1. **f2c 回调 ABI**：`lsode_f`/`lsode_j` 是作为**函数指针**传给 Fortran 的，在 wasm 里走
+   `call_indirect`；**签名不匹配会直接 trap**。对照 `LSODE.cc` 里两个回调的签名与
    f2c 版 `dlsode.f` 里 `EXTERNAL LSODE_F, LSODE_J` 的调用点。
+   （旁证：最终链上确实存在同类问题 —— `wasm-ld` 报过
+   `function signature mismatch: zdotu_`：`libqrupdate` 里是 `(i32×5)->f64`，
+   `librefblas` 里是 `(i32×6)->void`。f2c 的隐藏长度约定在这个工程里是真实存在的坑。）
+2. **f2c 的"未实现例程"**：odepack 出错路径会调 `xerrwv`/`s_stop` 一族，
+   若 libf2c 里对应实现缺失或签名不符，走到就 trap。
+3. **COMMON 块**：最终链接用 `-Wl,--allow-multiple-definition` 压 `dls001_`/`globe_`
+   的重复定义（HANDOFF §10.3）；被丢弃的那份里若含状态，行为就不对了。
+   可以对比 `/src/deps` 之外 7.2 那份 odepack 的编译方式。
+4. 最快的定位：在 `dlsode.f` 的 f2c 产物里按 `wasm-function` 索引反查
+   （用 `DIAG_NAMES=1` 那份带名字的构建，trap 栈里会直接出现 `dlsode` 或其被调函数）。
 
 ## 现状定性
-- 8761（7.2）与 8761/8762（11.3.0）**都是这个状态**：`lsode` **从来没在这个项目里
-  工作过**（不是本轮换基线引入的，也不是回归）。
+- 8761/8762（11.3.0）与 7.2 **都是这个状态**：`lsode` **从来没在这个项目里工作过**
+  （不是本轮换基线引入的，也不是回归）。
   此前没被发现，是因为 7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`**。
 - 已记入 `HANDOFF.md` §10.6 作为独立待办；`accept-113-ode15` 第八节单独隔离复现它、
   不计入 PASS/FAIL，避免它一 trap 就把整个套件打死。
-- 诊断用的两个临时站点（8763/8764，`diagsite`/`diagsite2`）**不参与验收**，
-  部署产物（8761/8762）全程未被诊断构建污染。
+- **诊断过程对部署产物零污染**：所有诊断构建都写到 `/src/websrc/diag*`、由临时站点
+  （8763/8764/8765）服务，用完即停并清理；插桩后还原并**用 sha256 复验**
+  （见上「插桩的善后」）。
 
