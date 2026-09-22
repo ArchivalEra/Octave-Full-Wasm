@@ -106,7 +106,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**25 套 615 项全绿**，
+本包内容 = 最近一次在浏览器实测通过的构建。**25 套 620 项全绿**，
 在 `http://127.0.0.1:8761/`（**即本包内容**）与 `8762` 上各跑一遍。
 
 **需求级** `accept-requirements` **14/14**（R1–R10 各一条最小实测 + 架构护栏）。
@@ -119,7 +119,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-113-oct | 8 | 真 `.oct` side module 能被装载并调用 |
 | accept-113-assets | 16 | 资产车道语义 |
 | accept-113-libs | 17 | 逐库数值断言（含**稀疏 `lu` 的六个形态**，见下） |
-| accept-113-ode15 | 24 | SUNDIALS `ode15s`/`ode15i` 数值 |
+| accept-113-ode15 | 29 | SUNDIALS `ode15s`/`ode15i` 数值 + **`lsode`（已修复）** |
 | accept-113-pkgoct | 27 | 27 个包编译件逐个真调用（零 trap） |
 | accept-full | 20 | 核心回归 + 官方 .oct 装载 + 资产车道 |
 | accept-hdf5 | 16 | `save/load -hdf5` |
@@ -127,7 +127,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-forge-oct | 15 | Forge 编译件 |
 | accept-forge2 | 42 | signal + control |
 | accept-dldfcn | 68 | dldfcn 官方装载语义与真数值 |
-| accept-ode15 | 14 | SUNDIALS `ode15s`/`ode15i`（7.2 时代的同一套，仍全绿） |
+| accept-ode15 | 14 | SUNDIALS `ode15s`/`ode15i`；`lsode` 那条已从「只查 exist」换成真调用 |
 | accept-archive | 20 | 压缩/归档无 shell 化 |
 | accept-image | 17 | 图像 I/O |
 | accept-print | 43 | `print -dsvg` |
@@ -140,16 +140,17 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-pkg | 16 | `pkg` 数据库/list/load/describe |
 | accept-input | 9 | `input()` 与 EOF |
 
-`accept-113-ode15` 里另有 **1 项已知缺陷**（`lsode` 调用即整页 trap），
-单独隔离复现、**不计入 PASS/FAIL**；它**在 7.2 上同样存在**，不是本次换基线引入的
-（详见 `build/113/NOTES-lsode.md`）。
+`lsode` **曾整页 trap，2026-09-22 已修好**（根因：ODEPACK 的用户回调给 4 个实参，
+而 Octave 的 `lsode_f` 有 5 个形参，wasm 的 `call_indirect` 做精确类型检查 → 不符即
+`unreachable`。修法见 `build/113/patch-odepack-callback-arity.sh`，详见
+`build/113/NOTES-lsode.md`）。现在 29/29 里含 5 条 `lsode` 断言。
+⚠️ 注意 `lsode` 的返回约定是 **`[x, istate, msg]`**，不是 `[t, y]`。
 
 ## 已知偏差（如实）
 
-- **`lsode` 调用即整页 trap**（`RuntimeError: unreachable`）：**7.2 与 11.3.0 都有**，
-  与 SUNDIALS、与本包内容无关（不装载 `__ode15__` 也复现）。此前未被发现是因为
-  7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`、从没真的调用过**。
-  已落档并隔离成"已知缺陷"，待把 trap 地址符号化后定位。
+- ~~**`lsode` 调用即整页 trap**~~ **已修复**（2026-09-22）：详见上面的说明与
+  `build/113/NOTES-lsode.md`。这条留档是因为它**在 7.2 上也存在**（不是换基线引入的），
+  而且此前没被任何套件发现 —— 7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`**。
 - `system`/`unix`/`popen` 清晰报错（有意保持，wasm 无 shell）。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
 - `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。

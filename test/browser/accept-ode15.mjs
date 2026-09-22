@@ -78,7 +78,12 @@ await ev('[ti,yi]=ode15i(@(t,y,yp) yp + y, [0 2], 1, -1, odeset("RelTol",1e-8,"A
 console.log('--- 回归：原有求解器不受影响 ---');
 await ev('[t45,y45]=ode45(@(t,y) -y, [0 2], 1); disp(abs(y45(end)-exp(-2))<1e-5)', 'ode45 仍正常', '1');
 await ev('disp(exist("ode23"))', 'ode23 在', '2');
-await ev('disp(exist("lsode"))', 'lsode 在（builtin）', '5');
+// ⚠️ 原来这里**只断言了 exist("lsode")==5**，从没真的调用过 —— 而 `lsode` 那时
+//    一调用就整页 trap（odepack 回调参数个数 4 vs Octave 的 5，wasm 的 call_indirect
+//    做精确类型检查所以必炸）。这个"只查存在性"的弱断言正是它藏了很久的原因
+//    （HANDOFF §10.3 坑 4）。2026-09-22 修好后，这里改成**真调用 + 数值断言**。
+//    注意 `lsode` 的返回约定是 `[x, istate, msg]`，不是 `[t, y]`。
+await ev('x=lsode(@(y,t) -y,1,[0 2]); disp(abs(x(end)-exp(-2))<1e-6)', '★ lsode 真调用（|x(2)-e^-2|<1e-6）', '1');
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();

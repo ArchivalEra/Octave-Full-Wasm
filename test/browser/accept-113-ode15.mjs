@@ -206,40 +206,35 @@ console.log('\n--- 七、主序列无整页 trap ---');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// 八、**已知缺陷**：`lsode` 调用即整页 trap（RuntimeError: unreachable）
+// 八、`lsode`（**2026-09-22 已修好；本节从"已知缺陷复核"改成正式断言**）
 //
-// 为什么单独一页：trap 会把页面打死，必须换新页面测，且**不能算进本套件的
-// PASS/FAIL**——它不是 ode15s 的问题，也不影响 R1 的结论。
+// 修复前的症状：`lsode` 一调用就整页 trap（`RuntimeError: unreachable`），
+// 7.2 与 11.3.0 都复现，且不装载 `__ode15__` 时也复现 —— 与 SUNDIALS 无关。
 //
-// 证据（全部实测，不是推断）：
-//   · 8762（11.3.0）与 **8761（7.2 已验收基线）都 trap** —— 不是本轮引入的回归；
-//   · **不装载 `__ode15__` 时也 trap** —— 与 SUNDIALS 无关；
-//   · `lsode_options("relative tolerance")` 正常（1.4901e-08）、`lsode_options()`
-//     正常、`quad(@(x) x.^2,0,1)` 正常（说明 Fortran + 回调这条路是通的）、
-//     `exist("lsode")=5` —— 所以不是"Fortran 全坏"，是 `lsode` 这条调用路径专属；
-//   · trap 前控制台**没有任何 Fortran/f2c 报错**，是静默 `unreachable`。
-//   · 之前没被发现的原因很典型：7.2 的 accept-ode15 对 lsode **只断言了 exist=5**，
-//     从没真的调用过（HANDOFF §10.3 坑 4 说的"装载类断言不够"又中一次）。
-// 待办：定位需要把 trap 地址符号化，超出本轮范围，已记进 HANDOFF §10.6。
-console.log('\n--- 八、已知缺陷复核：lsode 整页 trap（换新页面，不计入本套件）---');
-{
-  const p2 = await (await browser.newContext()).newPage();
-  const l2 = [];
-  p2.on('console', m => l2.push(m.text()));
-  p2.on('pageerror', e => l2.push('[pageerror] ' + e.message));
-  await p2.goto(URL, { waitUntil: 'load', timeout: 300000 });
-  for (let i = 0; i < 400; i++) {
-    try { const ok = await p2.evaluate(() => window.Module.eval_string('1+1')); if (ok === 2 || ok === 0 || ok === undefined || true) break; } catch {}
-    await sleep(700);
-  }
-  let trapped = false, detail = '';
-  try {
-    await p2.evaluate(() => window.Module.eval_string('[t6,y6]=lsode(@(y,t) -y,1,[0 2]);'));
-  } catch (e) { trapped = true; detail = String(e).slice(0, 90); }
-  console.log(`KNOWN-DEFECT | lsode 调用即整页 trap :: ${trapped ? '★ 复现（' + detail + '）' : '本次未复现（行为变了，需重新评估）'}`);
-  await p2.close();
-}
+// 根因（证据链完整，见 build/113/NOTES-lsode.md）：
+//   本树 odepack 的 Fortran 调用户回调时给 **4 个实参**（`dlsode.f:1393`
+//   `CALL F (NEQ, T, Y, RWORK(LF0))`，dstode.f 3 处、dprepj.f 3 处同），f2c 因此
+//   生成 4 参函数指针调用；而 Octave 的 `lsode_f` 有 **5 个形参**（多一个
+//   `F77_INT& ierr`）。原生 x86 上 C 不检查签名，所以"看起来能用"；
+//   **wasm 的 `call_indirect` 会精确检查类型 → 不符即 `unreachable`**。
+//   （同批的 `lsode_j` 是 7 参，而 dprepj 的 `(*jac)(…)` 恰好也是 7 参 → 只有 f 不匹配。）
+//   修法：`build/113/patch-odepack-callback-arity.sh` 给那 7 处 CALL F 补上第 5 个实参。
+//
+// ⚠️ 这里必须用**正确的输出约定**：`lsode` 返回的是 `[x, istate, msg]`（解与状态），
+//    **不是** `[t, y]`。第一版写成 `[t,y]=lsode(...)` 会把 istate(=2) 当成 y(end)，
+//    于是量到 err≈1.865 而误判"算错了"。本机原生 11.3.0 复核过同一坑。
+console.log('\n--- 八、lsode（曾整页 trap，现已修复）---');
+await num('x=lsode(@(y,t) -y,1,[0 2]); printf("%.12e\\n", abs(x(end)-exp(-2)))',
+  '★ lsode |x(2)-e^-2|（应 <1e-6）', v => v < 1e-6, '（原生 11.3.0 同题 4.3e-08）');
+await num('[x,ist,msg]=lsode(@(y,t) -y,1,[0 2]); printf("%d\\n", ist)',
+  'lsode istate=2（成功退出）', v => v === 2);
+await num('x=lsode(@(y,t) [-y(1);-2*y(2)],[1;1],[0 1]); printf("%.6f\\n", abs(x(end,2)-exp(-2)))',
+  '★ 两状态系统 |y2(1)-e^-2|（<1e-6）', v => v < 1e-6);
+await ev('lsode_options("integration method","non-stiff"); x=lsode(@(y,t) -y,1,[0 2]); disp("nonstiff-ok")',
+  'lsode 非刚方法也能跑', 'nonstiff-ok');
+await num('lsode_options("integration method","stiff"); x=lsode(@(y,t) -1000*(y-cos(t))-sin(t),1,0:0.05:1); printf("%.3e\\n", max(abs(x-cos((0:0.05:1)\'))))',
+  '★ 刚性问题 |x-cos t|（<1e-6）', v => v < 1e-6);
 
-console.log(`\n=== ${pass} PASS / ${fail} FAIL （另有 1 项已知缺陷，见上，不计入）===`);
+console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(fail ? 1 : 0);

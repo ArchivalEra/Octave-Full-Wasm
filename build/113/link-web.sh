@@ -133,6 +133,10 @@ DIAG=()
 #   开了断言之后，多数 abort 会在 console 里打出可读原因（越界、未捕获异常、
 #   栈溢出……）。和 DIAG_NAMES 一起用，就能"有名字 + 有原因"。
 [ "${DIAG_ASSERT:-0}" = "1" ] && { DIAG+=( -s ASSERTIONS=1 ); echo "== DIAG_ASSERT=1：打开运行时断言"; }
+# DIAG_SOURCEMAP=1：产出 octave.wasm.map，把 wasm 偏移映射回源码行。
+#   用途：浏览器只报 `wasm-function[N]:0x<文件偏移>`，有了 source map 就能翻成
+#   `文件:行`（本仓的 wasm-opt/wasm-dis 不带 dwarfdump，只能走这条路）。
+[ "${DIAG_SOURCEMAP:-0}" = "1" ] && { DIAG+=( -g -gsource-map ); echo "== DIAG_SOURCEMAP=1：产出 source map"; }
 
 set -x
 # EXTRA_LDFLAGS：诊断/定点补救用（空格分隔的链接旗标）。

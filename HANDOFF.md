@@ -620,7 +620,7 @@ makeinfo 生成 doc-cache）。
 
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **25 套 615 项全绿**
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **25 套 620 项全绿**
 （11.3.0 的 6 套 + 7.2 时代的 19 套，两套验收在 8761/8762 上各跑一遍都全绿），
 含需求级 `accept-requirements`。交付包重打：`sh build/make-dist.sh`。
 
@@ -870,7 +870,7 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **25 套 615 项全绿** | 同左（两份各跑一遍） |
+| 验收 | **25 套 620 项全绿** | 同左（两份各跑一遍） |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
@@ -878,12 +878,13 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 **25 套的构成**（`http://127.0.0.1:8761/` 与 `8762` 上各跑一遍都全绿）：
 
 - **11.3.0 侧 6 套**：`accept-113-boot` 10、`accept-113-oct` 8、`accept-113-assets` 16、
-  `accept-113-libs` **17**（含稀疏 `lu` 的六个形态）、`accept-113-ode15` **24**
-  （另有 1 项已知缺陷单列）、`accept-113-pkgoct` **27**。
+  `accept-113-libs` **17**（含稀疏 `lu` 的六个形态）、`accept-113-ode15` **29**
+  （含 5 条 `lsode` 断言 —— 2026-09-22 修好，原先那 1 项"已知缺陷"已转正）、
+  `accept-113-pkgoct` **27**。
 - **需求级**：`accept-requirements` **14/14**。
 - **7.2 时代的 19 套**（全部在新内容上复跑通过）：
   `accept-full` **20**、`accept-hdf5` 16、`accept-forge` **22**、`accept-forge-oct` 15、
-  `accept-forge2` 42、`accept-dldfcn` 68、`accept-ode15` 14、`accept-archive` 20、
+  `accept-forge2` 42、`accept-dldfcn` 68、`accept-ode15` 14（项数不变 —— 那条 `lsode` 从"只查 `exist`"**换成**了真调用）、`accept-archive` 20、
   `accept-image` 17、`accept-print` **43**、`accept-plotv2` **54**、`accept-plot3d` **34**、
   `accept-audio` 47、`accept-net` 30、`accept-help` 12、`accept-fileops` 20、
   `accept-pkg` 16、`accept-input` 9。
@@ -891,7 +892,7 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 **本轮（2026-09-22 第二轮）做完的事**：
 
 - **待办 1 ✅ SUNDIALS → 真 `__ode15__.oct`**：不再是桩。ode15s/ode15i 实测跑通，
-  `accept-113-ode15` **24/24**。**主 wasm 一个字节没动**（sha256 前后一致），
+  `accept-113-ode15` **29/29**。**主 wasm 一个字节没动**（sha256 前后一致），
   SUNDIALS 的静态码整个打进了 `.oct`（250195 字节）。提交 `459ddd1`。
 - **待办 2 ✅ 27 个包 `.oct` 按 11.3.0 重编**：`accept-113-pkgoct` **27/27 零 trap**
   （含真跑 libsvm）。提交 `3cbb81a`。旧件备份在
@@ -966,6 +967,21 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 12. **bzip2 的 Makefile 里 `CC=gcc` 是普通赋值，连 make 命令行的 CC 都压不住** →
     绕开它的 Makefile、直接编那 7 个源文件。**zlib 的 configure 不是 autoconf**
     （不接受 `CC=...` 参数，只能走环境变量）。
+13. **f2c 生成的回调调用，实参个数必须与 C++ 回调的形参个数**完全一致****。
+    原生 x86 上 C 不检查函数指针签名，多一个/少一个实参只是读到垃圾（通常无害）；
+    **wasm 的 `call_indirect` 会做精确类型检查，不符即 `unreachable` → 整页死**。
+    这就是 `lsode` 的根因（odepack 的 Fortran 给 4 个实参、Octave 的 `lsode_f` 有 5 个）。
+    同类风险仍在其它 f2c 回调上（`quad`/`daspk`/`lsode_j`…）—— 新增这类接口时，
+    先数两边的参数个数，别只看"能不能编过"。
+    修法见 `build/113/patch-odepack-callback-arity.sh`。
+14. **定位 wasm 里的 `unreachable`：从"报索引"到"报源码行"的三步**（这次靠它破案）：
+    ① `link-web.sh DIAG_NAMES=1` → 保留 name 段，栈里就有函数名；
+    ② `DIAG_ASSERT=1` → 若是 emscripten 断言类 abort 会打出原因（没有就说明是裸
+       `unreachable`）；
+    ③ `DIAG_SOURCEMAP=1` → 出 `octave.wasm.map`，把浏览器给的
+       `wasm-function[N]:0x<偏移>` 里的**文件偏移**当 source map 的 generated column
+       解析，直接翻成 `文件:行`（本仓的 `wasm-opt`/`wasm-dis` 不带 dwarfdump，只能这么走）。
+    三个开关**只写独立目录，不碰部署产物**。
 
 ### 10.4 已经做出来的东西
 
@@ -982,7 +998,11 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
   **本轮新增**：`build-sundials.sh`（SUNDIALS 6.1.1 → `/src/deps/sundials`，带符号自检）、
   `build-ode15.sh`（真编 `__ode15__.oct`：门禁宏 + `-lsundials_ida` 自包含）、
   `build-pkg-oct.sh`（27 个包 `.oct`，**显式模块表** + 合成 config.h）、
-  **`dldprobe.cc`**（dlopen 自检探针的**源码** —— 此前只有 7.2 编出来的二进制，没源码）。
+  **`dldprobe.cc`**（dlopen 自检探针的**源码** —— 此前只有 7.2 编出来的二进制，没源码）、
+  **`patch-odepack-callback-arity.sh`**（修 `lsode`：给 odepack 的 7 处 `CALL F` 补第 5 个
+  实参，与 Octave 的 `lsode_f` 对齐。**必须在编译主树之前跑**，或改后重编那 3 个 .f）。
+  诊断开关（`link-web.sh`，默认关、只写独立目录）：`DIAG_NAMES` / `DIAG_ASSERT` /
+  `DIAG_SOURCEMAP` / `EXTRA_LDFLAGS`。
 - **站点资产**（`site/` 与 `site113/` 内容相同）：`assets/oct/` 11 个 `.oct`（7 个核心
   dldfcn + webio + webimage-oct + webnet-oct + **`__ode15__`（真模块，250195 字节，
   内嵌 SUNDIALS）**）、`assets/m/`（webfile/pkgfix/webshell/webaudio/webnet/webimage/
@@ -1027,7 +1047,7 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    **主 wasm 零改动**（sha256 前后一致）—— 所以**不需要**重配/重编/重链主树，
    原计划那一串是照 configure 车道设想的，实车走 `.oct` 车道更短更安全。
    三个脚本：`build/113/build-sundials.sh` → `build-ode15.sh`（`build-oct.sh` 提供
-   `OCT_DEFS/OCT_INCS/OCT_LIBS` 开口子）。验收 `accept-113-ode15` **24/24**。
+   `OCT_DEFS/OCT_INCS/OCT_LIBS` 开口子）。验收 `accept-113-ode15` **29/29**。
    实测要点：刚性问题误差 9.1979e-05（7.2 站点 9.2e-05）；vdp1000 与 8761
    **五个用例判定与步数完全一致**（54/失败/失败/537/724）。
 2. ✅ **27 个包 `.oct` 按 11.3.0 重编**（提交 `3cbb81a`）。
@@ -1049,27 +1069,30 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    （`dldprobe.cc` 源码入仓并重编、`lanetest` 资产、`m/forge` 的 20 个预装 .m）。
    `recover.sh` 与 `DEPLOY.md` 同步改完，7.2 快照留在 `site-72bak/`。
    清单见 `build/113/PROMOTION.md`。
-6. **`lsode` 调用即整页 trap**（**两代基线共有**：7.2 与 11.3.0 都复现，且不装载
-   `__ode15__` 时也复现 → 与 SUNDIALS 无关）。**`lsode` 从来没在这个项目里工作过**，
-   不是本轮引入的。
-   详见 **`build/113/NOTES-lsode.md`**（证据表、排除过的解释、**第二轮诊断**）。
-   已让 `accept-113-ode15` 第八节单独隔离复现它，且**不计入 PASS/FAIL**。
-   **第二轮把 trap 符号化了**（`link-web.sh` 新增 `DIAG_NAMES` / `DIAG_ASSERT` /
-   `EXTRA_LDFLAGS` 三个诊断开关，只写独立目录、不碰部署产物）：
-   - 位置：`LSODE::do_integrate(double)`，**栈里没有更深一帧** → trap 在该函数自身代码里；
-   - 开 `-s ASSERTIONS=1` **没有**可读原因 → 是裸 `unreachable`；
-   - 用三条错误路径夹逼（回调长度不匹配 / AbsTol 长度不匹配 / maxord 非法，
-     全部**干净报错**不炸）⇒ 回调与初始化检查都正常，**trap 夹在
-     `F77_XFCN(dlsode, DLSODE, …)` 那一步**；
-   - **否掉**"符号漏链"：`-Wl,-u,dlsode_` 重链后产物 sha256 **完全相同**，
-     说明链接器本已解析它（名字串缺失是命名表表现，不能当证据 —— 正是 §10.3 坑 5）；
-   - **下一步（精确）**：带 `-g -gsource-map` 重链把 wasm 偏移映射到源码行；
-     或在 `LSODE.cc` 的 `F77_XFCN` 前后加 `fprintf`；若确认在 `dlsode` 内，
-     重点查 **f2c 回调 `lsode_f`/`lsode_j` 的函数指针 ABI**（wasm 里走 `call_indirect`，
-     签名不匹配会直接 trap 且报在调用点）。
+6. ✅ **`lsode` 整页 trap —— 根因查明并修好**（2026-09-22）。
+   **根因：ODEPACK 的用户回调参数个数与 Octave 的不一致 —— 4 个 vs 5 个。**
+   本树 odepack 的 Fortran 调 `F` 给 **4 个**实参（`dlsode.f:1393`、`dstode.f` ×3、
+   `dprepj.f` ×3，共 7 处），f2c 因此生成 4 参函数指针调用；而 Octave 的
+   `lsode_f` 有 **5 个**形参（多一个 `F77_INT& ierr`）。原生 x86 上 C 不检查函数指针
+   签名所以"看起来能用"，**wasm 的 `call_indirect` 做精确类型检查 → 不符即
+   `unreachable` → 整页死**。旁证：`lsode_j` 是 7 参而 dprepj 的 `(*jac)(…)` 也是 7 参
+   → **只有 `f` 这一侧不匹配**，这正解释了为什么只有 F 的调用点会 trap。
+   **修法**：新增 `build/113/patch-odepack-callback-arity.sh`（给那 7 处 `CALL F`
+   补第 5 个实参，用不声明的 `JERR` 走隐式 INTEGER，不动声明区；幂等 + 自检 7/7）。
+   **修复后实测**（8761）：`|x(2)-e^-2| = 4.301e-08`（原生同题 4.3e-08）、`istate=2`、
+   两状态精确、非刚正常、**刚性问题 2.744e-08**。`accept-113-ode15` **24 → 29/29**，
+   7.2 时代的 `accept-ode15` 里那条"只查 `exist`"也改成了真调用。
+   完整诊断链与**测法陷阱**（`lsode` 返回 `[x,istate,msg]` 不是 `[t,y]`）见
+   **`build/113/NOTES-lsode.md`**。
+   诊断手段留在 `link-web.sh`（默认关，只写独立目录）：
+   `DIAG_NAMES=1`（保留 name 段）/ `DIAG_ASSERT=1`（`-s ASSERTIONS=1`）/
+   `DIAG_SOURCEMAP=1`（`-g -gsource-map`，把 wasm 偏移翻成源码行 —— 这次就是靠它
+   定位到 `dlsode.c:1618`）/ `EXTRA_LDFLAGS`。
 7. ✅ **`dist/` 重打包**：`octave-full-wasm-site-20260922`（78M，187 文件；
    `octave-full-wasm-site-20260922.tar.zst` 22.4MB）。重打：`sh build/make-dist.sh`。
+   ⚠️ `lsode` 修好之后**需要再重打一次**（当前这一包是修复前的 wasm）。
 8. （不在本轮范围）P5 OSMesa 图形线；T2 图形句柄半真化（§5.5 表）。
+
 
 
 
