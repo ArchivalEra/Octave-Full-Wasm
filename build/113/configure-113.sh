@@ -62,17 +62,33 @@ export PKG_CONFIG=/usr/bin/pkg-config
 # 所以下面 configure 行里显式给了 `--with-pcre2=-lpcre2-8`。
 # （pcre2 的 8 位宽变体就是这个库名；上游 PCRE2 装出来的 .a 叫 libpcre2-8.a。）
 
-# ---- 编译/链接口径（取 Edge-Tools 在 11.x 上验证过的组合 + 我们的 PIC 要求） --
-# `-fPIC` 是 `.oct` 车道的前提：主链走 MAIN_MODULE=1 时 wasm-ld 用
-# `--experimental-pic -pie`，任何非 PIC 对象都会链接失败
-# （R_WASM_MEMORY_ADDR_LEB ... recompile with -fPIC）。
-# 依据：build/CLIBS.md「真 .oct 动态装载」+ 闸门二探针已实测通过
-# （build/113/probe-side-module.sh，emsdk 5.0.7 上 MAIN_MODULE/SIDE_MODULE 可用）。
+# ⚠️ 为什么是这一组（别再随手往里加东西，都是实测换来的）：
+#
+# 1. **`--disable-shared --enable-static`，不要 `--enable-shared`。**
+#    实测 `--enable-shared` 会让 configure 死在
+#      "configure: error: Octave requires some way to perform dynamic linking."
+#    （autoconf/libtool 在 emconfigure 下建立不起「动态链接」这个概念）。
+#    `--enable-shared` **不是** `.oct` 车道的必要条件：闸门二探针已证明，
+#    真正必需的是「全树 -fPIC + 终链 -sMAIN_MODULE=1 -sALLOW_TABLE_GROWTH=1」，
+#    而 `.oct` 是独立编的 side module、不链 Octave 的库；静态归档里的 -fPIC
+#    对象照样能进 PIC 主链。MAIN_MODULE 属于**终链**，不该塞进这里的 LDFLAGS。
+#
+# 2. **LDFLAGS 里不要放 `-s ERROR_ON_UNDEFINED_SYMBOLS=0`。**
+#    实测加进去之后 configure 在动态链接器特性那一段会报
+#      "./configure: line 36627: =-fPIC: command not found"
+#    紧跟 "Octave requires some way to perform dynamic linking." ——
+#    带空格的 `-s NAME=value` 被 autoconf/libtool 的 shell 片段拆坏。
+#    这个标志真正该出现的地方同样是**终链**（build/Makefile 的 EM_SFLAGS/LDFLAGS）。
+#
+# 3. **不要 FFLAGS、不要 EMCC_FORCE_STDLIBS、不要 --with-blas/--with-lapack。**
+#    这几样是照抄 7.2 的 reconf-pic.sh 加进来的，加完 configure 就挂；
+#    撤掉即恢复。BLAS/LAPACK 交给下面的 BLAS_LIBS/LAPACK_LIBS 环境变量。
+#
+# 结论：本脚本的 configure 配方是**实测通过过的那一版**（见 STATUS.md），
+# 加任何东西之前先跑一遍确认没破，再改。
 export CFLAGS="-O2 -fPIC"
 export CXXFLAGS="-O2 -fexceptions -fPIC"
-export FFLAGS="-O2 -fPIC"
-export LDFLAGS="-L$DEPS/lib -fPIC -s ERROR_ON_UNDEFINED_SYMBOLS=0"
-export EMCC_FORCE_STDLIBS=1
+export LDFLAGS="-L$DEPS/lib -fPIC"
 
 # ---- ccache：让整棵树的编译都进缓存（LAPACK 那种量重跑时省的是整段） --------
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
@@ -85,21 +101,25 @@ export CXX="ccache em++"
 export gl_cv_func_nanosleep=yes
 export gl_cv_func_usleep_works=yes
 export gl_cv_func_svid_putenv=yes
-# 线程相关：我们明确不要线程
-export ac_cv_header_pthread_h=no
-export ac_cv_type_pthread_t=no
-export ac_cv_type_pthread_spinlock_t=no
-export ac_cv_func_pthread_sigmask=no
-export gl_cv_const_PTHREAD_CREATE_DETACHED=no
-export gl_cv_const_PTHREAD_MUTEX_RECURSIVE=no
-export gl_cv_const_PTHREAD_MUTEX_ROBUST=no
-export gl_cv_const_PTHREAD_PROCESS_SHARED=no
+# ⚠️ 线程相关：**不要预置 ac_cv_header_pthread_h=no 这类值**（实测教训）。
+# 把 emscripten-forge 那份 recipe 的 pthread 预设抄进来后，gnulib 认为
+# 「本机没有 pthread.h」，于是自己生成 libgnu/pthread.h，与 Emscripten sysroot 的
+# pthread.h 撞车 → make 在 libgnu 就死：
+#   ./pthread.h:718:13: error: typedef redefinition with different types
+#     ('int' vs 'struct __pthread *')
+# 这正是 emscripten-forge patch 0010「Remove-redundant-headers」在处理的冲突；
+# 而 Edge-Tools 那份成功建出 11.1.0 的配方里**没有**这些 pthread 预设。
+# 我们只是不要多线程，`--disable-threads` 已经表达了，不必假装头文件不存在。
 # SuiteSparse 相关：我们全关，避免 configure 卡在探测上
 export ac_octave_suitesparseconfig_pkg_check=no
 export ac_octave_spqr_check_for_lib=no
 
 echo "=== configure 前置：Edge-Tools 在 11.x 上验证过的两处 configure 处理"
 cd "$SRCDIR"
+# 清掉 configure 缓存：`lt_cv_*` 这类结果会跨次污染
+# （实测过一次：上一次 --disable-shared 的缓存让这次 --enable-shared 的
+#  动态链接探测直接对不上，日志里一律带 (cached)）
+rm -f config.cache
 # 1) -fexceptions → -fwasm-exceptions（emsdk 5.x 下后者才是原生 wasm 异常）
 if grep -q -- '-fexceptions' configure; then
   n_before=$(grep -c -- '-fexceptions' configure || true)
@@ -125,8 +145,7 @@ emconfigure ./configure \
   --prefix="$PREFIX" \
   --enable-fortran-calling-convention=f2c \
   --with-pcre2=-lpcre2-8 \
-  --with-blas=-lrefblas --with-lapack=-llapack \
-  --enable-shared --disable-static \
+  --disable-shared --enable-static \
   --disable-readline --disable-docs --disable-java \
   --disable-threads \
   --without-qt --without-fltk \
