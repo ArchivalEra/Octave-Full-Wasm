@@ -87,13 +87,23 @@ async function svgCheck(path, label, opts = {}) {
   }, path);
   let ok = r.ok && !r.parseErr && r.len > 300 && r.svg === 1;
   const notes = [];
+  if (!r.ok) notes.push('读取/解析失败:' + (r.err || '?'));
   if (opts.minPolyline != null) { const c = r.polyline >= opts.minPolyline; ok = ok && c; notes.push(`poly=${r.polyline}${c ? '' : '!=' + opts.minPolyline}`); }
   if (opts.minCircle != null) { const c = r.circle >= opts.minCircle; ok = ok && c; notes.push(`circ=${r.circle}`); }
   if (opts.minRect != null) { const c = r.rect >= opts.minRect; ok = ok && c; notes.push(`rect=${r.rect}`); }
   if (opts.minPolygon != null) { const c = r.polygon >= opts.minPolygon; ok = ok && c; notes.push(`polyg=${r.polygon}`); }
   if (opts.minLine != null) { const c = r.line >= opts.minLine; ok = ok && c; notes.push(`line=${r.line}`); }
   if (opts.minText != null) { const c = r.text >= opts.minText; ok = ok && c; notes.push(`text=${r.text}`); }
-  if (opts.hasText) { const c = r.texts.some(s => s.includes(opts.hasText)); ok = ok && c; if (!c) notes.push(`缺文本"${opts.hasText}"`); }
+  // ⚠️ 必须先确认 r.texts 存在：上面 page.evaluate 的 try 一旦失败，返回的是
+  //    `{ok:false, err}`（**没有 texts 字段**），旧代码直接 `r.texts.some(...)`
+  //    就抛 TypeError: r.texts is undefined —— 整页没崩、但测试自己崩了，
+  //    把真正的失败原因（读取/解析失败）盖掉了。这就是「accept-print 的测试
+  //    自身有病」那条待办的根因。
+  if (opts.hasText) {
+    const found = Array.isArray(r.texts) && r.texts.some(s => s.includes(opts.hasText));
+    ok = ok && found;
+    if (!found) notes.push(Array.isArray(r.texts) ? `缺文本"${opts.hasText}"` : `无文本可查（r.texts 缺失）`);
+  }
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: len=${r.len} parseErr=${r.parseErr} ${notes.join(' ')} ${r.ok ? '' : r.err || ''}`);
   return r;

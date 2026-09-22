@@ -59,11 +59,16 @@ async function ev(name, code) {
 }
 
 console.log('--- R1–R10 各一条最小实测 ---');
+// ⚠️ 原先 R5 与"二进制往返"把 URL 写死成 http://127.0.0.1:8761/ —— 于是这套
+//    **只能在 8761 上跑**。8761/8762 同时在服务时，在 8762 上跑也仍去 8761 取文件：
+//    ① 测的不是当前站点；② 跨源 fetch 还会被 CORS 挡。改成跟页面自己的 origin 走
+//    （在 8761 上跑时，URL 与改之前完全相同）。
+const ORIGIN = await page.evaluate(() => location.origin);
 await ev('R1 SUNDIALS ode15s', "tic; [tt,yy]=ode15s(@(t,y) -y, [0 1], 1); disp(abs(yy(end)-exp(-0.1))<1e-4)");
 await ev('R2 Forge 包', "disp([exist('butter') exist('tf') exist('normpdf')])");
 await ev('R3 HDF5', "A=magic(3); save('-hdf5','/tmp/req.h5','A'); clear A; load('/tmp/req.h5'); disp(A(1,1))");
 await ev('R4 图像 I/O', "A=uint8(reshape(mod(0:255,256),16,16)); imwrite(A,'/tmp/req.png'); disp(isequal(A,imread('/tmp/req.png')))");
-await ev('R5 同步网络', "s=urlread('http://127.0.0.1:8761/assets/manifest.json'); disp(numel(s)>100)");
+await ev('R5 同步网络', `s=urlread('${ORIGIN}/assets/manifest.json'); disp(numel(s)>100)`);
 await ev('R6 压缩归档', "fid=fopen('/tmp/req.txt','w'); fprintf(fid,'x\\n'); fclose(fid); gzip('/tmp/req.txt'); disp(exist('/tmp/req.txt.gz'))");
 await ev('R7 CXSparse', "s=sparse([1 0;0 2]); [Q,R]=qr(s); disp(norm(full(s-Q*R))<1e-10)");
 await ev('R8 WebAudio', "y=sin(2*pi*440*(0:999)/8000); pl=audioplayer(y,8000); play(pl); disp(pl.Running)");
@@ -74,7 +79,8 @@ console.log('--- 架构要点（回归护栏）---');
 await ev('官方 .oct 装载', "disp([num2str(exist('convhulln')) ' ' which('convhulln')])");
 await ev('plot 桥 v2 3D', "clf; [X,Y]=meshgrid(-1:0.5:1); surf(X,Y,X.*Y); print('/tmp/req3.svg','-dsvg'); d=dir('/tmp/req3.svg'); disp(d.bytes>3000)");
 await ev('中文字符串', "clf; title('中文标题'); print('/tmp/reqc.svg','-dsvg'); s=fileread('/tmp/reqc.svg'); disp(!isempty(strfind(s,'中文标题')))");
-await ev('二进制往返', "urlwrite('http://127.0.0.1:8761/octave.wasm','/tmp/req.wasm'); d=dir('/tmp/req.wasm'); disp(d.bytes>1000000)");
+// R10 的阈值 1.5s 是 7.2 -O1 基线定的；11.3.0 同档 -O1，判定沿用不变。
+await ev('二进制往返', `urlwrite('${ORIGIN}/octave.wasm','/tmp/req.wasm'); d=dir('/tmp/req.wasm'); disp(d.bytes>1000000)`);
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
