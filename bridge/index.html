@@ -102,7 +102,7 @@
         //     纯文本（见 build/render-docstrings.py），所以 help 不需要 makeinfo。
         //   doc-cache：`lookfor` 和 help 目录列表用的索引。
         // 两个合计约 2.5MB，相对首包不算小，但换的是"学生第一个命令就能用"。
-        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi'])
+        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge'])
           .catch(function (e) {
             console.warn('[assets] help 数据装载失败（help/lookfor 将不可用）: ' + e.message);
             return null;
