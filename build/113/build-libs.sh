@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+#
+# 逐库独立构建第三方 wasm 静态库（外部校对建议的策略）
+#
+# 原则（为什么这么组织）：
+#   1. **每个库一个独立、干净、可重复的 prefix**（/src/deps/<lib>）——
+#      而不是全塞进一个共享 /usr/local。这样"某个库把公共 CPPFLAGS/头文件/探测结果
+#      改坏了"这类 configure-time 污染就不会发生，也让单个库失败时可以只重来它。
+#   2. **逐库自检**：每个库建完立刻验它该有的符号（用 emnm）。
+#      建库阶段是**可以**逐库隔离的正确粒度；主程序的 configure 则是一次全开、
+#      失败后再按库集合二分（见 build/113/STATUS 里的策略）。
+#   3. `-fPIC` 只给真正需要的库：7.2 用 `-Wl,--error-limit=0` 让链接器报全量错误后
+#      统计出来的完整清单是 glpk / arpack / sndfile / qhull / fftw3+3f。
+#
+# 用法：bash build-libs.sh <lib|all|list>
+#   lib ∈ zlibbz2 glpk fftw qhull sndfile rapidjson hdf5
+#
+set -euo pipefail
+
+# 源码分布在两个目录（实测）：vendored 大件与 octave 自带的第三方分开放
+SRC="${SRC:-/src/vendor}"
+SRC2="${SRC2:-/src/third_party}"
+DEPS="${DEPS:-/src/deps}"
+WORK="${WORK:-/src/libwork}"
+JOBS="${JOBS:-$(nproc)}"
+export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
+
+# ccache 的正确接法（本项目实测过的教训）：emconfigure 会覆盖 CC/CXX 环境变量，
+# 所以必须把它们作为 **configure 的命令行参数**传。
+CCACHE_CC="ccache emcc"
+CCACHE_CXX="ccache em++"
+
+say () { echo; echo "=== $*"; }
+need () { [ -f "$1" ] || { echo "FATAL: 缺 $1" >&2; exit 2; }; }
+
+unpack () {  # $1=tar 文件名（在 SRC/SRC2 里找）  $2=解包后目录名
+  local f="$1" d="$2" t=""
+  for dir in "$SRC" "$SRC2"; do
+    if [ -f "$dir/$f" ]; then t="$dir/$f"; break; fi
+  done
+  [ -n "$t" ] || { echo "FATAL: 在两个源码目录里都找不到 $f（$SRC, $SRC2）" >&2; exit 2; }
+  mkdir -p "$WORK"
+  [ -d "$WORK/$d" ] || tar xf "$t" -C "$WORK"
+}
+
+# ---------------------------------------------------------------------------
+# zlib / bzip2：不走源码构建，用 Emscripten 自带的 ports（PIC 版 sysroot）
+#   7.2 的经验：`embuilder --pic build zlib bzip2`——PIC sysroot 里默认没有它们
+# ---------------------------------------------------------------------------
+do_zlibbz2 () {
+  say "zlib + bzip2（从源码建；不用 Emscripten ports——容器内取代理不稳）"
+  # ports 会从 GitHub 拉源码，而容器直连 GitHub 基本不可用（本项目已知问题）
+  # → 自动取容器网关，走宿主上那个 HTTP 代理
+  local P="$DEPS/zlibbz2"
+  mkdir -p "$P"
+  # zlib（自带 configure 脚本，非 autoconf）
+  unpack "zlib-1.3.1.tar.gz" zlib-1.3.1
+  cd "$WORK/zlib-1.3.1"
+  emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
+  emmake make -j"$JOBS" > "$WORK/zlib-make.log" 2>&1
+  emmake make install > "$WORK/zlib-inst.log" 2>&1
+  grep -q ' deflate$' <(emnm "$P/lib/libz.a") || { echo "FATAL: libz.a 缺 deflate" >&2; exit 1; }
+  # bzip2（没有 configure，直接 make 目标 libbz2.a）
+  unpack "bzip2-1.0.8.tar.gz" bzip2-1.0.8
+  cd "$WORK/bzip2-1.0.8"
+  emmake make -j"$JOBS" libbz2.a CFLAGS="-O2 -fPIC" > "$WORK/bz2-make.log" 2>&1
+  mkdir -p "$P/lib" "$P/include"
+  cp -f libbz2.a "$P/lib/libbz2.a"
+  cp -f bzlib.h   "$P/include/bzlib.h"
+  grep -q ' BZ2_bzCompress$' <(emnm "$P/lib/libbz2.a") || { echo "FATAL: libbz2.a 缺 BZ2_bzCompress" >&2; exit 1; }
+  echo "  ✅ zlib + bzip2 → $P"
+}
+
+# ---------------------------------------------------------------------------
+# glpk（autotools，需要 -fPIC）
+# ---------------------------------------------------------------------------
+do_glpk () {
+  say "glpk-5.0"
+  unpack "glpk-5.0.tar.gz" glpk-5.0
+  local P="$DEPS/glpk"
+  cd "$WORK/glpk-5.0"
+  emconfigure ./configure --prefix="$P" --disable-shared --enable-static \
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" > "$WORK/glpk-conf.log" 2>&1
+  emmake make -j"$JOBS" > "$WORK/glpk-make.log" 2>&1
+  emmake make install > "$WORK/glpk-inst.log" 2>&1
+  local s; s="$(emnm "$P/lib/libglpk.a")"
+  grep -q ' glp_simplex$' <<<"$s" || { echo "FATAL: libglpk.a 缺 glp_simplex" >&2; exit 1; }
+  echo "  ✅ glpk → $P（glp_simplex 在）"
+}
+
+# ---------------------------------------------------------------------------
+# fftw（autotools，双精度 + 单精度两份；需要 -fPIC）
+# ---------------------------------------------------------------------------
+do_fftw () {
+  say "fftw-3.3.10（double + single）"
+  unpack "fftw-3.3.10.tar.gz" fftw-3.3.10
+  local P="$DEPS/fftw"
+  cd "$WORK/fftw-3.3.10"
+  for variant in "" "--enable-single"; do
+    emmake make distclean >/dev/null 2>&1 || true
+    emconfigure ./configure --prefix="$P" --disable-fortran --disable-threads \
+        --disable-openmp --disable-shared --enable-static $variant \
+        CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" > "$WORK/fftw-conf.log" 2>&1
+    emmake make -j"$JOBS" > "$WORK/fftw-make.log" 2>&1
+    emmake make install > "$WORK/fftw-inst.log" 2>&1
+  done
+  grep -q ' fftw_plan_dft_1d$'  <(emnm "$P/lib/libfftw3.a")  || { echo "FATAL: libfftw3.a 缺 fftw_plan_dft_1d" >&2; exit 1; }
+  grep -q ' fftwf_plan_dft_1d$' <(emnm "$P/lib/libfftw3f.a") || { echo "FATAL: libfftw3f.a 缺 fftwf_plan_dft_1d" >&2; exit 1; }
+  echo "  ✅ fftw3 + fftw3f → $P"
+}
+
+# ---------------------------------------------------------------------------
+# qhull（cmake；需要 -fPIC）
+#   注意：装出来的库名是 libqhullstatic_r.a，而 Octave 找的是 -lqhull_r
+# ---------------------------------------------------------------------------
+do_qhull () {
+  say "qhull-8.0.2"
+  unpack "qhull-8.0.2.tar.gz" qhull-8.0.2
+  local P="$DEPS/qhull"
+  local TC=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
+  emcmake cmake -S "$WORK/qhull-8.0.2" -B "$WORK/qhull-build" \
+      -DCMAKE_INSTALL_PREFIX="$P" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_FLAGS="-O2 -fPIC" -DCMAKE_CXX_FLAGS="-O2 -fPIC" \
+      -DCMAKE_TOOLCHAIN_FILE="$TC" \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
+      > "$WORK/qhull-conf.log" 2>&1
+  emmake cmake --build "$WORK/qhull-build" -j"$JOBS" > "$WORK/qhull-make.log" 2>&1
+  emmake cmake --install "$WORK/qhull-build" > "$WORK/qhull-inst.log" 2>&1
+  cp -f "$P/lib/libqhullstatic_r.a" "$P/lib/libqhull_r.a"
+  grep -q ' qh_new_qhull$' <(emnm "$P/lib/libqhull_r.a") || { echo "FATAL: libqhull_r.a 缺 qh_new_qhull" >&2; exit 1; }
+  echo "  ✅ qhull → $P（qh_new_qhull 在；已补 libqhull_r.a 别名）"
+}
+
+# ---------------------------------------------------------------------------
+# libsndfile（cmake；需要 -fPIC）
+# ---------------------------------------------------------------------------
+do_sndfile () {
+  say "libsndfile-1.2.2"
+  unpack "libsndfile-1.2.2.tar.xz" libsndfile-1.2.2
+  local P="$DEPS/sndfile"
+  local TC=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
+  cd "$WORK/libsndfile-1.2.2"
+  emcmake cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$P" \
+      -DBUILD_SHARED_LIBS=OFF -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF \
+      -DBUILD_TESTING=OFF -DENABLE_EXTERNAL_LIBS=OFF -DENABLE_MPEG=OFF \
+      -DCMAKE_C_FLAGS="-O2 -fPIC" -DCMAKE_TOOLCHAIN_FILE="$TC" \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
+      > "$WORK/sndfile-conf.log" 2>&1
+  emmake cmake --build build -j"$JOBS" > "$WORK/sndfile-make.log" 2>&1
+  emmake cmake --install build > "$WORK/sndfile-inst.log" 2>&1
+  grep -q ' sf_open$' <(emnm "$P/lib/libsndfile.a") || { echo "FATAL: libsndfile.a 缺 sf_open" >&2; exit 1; }
+  echo "  ✅ libsndfile → $P（sf_open 在）"
+}
+
+# ---------------------------------------------------------------------------
+# rapidjson（header-only：只需把头文件摊到 prefix）
+# ---------------------------------------------------------------------------
+do_rapidjson () {
+  say "rapidjson-1.1.0（header-only）"
+  unpack "rapidjson-1.1.0.tar.gz" rapidjson-1.1.0
+  local P="$DEPS/rapidjson"
+  mkdir -p "$P/include"
+  cp -r "$WORK/rapidjson-1.1.0/include/rapidjson" "$P/include/"
+  [ -f "$P/include/rapidjson/document.h" ] || { echo "FATAL: rapidjson 头未就位" >&2; exit 1; }
+  echo "  ✅ rapidjson → $P/include/rapidjson"
+}
+
+# ---------------------------------------------------------------------------
+# hdf5（autotools；只要 C 接口，关掉 tools/tests/fortran/cxx/hl 省时间）
+# ---------------------------------------------------------------------------
+do_hdf5 () {
+  say "hdf5-1.14.2"
+  unpack "hdf5-1.14.2.tar.gz" hdf5-1.14.2
+  local P="$DEPS/hdf5"
+  cd "$WORK/hdf5-1.14.2"
+  emconfigure ./configure --host=wasm32-unknown-emscripten --prefix="$P" \
+      --disable-shared --enable-static --disable-tools --disable-tests \
+      --disable-fortran --disable-cxx --disable-hl --disable-docs \
+      --disable-parallel --disable-threadsafe --with-pic \
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" \
+      > "$WORK/hdf5-conf.log" 2>&1
+  # ⚠️ 实测坑（交叉编译经典问题）：H5lib_settings.c / H5Tinit.c 是由**刚编出来的
+  #   程序**（H5make_libsettings / H5detect）在**运行时**生成的；而 Emscripten/Node 下
+  #   那个程序看不到宿主目录里的 libhdf5.settings → 报
+  #     libhdf5.settings: No such file or directory
+  #   标准解法：这两个是**构建期工具**，用**宿主原生**编译并运行来产出那两个 .c。
+  #   生成后把时间戳推新（并配 HDF5_Make_Ignore=1），阻止 make 再用那条跑不通的规则。
+  cd "$WORK/hdf5-1.14.2/src"
+  cc -I. -I.. -DHAVE_CONFIG_H -o "$WORK/h5mls" H5make_libsettings.c -lm
+  cc -I. -I.. -DHAVE_CONFIG_H -o "$WORK/h5det" H5detect.c -lm
+  [ -f libhdf5.settings ] || emmake make libhdf5.settings
+  "$WORK/h5mls" H5lib_settings.c
+  "$WORK/h5det"  H5Tinit.c
+  touch -d "now + 2 hour" H5lib_settings.c H5Tinit.c libhdf5.settings
+  cd "$WORK/hdf5-1.14.2"
+  HDF5_Make_Ignore=1 emmake make -j"$JOBS" > "$WORK/hdf5-make.log" 2>&1
+  HDF5_Make_Ignore=1 emmake make install > "$WORK/hdf5-inst.log" 2>&1
+  grep -q ' H5Fopen$' <(emnm "$P/lib/libhdf5.a") || { echo "FATAL: libhdf5.a 缺 H5Fopen" >&2; exit 1; }
+  echo "  ✅ hdf5 → $P（H5Fopen 在）"
+}
+
+case "${1:-list}" in
+  zlibbz2)   do_zlibbz2 ;;
+  glpk)      do_glpk ;;
+  fftw)      do_fftw ;;
+  qhull)     do_qhull ;;
+  sndfile)   do_sndfile ;;
+  rapidjson) do_rapidjson ;;
+  hdf5)      do_hdf5 ;;
+  all)       do_zlibbz2; do_glpk; do_fftw; do_qhull; do_sndfile; do_rapidjson; do_hdf5 ;;
+  list)      echo "可建：zlibbz2 glpk fftw qhull sndfile rapidjson hdf5（以及后续的 suitesparse/arpack/qrupdate）" ;;
+  *)         echo "未知库：$1" >&2; exit 2 ;;
+esac
+
+say "完成：$1"

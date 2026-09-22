@@ -149,6 +149,7 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `build/113/STATUS.md` (6867 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
 - `build/113/build-deps.sh` (9359 bytes)
+- `build/113/build-libs.sh` (10877 bytes)
 - `build/113/configure-113.sh` (12415 bytes)
 - `build/113/emf77` (4503 bytes)
 - `build/113/link-web.sh` (3918 bytes)
