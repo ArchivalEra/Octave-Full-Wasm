@@ -56,17 +56,27 @@ do_zlibbz2 () {
   # zlib（自带 configure 脚本，非 autoconf）
   unpack "zlib-1.3.1.tar.gz" zlib-1.3.1
   cd "$WORK/zlib-1.3.1"
-  emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
-  emmake make -j"$JOBS" > "$WORK/zlib-make.log" 2>&1
+  # ⚠️ zlib 的 configure **不是 autoconf**，不接受 `CC=...` 之类的参数
+  #   （实测报 "unknown option: CC=ccache emcc"）。CC 必须走**环境变量**。
+  CC="$CCACHE_CC" emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
+  emmake make -j"$JOBS" CC="$CCACHE_CC" > "$WORK/zlib-make.log" 2>&1
   emmake make install > "$WORK/zlib-inst.log" 2>&1
   grep -q ' deflate$' <(emnm "$P/lib/libz.a") || { echo "FATAL: libz.a 缺 deflate" >&2; exit 1; }
-  # bzip2（没有 configure，直接 make 目标 libbz2.a）
+  # bzip2：**绕开它的 Makefile**。实测两轮都失败：其 Makefile 里 `CC=gcc` 是
+  #   普通赋值，连 make 命令行传 CC 都没压住（日志里始终是宿主 gcc），于是产出
+  #   x86 对象，链接时报
+  #     archive member 'blocksort.o' is neither Wasm object file nor LLVM bitcode
+  #   与其和它的 Makefile 纠缠，不如直接编那 7 个源文件——完全可控。
   unpack "bzip2-1.0.8.tar.gz" bzip2-1.0.8
   cd "$WORK/bzip2-1.0.8"
-  emmake make -j"$JOBS" libbz2.a CFLAGS="-O2 -fPIC" > "$WORK/bz2-make.log" 2>&1
+  local bzobjs=() c
+  for c in blocksort huffman crctable randtable compress decompress bzlib; do
+    $CCACHE_CC -O2 -fPIC -D_FILE_OFFSET_BITS=64 -c "$c.c" -o "$c.bz.o"
+    bzobjs+=("$c.bz.o")
+  done
   mkdir -p "$P/lib" "$P/include"
-  cp -f libbz2.a "$P/lib/libbz2.a"
-  cp -f bzlib.h   "$P/include/bzlib.h"
+  emar rcs "$P/lib/libbz2.a" "${bzobjs[@]}"
+  cp -f bzlib.h "$P/include/bzlib.h"
   grep -q ' BZ2_bzCompress$' <(emnm "$P/lib/libbz2.a") || { echo "FATAL: libbz2.a 缺 BZ2_bzCompress" >&2; exit 1; }
   echo "  ✅ zlib + bzip2 → $P"
 }
@@ -79,8 +89,11 @@ do_glpk () {
   unpack "glpk-5.0.tar.gz" glpk-5.0
   local P="$DEPS/glpk"
   cd "$WORK/glpk-5.0"
+  # -fwasm-exceptions 必须与整棵树一致：glpk 用了 setjmp/longjmp，不统一就会带进
+  # legacy 的 invoke_*/emscripten_longjmp（实测扫出 117 处），web 终链报
+  #   invoke_ functions exported but exceptions and longjmp are both disabled
   emconfigure ./configure --prefix="$P" --disable-shared --enable-static \
-      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" > "$WORK/glpk-conf.log" 2>&1
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions" > "$WORK/glpk-conf.log" 2>&1
   emmake make -j"$JOBS" > "$WORK/glpk-make.log" 2>&1
   emmake make install > "$WORK/glpk-inst.log" 2>&1
   local s; s="$(emnm "$P/lib/libglpk.a")"
@@ -115,12 +128,19 @@ do_fftw () {
 # ---------------------------------------------------------------------------
 do_qhull () {
   say "qhull-8.0.2"
+  # ⚠️ 实测坑：qhull 用了 setjmp/longjmp。若构建时**不开** wasm 异常，
+  #   emscripten 默认走 legacy longjmp，对象里会引用 `emscripten_longjmp`；
+  #   而我们的整棵树是 -fwasm-exceptions，那个符号不会被提供 →
+  #     undefined symbol: emscripten_longjmp
+  #   且 `-sSUPPORT_LONGJMP=emscripten` 与 -fwasm-exceptions **明确不兼容**
+  #   （实测 emcc 报 "not compatible with -fwasm-exceptions"）。
+  #   所以必须让 qhull 与整棵树用同一套：加 -fwasm-exceptions。
   unpack "qhull-8.0.2.tar.gz" qhull-8.0.2
   local P="$DEPS/qhull"
   local TC=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
   emcmake cmake -S "$WORK/qhull-8.0.2" -B "$WORK/qhull-build" \
       -DCMAKE_INSTALL_PREFIX="$P" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_C_FLAGS="-O2 -fPIC" -DCMAKE_CXX_FLAGS="-O2 -fPIC" \
+      -DCMAKE_C_FLAGS="-O2 -fPIC -fwasm-exceptions" -DCMAKE_CXX_FLAGS="-O2 -fPIC -fwasm-exceptions" \
       -DCMAKE_TOOLCHAIN_FILE="$TC" \
       -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
@@ -164,6 +184,9 @@ do_rapidjson () {
   mkdir -p "$P/include"
   cp -r "$WORK/rapidjson-1.1.0/include/rapidjson" "$P/include/"
   [ -f "$P/include/rapidjson/document.h" ] || { echo "FATAL: rapidjson 头未就位" >&2; exit 1; }
+  # rapidjson 1.1.0 与新 clang 不兼容（Octave 的 jsondecode.cc 编不过）：
+  # 补丁逻辑独立成 build/113/fix-rapidjson.py，避免在 shell 里嵌 heredoc。
+  python3 /src/bin/fix-rapidjson.py "$P/include/rapidjson/document.h"
   echo "  ✅ rapidjson → $P/include/rapidjson"
 }
 
@@ -179,7 +202,7 @@ do_hdf5 () {
       --disable-shared --enable-static --disable-tools --disable-tests \
       --disable-fortran --disable-cxx --disable-hl --disable-docs \
       --disable-parallel --disable-threadsafe --with-pic \
-      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" \
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions" \
       > "$WORK/hdf5-conf.log" 2>&1
   # ⚠️ 实测坑（交叉编译经典问题）：H5lib_settings.c / H5Tinit.c 是由**刚编出来的
   #   程序**（H5make_libsettings / H5detect）在**运行时**生成的；而 Emscripten/Node 下
@@ -268,8 +291,14 @@ do_suitesparse () {
   unpack "suitesparse-full-5.4.0.tar.gz" SuiteSparse-5.4.0
   local P="$DEPS/suitesparse"; mkdir -p "$P/lib" "$P/include"
   cd "$WORK/SuiteSparse-5.4.0"
+  # CHOLMOD_CONFIG=-DNPARTITION：关掉 CHOLMOD 的分区模块。
+  #   实测不关的话它会引用 METIS（METIS_ComputeVertexSeparator / METIS_NodeND），
+  #   而我们没建 METIS（Octave 也不需要 CHOLMOD 的分区功能）。
+  #   SuiteSparse 文档原文：-DNPARTITION "do not include the Partition module.
+  #   also do not include METIS."
   local OV=( CC="$CCACHE_CC" CXX="$CCACHE_CXX" AR=emar RANLIB=emranlib
              CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC" CFOPENMP=
+             CHOLMOD_CONFIG="-DNPARTITION"
              BLAS="-lrefblas" LAPACK="-llapack" )
   # 用 **static** 目标，不用 library：后者末尾会 `make install` 去编 .so，
   # 而 SO_OPTS 里带 `-Wl,--no-undefined`（wasm-ld 不认识）→ 必失败。

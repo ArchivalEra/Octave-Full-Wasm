@@ -50,10 +50,28 @@ SFLAGS=( -s WASM=1 -s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1
          -s ERROR_ON_UNDEFINED_SYMBOLS=0
          -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 )
 
-LIBS=( "$OCT/libinterp/.libs/liboctinterp.a"
-       "$OCT/liboctave/.libs/liboctave.a"
-       "$OCT/libgnu/.libs/libgnu.a"
-       -L"$DEPS/lib" -llapack -lrefblas -lf2c -lpcre2-8 -lm )
+LIBS=(
+  # Octave 自身的三个归档
+  "$OCT/libinterp/.libs/liboctinterp.a"
+  "$OCT/liboctave/.libs/liboctave.a"
+  "$OCT/libgnu/.libs/libgnu.a"
+  # 各库的独立 prefix（② 建的）
+  -L/src/deps/glpk/lib -L/src/deps/qhull/lib -L/src/deps/fftw/lib
+  -L/src/deps/sndfile/lib -L/src/deps/qrupdate/lib -L/src/deps/hdf5/lib
+  -L/src/deps/zlibbz2/lib -L/src/deps/arpack/lib -L/src/deps/suitesparse/lib
+  -L"$DEPS/lib"
+  # 早期四个 + Octave 自己报的链接依赖（LIBOCTINTERP_LINK_DEPS / LIBOCTAVE_LINK_DEPS）
+  -llapack -lrefblas -lf2c -lpcre2-8
+  -lhdf5 -lz -lbz2
+  -lcholmod -lumfpack -lamd -lcamd -lcolamd -lccolamd -lcxsparse -lsuitesparseconfig
+  -lfftw3 -lfftw3f -larpack -lqrupdate
+  # ⚠️ 这三个**不在** LIB*_LINK_DEPS 里（它们只被 dldfcn 用），但必须链进主模块：
+  #   `.oct` 是 side module、**不链任何库**，装载时靠主模块解析符号——
+  #   qhull ← convhulln/__delaunayn__/__voronoi__，glpk ← __glpk__，sndfile ← audioread。
+  #   7.2 的 Makefile 注释里专门记了这条（"下面这一串 -l 一个都不能删"）。
+  -lglpk -lqhull_r -lsndfile
+  -lm
+)
 
 #  ---- 异常模式：必须与整棵树一致 -------------------------------------------
 #  实测坑：给 main.o 用 `-fwasm-exceptions`（原生 wasm 异常）而树用 `-fexceptions`
