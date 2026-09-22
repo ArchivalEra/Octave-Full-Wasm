@@ -1,5 +1,32 @@
 # 闸门③ 未通过：11.3.0 的 wasm 是「共享内存（pthread）」构建
 
+## ✅ 已解决（2026-09-22）—— 下面保留为「当时的分析与问题单」
+
+**解法**（由外部审查指出，已实测通过）：把两件事**解耦**——
+「有没有 `pthread.h`」保持 **yes**（gnulib 于是不生成替代头，patch 0010 不用碰），
+只让 `AX_PTHREAD` 在 emscripten 下**不生效**。
+
+实现：`build/113/patch-ax-pthread.sh` 在生成的 `configure` 里、
+`AX_PTHREAD` 展开块的 ACTION-IF-FOUND 判定之前，对**每一处展开**（实测 2 处）
+插入 `case $host in *-emscripten*) ax_pthread_ok=no; PTHREAD_CFLAGS=""; PTHREAD_LIBS="";; esac`。
+（注意 release tarball 里 `configure` 是预生成的，只改 `configure.ac` 不生效。）
+
+**实测结果**：
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| `BUILD_CFLAGS` | `-O2 -fPIC -pthread -fwasm-exceptions` | `-O2 -fPIC -fwasm-exceptions`（**无 -pthread**） |
+| `PTHREAD_CFLAGS` / `PTHREAD_LIBS` | `-pthread` / `-lpthread` | **空** |
+| `HAVE_PTHREAD_H` | 1 | **1（保持不变）** |
+| 胶水 `shared:true` | 1 | **0** |
+| wasm 内存 | shared（由 JS 提供） | `limits_flags=0x1` → **非 shared** |
+| worker 文件 | — | **无** |
+| 数值回归 | — | `x=2 1`、`det=5`、`svd=5.398345638`、`eig=5`，**与本机 11.3.0 逐位一致** |
+
+**三道闸门现全部通过。** 本文余下部分保留作为分析与问题单的存档。
+
+---
+
 > 2026-09-22。给外部（GPT）看的问题单 + 我们已试过的记录。
 > 结论先说：**闸门① 与 闸门② 都过了**；**闸门③（不引入 COI/SharedArrayBuffer）没过**，
 > 根因已定位，但按「不死磕」的约定停在这里，把问题交出去。

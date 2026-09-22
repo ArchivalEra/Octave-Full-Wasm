@@ -139,6 +139,17 @@ else
   echo "  [2] 已处理（跳过）"
 fi
 
+# 3) emscripten 下跳过 AX_PTHREAD（但**保留** pthread.h 检测）
+#    这一步是闸门③（免 COI）的关键，详见 build/113/GATE3-QUESTION.md 与
+#    patch-ax-pthread.sh 的头注释。要点：把「有没有 pthread.h」与
+#    「要不要 pthread 线程模型」解耦——前者保持 yes（gnulib 于是不造替代头），
+#    后者在 emscripten 下由本补丁压成空，使全树不带 -pthread。
+if [ -f /src/bin/patch-ax-pthread.sh ]; then
+  bash /src/bin/patch-ax-pthread.sh "$SRCDIR"
+else
+  echo "FATAL: 缺 patch-ax-pthread.sh（闸门③ 必需）" >&2; exit 1
+fi
+
 echo "=== configure $SRCDIR → $PREFIX"
 emconfigure ./configure \
   --host=wasm32-unknown-emscripten \
