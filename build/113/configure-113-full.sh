@@ -60,7 +60,17 @@ rapidjson|rapidjson|
 echo "=== 依赖表（SKIP=\"$SKIP\"）"
 while IFS='|' read -r name pf opt; do
   [ -n "$name" ] || continue
-  if skipped "$name"; then echo "   [跳过] $name"; continue; fi
+  # SKIP 既可写 prefix 名（跳过该 prefix 下所有选项），也可写选项名
+  # （如 SKIP=umfpack 只关 UMFPACK，但保留 SuiteSparse 其余部分）——
+  # 按库集合二分 / 精确关单个库都靠它。
+  if skipped "$name" || { [ -n "$opt" ] && skipped "$opt"; }; then
+    # ⚠️ 仅仅"不传 --with-<opt>-*"是**不够**的：库的 prefix 已经在
+    #   CPPFLAGS/LDFLAGS 的搜索路径里，configure 自己就会找到它
+    #   （实测：不传 --with-umfpack-* 时 HAVE_UMFPACK 仍是 1）。
+    #   必须**显式 --without-<opt>** 才能真正关掉。
+    [ -n "$opt" ] && FLAGS+=("--without-$opt")
+    echo "   [跳过] $name${opt:+ / $opt}（显式 --without-$opt）"; continue
+  fi
   p="$D/$pf"
   [ -d "$p" ] || { echo "FATAL: 库 $name 的 prefix 不存在：$p" >&2; exit 2; }
   [ -d "$p/include" ] && INCS+=("-I$p/include")
