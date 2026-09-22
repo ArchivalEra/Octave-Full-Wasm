@@ -290,7 +290,7 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `dist/DEPLOY.md` (6427 bytes)
 - `dist/serve.py` (2668 bytes)
 - `test/browser/accept-113-boot.mjs` (4837 bytes)
-- `test/browser/accept-113-oct.mjs` (4691 bytes)
+- `test/browser/accept-113-oct.mjs` (5176 bytes)
 - `test/browser/accept-archive.mjs` (5665 bytes)
 - `test/browser/accept-audio.mjs` (12365 bytes)
 - `test/browser/accept-dldfcn.mjs` (11012 bytes)

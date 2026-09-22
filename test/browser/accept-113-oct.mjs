@@ -86,7 +86,15 @@ await ev('which 指向 .oct',       "w=which('miniprobe'); disp(!isempty(w))", '
 // 关键一条：走完整 ABI，并且 determinant() 会回调**主模块里的 LAPACK**
 await ev('调用① det→5',          "printf('%.10g', miniprobe([2,3;1,4]))", '5');
 await ev('调用② det→-2（再次调用）', "printf('%.10g', miniprobe([1,2;3,4]))", '-2');
-await ev('非方阵走错误路径',       "miniprobe([1,2,3])", undefined);
+// 非方阵：**期望**报错（验证错误路径确实交回消息）。不能用通用 ev()——
+// 它的判定是"不能有 error"，对这条恰好相反；且 error 会中止执行、哨兵不会出现，
+// 所以必须走"不等哨兵"的路径。
+{
+  const r = await run("miniprobe([1,2,3])", 20000, false);
+  const ok = /must be square/i.test(r.out) || /must be square/i.test(r.err || '');
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'PASS' : 'fail'} | ${'非方阵走错误路径'.padEnd(30)} :: ${(r.out || r.err || '(空)').slice(0, 96)}`);
+}
 await ev('clear 后再调用（重解析）', "clear miniprobe; printf('%.10g', miniprobe([2,0;0,3]))", '6');
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
