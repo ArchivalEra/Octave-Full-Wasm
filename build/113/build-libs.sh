@@ -310,11 +310,46 @@ do_suitesparse () {
   #   Octave 这边 OCTAVE_IDX_TYPE 是 int32_t，而 wasm32 上 `long` 也是 32 位，
   #   两边本来一致；强行改成 64 位反而制造了真错配（改完 lu 照样 trap）。
   #   详见 build/113/NOTES-umfpack.md。
+  #
+  # ★★ -DNBLAS / -DNSUPERNODAL：**稀疏 lu 整页 trap 的真正根因**（2026-09-22 查明）
+  #
+  # 现象（改之前）：稀疏 `lu(s)` 的 3 输出/4 输出 → `RuntimeError: unreachable`，
+  #   整个页面死掉；而 1/2 输出正常，`chol(s)`/`qr(s)`/`s\b` 也都正常。
+  #
+  # 根因：这两个开关**正是"别用外部 BLAS"**的开关，而本仓的 BLAS 是 **f2c 转出来的**
+  #   （下面 `BLAS="-lrefblas"`）。UMFPACK 的 C 代码按"标准 BLAS"的约定调
+  #   `dgemm_`/`dger_`/`dtrsv_`/`dtrsm_`，而 f2c 版这些例程用的是 f2c 的隐藏长度
+  #   （`ftnlen`）约定 → 形参错位、内存被踩 → wasm trap。
+  #   **1/2 输出不做数值分解所以不炸；3+ 输出要走 → 必炸** —— 现象与根因严丝合缝。
+  #   旁证：11.3.0 的 `libumfpack.a` 里能查到 `dgemm_/dger_/dtrsv_/dtrsm_/zgemm_…`
+  #   这些**未定义**符号，而 7.2 那份**一个都没有**（对照见下）。
+  #
+  # 证据（不是猜的，是拿 7.2 的**成品源码树**跟干净 tarball 逐行 diff 出来的）：
+  #   本仓 vendored 的 7.2 SuiteSparse 树里，`SuiteSparse_config.mk` 相对干净
+  #   `suitesparse-full-5.4.0.tar.gz` 只有 3 处人工改动：
+  #     :269  `UMFPACK_CONFIG ?= -DNBLAS`                          ← 本处
+  #     :313  `CHOLMOD_CONFIG ?= $(GPU_CONFIG) -DNPARTITION -DNSUPERNODAL`  ← 本处
+  #     :476  `SO_OPTS += -shared -Wl,-soname -Wl,$(SO_MAIN)`
+  #           （去掉了 tarball 自带的 `-Wl,--no-undefined`）
+  #   前两处就是"别用外部 BLAS"，第三处是"编 .so 别要求符号全定义"——我们用
+  #   `static` 目标，天然不碰 SO_OPTS。
+  #   ⇒ **7.2 能用，是因为它带着这两个补丁**；11.3.0 用了干净 tarball 却只照抄了
+  #     `-DNPARTITION`，于是踩了 7.2 早就踩过、且早已修掉的同一个坑。
+  #
+  # 与 NOTES-umfpack.md 的关系：那份里"索引宽度"的假设**仍然是被证伪的**；
+  #   这里不是翻案，是找到了另一条（7.2 已经验证过的）解释。
   local OV=( CC="$CCACHE_CC" CXX="$CCACHE_CXX" AR=emar RANLIB=emranlib
              CFOPENMP=
-             CHOLMOD_CONFIG="-DNPARTITION"
+             CHOLMOD_CONFIG="-DNPARTITION -DNSUPERNODAL"
+             UMFPACK_CONFIG="-DNBLAS"
              CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC"
              BLAS="-lrefblas" LAPACK="-llapack" )
+  # ⚠️ 改了 config 宏就必须**先删旧 .o 再编**：SuiteSparse 的 make 不会因为
+  #   "命令行里多了一个 -D" 就重编已有对象（与 HANDOFF §10.3 坑 2 同源）。
+  #   只清受影响的两个库的 .o，精确且可解释。
+  for _l in UMFPACK CHOLMOD; do
+    [ -d "$_l/Lib" ] && { rm -f "$_l"/Lib/*.o; echo "  清了 $_l/Lib/*.o（config 变了，必须重编）"; }
+  done
   # 用 **static** 目标，不用 library：后者末尾会 `make install` 去编 .so，
   # 而 SO_OPTS 里带 `-Wl,--no-undefined`（wasm-ld 不认识）→ 必失败。
   # static 只产 .a，正好是我们要的。

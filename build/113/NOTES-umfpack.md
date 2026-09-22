@@ -1,6 +1,13 @@
-# UMFPACK 稀疏 lu 整页 trap —— 调查记录（含一个被实测证伪的假设）
+# UMFPACK 稀疏 lu 整页 trap —— 调查记录（**根因已查明**，附一个被证伪的假设）
 
-> 诚实记录：本文件里的**假设已被证伪**，原因仍未查明。不要照着"索引宽度"那条去修。
+> **✅ 根因（2026-09-22 查明）：少传了 `-DNBLAS` / `-DNSUPERNODAL`，于是 UMFPACK
+> 去调 f2c 版 BLAS，ABI 错位踩内存 → trap。**
+> 修法已落进 `build/113/build-libs.sh`（`UMFPACK_CONFIG="-DNBLAS"`、
+> `CHOLMOD_CONFIG="-DNPARTITION -DNSUPERNODAL"`），并带"改了 config 就必须先删 .o"
+> 的守卫。验证见下面「根因」一节。
+>
+> ⚠️ 本文件下半部分那个"索引宽度"的假设**仍然是被实测证伪的** —— 别照它修。
+> 下面「现象 / 处置 / 下一步」几节保留为**当时的过程记录**，最后加一节写真相。
 
 ## 现象（可复现）
 
@@ -70,4 +77,57 @@ $ grep OCTAVE_IDX_TYPE config.h
 - 其余 **11 条树内断言全部通过**（hdf5/fft/ifft/sparse qr/chol/inv/save -z/-v7/json/cholupdate）。
 - `accept-113-boot` 10/10、`accept-113-oct` 8/8。
 - **8761（7.2 基线）全程未动**。
-- 稀疏 `lu` 三个以上输出：**当前不可用**，属已知回退。
+- 稀疏 `lu` 三个以上输出：**当时不可用，属已知回退**（换基线因此被卡住）——
+  **已在下一节修好**。
+
+---
+
+## ✅ 根因与修法（2026-09-22 查明；本节推翻上面「下一步」里的方向 1/2）
+
+### 一句话
+**11.3.0 建 SuiteSparse 时漏传了 `-DNBLAS`（和 CHOLMOD 的 `-DNSUPERNODAL`），
+于是 UMFPACK 去调本仓那套 f2c 转出来的 BLAS，ABI 错位踩内存 → wasm trap。**
+
+### 为什么现象对得上
+- `-DNBLAS` 的语义就是"**别用外部 BLAS**，UMFPACK 用它自带的内部实现"（会慢）。
+- 只有 **3 输出/4 输出**的稀疏 `lu` 才真正走数值分解 → 才会碰 BLAS → 才炸；
+  1/2 输出不分解，所以正常。
+- 实测 `chol(s)`/`qr(s)`/`s\b` 都正常 —— 它们不走 UMFPACK 这条。
+- **本仓的 BLAS 是 f2c 转的**（`BLAS="-lrefblas"`，lapack-3.4.2 经 emf77）。
+  UMFPACK 的 C 代码按"标准 BLAS"的约定调 `dgemm_`/`dger_`/`dtrsv_`/`dtrsm_`，
+  而 f2c 版这些例程用的是 f2c 的**隐藏长度（`ftnlen`）**约定 → 形参错位 →
+  踩内存 → `unreachable`。这是"能编能链、一调就炸"的典型。
+
+### 证据（不是推测，是跟 7.2 的成品源码树逐行 diff 出来的）
+本仓 vendored 的 7.2 SuiteSparse 树
+（`/mnt/hdd/octave-wasm-build/octave-wasm/third_party/suitesparse-5.4.0/`
+`SuiteSparse_config/SuiteSparse_config.mk`）与干净 tar 包
+（`suitesparse-full-5.4.0.tar.gz`）相比，**只有 3 处人工改动**：
+
+| 行 | 7.2 vendored | 干净 tar 包 | 作用 |
+|---|---|---|---|
+| :269 | `UMFPACK_CONFIG ?= -DNBLAS` | `UMFPACK_CONFIG ?=`（空） | 别用外部 BLAS |
+| :313 | `CHOLMOD_CONFIG ?= $(GPU_CONFIG) -DNPARTITION -DNSUPERNODAL` | `… $(GPU_CONFIG)`（只有空） | 别用 BLAS/LAPACK 的 supernodal 模块 |
+| :476 | `SO_OPTS += -shared -Wl,-soname -Wl,$(SO_MAIN)` | 同前 + `-Wl,--no-undefined` | 编 `.so` 别要求符号全定义 |
+
+⇒ **7.2 能用，正是因为它带着前两个补丁**；11.3.0 用了干净 tar 包，
+只照抄了 `-DNPARTITION`，于是踩了 7.2 早就踩过、并且早已修掉的**同一个坑**。
+
+### 库层面的验证（改完立刻可测，不用等全量重编）
+重建 UMFPACK/CHOLMOD 后对比 `libumfpack.a` 的**未定义**符号集：
+
+| | 未定义符号总数 | 其中 BLAS 族 |
+|---|---|---|
+| 11.3.0 **改之前** | 258 | **10**（`dgemm_ dgemv_ dger_ dtrsm_ dtrsv_ zgemm_ zgemv_ zgeru_ ztrsm_ ztrsv_`）|
+| 11.3.0 **改之后** | 248 | **0** |
+| 7.2 成品（对照） | 248 | 0 |
+
+改后与 7.2 的差集只剩 `__indirect_function_table`（我们 `-fPIC` 才有）与
+`log10`（我们由 libm 解析）—— 都是与本次问题无关的差异。
+
+### 落地的改动
+`build/113/build-libs.sh` 的 `do_suitesparse()`：
+`UMFPACK_CONFIG="-DNBLAS"`、`CHOLMOD_CONFIG="-DNPARTITION -DNSUPERNODAL"`，
+并在构建前 `rm -f UMFPACK/Lib/*.o CHOLMOD/Lib/*.o`（**改了 config 宏就必须先删旧对象**
+—— SuiteSparse 的 make 不会因为"命令行多了个 -D"就重编，与 HANDOFF §10.3 坑 2 同源）。
+

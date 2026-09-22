@@ -72,6 +72,16 @@ await ev('ifft 往返',        "x=rand(1,16); disp(max(abs(ifft(fft(x))-x))<1e-1
 console.log('--- SuiteSparse / CXSparse ---');
 await ev('sparse qr: s=Q*R', "s=sparse([1 0 0;0 2 0;0 0 3]); [Q,R]=qr(s); disp(norm(full(s-Q*R))<1e-12)", '1');
 await ev('sparse lu',        "s=sparse([4 1;1 3]); [L,U,P]=lu(s); disp(norm(full(P*s-L*U))<1e-12)", '1');
+// ⚠️ 下面四条是**曾经整页 trap** 的 UMFPACK 路径（`RuntimeError: unreachable`），
+//    根因是建 SuiteSparse 时漏传 -DNBLAS → UMFPACK 去调 f2c 版 BLAS、ABI 错位。
+//    详见 build/113/NOTES-umfpack.md。**别删这几条** —— 它们就是那个回归的护栏：
+//    只有 3+/4 输出与 `'vector'` 形式才真正走数值分解，也就只有它们会碰 BLAS。
+await ev('sparse lu 4 输出',  "s=sparse([4 1;1 3]); [L,U,P,Q]=lu(s); disp(norm(full(P*s*Q-L*U))<1e-12)", '1');
+await ev('sparse lu vector',  "s=sparse([4 1;1 3]); [L,U,p]=lu(s,'vector'); disp(norm(full(L*U-s(p,:)))<1e-12)", '1');
+await ev('稀疏 lu 更大矩阵',    "n=8; s=sparse(1:n,1:n,4,n,n)+sparse(2:n,1:n-1,-1,n,n)+sparse(1:n-1,2:n,-1,n,n); [L,U,P]=lu(s); disp(norm(full(P*s-L*U))<1e-12)", '1');
+// 复稀疏：会走 zgemm_/zgeru_（复 BLAS），是最能暴露 ABI 错位的一条
+await ev('复稀疏 lu',         "s=sparse([4+1i 1;1 3-2i]); [L,U,P]=lu(s); disp(norm(full(P*s-L*U))<1e-12)", '1');
+await ev('100x100 稀疏求解',   "n=100; A=sparse(1:n,1:n,4,n,n)+sparse(2:n,1:n-1,-1,n,n)+sparse(1:n-1,2:n,-1,n,n); b=ones(n,1); x=mldivide(A,b); disp(norm(A*x-b)<1e-10)", '1');
 await ev('sparse chol',      "s=sparse([4 1;1 3]); R=chol(s); disp(norm(full(R'*R-s))<1e-12)", '1');
 await ev('sparse inv',       "s=sparse([4 1;1 3]); d=inv(s)*s; disp(norm(full(d-eye(2)))<1e-12)", '1');
 
