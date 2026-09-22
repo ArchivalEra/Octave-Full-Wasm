@@ -412,9 +412,9 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | ~~5~~ | ~~**T5**~~ | ✅ **已完成**：`input()` **本来就能用**（Emscripten 默认 stdin → `/dev/tty` → `window.prompt`），只加了官方扩展点 `Module.stdin` 让验收可确定性断言。见 §5.9 | — | 无需代码 |
 | ~~6~~ | ~~**T6**~~ | ✅ **已完成（2026-09-22）**：`audiodevinfo` 最小 shim + `doc` 的浏览器实现 + **输出落点**（计划外，见下）。`accept-t6-audio-doc` **33/33**。见 **§5.10** 与 `build/113/NOTES-t6-t7-hostlayer.md` | — | **资产（零重链）** |
 | ~~7~~ | ~~**T7**~~ | ✅ **已完成（2026-09-22）**：19 个 `__recorder_*` 纯 `.m` + `getUserMedia`/`MediaRecorder` 桥；权限三态各自明确报错。`accept-t7-recorder` **40/40**。**`recordblocking` 如实报错**（实测需要 Asyncify，见 §5.10） | — | **资产+JS 桥（零重链）** |
-| 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS（**已实测确认**：同步性必须靠 Asyncify —— `pause()` 会完全阻塞页面，所以"轮询等待"那条路走不通，见 §5.10 坑 1） | 1–2 d | 需 G2 先验 |
-| 9 | **T9** | **G1 `MAIN_MODULE=2` + 自动 keep 清单**：读每个 `.oct` 的 wasm import 表 → 生成保活集 → 跑全量回归验证 | 1–3 d | Lane B |
-| 10 | **T10** | **G2 Asyncify 最小实验**（**只实验不采用**）：用 `ASYNCIFY_IMPORTS/ONLY/REMOVE` 限制插桩范围，测体积/性能/回归。**优先级因 T7 的实测而上调**：`recordblocking` 与 `uigetfile` 都卡在这 | 0.5–1 d | 独立容器 |
+| 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS。**⚠️ 已实测排除了 Asyncify 路线**（T10 结论：Asyncify 与本构建必需的 `-fwasm-exceptions` 互斥，链不出来）⇒ 只能走**非标准异步 API**（外部审核当时并列的"路线 B"），并如实标注语义与 MATLAB 不同 | 1–2 d | 资产 + JS 桥 |
+| 9 | **T9** | **G1 `MAIN_MODULE=2` + 自动 keep 清单**：读每个 `.oct` 的 wasm import 表 → 生成保活集 → 跑全量回归验证（体积优化，Lane B） | 1–3 d | Lane B |
+| ~~10~~ | ~~**T10**~~ | ✅ **已实验（2026-09-22）——结论：Asyncify 不可采用**。`-s ASYNCIFY=1` 链接**失败**：`emcc.py:438` 明确警告 `ASYNCIFY=1 is not compatible with -fwasm-exceptions`，随后 `wasm-opt --asyncify` 报 `__asyncify_get_call_index does not exist` 返回 1，产物未生成。**代价不是体积，而是整条 `.oct` 资产车道**（JS 式异常会让 side module 装载即崩，§10.3 坑 1）。完整记录见 `build/113/NOTES-asyncify.md` | — | 独立目录（部署未动） |
 
 **明确暂缓（GPT 判断，采纳）**：`D2b publish`(2–4d)、`E2 keyboard/kbhit/pause`
 （等 Asyncify）、`H3 getframe/movie`（等 graphics 成熟）、`H4`、`H1 voronoi 单输出`
@@ -1023,6 +1023,31 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 `build/assets-meta.json`，并补了工具 **`build/assets.py sync-js`**
 （不能用 `gen-manifest`：它整份重算，会把 11.3.0 站点 `file` 类资产的
 11.3.0 专属 mount 路径算错）。
+
+### 5.11 T10 已完成（2026-09-22）——**Asyncify 不可采用**（实测）
+
+计划里 T10 是"只实验不采用"。实验做完了，**结论比预期干脆：它在这个构建里链不出来**，
+因此**不可以采用**。完整记录见 **`build/113/NOTES-asyncify.md`**。
+
+- **做法**：`EXTRA_LDFLAGS="-s ASYNCIFY=1" bash link-web.sh /src/websrc/asyncify-out`
+  （Asyncify 是链接期 binaryen 变换，不用重编任何 `.o`；输出到独立目录，部署未动）。
+- **结果（硬失败）**：`emcc.py:438` 明确警告
+  `ASYNCIFY=1 is not compatible with -fwasm-exceptions. Parts of the program that mix
+  ASYNCIFY and exceptions will not compile.`，随后
+  `wasm-opt --asyncify` 报 `Fatal: Module::getFunction: __asyncify_get_call_index does
+  not exist` 并返回 1 —— **`octave.js` 未生成**。
+- **为什么这条结论是决定性的**：本构建**必须**用 `-fwasm-exceptions`
+  （§10.3 坑 1：JS 式异常引入只在胶水里的 `invoke_*`/`__cxa_*`，side module 装载即崩）。
+  所以"上 Asyncify"的真实代价不是体积，**而是整条 `.oct` 资产车道**
+  （dldfcn 核心组 + 全部 Forge 编译件 + `__ode15__` + 录/放音桥）。
+  **代价与收益完全不成比例。**
+- **体积那点数据只能当下界**：换旗标后（Asyncify pass 之前）的中间 wasm 41.17MB
+  vs 部署版 35.97MB（+5.2MB）。**Asyncify pass 没跑成，所以从没得到过有效产物**——
+  别把这 +14.5% 写成"Asyncify 的代价"。
+- **对 T8 的直接影响**：`uigetfile` **不走 Asyncify**，改走外部审核并列的**路线 B**
+  （非标准异步 API），并如实标注与 MATLAB 语义不同。
+- **安全**：实验前后部署件 sha256 都是 `bac48adb960c9c79…`（`site/` 与
+  `o113:/src/websrc/out/` 两侧都核过）。
 
 ---
 
