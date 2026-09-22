@@ -365,9 +365,18 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
   }
 
   // Phase 1: the original 16 dirs (proven good) — one shot, abort on failure.
+  //
+  // 开头额外加上 `m` 目录**本身**（不只是它的子目录）。这不是可有可无的：
+  // Octave 11.x 的 m/ 下有 `+matlab`、`+containers`、`@ftp` 三个特殊目录
+  // （`+` 是包命名空间、`@` 是类目录），它们**不是靠自己被 addpath 解析**，
+  // 而是靠**父目录 m/ 在 path 上**才解析得到。
+  // 依据（实读本机同版 octave 11.3.0 的 path()）：里面确实有
+  // `/usr/share/octave/11.3.0/m` 这一条，却没有单独列 `+matlab` 等。
+  // 7.2 时代没有这类目录，所以当时不需要这一条——这是 11.x 的差异，别照抄 7.2。
   try {
     octave_value_list octave_paths;
-    octave_paths(0) = octave_value("/usr/src/octave/m/help:"
+    octave_paths(0) = octave_value("/usr/src/octave/m:"
+        "/usr/src/octave/m/help:"
         "/usr/src/octave/m/general:"
         "/usr/src/octave/m/set:"
         "/usr/src/octave/m/miscellaneous:"
