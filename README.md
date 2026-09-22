@@ -1,11 +1,13 @@
 # Octave-Full-Wasm
 
-目标：**浏览器里跑满功能 Octave 7.2**——官方 `rwl/octave-wasm` 只预装 16 个 `.m` 目录，
-本仓库把剩下能补的全部补上：全量核心脚本、forge 统计、纯 `.m` 后备 FFT、
-自研 `ttest`、plot 翻译桥（Octave 算 + gnuplot-wasm 画）。
+目标：**浏览器里跑满功能 Octave**（当前基线 **11.3.0**）——把官方发行版缺的宿主组件
+换成浏览器原生 API，并把 C 库长尾尽量补全：全量核心脚本、Forge 包、
+SuiteSparse / ARPACK / FFTW / QHull / GLPK / HDF5、图像与音频 I/O、同步网络、
+plot 桥 + `print -dsvg`。
 
-上游：`rwl/octave-wasm`（BSD）+ Emscripten 3.1.24。构建产物（wasm/data/js）
-体积大，走 Release 分发，不进 git。
+起点是 `rwl/octave-wasm`（BSD）的 7.2 骨架；**第四轮已换基线到 vanilla
+Octave 11.3.0 + emsdk 5.0.7**（计划见 `HANDOFF.md` §9，实况与坑见 §10）。
+构建产物（wasm/data/js）体积大，走 Release 分发，不进 git。
 
 ## 为什么是网页版
 
@@ -15,7 +17,7 @@
    gnuplot/图形，每一步劝退一批人；网页版是**一个链接**。对"考前冲刺"场景，
    安装成本直接等于放弃率。
 2. **手机能用**——桌面版永远做不到。通勤/课间用手机跑一段矩阵、看一眼图。
-3. **可分享、可复现、版本钉死**——URL 即环境；Octave 7.2.0 + 具体 BLAS/包版本
+3. **可分享、可复现、版本钉死**——URL 即环境；Octave 11.3.0 + 具体 BLAS/包版本
    全打包，所有人算出的数字一致。桌面版是"在我机器上能跑"。
 4. **示例可以内嵌成"活的"**——教材解析里的例子不再需要"自己复制到 Octave 试"，
    点一下就跑，输出长在讲解旁边。文字/符号气泡/可执行代码是**同一个产物**。
@@ -29,51 +31,57 @@
 
 一句话：桌面版是「**一台装着 Octave 的电脑**」，网页版是「**一个能算、能画、
 能被链接和嵌入的 Octave**」。前者拼功能完整性，后者拼**分发与集成**。
-代价也要认清：慢（-O0 + wasm）、无工具箱生态、无 GUI 工具链、内存受限——
+代价也要认清：慢（wasm 单线程、无 JIT）、无工具箱生态、无 GUI 工具链、内存受限——
 它不是取代桌面版，是**另一个产品**。
 
 ## 架构
 
 ```text
-Octave 7.2 wasm（build/Makefile + build/main.cc 补丁；-O1 编译）
+Octave 11.3.0 wasm（build/113/configure-113-full.sh + link-web.sh；-O2 编译）
 ├── 全量核心 .m（plot/ode/signal/special-matrix/…，两段式 addpath）
 ├── vendor/forge：forge statistics 纯 .m（normpdf/tcdf/ttest 依赖…）
 ├── 真 .oct 动态装载：主模块 -s MAIN_MODULE=1，模块编成 wasm side module
-│   运行时 dlopen —— 与桌面版插件模型一致，加模块不必重链那 44MB 主 wasm。
+│   运行时 dlopen —— 与桌面版插件模型一致，加模块不必重链那 36MB 主 wasm。
 │   连 dldfcn（convhulln/gzip/glpk/fftw/audioread/…）也走这条路。
 ├── 资产懒加载车道：站点 assets/ 下按需 fetch → 写 wasm FS → addpath
 │   （Forge 包、SUNDIALS、图像、音频、网络、plot 桥覆写全在这里）
-├── plot 桥 v2：Octave 算 → spec → gnuplot-wasm → SVG（2D + 3D）
+├── plot 桥 v2：Octave 算 → spec → SVG（2D + 3D，含 subplot/figure(n)/axis）
 └── print -dsvg：纯 .m SVG 生成器（不依赖 gnuplot，也不需 Asyncify）
 ```
 
 构建命令里 `-s MAIN_MODULE=1` 与 `-fPIC` 是一对：主链带 MAIN_MODULE 时，
-Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`
-重编，否则 wasm-ld 报 `recompile with -fPIC`。换 O 级走 `build/reconf-bench.sh`。
-配方与坑见 `build/CLIBS.md`。
+Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recompile with -fPIC`。
+**11.3.0 车道的重配/重链是 `build/113/configure-113-full.sh` + `build/113/link-web.sh`**
+（依赖写成一张表，`SKIP=<库名>` 可按库集合二分；7.2 时代的 `build/reconf-pic.sh`
+保留作历史记录）。配方与坑见 `build/CLIBS.md`。
 
-## 状态（2026-09-21 实测）
+## 状态（2026-09-22 实测）
 
-**R1–R10 需求全部落地**（见 `build/GAPS.md` 的需求书与 `HANDOFF.md` §5 的结论表）。
+**基线 = Octave 11.3.0**。`http://127.0.0.1:8761/` 服务的就是**最近一次通过浏览器
+实测**的构建（wasm sha256 `bac48adb…`）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
+（见 `build/GAPS.md` 的需求书与 `HANDOFF.md` §5 / §10 的结论表）。
 
 | 项 | 结果 |
 |---|---|
-| 线代/微积分/优化/ODE45/多项式 | ✅ 全对 |
+| 线代/微积分/优化/ODE45/多项式 | ✅ 全对（与本机同版 11.3.0 **逐位一致**） |
 | 统计分布 + ttest/regress + fft 后备 | ✅ 全对 |
-| R1 SUNDIALS → `ode15s`/`ode15i` | ✅ 刚性方程误差 9.2e-05（收紧容差 1.1e-08） |
+| R1 SUNDIALS → `ode15s`/`ode15i` | ✅ 真 `__ode15__.oct`（SUNDIALS 静态码全在模块内，主 wasm 零改动） |
 | R2 Forge 包（statistics/optim/signal/control/…） | ✅ 懒加载，真数值验证 |
 | R3 HDF5 → `save/load -hdf5` | ✅ 往返/压缩/`whos -file` 全通 |
 | R4 图像 → `imread`/`imwrite`/`imfinfo` | ✅ PNG/BMP/TGA 像素级无损 |
 | R5 网络 → `urlread`/`urlwrite`/`webread`/`websave` | ✅ **真同步**（同步 XHR，无需 Asyncify） |
 | R6 压缩归档（6 个函数无 shell 化） | ✅ 二进制字节级往返 |
-| R7 CXSparse | ✅ 已开（SPQR 未做，非阻塞） |
+| R7 CXSparse | ✅ 已开（SPQR 不是缺口，`spqr` 3.6.0 就被 `qr` 取代） |
 | R8 WebAudio → `audioplayer` | ✅ 18 个符号纯 `.m` 实现，真实 AudioContext 调度 |
 | R9 图形导出 → `print -dsvg` | ✅ 2D + 3D 都能出，不依赖 gnuplot |
-| R10 编译级别 | ✅ **采纳 `-O1`**：解释器密集代码快 5–10×，体积还小 7.5MB |
+| R10 编译级别 | ✅ 11.3.0 车道走 `-O2`；R10 计时护栏（1e6 循环 <1.5s）通过 |
 | plot 桥 | ✅ v2：2D（含 subplot/figure(n)/axis）+ 3D（plot3/mesh/surf/contour）+ 中文标签 |
-| **官方 `.oct` 装载** | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
-| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260921`，首包 gzip ≈11.6MB |
-| 验收 | ✅ **19 套 475 项全绿**（含需求级 `accept-requirements` + T 批次专项） |
+| **图形句柄（T2）** | ✅ `web` toolkit：`figure/gcf/gca/get/set/title/close` 全可用（资产车道） |
+| 官方 `.oct` 装载 | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
+| 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
+| `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
+| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260922`，首包 gzip ≈11.6MB |
+| 验收 | ✅ **26 套 646 项全绿**（含需求级 `accept-requirements`） |
 
 ### 已知偏差（如实）
 - ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
@@ -86,29 +94,32 @@ Octave 本体与 5 个静态库必须走 `build/reconf-pic.sh` + `build/rebuild-
   签名不匹配会整页崩，故 `ss`/`step`/`tf2ss` 不可用（`tf`/`dcgain`/`bode` 等正常）。
 - `voronoi` 单输出形式（要画图）不可用；两输出形式正常。
 
-## 下一步（第三轮，已排好序）
+## 下一步（第三轮：浏览器环境语义）
 
-R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩下的缺口不是数学能力，
-而是"宿主 API 怎么换成浏览器原生"（`HANDOFF.md` §5.5 有完整计划）：
+R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 API 怎么换成浏览器原生"**
+（完整计划见 `HANDOFF.md` §5.5）：
 
-~~**T1** `help`~~ ✅ **已完成**（构建期 makeinfo 预渲染，`accept-help` 12/12 绿；
-详见 `HANDOFF.md` §5.6 与 `build/CLIBS.md` 批次 T1）→
-**T2** graphics 句柄半真化（写薄 toolkit，渲染仍走现有 plot 桥）→
-~~**T3** `copyfile`/`movefile`/`ls`~~ ✅ **已完成**（进程内纯 `.m`，`accept-fileops` 20/20 绿，无 shell）
-~~**T4** `pkg` 语义~~ ✅ **已完成**（还原被 fork 删掉的 `installed_packages.m` + 生成数据库，
-`accept-pkg` 16/16 绿）→ ~~**T5** `input()`~~ ✅ **已完成**（本就可用，只需官方 `Module.stdin`
-扩展点让验收可测，`accept-input` 9/9 绿）→ **T6** `audiodevinfo`/`doc` →
-**T7** `audiorecorder` → **T8** `uigetfile` → **T9** `MAIN_MODULE=2`（体积优化）→
-**T10** Asyncify 最小实验。
+**T1** `help`（构建期 makeinfo 预渲染）、**T2** graphics 句柄半真化（薄 `web` toolkit）、
+**T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`
+—— ✅ **五项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
+`accept-fileops` 20、`accept-pkg` 16、`accept-input` 9）。
+
+剩余（按依赖顺序）：**T6** `audiodevinfo` 最小 shim + `doc` → **T7** `audiorecorder`
+（`record`/`stop`/`getaudiodata`，不需 Asyncify）→ **T9** `MAIN_MODULE=2`（体积优化）→
+**T10** Asyncify 最小实验（只实验）→ **T8** `uigetfile`（依赖 T10 结论）。
 
 依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
 （外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
 以及 A1 的核心建议——**不复活 gnuplot 后端，改写薄 toolkit 复用现有桥**）。
 
-## 第四轮：换基线到 **Octave 11.3.0** + 重构图形线
+> **图形线（P5 OSMesa）**在 `graphics-osmesa` 分支上做：已完成的步骤① 证明
+> OSMesa + softpipe 在 wasm 里能渲出正确三角形（**含立即模式**，即
+> `opengl_renderer` 需要的那条路）。
 
-已决定换到 **11.3.0**（决策与闸门见 `HANDOFF.md` §9，**事实依据
-`build/BASELINE-11.3.md`**）。要点：
+## 第四轮：已换基线到 **Octave 11.3.0**（2026-09-22 落地）
+
+计划见 `HANDOFF.md` §9，**实况、坑与结论见 §10**，外部事实依据 `build/BASELINE-11.3.md`。
+要点：
 
 - **收益**：11.x 的卷积快 10%–150×、`randi` 4.5×、logical 求和最高 6×；MATLAB 兼容
   有一整节（稀疏/对角 broadcasting、一大批函数的 `"all"`/`vecdim`/`nanflag`、
@@ -117,10 +128,13 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
   （1 个已进上游该删、2 个局部重做，共 4 个文件）。
 - **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
   Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
-- **图形**：第三方已把「薄 toolkit」写成并在 11.1.0 上验证能跑，撞墙点与我们记录一致，
-  同样推荐 **OSMesa** —— 这一轮把图形线真正做成官方实现。
-- **纪律**：7.2 基线（`http://127.0.0.1:8761/`）在 11.3.0 通过等价验收前**不动**；
-  11.3.0 全程在独立容器 `o113` 内做。
+- **结果**：三道闸门（能编能跑数值对 / `.oct` side module 可用 / **免 COI**）**全部通过**；
+  8761 已切到 11.3.0，7.2 快照留在 `/mnt/hdd/octave-wasm-build/site-72bak/`。
+  9 个长尾库（glpk/qhull/fftw3+3f/sndfile/qrupdate/hdf5/arpack/SuiteSparse）全部重开。
+- **换基线时补的三处内容缺口**：`dldprobe.oct` 的源码入仓、`lanetest` 资产、
+  `m/forge` 的 20 个预装 `.m`（否则 `normpdf` 从"开箱即有"退化成"要先加载包"）。
+- **图形**：plot 桥 + `print -dsvg` 是当前可用路径；**OSMesa 软件光栅化线**
+  已完成步骤①（wasm 内渲出正确三角形，含立即模式），**后续在 `graphics-osmesa` 分支做**。
 
 > **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
 > `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
@@ -135,7 +149,7 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (1508 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (93189 bytes)
+- `HANDOFF.md` (94873 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
@@ -150,9 +164,9 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `build/113/NOTES-p5-osmesa.md` (11517 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
-- `build/113/PROMOTION.md` (5310 bytes)
+- `build/113/PROMOTION.md` (6441 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
-- `build/113/STATUS.md` (6867 bytes)
+- `build/113/STATUS.md` (8407 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
 - `build/113/build-deps.sh` (9359 bytes)
 - `build/113/build-libs.sh` (22343 bytes)

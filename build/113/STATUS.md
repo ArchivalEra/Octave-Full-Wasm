@@ -1,4 +1,12 @@
-# build/113 · P0 进展与结论（Octave 11.3.0 → wasm）
+# build/113 · P0 阶段记录（Octave 11.3.0 → wasm）
+
+> ⚠️ **这是 P0 阶段的历史记录，不是当前状态。** 当前状态看 **`HANDOFF.md` §10**
+> （第四轮已全部落地：8761 已服务 11.3.0，26 套 646 项全绿）。
+>
+> 保留它的理由是里面有几条**至今仍有用的一手实测结论**：libf2c 的 `QINT` 组为何必须
+> 排除、LAPACK 被 f2c 拒编的 30 个文件为何可接受、以及 `emconfigure` 下 `PKG_CONFIG`
+> 为空导致 pcre2 探测假失败的根因。
+> **下面"未验证 / P0 续 / 下一步"三节已改成结果对照，别再当待办执行。**
 
 > 只记**实测**结果；未跑完的明确写"未验证"。
 > 事实依据与出处见 `build/BASELINE-11.3.md`。
@@ -65,15 +73,18 @@ typedef → 默认配置下编不过。`pow_qq.c`/`qbitbits.c`/`qbitshft.c` 同�
 **缺口完全一致。** 7.2 是能跑、19 套全绿的构建 → 这些缺失不构成问题。
 机制：静态归档里**未被引用的成员不会被拉进链接**，其内部的未定义引用自然不参与解析。
 
-## 未验证（不许当成已完成）
+## 当年"未验证"的 5 条 —— **结果对照（已全部有答案）**
 
-1. **Octave 11.3.0 本身还没 configure / make 过**——这是 P0 真正的闸门。
-2. 打补丁 → configure 只是**参数已备好**，未执行。
-3. `.oct` side module 在 emsdk 5.0.7 上能否装载（P0 闸门之二，最大不确定性）。
-4. freetype 未构建（无头数值阶段可能不需要；P5 图形再说）。
-5. 三条闸门一条未过。
+| # | 当年标记 | 结果 |
+|---|---|---|
+| 1 | Octave 11.3.0 还没 configure / make 过 | ✅ 已 configure + make + 重链，8761 现在跑的就是它 |
+| 2 | 补丁 → configure 只是参数备好、未执行 | ✅ `apply-platform-patches.sh` 的 4 处改动 + configure 均已跑通 |
+| 3 | `.oct` side module 在 emsdk 5.0.7 上能否装载（**最大不确定性**） | ✅ **能**。`probe-side-module.sh` 得 43；dldfcn 也走官方 dlopen，`exist=3` |
+| 4 | freetype 未构建 | ⏳ **仍缺**。数值/plot 桥不受影响；但它让 `axes` 创建时打一次 FreeType 警告、`help`/`print` 的文本路径受限。**图形线（`graphics-osmesa` 分支）要处理** |
+| 5 | 三条闸门一条未过 | ✅ **三条全过**（能编能跑数值对 / `.oct` 可用 / **免 COI**，`shared:true` 1→0） |
 
 ## P0 续：configure 卡在 pcre2 —— 根因已定位（2026-09-21 收尾时）
+
 
 ### 已走到的步骤
 
@@ -119,7 +130,7 @@ if test $ac_octave_pcre2_pkg_check = yes; then
 他们能过是因为用的**不是** emconfigure 包装过的 pkg-config，或者他们的
 `PKG_CONFIG` 非空。我们这边实测是空的。）
 
-### 尚未验证的修法（**下一步先验这个**）
+### 修法（**两条都已实施**，见 `configure-113-full.sh`）
 
 在 `configure-113.sh` 里加一行：
 
@@ -127,13 +138,15 @@ if test $ac_octave_pcre2_pkg_check = yes; then
 export PKG_CONFIG=/usr/bin/pkg-config
 ```
 
-然后重跑。**未验证**——只验证过「`PKG_CONFIG` 为空」与「pkg-config 手工可用」这两件事，
-两者合起来足以解释现象，但加变量后 configure 是否就过，还没有实测。
-
 若仍不过，次选：显式传库名，绕开探测——
 `--with-pcre2=-lpcre2-8`（`configure` 里 `-*` 分支会把它直接当 `PCRE2_LIBS`）。
 
-## 下一步（P0 续）
+**结果**：`configure-113-full.sh` 现在**两条都在**（`export PKG_CONFIG=/usr/bin/pkg-config`
++ `--with-pcre2=-lpcre2-8`），configure 已多次跑通。**这条坑的通用教训**：
+`emconfigure` 下 `$PKG_CONFIG` 是空的 → 所有"先试 pkg-config、失败再回退"的探测
+都会走错分支。遇到"头文件明明找到了却报缺库"这类自相矛盾的报错，先查 `PKG_CONFIG`。
+
+## 下一步（P0 续）—— 已被后续轮次取代
 
 ```bash
 # 容器内
@@ -143,6 +156,10 @@ export PKG_CONFIG=/usr/bin/pkg-config
 bash /src/bin/configure-113.sh
 # 2) configure 过了再 make（Edge-Tools 用 emmake make EXEEXT=.mjs）
 ```
+
+> **上面的流程已被 11.3.0 车道的正式配方取代**：重配/重链是
+> `build/113/configure-113-full.sh` + `build/113/link-web.sh`。
+> 断电恢复一条命令：`sh build/recover.sh`（8761）/ `sh build/recover-113.sh`（8762）。
 
 **注意两条**：
 - 构建目录路径必须逐字固定（绝对 `-I` 进 ccache 的 hash；实测见 `BASELINE-11.3.md` §7.1），

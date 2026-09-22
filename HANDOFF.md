@@ -641,12 +641,28 @@ makeinfo 生成 doc-cache）。
   `help disp` 全部可用（见 §5.6）。**仍存在的部分**：`help ode45` 这类 `.m` 文件的
   docstring 走运行时路径，仍会报 makeinfo 错误——这是剩余缺口，不是已解决项。
   （`doc-cache` 注入**已实测无效**，别再试。）
-- **图形句柄是"半死"状态**（实测分界）：`gcf()` 可用；`gca()` 报 `invalid handle`；
-  `figure()` 返回假句柄。**T2 的目标**（见 §5.5）。
+- ~~**图形句柄是"半死"状态**：`gca()` 报 `invalid handle`、`figure()` 返回假句柄~~
+  → **T2 已修复**（`web` toolkit，资产车道零重链，见 §5.5.1）：
+  `figure/gcf/gca/get/set/title/xlabel/ylabel/close/allchild/findall` 全部可用，
+  `set(gca,'xlim',[0 5])` → `get` 得 `[0 5]`（实测）。
+  **半真化的边界（实测，2026-09-22）**——这些不是 bug，是"只救句柄、不碰绘图"的直接后果：
+  - `plot(1:5)` 后 `get(gca,'children')` = **0**（plot 桥的序列不在真对象里，
+    渲染走桥出 SVG）；`h = plot(...)` 返回**空句柄**。
+  - **`plot(hax, ...)` 这类"首参是句柄"的调用形态桥不支持**（`plot`/`hold`/`title`/
+    `xlabel` 实测全报错）→ 这就是 `voronoi` 单输出版本失败的真因。
+  - `getframe()` 报 `failed to capture frame data, potentially due to insufficient
+    graphics capabilities`（toolkit 的 `get_pixels` 返回空）。
+- **FreeType 未构建**（`--without-freetype`）：效果是**每次会话一条**警告
+  `opengl_renderer::render_text: support for rendering text (FreeType) was unavailable
+  or disabled when Octave was built`（`text-renderer.cc:53` 的 `static bool warned`，
+  所以只在首次建 axes 时打一次），之后文本能力静默缺失。数值与 plot 桥不受影响。
+- **`doc`** 目前报 `doc: unable to find the Octave info manual, Octave installation is
+  incomplete`（11.3.0 的 `doc.m` 末路是 `system()` 起 info 浏览器，本构建无 shell）。
 - **control 包的 SLICOT 编译件未发布**（§4.12）：`ss`/`step`/`tf2ss` 不可用；
   `tf`/`tfdata`/`dcgain`/`pole`/`zero`/`feedback`/`bode` 等纯 `.m` 面正常。
-- `voronoi` 的**单输出形式**（要画图，走 `gca`）不可用；两输出形式正常
-  —— **T2 的派生收益**，不单独修。
+- `voronoi` 的**单输出形式**（要画图）：T2 之后**已能走到绘图**，但终点是 plot 桥的
+  `plot(hax, x, y)` 调用形态不支持（见上面的边界条目）→ 报 `X and Y sizes do not match`。
+  两输出形式正常。**根因在 plot 桥，不在句柄系统。**
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
 
 ---
@@ -961,7 +977,8 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
 
-**25 套的构成**（`http://127.0.0.1:8761/` 与 `8762` 上各跑一遍都全绿）：
+**26 套的构成**（`http://127.0.0.1:8761/` 与 `8762` 上各跑一遍都全绿；逐套实测见
+下；`accept-113-pkgoct` 的自有汇总格式是「27 个模块：OK 27」，不是 `PASS/FAIL` 那套）：
 
 - **11.3.0 侧 6 套**：`accept-113-boot` 10、`accept-113-oct` 8、`accept-113-assets` 16、
   `accept-113-libs` **17**（含稀疏 `lu` 的六个形态）、`accept-113-ode15` **29**
@@ -1001,7 +1018,8 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
   （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
   `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
   `build/forge-preload/` 并由 `link-web.sh` 预加载）。
-  换完之后 25 套在 8761 上复跑全绿。清单与决策记录见 `build/113/PROMOTION.md`。
+  换完之后这些套件在 8761 上复跑全绿（补上 T2 后为 **26 套 646 项**）。
+  清单与决策记录见 `build/113/PROMOTION.md`。
 - **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
   `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
 
