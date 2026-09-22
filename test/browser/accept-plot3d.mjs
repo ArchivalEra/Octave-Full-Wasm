@@ -18,6 +18,16 @@ while (Date.now() - t < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
   if (ok) break; await new Promise(r => setTimeout(r, 800));
 }
+// ⚠️ 等站点自己置的 ready 标志（`plotbridge` 是页面启动装载清单里的资产）。
+//    不等的话头几条 plot3 会假失败（plotbridge 还没挂上），并连带后面的
+//    svg 解析返回 undefined —— 实测就是这样。与 accept-print/accept-plotv2 同源。
+await page.evaluate(async () => {
+  for (let i = 0; i < 300; i++) {
+    if (window.__octaveReady === true) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+}).catch(() => {});
+await new Promise(r => setTimeout(r, 500));
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
 let pass = 0, fail = 0;
@@ -46,8 +56,13 @@ async function svg(path, label, checks = {}) {
     } catch (e) { return { ok: false, err: String(e).slice(0, 140) }; }
   }, path);
   let ok = r.ok && !r.parseErr && r.len > 250 && r.svg === 1;
-  const notes = [`len=${r.len}`, `poly=${r.poly}`, `polyg=${r.polyg}`, `circ=${r.circ}`, `line=${r.line}`];
+  // ⚠️ r.ok===false 时上面 try 的返回值只有 {ok,err} —— 直接拼 `len=${r.len}` 会打出
+  //    一屏 undefined，真因（读取/解析失败的原话）反而看不清。第一版就是这样。
+  const notes = r.ok
+    ? [`len=${r.len}`, `poly=${r.poly}`, `polyg=${r.polyg}`, `circ=${r.circ}`, `line=${r.line}`]
+    : [`读取/解析失败: ${r.err || '?'}`];
   for (const [k, v] of Object.entries(checks)) {
+    if (!r.ok) break;                       // 读不出来就别再逐项比了，notes 里已有真因
     const good = r[k] >= v;
     ok = ok && good;
     if (!good) notes.push(`!!${k}=${r[k]}<${v}`);

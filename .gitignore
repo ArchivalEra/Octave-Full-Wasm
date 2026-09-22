@@ -43,6 +43,7 @@
 !build/assets.py
 !build/render-docstrings.py
 !build/check_m.py
+!build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*
 !build/pkgrestore/*

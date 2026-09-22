@@ -18,6 +18,17 @@ while (Date.now() - t < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
   if (ok) break; await new Promise(r => setTimeout(r, 800));
 }
+// ⚠️ 等站点自己置的 ready 标志：`plotbridge` 是**页面启动装载清单**里的资产，
+//    在它挂上之前 plot/print 会走核心路径或直接失败 —— 本套第一版没等，
+//    结果头几条（barh 等）全部假失败，还连带后面的 svg 解析拿不到对象。
+//    （与 accept-print / accept-plot3d 是同一个病，一起修。）
+await page.evaluate(async () => {
+  for (let i = 0; i < 300; i++) {
+    if (window.__octaveReady === true) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+}).catch(() => {});
+await new Promise(r => setTimeout(r, 500));
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
 let pass = 0, fail = 0;
@@ -56,9 +67,12 @@ async function svg(path, label, checks = {}) {
     `line=${r.line}`, `rect=${r.rect}`, `text=${r.text}`];
   for (const [k, v] of Object.entries(checks)) {
     if (k === 'hasText') {
-      const good = r.texts.some(s => s.includes(v));
+      // ⚠️ 必须确认 r.texts 存在：上面 try 失败时返回的是 `{ok:false, err}`，
+      //    **没有 texts 字段**，无条件 `.some()` 会抛 TypeError 把真因盖掉，
+      //    还让整个套件崩掉（实测就是这么翻车的，与 accept-print 同源）。
+      const good = Array.isArray(r.texts) && r.texts.some(s => s.includes(v));
       ok = ok && good;
-      if (!good) notes.push(`缺文本"${v}"`);
+      if (!good) notes.push(Array.isArray(r.texts) ? `缺文本"${v}"` : '无文本可查（r.texts 缺失）');
       continue;
     }
     if (k === 'maxText') {

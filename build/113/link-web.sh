@@ -40,6 +40,23 @@ for d in "$M"/*/; do
 done
 echo "== preload ${#PRELOAD[@]} 项（含 +matlab/+containers/@ftp），来自 $M"
 
+# ---- forge 预装集（20 个 .m）→ /usr/src/octave/m/forge ----------------------
+# 为什么要有这一项：7.2 的站点上 `exist("normpdf")` **不加载任何资产就是 2**，
+# 因为它的主链把一小撮 forge .m **预装**进了 `m/forge/`（实测 which →
+# `/usr/src/octave/m/forge/normpdf.m`）。这批函数是早期为补 `ttest` 依赖塞进去的
+# （betacdf/fcdf/gamcdf/normcdf/normpdf/ttest… 共 20 个，另含 fft/ifft/asciiplot，
+# 其中 fft/ifft 被核心内建遮蔽、无害）。
+# 11.3.0 的链一开始只 preload 了 `m` 的 35 个子目录，缺这一项 ⇒ `normpdf` 变成
+# "要加载 statistics 资产才有"，**相对 7.2 是行为回退**。
+# 文件集已入仓（build/forge-preload/），容器内同步到 /src/websrc/forge。
+FORGE_SRC="${FORGE_SRC:-/src/websrc/forge}"
+if [ -d "$FORGE_SRC" ] && ls "$FORGE_SRC"/*.m >/dev/null 2>&1; then
+  PRELOAD+=("--preload-file" "$FORGE_SRC@/usr/src/octave/m/forge")
+  echo "== preload forge 预装集：$(ls "$FORGE_SRC"/*.m | wc -l) 个 .m → /usr/src/octave/m/forge"
+else
+  echo "⚠ 缺 $FORGE_SRC/*.m —— 主链会少掉 7.2 就有的 forge 预装（normpdf 等会变成需懒加载）"
+fi
+
 # ---- 主链 ---------------------------------------------------------------
 #  MAIN_MODULE=1 + ALLOW_TABLE_GROWTH=1：为 .oct side module 的 dlopen 服务
 #  （闸门②探针已实测 emsdk 5.0.7 上可行）

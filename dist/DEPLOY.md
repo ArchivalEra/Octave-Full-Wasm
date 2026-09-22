@@ -1,6 +1,10 @@
 # 部署说明 · Octave-Full-Wasm 站点包
 
-**纯静态站点**：Octave 7.2.0 全文解释器跑在浏览器 wasm 内，服务端只发文件、零计算。
+**纯静态站点**：**Octave 11.3.0** 全文解释器跑在浏览器 wasm 内，服务端只发文件、零计算。
+
+> **2026-09-22：基线已从 7.2.0 换到 11.3.0。** 8761 上现在服务的就是这一版；
+> 7.2 的站点快照留在 `/mnt/hdd/octave-wasm-build/site-72bak/`（回退：
+> `cp -a site-72bak/. site/`）。换基线的判定与清单见 `build/113/PROMOTION.md`。
 
 ## 包内容
 
@@ -8,22 +12,25 @@
 index.html          入口（起解释器 + 资产清单；dldfcn 核心组开箱即用）
 octave.js           胶水层（含 dylink 符号表）
 octave.wasm         主模块（MAIN_MODULE=1 可重定位，支持运行时 dlopen）
-octave.data         预装 .m / 帮助文件
+octave.data         预装 .m / 帮助文件（含 m/ 的 35 个子目录 + **m/forge 的 20 个预装 .m**）
+VERSION             基线标识（octave-11.3.0）
 assets/             懒加载资产（按需 fetch，不进首包）
   manifest.json       资产清单（名称 → url / 挂载点 / 依赖 / 别名）
-  meta.json           人工维护的说明与别名
   oct/*.oct           单文件模块（dldfcn 核心组、__ode15__、webio、webimage、webnet）
-  octdir/<pkg>/*.oct  包编译件（struct/optim/statistics/geometry/control/…）
-  pkg/*.js            Forge 纯 .m 包（10+ 个）
-  m/*.js              .m 资产（webaudio/webnet/webshell 覆写/plot 桥覆写）
-  data/*              数据文件（doc-cache、built-in-docstrings）
-plotbridge*.m/js    plot 桥（Octave 侧垫片 + JS 侧 spec→gnuplot）
-gp/                 gnuplot-wasm（渲染 SVG 用，按需加载）
-vendor/             vendored .m（已打进 octave.data，此处留档）
-serve.py            本地/自托管服务脚本（wasm MIME + gzip_static）
-MANIFEST.sha256     全部源文件的 sha256
-*.gz                每个文本资源的预压件（nginx gzip_static 直接发）
+  octdir/<pkg>/*.oct  包编译件（struct/optim/statistics/geometry/control/miscellaneous，27 个）
+  pkg/*.js            Forge 纯 .m 包
+  m/*.js              .m 资产（webaudio/webnet/webshell/webfile/plotbridge/pkgfix/…）
+  data/*              数据文件（doc-cache、built-in-docstrings、macros.texi）
+dldprobe.oct        dlopen 自检探针（accept-full 用；源码 build/113/dldprobe.cc）
+minioct.oct         dldfcn 闸门探针（accept-113-oct 用）
+vendor/             forge 预装集留档（**已打进 octave.data 的 m/forge**；源码 build/forge-preload/）
 ```
+
+**与 7.2 包的两处结构差别**（都是 11.3.0 侧有意为之）：
+- **没有 `gp/`（gnuplot-wasm）、没有 `plotbridge/` + `plotbridge.js` 顶层目录**：
+  11.3.0 的 plot 桥是**纯 `.m` 直接生成 SVG**，不依赖 gnuplot。plotbridge 现在是一个
+  **懒加载资产**（`assets/m/plotbridge.js` + `assets/m/plotbridge/`）。
+- `help` 数据从 7.2 的运行时 `__makeinfo__` 换成**构建期预渲染的 doc-cache**。
 
 ## 体积
 
@@ -99,25 +106,28 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**全量 14 套 400 项全绿**：
+本包内容 = 最近一次在浏览器实测通过的构建。**25 套 615 项全绿**，
+在 `http://127.0.0.1:8761/`（**即本包内容**）与 `8762` 上各跑一遍。
 
-> **下一条基线（Octave 11.3.0）已就绪但有意未启用。**
-> 它在 `http://127.0.0.1:8762/`（容器 `o113`）上跑通了 14 套，
-> 含需求级 `accept-requirements` **14/14**；`ode15s`/`ode15i` 已可用
-> （本轮从"桩"换成内嵌 SUNDIALS 的真 `.oct`）。
-> **没换成 8761 的原因**：稀疏 `lu`（UMFPACK）在 11.3.0 上不可用，而 7.2 可用 ——
-> 换过去就是功能回退，与"新实验不许让 8761 退化"冲突。
-> 换基线的完整清单与决策点见 **`build/113/PROMOTION.md`**。
+**需求级** `accept-requirements` **14/14**（R1–R10 各一条最小实测 + 架构护栏）。
+其中 R1 `ode15s`/`ode15i` 由内嵌 SUNDIALS 6.1.1 的真 `.oct` 提供（此前是"桩"）。
 
 | 套件 | 项数 | 覆盖 |
 |---|---|---|
+| accept-requirements | 14 | **需求级**：R1–R10 + 架构护栏 |
+| accept-113-boot | 10 | 11.3.0 能起、能 eval |
+| accept-113-oct | 8 | 真 `.oct` side module 能被装载并调用 |
+| accept-113-assets | 16 | 资产车道语义 |
+| accept-113-libs | 17 | 逐库数值断言（含**稀疏 `lu` 的六个形态**，见下） |
+| accept-113-ode15 | 24 | SUNDIALS `ode15s`/`ode15i` 数值 |
+| accept-113-pkgoct | 27 | 27 个包编译件逐个真调用（零 trap） |
 | accept-full | 20 | 核心回归 + 官方 .oct 装载 + 资产车道 |
 | accept-hdf5 | 16 | `save/load -hdf5` |
-| accept-forge | 21 | Forge 纯 .m 包 |
+| accept-forge | 22 | Forge 纯 .m 包（含 forge 预装集） |
 | accept-forge-oct | 15 | Forge 编译件 |
 | accept-forge2 | 42 | signal + control |
 | accept-dldfcn | 68 | dldfcn 官方装载语义与真数值 |
-| accept-ode15 | 14 | SUNDIALS `ode15s`/`ode15i` |
+| accept-ode15 | 14 | SUNDIALS `ode15s`/`ode15i`（7.2 时代的同一套，仍全绿） |
 | accept-archive | 20 | 压缩/归档无 shell 化 |
 | accept-image | 17 | 图像 I/O |
 | accept-print | 43 | `print -dsvg` |
@@ -125,15 +135,28 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-plot3d | 34 | plot 桥 v2（3D） |
 | accept-audio | 47 | WebAudio 播放 |
 | accept-net | 30 | 同步网络 |
+| accept-help | 12 | `help`/`lookfor`/`get_first_help_sentence` |
+| accept-fileops | 20 | 文件操作语义 |
+| accept-pkg | 16 | `pkg` 数据库/list/load/describe |
+| accept-input | 9 | `input()` 与 EOF |
+
+`accept-113-ode15` 里另有 **1 项已知缺陷**（`lsode` 调用即整页 trap），
+单独隔离复现、**不计入 PASS/FAIL**；它**在 7.2 上同样存在**，不是本次换基线引入的
+（详见 `build/113/NOTES-lsode.md`）。
 
 ## 已知偏差（如实）
 
-- **`help` 对非平凡输入会报 `makeinfo` 子进程错误**：wasm 无 shell。`.m` 文件的
-  docstring 直接可读（`help plot` 可用），但走 texinfo 渲染的路径（含所有内建）
-  必然失败。**已实测修不了**（注入 doc-cache 也无用）。不影响函数调用。
-- `system`/`unix`/`popen` 清晰报错（有意保持）。
+- **`lsode` 调用即整页 trap**（`RuntimeError: unreachable`）：**7.2 与 11.3.0 都有**，
+  与 SUNDIALS、与本包内容无关（不装载 `__ode15__` 也复现）。此前未被发现是因为
+  7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`、从没真的调用过**。
+  已落档并隔离成"已知缺陷"，待把 trap 地址符号化后定位。
+- `system`/`unix`/`popen` 清晰报错（有意保持，wasm 无 shell）。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
-- **control 包的 SLICOT 编译件未发布**：它们作为 side module 调用主模块的
-  Fortran 符号时签名不匹配，一调就整页崩。故 `ss`/`step`/`tf2ss` 不可用；
-  `tf`/`tfdata`/`dcgain`/`pole`/`bode`/`feedback` 等纯 `.m` 面正常。
+- `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。
+- **control 包的 SLICOT 编译件不发布**：它们要 Fortran 的 `slicotlibrary.a`（本仓不建）。
+  故 `sl_*` 系列不可用；`tf`/`tfdata`/`dcgain`/`pole`/`bode`/`feedback` 等纯 `.m` 面正常，
+  `is_*`/`lti_input_idx`/`__control_helper_functions__` 等 8 个编译件正常。
 - `voronoi` 的**单输出形式**（要画图）不可用；两输出形式正常。
+- **`help` 走构建期预渲染的 doc-cache**，不再有运行时 `makeinfo` 子进程
+  （7.2 那条"内建 help 必失败"的偏差**在 11.3.0 上已消除**，`accept-help` 12/12 为证）。
+

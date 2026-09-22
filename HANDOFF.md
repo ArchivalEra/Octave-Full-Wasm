@@ -619,27 +619,32 @@ makeinfo 生成 doc-cache）。
 ---
 
 ## 8. 一句话接续
-**当前基线 8761 = 批次 0/1a/1b/1d + 1 + 2A/2B + 3 + 4 + 5 + 6 + 7a/7b + 8 + 9 + 11 + 12 + 13 + T1 + T3 + T4 + T5**，
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **19 套 475 项全绿**（含需求级
-`accept-requirements` 与新增的 `accept-help`/`accept-fileops`/`accept-pkg`/`accept-input`），交付包在
-`/mnt/hdd/octave-wasm-build/dist/octave-full-wasm-site-20260921/`（重打：`sh build/make-dist.sh`）。
+**当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **25 套 615 项全绿**
+（11.3.0 的 6 套 + 7.2 时代的 19 套，两套验收在 8761/8762 上各跑一遍都全绿），
+含需求级 `accept-requirements`。交付包重打：`sh build/make-dist.sh`。
 
-**R1–R10 全部落地**；**第三轮 T1 + T3 + T4 + T5 已完成**（`help` §5.6；文件操作 §5.7；pkg 语义 §5.8；`input()` §5.9）。
-**下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
+**7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M）。
+回退：`cp -a site-72bak/. site/`（**注意** `build/recover.sh` 已是 11.3.0 口径，
+回退后要用它得先把取值源改回 `obench`，见 git 历史）。
 
-**⚠️ 第四轮（11.3.0）已经**实际落地**，不再是"待执行"：见 **§10**。
-8762 跑着 11.3.0 的站点，10 套验收 **194/195**；**8761（7.2）全程未动、仍绿**。
+**R1–R10 全部落地**；第三轮 T1 + T3 + T4 + T5 已完成（`help` §5.6；文件操作 §5.7；
+pkg 语义 §5.8；`input()` §5.9）。**第四轮（11.3.0 换基线）已完成，见 §10**，
 §9 保留为当时的计划与决策记录。
+**剩下的长尾**：`lsode` 整页 trap（§10.6 第 6 项，两代基线共有）、
+T2 图形句柄半真化（§5.5 表）、P5 OSMesa 图形线。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 **改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
-只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild`/`odld`/`obench` 容器内工作。
+只在 `/mnt/hdd/zcode-projects/Octave-Full-Wasm` 及 `obuild`/`odld`/`obench`/`o113` 容器内工作。
 
 **恢复流程（断电/新会话第一条命令）**：
 ```bash
-sudo docker start obuild odld obench && sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover.sh
+sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover.sh
 ```
-它会起容器、体检工具链（cmake 曾因断电损坏）、必要时重建站点、起 8761、跑验收。
+它会起容器、体检 o113 工具链、必要时按 **11.3.0** 口径重组站点、起 8761、跑验收
+（需求级 + 核心回归）。11.3.0 车道的独立恢复是 `build/recover-113.sh`（起 8762）。
+
 最近的镜像检查点：**`octave-build:b13-official-dldfcn`**（`obench`，**O1 基线 + 官方装载**，
 当前主力）；`octave-build:b12-forge2`（`odld`，O0）；更早的 `b9-net`…`b5-image` 是回退点。
 
@@ -860,35 +865,57 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 
 ### 10.1 现在是什么状态
 
-| | 7.2 基线 | **11.3.0 staging** |
+| | **8761（当前基线）** | 8762（同一内容的第二个入口） |
 |---|---|---|
-| 站点 | **8761**（`/mnt/hdd/octave-wasm-build/site`） | **8762**（`.../site113`） |
-| 容器 | `obuild`/`odld`/`obench` | **`o113`**（`emsdk 5.0.7`，Ubuntu 24.04） |
-| 验收 | 19 套 475 项全绿 | **13 套，需求级全绿** |
+| 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
+| 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
+| 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
+| 验收 | **25 套 615 项全绿** | 同左（两份各跑一遍） |
 
-**8761 全程未动**（本轮所有动作都在 o113 + site113/8762 上）。
+**7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
+`cp -a site-72bak/. site/` 即可回退内容。
 
-11.3.0 上的 14 套（`http://127.0.0.1:8762/`）：
-`accept-113-boot` 10/10、`accept-113-oct` 8/8、`accept-113-assets` 16/16、
-`accept-113-libs` 11/12、`accept-113-ode15` **24/24**、`accept-113-pkgoct` **27/27**、
-`accept-fileops` 20/20、`accept-image` 17/17、`accept-help` **12/12**、
-`accept-pkg` **16/16**（换 27 个新 `.oct` 后复跑仍全绿）、
-`accept-print` **43/43**（测试自身的病修好后才第一次真正跑起来）、
-`accept-net` 30/30、`accept-audio` 47/47、
-**`accept-requirements` 14/14**（需求级 —— 这是 §10.6 第 5 项的换基线闸门）。
+**25 套的构成**（`http://127.0.0.1:8761/` 与 `8762` 上各跑一遍都全绿）：
 
-**唯一 FAIL 是已知缺口**（`accept-113-libs` 的第 12 项 = 稀疏 `lu`，见 10.6 第 4 项）。
+- **11.3.0 侧 6 套**：`accept-113-boot` 10、`accept-113-oct` 8、`accept-113-assets` 16、
+  `accept-113-libs` **17**（含稀疏 `lu` 的六个形态）、`accept-113-ode15` **24**
+  （另有 1 项已知缺陷单列）、`accept-113-pkgoct` **27**。
+- **需求级**：`accept-requirements` **14/14**。
+- **7.2 时代的 19 套**（全部在新内容上复跑通过）：
+  `accept-full` **20**、`accept-hdf5` 16、`accept-forge` **22**、`accept-forge-oct` 15、
+  `accept-forge2` 42、`accept-dldfcn` 68、`accept-ode15` 14、`accept-archive` 20、
+  `accept-image` 17、`accept-print` **43**、`accept-plotv2` **54**、`accept-plot3d` **34**、
+  `accept-audio` 47、`accept-net` 30、`accept-help` 12、`accept-fileops` 20、
+  `accept-pkg` 16、`accept-input` 9。
 
-**本轮（2026-09-22 第二轮）新做完两件待办**：
+**本轮（2026-09-22 第二轮）做完的事**：
+
 - **待办 1 ✅ SUNDIALS → 真 `__ode15__.oct`**：不再是桩。ode15s/ode15i 实测跑通，
   `accept-113-ode15` **24/24**。**主 wasm 一个字节没动**（sha256 前后一致），
   SUNDIALS 的静态码整个打进了 `.oct`（250195 字节）。提交 `459ddd1`。
 - **待办 2 ✅ 27 个包 `.oct` 按 11.3.0 重编**：`accept-113-pkgoct` **27/27 零 trap**
   （含真跑 libsvm）。提交 `3cbb81a`。旧件备份在
   `/mnt/hdd/octave-wasm-build/octdir-72bak`。
-- **待办 3 ✅ `accept-print` 测试自身崩溃的病修好了**（`r.texts` 无守卫）。
-- **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 7 项与
-  `build/113/NOTES-lsode.md`）。**8761 本来就是这个状态，未退化。**
+- **待办 3 ✅ `accept-print` 测试自身崩溃的病修好了**：两层根因 —— ① `svgCheck` 的
+  失败分支返回的对象没有 `texts` 字段却无条件 `.some()`；② **更关键**：这套没等
+  `window.__octaveReady`，在 plotbridge 挂上前就断言。两层都修完 43/43。
+  `accept-plotv2`/`accept-plot3d` 是**同一个病**，一并修好（54/54、34/34）。
+- **待办 4 ✅ 稀疏 `lu`（UMFPACK）根因查明并修好**：建 SuiteSparse 时**漏传
+  `-DNBLAS`（和 CHOLMOD 的 `-DNSUPERNODAL`）**，UMFPACK 去调本仓那套 **f2c 转出来的
+  BLAS** → ABI 错位踩内存 → 整页 trap。证据：7.2 vendored 的 SuiteSparse 树相对干净
+  tar 包只有 3 处人工改动，前两处正是这两个开关；`libumfpack.a` 的 BLAS 未定义符号
+  **10 → 0**。`accept-113-libs` 11/12 → **17/17**。提交 `52489ab`。
+- **待办 5 ✅ 换基线到 8761**（本节的核心）：8761 现在服务 11.3.0。
+  换之前先补了一组**关键证据**——把 7.2 时代的 19 套全部指向 11.3.0 内容跑一遍，
+  发现 5 处不对齐（2 处是测试自身的病，3 处是"7.2 站点有、site113 没有"的**内容缺口**）：
+  `dldprobe.oct`（探针，源码此前从未入仓 → 已补 `build/113/dldprobe.cc` 并用
+  `build-oct.sh --cc` 重编）、`lanetest` 资产、以及 **`m/forge` 的 20 个预装 .m**
+  （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
+  `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
+  `build/forge-preload/` 并由 `link-web.sh` 预加载）。
+  换完之后 25 套在 8761 上复跑全绿。清单与决策记录见 `build/113/PROMOTION.md`。
+- **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
+  `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
 
 ### 10.2 三道闸门（P0）全部通过
 
@@ -954,38 +981,46 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
   `probe-side-module.sh`（闸门②）、`fix-rapidjson.py`、`ss-long64.h`（**已被证伪，勿用**）。
   **本轮新增**：`build-sundials.sh`（SUNDIALS 6.1.1 → `/src/deps/sundials`，带符号自检）、
   `build-ode15.sh`（真编 `__ode15__.oct`：门禁宏 + `-lsundials_ida` 自包含）、
-  `build-pkg-oct.sh`（27 个包 `.oct`，**显式模块表** + 合成 config.h）。
-- **site113 资产**：`assets/oct/` 11 个 `.oct`（7 个核心 dldfcn + webio + webimage-oct +
-  webnet-oct + **`__ode15__`（真模块，250195 字节，内嵌 SUNDIALS）**）、
-  `assets/m/`（webfile/pkgfix/webshell/webaudio/webnet/webimage/plotbridge）、
-  `assets/pkg/`（12 个纯 `.m` Forge 包）、
+  `build-pkg-oct.sh`（27 个包 `.oct`，**显式模块表** + 合成 config.h）、
+  **`dldprobe.cc`**（dlopen 自检探针的**源码** —— 此前只有 7.2 编出来的二进制，没源码）。
+- **站点资产**（`site/` 与 `site113/` 内容相同）：`assets/oct/` 11 个 `.oct`（7 个核心
+  dldfcn + webio + webimage-oct + webnet-oct + **`__ode15__`（真模块，250195 字节，
+  内嵌 SUNDIALS）**）、`assets/m/`（webfile/pkgfix/webshell/webaudio/webnet/webimage/
+  plotbridge/**lanetest**）、`assets/pkg/`（12 个纯 `.m` Forge 包）、
   `assets/octdir/`（**已按 11.3.0 重编的 27 个 `.oct`**；7.2 旧件备份在
-  `/mnt/hdd/octave-wasm-build/octdir-72bak`）、`assets/data/`（T1 三件）。
+  `/mnt/hdd/octave-wasm-build/octdir-72bak`）、`assets/data/`（T1 三件）、
+  `dldprobe.oct`（根目录，`accept-full` 用）、`minioct.oct`（`accept-113-oct` 用）、
+  `vendor/`（forge 预装集留档，源码在 `build/forge-preload/`）、`VERSION`（基线标识）。
 - **仓库补的可复现性缺口**：`post.js`、`build/webshell/` 的 6 个 `.m`
-  （此前只在 7.2 站点的压缩 bundle 里）。
-- **四份 NOTES**（都在 `build/113/`）：`NOTES-umfpack.md`（**被证伪的假设**）、
-  `NOTES-archive.md`（gzip/zip 两个 trap 的**根因与修法**）、`GATE3-QUESTION.md`、
-  **`NOTES-lsode.md`**（本轮新查出的 `lsode` 整页 trap：证据、排除过的解释、下一步）。
+  （此前只在 7.2 站点的压缩 bundle 里）、**`build/113/dldprobe.cc`**、
+  **`build/forge-preload/`（20 个预装 .m）**。
+- **四份 NOTES + 一份清单**（都在 `build/113/`）：`NOTES-umfpack.md`（**根因已查明**，
+  附一个被证伪的假设）、`NOTES-archive.md`（gzip/zip 两个 trap 的**根因与修法**）、
+  `GATE3-QUESTION.md`、`NOTES-lsode.md`（`lsode` 整页 trap：证据、排除过的解释、下一步）、
+  **`PROMOTION.md`**（换基线的判定、清单、已完成项、还剩什么）。
 
 ### 10.5 恢复流程（断电/新会话）
 
 ```bash
 sudo docker start obuild odld obench o113
-sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover.sh       # 8761（7.2）
-sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（11.3.0）
+sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover.sh       # 8761（**已是 11.3.0**）
+sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同一内容）
 ```
-**8762 车道的独立恢复脚本本轮已补齐**：`build/recover-113.sh`（起 o113、
-核对三大件、**只读**核对清单摘要、起 8762、跑需求级体检）。
-它**绝不碰 8761** —— 换基线之前用它；真换的时候按 `build/113/PROMOTION.md` 把
-`recover.sh` 的取值源从 `obench` 改到 `o113`（否则断电恢复会把 8761 打回 7.2）。
+两个脚本现在都按 **11.3.0** 口径工作：
+- `recover.sh` 的三大件来自 **`o113:/src/websrc/out/`**（原为 `obench` 的 7.2 产物），
+  站点内容从 `site113/` 组装，清单**只读核对摘要**（不再 `gen-manifest` ——
+  那会按 7.2 口径把 11.3.0 的 mount 路径算错），并用 `site/VERSION` 判断是否已是 11.3.0。
+- `recover-113.sh` 是 8762 车道的同一套逻辑（起 o113 + 起 8762）。
+- **回退到 7.2**：`cp -a /mnt/hdd/octave-wasm-build/site-72bak/. /mnt/hdd/octave-wasm-build/site/`
+  （内容立刻回到 7.2）；若要连恢复脚本一起回退，从 git 历史取 `recover.sh` 的旧版。
 
-**检查点**：`octave-build:113-assets-full`（最新，o113 全状态）。
+**检查点**：`octave-build:113-assets-full`（11.3.0 全状态）。
 更早：`113-pkg` / `113-trapfix` / `113-hostlayer` / `113-oct-assets` / `113-no-umfpack` /
 `113-full-deps` / `113-libs2` / `113-libs1` / `113-wasm-eh` / `113-base`。
 
 重启后 **gh token 会失效**：`gh auth setup-git` 有时能救、有时要重新 `gh auth login`。
 
-### 10.6 待办（按建议顺序；✅ = 本轮已完成）
+### 10.6 待办（✅ = 已完成）
 
 1. ✅ **SUNDIALS → R1 `ode15s`**（提交 `459ddd1`）。
    `__ode15__.oct` 已是**真模块**（250195 字节，SUNDIALS 静态码全在 `.oct` 内），
@@ -999,21 +1034,28 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（11.3
    `build/113/build-pkg-oct.sh`：模块表显式写死（control 的 SLICOT 那条 Fortran 路
    本仓不建，自动分组会编出坏模块）+ **合成 config.h**（不跑包自带 configure）。
    验收 `accept-113-pkgoct` **27/27 零 trap**。旧件在 `/mnt/hdd/octave-wasm-build/octdir-72bak`。
-3. ✅ **`accept-print` 测试自身崩溃**：根因是 `svgCheck` 的失败分支返回的对象
-   **没有 `texts` 字段**，下面却无条件 `r.texts.some(...)` → TypeError 把真因盖掉。
-   已加守卫并把真因打进 notes。
-4. **稀疏 `lu`（UMFPACK）**：整页 trap 已改为**干净报错**（当前把 UMFPACK 关掉）。
-   根因**未查明**——「索引宽度」假设已被实测证伪，详见 `NOTES-umfpack.md`。
-   **⚠️ 这是换基线的拦路虎**：7.2 上稀疏 `lu` 可用，11.3.0 上不可用，
-   换过去就是**功能回退**，与"新实验不许让 8761 退化"冲突。换基线前必须先解决。
-5. **S6 换基线到 8761**：**需求级闸门已绿**（`accept-requirements` 在 8762 上
-   **14/14**），但**还没换**——卡在第 4 项（UMFPACK 功能回退），另需同时改
-   `build/recover.sh`（它现在从 `obench` 拉 **7.2** 的三大件重建 8761，
-   不改的话**下次断电恢复会把 8761 打回 7.2**）与 `dist/DEPLOY.md`。
-6. **🆕 `lsode` 调用即整页 trap**（本轮新查出，**两代基线共有**：8761 与 8762 都复现，
-   且不装载 `__ode15__` 时也复现 → 与 SUNDIALS 无关，8761 未退化）。
+3. ✅ **`accept-print` / `accept-plotv2` / `accept-plot3d` 测试自身崩溃**：
+   ① `svgCheck` 的失败分支返回的对象**没有 `texts` 字段**却无条件 `.some()`；
+   ② **没等 `window.__octaveReady`**（plotbridge 挂上前就断言）。
+   修完分别 **43/43、54/54、34/34**。
+4. ✅ **稀疏 `lu`（UMFPACK）根因查明并修好**（提交 `52489ab`）：
+   建 SuiteSparse 时**漏传 `-DNBLAS` / `-DNSUPERNODAL`** → UMFPACK 去调本仓那套
+   **f2c 转出来的 BLAS**（`-lrefblas`）→ ABI 错位踩内存 → 整页 trap。
+   证据：7.2 vendored 的 SuiteSparse 树相对干净 tar 包只有 3 处人工改动，前两处正是
+   这两个开关；`libumfpack.a` 的 BLAS 未定义符号 **10 → 0**，其余符号集与 7.2 一致。
+   `accept-113-libs` 11/12 → **17/17**（那六条 trap 形态已立成护栏）。
+5. ✅ **S6 换基线到 8761**：**已换**。8761 现在服务 11.3.0（wasm sha `11f6175a…`）。
+   换前补了关键证据（7.2 的 19 套指向 11.3.0 内容跑一遍），顺带补上三处**内容缺口**
+   （`dldprobe.cc` 源码入仓并重编、`lanetest` 资产、`m/forge` 的 20 个预装 .m）。
+   `recover.sh` 与 `DEPLOY.md` 同步改完，7.2 快照留在 `site-72bak/`。
+   清单见 `build/113/PROMOTION.md`。
+6. **`lsode` 调用即整页 trap**（**两代基线共有**：7.2 与 11.3.0 都复现，且不装载
+   `__ode15__` 时也复现 → 与 SUNDIALS 无关）。
    详见 **`build/113/NOTES-lsode.md`**（证据表、排除过的五种解释、下一步定位路子）。
-   已让 `accept-113-ode15` 第八节单独隔离复现它，且**不计入 PASS/FAIL**，
-   避免它一 trap 就把整个套件打死。
-7. （不在本轮范围）P5 OSMesa 图形线。
+   已让 `accept-113-ode15` 第八节单独隔离复现它，且**不计入 PASS/FAIL**。
+   **下一步**：带 `--profiling-funcs` 重链一次（或在 `link-web.sh` 加 `-g`，输出到独立目录、
+   不动部署产物），把 `wasm-function[NNNNN]` 的索引符号化，定位到具体函数。
+7. **`dist/` 重打包**：`sh build/make-dist.sh`（含新资产 + `MANIFEST.sha256`）。
+8. （不在本轮范围）P5 OSMesa 图形线；T2 图形句柄半真化（§5.5 表）。
+
 
