@@ -30,7 +30,8 @@ vendor/             forge 预装集留档（**已打进 octave.data 的 m/forge*
 - **没有 `gp/`（gnuplot-wasm）、没有 `plotbridge/` + `plotbridge.js` 顶层目录**：
   11.3.0 的 plot 桥是**纯 `.m` 直接生成 SVG**，不依赖 gnuplot。plotbridge 现在是一个
   **懒加载资产**（`assets/m/plotbridge.js` + `assets/m/plotbridge/`）。
-- `help` 数据从 7.2 的运行时 `__makeinfo__` 换成**构建期预渲染的 doc-cache**。
+- `help` 从 7.2 的运行时 `__makeinfo__` 换成**构建期预渲染**：内建走 `built-in-docstrings`，
+  `.m` 文件的 docstring 也已预渲染成纯文本并随主链预载（`build/prerender-m-docstrings.py`）。
 
 ## 体积
 
@@ -163,6 +164,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
   故 `sl_*` 系列不可用；`tf`/`tfdata`/`dcgain`/`pole`/`bode`/`feedback` 等纯 `.m` 面正常，
   `is_*`/`lti_input_idx`/`__control_helper_functions__` 等 8 个编译件正常。
 - `voronoi` 的**单输出形式**（要画图）不可用；两输出形式正常。
-- **`help` 走构建期预渲染的 doc-cache**，不再有运行时 `makeinfo` 子进程
-  （7.2 那条"内建 help 必失败"的偏差**在 11.3.0 上已消除**，`accept-help` 12/12 为证）。
+- **`help` 走构建期预渲染**，不再有运行时 `makeinfo` 子进程 —— 内建（T1）与
+  `.m` 文件的 docstring（P1，`accept-t9-helpm` 18/18）都覆盖了；
+  7.2 那条"help 必失败"的偏差**在 11.3.0 上已彻底消除**。
 

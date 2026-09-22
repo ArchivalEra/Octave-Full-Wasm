@@ -75,6 +75,19 @@ async function evErr (label, expr, want) {
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 200))}`);
 }
 
+// 负向断言：成功执行、且输出里**不出现**某串（用于"缺口已补"这类断言）
+async function evNot (label, expr, unwanted) {
+  logs.length = 0;
+  let r;
+  try { r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr); }
+  catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 130)}`); fail++; return; }
+  await new Promise(rr => setTimeout(rr, 400));
+  const out = [...logs].join(' ') + ' ' + (r.err || '');
+  const ok = r.rc === 0 && !out.includes(unwanted);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${ok ? '（未出现 ' + unwanted + '）' : out.replace(/\s+/g, ' ').slice(0, 200)}`);
+}
+
 console.log('--- ① 门禁：官方链要求 exist(...) == 3，所以必须是 .oct ---');
 await ev('uigetfile 本身在（官方 .m）', 'disp(num2str(exist("uigetfile")))', '2');
 await ev('未加载 → __fltk_uigetfile__ 不存在', 'disp(exist("__fltk_uigetfile__"))', '0');
@@ -126,10 +139,14 @@ await ev('第二个文件也能读', 'disp(num2str(!isempty(fileread(fullfile(mp
 await ev('多选内容正确（逐个核）', 'disp(strtrim(fileread(fullfile(mp,mf{2}))))', 'second');
 
 console.log('--- 回归护栏 ---');
-// ⚠️ `help uigetfile` 在**本批之前**就是坏的：它是带 texinfo 标记的 .m 文件，
-// 走运行时 makeinfo（本构建无 shell）—— 这是 HANDOFF §5.6 的"剩余缺口"（C7），
-// 与 T8 无关。这里如实断言**那个既存错误**，免得将来误判成本批引入的。
-await evErr('help uigetfile 是既存缺口（.m docstring，见 C7）', 'help("uigetfile")', 'makeinfo');
+// ⚠️ 这里原来断言的是**反向**的东西：`help uigetfile` 曾因 `.m` docstring 走运行时
+// makeinfo（本构建无 shell）而报错 —— 那是 T8 之前就存在的缺口，当时用一条"断言那个
+// 既存错误"的护栏把它钉住，免得将来误判成本批引入的。
+// **P1（2026-09-22）把缺口补上了**（.m docstring 构建期预渲染），于是这条护栏在 8762 的
+// 全量回归里如实报错 —— 护栏该有的行为。现在翻成正向断言：
+await ev('help uigetfile 现在可读（P1 已补 .m docstring）',
+  'h=help("uigetfile"); disp([num2str(!isempty(h)) " " num2str(!isempty(strfind(h,"MultiSelect")))])', '1 1');
+await evNot('help uigetfile 不再报 makeinfo', 'h=help("uigetfile"); disp("done")', 'makeinfo');
 await ev('无整页 trap', 'disp("alive")', 'alive');
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);

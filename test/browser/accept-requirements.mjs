@@ -79,7 +79,8 @@ console.log('--- 架构要点（回归护栏）---');
 await ev('官方 .oct 装载', "disp([num2str(exist('convhulln')) ' ' which('convhulln')])");
 await ev('plot 桥 v2 3D', "clf; [X,Y]=meshgrid(-1:0.5:1); surf(X,Y,X.*Y); print('/tmp/req3.svg','-dsvg'); d=dir('/tmp/req3.svg'); disp(d.bytes>3000)");
 await ev('中文字符串', "clf; title('中文标题'); print('/tmp/reqc.svg','-dsvg'); s=fileread('/tmp/reqc.svg'); disp(!isempty(strfind(s,'中文标题')))");
-// R10 的阈值 1.5s 是 7.2 -O1 基线定的；11.3.0 同档 -O1，判定沿用不变。
+// R10 的阈值 1.5s 是 7.2 的 -O1 基线定的；11.3.0 车道用 -O2（见 build/113/configure-113-full.sh），
+// 判定沿用不变 —— 它测的是"解释器循环够不够快"，不是"用的是哪一档 -O"。
 await ev('二进制往返', `urlwrite('${ORIGIN}/octave.wasm','/tmp/req.wasm'); d=dir('/tmp/req.wasm'); disp(d.bytes>1000000)`);
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);

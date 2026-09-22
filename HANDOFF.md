@@ -54,14 +54,21 @@ graphics 对象、文件操作、pkg 语义、`input()`、录音、文件选择�
 - 远程：`https://github.com/ArchivalEra/Octave-Full-Wasm`（私有）
 - 许可：AGPL-3.0（`LICENSE`）；混合体无其他选择
 - 当前 HEAD：以 `git log -1` 为准（本文档自身也随每次提交更新；勿在文档里写死哈希，容易过期）
-- 产物体积（**当前：`-O1` + MAIN_MODULE=1 + HDF5**；交付走 EdgeOne 自动压缩）：
-  wasm raw 44.5MB / gzip 9.07MB；js raw 20.5MB / gzip 1.33MB；data raw 5.94MB / gzip 1.15MB。
-  **三大件 gzip 合计 ≈11.6MB**（上一版是 12.5MB——`-O1` 让 js 缩了 10MB）。
-  另加**按需懒加载资产 20MB / 59 个文件**（谁用到谁下载，不计入首包）。
-  历史：`MAIN_MODULE=1` 让 gzip 从 6.18MB 涨到 10.96MB（不做 DCE），HDF5 再 +1.5MB；
-  `-O1` 又把它拉回 11.6MB（见 §5 批次 11）。`MAIN_MODULE=2` 能把体积压得更低，
-  但 **DCE 会删掉 `.oct` 要 import 的函数**（运行时 `null function` 崩），未采用——
-  要吃得维护一份导出清单（见 `CLIBS.md`）。
+- 产物体积（**当前 11.3.0 车道：`-O2` + MAIN_MODULE=1 + HDF5**；交付走 EdgeOne 自动压缩）：
+  wasm raw **34.30MB / gzip 7.78MB**；js raw **0.68MB / gzip 0.15MB**；
+  data raw **6.80MB / gzip 1.34MB** → **首包 gzip 合计 ≈9.3MB**。
+  另加**按需懒加载资产 19MB / 71 个文件**（谁用到谁下载，不计入首包）。
+  ⚠️ **O 级口径**：`-O1` 是 **7.2 时代**的 R10 结论（见 `build/BENCH.md`）；
+  **11.3.0 车道用的是 `-O2`**（`build/113/configure-113-full.sh` 的 `CFLAGS/CXXFLAGS`
+  与 `link-web.sh` 的 `EXC_FLAGS` 都是 `-O2`）。别把两者混着写。
+  历史：`MAIN_MODULE=1` 不做 DCE ⇒ 7.2 时代 gzip 从 6.18MB 涨到 10.96MB；HDF5 再 +1.5MB。
+  **`MAIN_MODULE=2` 值得重做**（2026-09-22 调查）：Emscripten 会在 side module 上主链时
+  **自动生成保活集**，不再需要手工维护导出清单 —— 见 §8 的"仍待办"。
+- **2026-09-22 修掉一个"数据里带无用副本"的构建 bug**：`--preload-file` 按第一个 `@`
+  切 `src@dst`，而 `m/@ftp` 的源路径自带 `@` ⇒ **整棵 m/ 树被复制到
+  `/ftp@/usr/src/octave/m/@ftp/`**。实测文件表 2181 条里 **1087 条是重复（5.25MB / 44%）**，
+  且 `@ftp` 自己的文件不在正确路径上。修完 **octave.data 13.83MB → 6.99MB
+  （gzip −1.31MB）**，wasm 逐字节未变。见 §5.13。
 
 ---
 
@@ -378,7 +385,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | R7 CXSparse | 已开 | **SPQR 不是缺口**：`spqr` 函数在 Octave 3.6.0 就被 `qr` 取代（GPT 审核指出，已核对官方 obsolete 表）；稀疏 `qr` 走 CXSparse 后端，已实测可用 |
 | R8 WebAudio | `audioplayer` 全 18 个符号可用 | **纯 `.m` 就够**（句柄=struct，零编译）；不用 AudioWorklet |
 | R9 图形导出 | `print -dsvg`（2D+3D 都能出） | 纯 `.m` SVG 生成器；gnuplot 路线要 Asyncify 才有同步通道，故不采用 |
-| R10 编译级别 | **采纳 `-O1`** | 解释器密集代码快 5–10×，体积还小 7.5MB；wasm64 不碰 |
+| R10 编译级别 | 7.2 时代**采纳 `-O1`**；**11.3.0 车道用 `-O2`** | 解释器密集代码快 5–10×；wasm64 不碰 |
 
 ### ⬜ 第三轮（**进行中**，GPT 审核已就位）
 
@@ -678,12 +685,20 @@ makeinfo 生成 doc-cache）。
   `plot(hax, x, y)` 调用形态不支持（见上面的边界条目）→ 报 `X and Y sizes do not match`。
   两输出形式正常。**根因在 plot 桥，不在句柄系统。**
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
+- **句柄/对话框一族划归图形分支**（2026-09-22 用户拍板）：`hgsave`/`copyobj`/
+  `uicontrol`/`uimenu`/`uisetfont`/`movie`/`gcbo`/`questdlg`/`menu` 以及 `inputname`
+  （H4）**不在非图形轮次内** —— 它们要真图形对象才谈得上语义，归 `graphics-osmesa` 分支。
+  现状（源码级，供分支参考）：`exist=2` 但依赖真对象；`menu.m` 会回落成
+  **控制台菜单**（走 `input()`，T5 之后**可能已经能用** —— 分支开工时先验这一条）；
+  `questdlg.m:136-139` 在 `__event_manager_have_dialogs__()` 为假时是**直接报错**
+  "not available in this version of Octave"（上游行为，如实保持即可）。
 
 ---
 
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **29 套 738 项全绿**
+**`-O2`** 编译（11.3.0 车道的口径；`-O1` 是 7.2 时代的 R10 结论，见 `build/BENCH.md`），
+**dldfcn 走官方 dlopen 装载**。全量 **29 套 738 项全绿**
 （11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8 四套，在 8761/8762 上各跑一遍都全绿），
 含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
 （197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
@@ -698,16 +713,28 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 **T7 录音** §5.10；**T10 Asyncify 实验=不可采用** §5.11）。
 **第四轮（11.3.0 换基线）已完成，见 §10**；§9 保留为当时的计划与决策记录。
 
-### ⬜ 仍待办（非图形，两件 —— 图形线开工前建议先清掉）
-1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化。
-   从每个 `.oct` 的 import 表/dylink 段生成保活集喂主链；
-   **不要把 import 原样抄成导出清单**。验收：体积降 **且** 29 套全绿。
-2. **`help` 覆盖 `.m` 文件的 docstring**（`help ode45` / `help uigetfile` 仍报 makeinfo 错，
-   约 1010 个 `.m`）：做法是**构建期预渲染**（与 T1 同技术）；要么重链 `octave.data`，
-   要么走资产车道在加载时覆写 MEMFS 里的 `.m`。**`doc-cache` 注入已实测无效，别再试。**
+### ⬜ 仍待办（非图形，一件 + 一条长尾 —— 图形线开工前建议先清掉）
+1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（体积优化）。
+   **更新（2026-09-22 调查）**：Emscripten **自己就会生成保活集** —— 只要把 side module
+   放在**主链命令行上**，它就把其 import 表喂进 `SIDE_MODULE_IMPORTS`/`EXPORT_IF_DEFINED`
+   保活（`tools/link.py:2829-2881`）；我们现在**一个 `.oct` 都没传给主链**，所以只能靠
+   M1 全导出。另外**文档里"import 在 `dylink.0` 段"是错的**（实测那 7 字节不含符号名），
+   真工具是 `wasm-dis`（`emnm -u` 读不出来、`wasm-objdump` 在 o113 里不存在）。
+   验收：体积降 **且** 30 套全绿。
+2. ~~**`help` 覆盖 `.m` 文件的 docstring**~~ → ✅ **已完成（2026-09-22）**：构建期预渲染
+   （`build/prerender-m-docstrings.py` + 官方 `__makeinfo__` 驱动 + `link-web.sh` 的
+   `M_SRC`），1043/1043 渲染成功、离线对照 **25/25 与桌面逐字一致**、
+   `accept-t9-helpm` 18/18。**`doc-cache` 注入仍然别再试**（那是另一条路，已实测无效）。
+3. **长尾**：control 的 SLICOT 编译件（`ss`/`step`/`tf2ss`）—— 调查更正：**不是签名问题，
+   是 `slicotlibrary.a` 从未编过**（611 个 SLICOT Fortran 源一次都没 f2c 过）。
 
 **覆盖率已经收口**（见 §5.12）：桌面 11.3.0 的可调用名字 **926/926** 都可用，
 唯一不在的是 Debian 打包产物 `debian_missing_handler`（不属 Octave）。
+
+**顺带修掉一个"数据里带无用副本"的构建 bug**（2026-09-22）：`--preload-file` 按第一个
+`@` 切 `src@dst`，而 `m/@ftp` 的**源路径自带 `@`** ⇒ **整棵 m/ 树被复制到
+`/ftp@/usr/src/octave/m/@ftp/`**（实测文件表 2181 条里 1087 条是重复，5.25MB / 44%），
+且 `@ftp` 自己的文件不在正确路径上。修法与收益见 §5.13。
 
 图形线（P5 OSMesa）**在 `graphics-osmesa` 分支上做** —— 开工前先读该分支的
 `build/113/NOTES-p5-osmesa.md`（那里纠正了"四个 GL 头门禁卡住"这条**误判**）。
@@ -723,7 +750,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 它会起容器、体检 o113 工具链、必要时按 **11.3.0** 口径重组站点、起 8761、跑验收
 （需求级 + 核心回归）。11.3.0 车道的独立恢复是 `build/recover-113.sh`（起 8762）。
 
-最近的镜像检查点：**`octave-build:b13-official-dldfcn`**（`obench`，**O1 基线 + 官方装载**，
+最近的镜像检查点（11.3.0 车道）：**`octave-build:113-coverage-100`** / `113-nongfx-t6t7`（`o113`）。
+更早的 7.2 检查点：**`octave-build:b13-official-dldfcn`**（`obench`，**O1 基线 + 官方装载**，
 当前主力）；`octave-build:b12-forge2`（`odld`，O0）；更早的 `b9-net`…`b5-image` 是回退点。
 
 **架构要点（别再走弯路）**：
@@ -1108,6 +1136,56 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 
 **本批之后，非图形只剩两件**：G1 `MAIN_MODULE=2` + keep 清单（体积，Lane B）、
 以及 `help` 覆盖 `.m` 的 docstring（约 1010 个 `.m`）。
+
+### 5.13 P1 已完成（2026-09-22）——`help <mfile>` 可用 + 修掉"数据里带整棵重复树"
+
+**① 构建期预渲染 `.m` 的 docstring**（用户可见的最大一块缺口）：
+
+- **为什么 T1 的表救不了它**：`.m` 的 docstring **永远不查 `built-in-docstrings`** ——
+  那条回退只在符号表和**文件查找都失败**时才走（`help.cc:206-232` 的 `raw_help`）。
+- **为什么必须在构建期改文件**：`help X` 第一次解析会把 docstring **缓存在
+  `octave_function` 对象上**（`octave_function::doc_string()`）；运行期覆写 MEMFS 有
+  "谁先被解析谁赢"的竞态。
+- **工具**：`build/prerender-m-docstrings.py`（抽取 + 写回 + 3 条自检）+
+  `build/render_docstring_batch.m`（**渲染交给官方的 `__makeinfo__`**）。
+  接线：`link-web.sh` 新增 `M_SRC`（默认安装树，指到 staged 树即可；
+  **运行期路径完全不变**）。
+- **★ 第一版为什么全错（值得记住）**：只复刻了 makeinfo 调用，漏了 `__makeinfo__.m`
+  里的一整套文本变换 —— 去掉**每行一个前导空格**（`text(2)==" "` 那个守卫成立是因为
+  `looks_like_texinfo` 的 `erase(0,p1)` **把标记行的换行符留了下来**）、`@end tex` 缩进、
+  `@seealso`→`@xseealso` 并转义 `@`、`@ref/@xref/@pxref`、收尾 ` -- : `。
+  结果离线对照 **20/20 逐字不同**（折行宽度 + 每行差一个空格）。
+  **改用官方函数后，"与桌面一致"变成构造性成立**（宿主同版 11.3.0，
+  `texi_macros_file()` 与站点发的 `macros.texi` 逐字节相同）。
+- **实测**：1043/1043 渲染成功、0 失败（另有 3 个无 docstring、5 个非 texinfo）；
+  离线对照 **25/25 与桌面 `help` 逐字相同**；`accept-t9-helpm` **18/18**。
+- **抽取规则用活**（`lex.cc:2253-2301` / `5288-5303` / `comment-list.h:150-168`）：
+  "先跳空白、再去掉**所有**前导 `#`/`%`" ⇒ 内容里**缩进过的** `## xx` 能无损写回，
+  只有**第 0 列**就是 `#`/`%` 时才无解（工具会明确失败而不是静默少字符）。
+- **测试自身的三个坑**（都写进 `accept-t9-helpm.mjs` 的注释了）：别只取前 N 个字符断言
+  （`help` 开头是签名行）；多行 `{...}` cell 字面量**每行列数必须一致**（用 `strsplit`）；
+  `end_try_catch` 后直接跟 `if` 需要分隔符。
+
+**② 修掉 `@ftp` 预载路径错位**（调查中查出的构建 bug，零风险、净赚体积）：
+
+`--preload-file` 按**第一个 `@`** 切 `src@dst`，而 `m/@ftp` 的**源路径自带 `@`** ⇒
+那一条被切成 `src=.../m/`、`dst=ftp@/usr/src/octave/m/@ftp`，于是**整棵 m/ 树被复制**
+到那个怪路径下。实测：
+
+| | 修前 | 修后 |
+|---|---|---|
+| octave.js 文件表记录 | 2181（其中 **1087 条**在 `/ftp@/…`） | 1108（**0 条**） |
+| 文件表里重复数据 | **5.25MB（44%）** | 0 |
+| `/usr/src/octave/m/@ftp/loadobj.m` | **不存在** | 存在 |
+| octave.data | 13,829,164（gz 2,652,167） | **6,989,733（gz 1,337,924）** |
+| octave.js | 785,187（gz 166,645） | 683,642（gz 151,361） |
+| octave.wasm | 35,970,251 | **逐字节未变**（`bac48adb…`） |
+
+修法：源路径里含 `@` 的目录先拷到**名字里没有 `@`** 的暂存目录再预载（目的地照旧写
+`/usr/src/octave/m/@ftp`）；并在 `link-web.sh` 末尾加**构建期自检** —— 产物里出现
+`/ftp@` 记录就直接 FATAL，别静默出包。
+
+**两个验收（本批）**：`accept-t9-helpm` 18/18；8762 全量回归 + 8761 复跑全绿。
 
 ---
 
