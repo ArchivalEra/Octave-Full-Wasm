@@ -13,6 +13,18 @@
 #
 # 用法（容器内）：bash build-oct.sh <模块名...>    例如 build-oct.sh convhulln gzip
 # 输出：$OUT/<模块名>.oct（默认 /src/octs）
+#
+# ---- 「自带第三方静态库」的模块：只有 __ode15__（SUNDIALS）一个 --------------
+# 绝大多数 dldfcn 的第三方符号（qhull/glpk/sndfile…）由**主模块**在 dlopen 时解析，
+# 所以这里不链任何库。例外是 SUNDIALS：它**不在主 wasm 里**（也不该进去——
+# 主 wasm 一个字节都别动），静态码整个打进 .oct，产物自包含。
+# 这类模块靠三个环境变量开口子（都是空格分隔、无嵌套空格的简单旗标）：
+#   OCT_DEFS 额外的 -D 门禁。注意 config.h 里 sundials 的宏**全是 `/* #undef */`
+#            纯注释**（`HAVE_SUNDIALS` 在 11.3.0 的 config.h:2233 就是如此），
+#            所以命令行 -D 直接就能打开，**不需要重跑 configure**。
+#   OCT_INCS 额外的 -I
+#   OCT_LIBS 额外要链的静态库；**放在链接命令行、且必须排在 .o 之后**
+#            （否则归档成员一个都拉不进来）
 set -euo pipefail
 
 OCT="${OCT:-/src/work/octave-11.3.0}"
@@ -44,6 +56,11 @@ FLAGS=(
   -std=c++17 -O2 -fwasm-exceptions -fPIC
 )
 
+# 额外门禁 / 头 / 库（见文件头的说明；默认全空 → 与老行为逐字节一致）
+# shellcheck disable=SC2206  # 故意按 IFS 拆词：这些都是「无嵌套空格的旗标串」
+EXTRA=( ${OCT_DEFS:-} ${OCT_INCS:-} )
+EXTRA_LIBS=( ${OCT_LIBS:-} )
+
 # ---- 我们自己的 .cc（不是 Octave 的 dldfcn）也走同一条路 -------------------
 # 用法：OUT=/src/octs CC_SRCS="webio:/src/websrc/webio.cc webimage:/src/websrc/webimage.cc" \
 #        bash build-oct.sh --cc
@@ -72,9 +89,9 @@ ok=0; bad=0
 for m in "$@"; do
   src="$OCT/libinterp/dldfcn/$m.cc"
   if [ ! -f "$src" ]; then echo "  ✗ $m: 没有 $src" >&2; bad=$((bad+1)); continue; fi
-  if ccache em++ "${FLAGS[@]}" -c "$src" -o "$OUT/$m.oct.o" 2> "$OUT/$m.cxx.log"; then
+  if ccache em++ "${FLAGS[@]}" "${EXTRA[@]}" -c "$src" -o "$OUT/$m.oct.o" 2> "$OUT/$m.cxx.log"; then
     ccache em++ -sSIDE_MODULE=1 -fPIC -O2 -fwasm-exceptions -shared \
-        -o "$OUT/$m.oct" "$OUT/$m.oct.o" 2> "$OUT/$m.link.log" \
+        -o "$OUT/$m.oct" "$OUT/$m.oct.o" "${EXTRA_LIBS[@]}" 2> "$OUT/$m.link.log" \
       && { printf "  ✅ %-16s %s 字节\n" "$m" "$(stat -c%s "$OUT/$m.oct")"; ok=$((ok+1)); } \
       || { echo "  ✗ $m 链接失败:" >&2; tail -4 "$OUT/$m.link.log" >&2; bad=$((bad+1)); }
   else
