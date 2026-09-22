@@ -51,6 +51,7 @@
 !build/recover.sh
 !build/webio.cc
 !build/webimage.cc
+!build/webfilepick.cc
 !build/build_pkg_oct.sh
 !build/forge-fetch.py
 !build/forge-build.sh
@@ -59,6 +60,7 @@
 !bridge/plotbridge.js
 !bridge/webaudio.js
 !bridge/webaudiorec.js
+!bridge/webfilepick.js
 !bridge/webnet.js
 !vendor/MANIFEST.md
 !vendor/forge/*

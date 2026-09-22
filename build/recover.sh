@@ -71,6 +71,7 @@ else
   # 桥从仓库取当前版本（仓库是这些文件的唯一真相源）
   cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" \
      "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
+     "$REPO/bridge/webfilepick.js" \
      "$REPO/bridge/webnet.js" "$SITE/"
   echo "octave-11.3.0" > "$SITE/VERSION"
   sudo chown -R "$(id -u):$(id -g)" "$SITE"

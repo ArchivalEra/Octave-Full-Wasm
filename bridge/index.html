@@ -15,6 +15,10 @@
      MediaRecorder 真采集，再把 PCM 写回 MEMFS 供 getaudiodata 同步读取。
      与播放桥分开两个文件，是因为录音还有权限三态要处理。 -->
 <script type="text/javascript" src="webaudiorec.js"></script>
+<!-- 文件选择器桥（T8）：Octave 侧 __fltk_uigetfile__.oct 把请求写进队列，这一侧弹
+     <input type=file>、把选中文件的字节写进 MEMFS，再由 Octave 复制进当前目录。
+     因为是异步/同步的硬冲突，uigetfile 在这条路上是**两步**（详见桥里的说明）。 -->
+<script type="text/javascript" src="webfilepick.js"></script>
 <script type="text/javascript">
   // ── 输出落点（T6c）────────────────────────────────────────────────────────
   // 上游骨架只留了一个空的 `<pre id="output">`，而且**没有人往里写东西**：
@@ -192,6 +196,12 @@
       if (window.OctaveRec) {
         window.OctaveRec.init().catch(function (e) {
           console.warn('[audiorec] 桥未就绪: ' + e.message);
+        });
+      }
+      // 文件选择器桥：只轮询队列，不主动弹任何框（弹框的时机是用户调 uigetfile）。
+      if (window.OctaveFilePick) {
+        window.OctaveFilePick.init().catch(function (e) {
+          console.warn('[filepick] 桥未就绪: ' + e.message);
         });
       }
     }

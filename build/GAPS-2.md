@@ -19,7 +19,7 @@
 > | **G2** Asyncify 最小实验 | ✅ **已实验（T10）—— 结论：不可采用** | `-s ASYNCIFY=1` 与 `-fwasm-exceptions` 互斥，`wasm-opt --asyncify` 直接失败；见 `build/113/NOTES-asyncify.md` |
 > | **G3** pkg 语义 | ✅ **已完成**（T4） | `accept-pkg` 16/16 |
 > | **H1** `voronoi` 单输出 | ⬜ **仍不可用，且根因变了** | T2 之后已能走到绘图，终点是 plot 桥不支持 `plot(hax,…)` 这类"首参是句柄"的调用形态 |
-> | **H2** `uigetfile` | ⬜ **仍待做** | **Asyncify 路线已被 G2 实测排除** ⇒ 只能走**非标准异步 API**（路线 B） |
+> | **H2** `uigetfile` | ✅ **已完成（T8）** | 走官方缝 `__fltk_uigetfile__`（必须是 `.oct` —— 中间层门禁 `exist==3`）；**两步**语义（异步/同步硬冲突），`accept-t8-uigetfile` 19/19 |
 > | **H3** `getframe`/`movie` | ⬜ 仍暂缓 | 现在报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）；属图形线 |
 > | **H4** `inputname`/`nargin` 反射 | ⬜ 仍暂缓 | 优先级低，未测 |
 >

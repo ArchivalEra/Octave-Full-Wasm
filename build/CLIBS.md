@@ -1082,4 +1082,66 @@ resolve 后若已请求停止就"录一瞬即收"；空 blob 直接记 `done/0 �
 
 - `accept-t6-audio-doc` **33/33**（含"文档正文真的出现在页面 DOM 里"这条硬断言）
 - `accept-t7-recorder` **40/40**（Chromium 假麦克风，确定性；含权限三态）
-- 8761 全量：**692 PASS / 0 FAIL + pkgoct 27 = 28 套 719 项全绿**
+- 8761 全量：**692 PASS / 0 FAIL + pkgoct 27 = 28 套 719 项全绿**（T6/T7 那轮）
+
+---
+
+# 批次 T8 + 覆盖率收口（2026-09-22）—— 桌面可调用名字 **926/926**
+
+> 完整记录见 **`build/113/NOTES-coverage-100.md`**（含 6 条实测/源码发现与复现命令）。
+> 这里只收**可复用的坑**。
+
+## 坑 1 ★ `uigetfile` 的链有三层，中间那层要求 `exist == 3`
+
+```
+uigetfile.m → __get_funcname__ → __uigetfile_fltk__.m（m/gui/**private**/）
+            → __fltk_uigetfile__（dldfcn；开头 `if (exist(...) != 3) error("fltk graphics toolkit required")`）
+```
+
+⇒ **纯 `.m` 覆写满足不了这道门禁，必须是个 `.oct`**。动手前先读调用链，否则会写出一个
+"看起来对但永远进不去"的覆写。
+
+（附带：`__get_funcname__.m:44` 是**无条件**赋值 `funcname = ["__" basename "_fltk__"]`，
+所以不管当前 toolkit 是什么都会用 `_fltk__` 那个名字，并打一句
+`no implementation for toolkit 'X', using 'fltk' instead` —— 上游行为，我们没改。）
+
+## 坑 2 ★ 上游把 `MultiSelect` 当**字符串**传，不是逻辑值
+
+`uigetfile.m` 里 `outargs{4} = lower (val)` ⇒ C++ 收到的是 `"on"`/`"off"`。
+按 `is_scalar_type() && bool_value()` 判断 → **多选永远失效**（实测症状是
+Playwright 报 `Non-multiple file input can only accept single file`）。两种形式都要收。
+
+## 坑 3 FLTK 过滤器串**自带制表符**，会打乱制表符分隔的队列协议
+
+`__fltk_file_filter__.m` 用 `\t` 把多个过滤器拼成一条（`A (*.txt)\tB (*.m)`），
+而队列行也是 `\t` 分隔 ⇒ 入队前必须把 `\t\n\r` 换成空格。
+
+## 坑 4 「缺 FLTK/gnuplot」不等于「名字该缺」—— 看**源码里的条件编译结构**
+
+- `__init_fltk__.cc` / `__fltk_uigetfile__.cc`：FLTK 部分在 `#if defined (HAVE_FLTK)` 里，
+  但 **DEFUN 无条件存在**，缺 FLTK 时报 `err_disabled_feature` ⇒ 上游任何构建里这些名字**都在**，
+  我们编出来就是**上游"没编 FLTK"的官方行为**（不是桩）。
+- `__init_gnuplot__.cc`：**零外部依赖**（`_LIBADD` 只有 liboctinterp）⇒ 直接能编，
+  行为与"桌面没装 gnuplot"一字不差（`__have_gnuplot__()` → 0，
+  `__init_gnuplot__()` → 上游原话 `the gnuplot program is not available, see 'gnuplot_binary'`）。
+
+⇒ **判"某个名字算不算缺口"之前，先看它在源码里是被 `#if` 包着、还是被排除在构建之外。**
+
+## 坑 5 摸覆盖率时，方向要选**桌面 → 浏览器**
+
+两边 `__list_functions__` 的口径**不一样**（我们的 path 含全部 m 子目录，会多报很多），
+直接比数量是错的。正确做法：拿**桌面**那份名字（可解释的分母）逐个到浏览器里 `exist()`。
+另外**必须先把懒加载资产装上**，否则会把"还没装"算成"缺"。
+
+## 另一个教训：`.oct` 资产也要能被 `sync-js` 登记
+
+`assets/oct/*.oct` 的清单条目带 `mount`/`addpath`（多函数模块还要 `aliases`）。
+`sync-js` 现在两类都管（js 包 + `.oct`）。**别用 `gen-manifest`** —— 它整份重算，
+会把 11.3.0 站点 `file` 类资产的专属 mount 路径算错。
+
+## 验收（本批）
+
+- `accept-t8-uigetfile` **19/19**（Playwright `fileChooser` 走完 选单个/取消/多选）
+- 覆盖率探针：桌面 927 个名字 → 浏览器 **926**，唯一不在的是 Debian 打包产物
+  `debian_missing_handler`（不属 Octave）
+- 8761 全量：**711 PASS / 0 FAIL + pkgoct 27 = 29 套 738 项全绿**

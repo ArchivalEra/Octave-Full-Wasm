@@ -2,7 +2,7 @@
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
 > 最后更新：**2026-09-22**（第三轮 T1–T7 全部完成、T10 实验有结论；
-> 8761 当前 = Octave 11.3.0，**28 套 719 项全绿**）。
+> 8761 当前 = Octave 11.3.0，**29 套 738 项全绿**）。
 > **接续先读 §8（一句话接续，含"仍待办三件"）与 §10（第四轮实况）**；
 > §9 是当时的计划。图形线（P5）在 **`graphics-osmesa` 分支**。
 
@@ -417,7 +417,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | ~~5~~ | ~~**T5**~~ | ✅ **已完成**：`input()` **本来就能用**（Emscripten 默认 stdin → `/dev/tty` → `window.prompt`），只加了官方扩展点 `Module.stdin` 让验收可确定性断言。见 §5.9 | — | 无需代码 |
 | ~~6~~ | ~~**T6**~~ | ✅ **已完成（2026-09-22）**：`audiodevinfo` 最小 shim + `doc` 的浏览器实现 + **输出落点**（计划外，见下）。`accept-t6-audio-doc` **33/33**。见 **§5.10** 与 `build/113/NOTES-t6-t7-hostlayer.md` | — | **资产（零重链）** |
 | ~~7~~ | ~~**T7**~~ | ✅ **已完成（2026-09-22）**：19 个 `__recorder_*` 纯 `.m` + `getUserMedia`/`MediaRecorder` 桥；权限三态各自明确报错。`accept-t7-recorder` **40/40**。**`recordblocking` 如实报错**（实测需要 Asyncify，见 §5.10） | — | **资产+JS 桥（零重链）** |
-| 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS。**⚠️ 已实测排除了 Asyncify 路线**（T10 结论：Asyncify 与本构建必需的 `-fwasm-exceptions` 互斥，链不出来）⇒ 只能走**非标准异步 API**（外部审核当时并列的"路线 B"），并如实标注语义与 MATLAB 不同 | 1–2 d | 资产 + JS 桥 |
+| ~~8~~ | ~~**T8**~~ | ✅ **已完成（2026-09-22）**：`uigetfile` 可用（**两步**：第一次弹框并提示"选好后再跑一次"，第二次返回结果；取消返回 0；`MultiSelect` 返回 cell，选中文件字节被复制进当前目录）。走官方缝 `__fltk_uigetfile__`（**必须是 `.oct`** —— 中间层 `__uigetfile_fltk__.m` 的门禁是 `exist==3`）。`accept-t8-uigetfile` **19/19**。见 **§5.12** 与 `build/113/NOTES-coverage-100.md` | — | 资产 + JS 桥（零重链） |
 | 9 | **T9** | **G1 `MAIN_MODULE=2` + 自动 keep 清单**：读每个 `.oct` 的 wasm import 表 → 生成保活集 → 跑全量回归验证（体积优化，Lane B） | 1–3 d | Lane B |
 | ~~10~~ | ~~**T10**~~ | ✅ **已实验（2026-09-22）——结论：Asyncify 不可采用**。`-s ASYNCIFY=1` 链接**失败**：`emcc.py:438` 明确警告 `ASYNCIFY=1 is not compatible with -fwasm-exceptions`，随后 `wasm-opt --asyncify` 报 `__asyncify_get_call_index does not exist` 返回 1，产物未生成。**代价不是体积，而是整条 `.oct` 资产车道**（JS 式异常会让 side module 装载即崩，§10.3 坑 1）。完整记录见 `build/113/NOTES-asyncify.md` | — | 独立目录（部署未动） |
 
@@ -683,8 +683,8 @@ makeinfo 生成 doc-cache）。
 
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **28 套 719 项全绿**
-（11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7 三套，在 8761/8762 上各跑一遍都全绿），
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **29 套 738 项全绿**
+（11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8 四套，在 8761/8762 上各跑一遍都全绿），
 含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
 （197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
 `bac48adb960c9c79…`）；重打命令 `sh build/make-dist.sh`。
@@ -698,15 +698,16 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 **T7 录音** §5.10；**T10 Asyncify 实验=不可采用** §5.11）。
 **第四轮（11.3.0 换基线）已完成，见 §10**；§9 保留为当时的计划与决策记录。
 
-### ⬜ 仍待办（非图形，三件 —— 图形线开工前建议先清掉）
+### ⬜ 仍待办（非图形，两件 —— 图形线开工前建议先清掉）
 1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化。
    从每个 `.oct` 的 import 表/dylink 段生成保活集喂主链；
-   **不要把 import 原样抄成导出清单**。验收：体积降 **且** 28 套全绿。
-2. **`help` 覆盖 `.m` 文件的 docstring**（`help ode45` 仍报 makeinfo 错，约 1010 个 `.m`）：
-   做法是**构建期预渲染**（与 T1 同技术）；要么重链 `octave.data`，要么走资产车道
-   在加载时覆写 MEMFS 里的 `.m`。**`doc-cache` 注入已实测无效，别再试。**
-3. **H2 `uigetfile`**：**Asyncify 路线已被 T10 实测排除** ⇒ 只能走**非标准异步 API**，
-   并如实标注与 MATLAB 语义不同。
+   **不要把 import 原样抄成导出清单**。验收：体积降 **且** 29 套全绿。
+2. **`help` 覆盖 `.m` 文件的 docstring**（`help ode45` / `help uigetfile` 仍报 makeinfo 错，
+   约 1010 个 `.m`）：做法是**构建期预渲染**（与 T1 同技术）；要么重链 `octave.data`，
+   要么走资产车道在加载时覆写 MEMFS 里的 `.m`。**`doc-cache` 注入已实测无效，别再试。**
+
+**覆盖率已经收口**（见 §5.12）：桌面 11.3.0 的可调用名字 **926/926** 都可用，
+唯一不在的是 Debian 打包产物 `debian_missing_handler`（不属 Octave）。
 
 图形线（P5 OSMesa）**在 `graphics-osmesa` 分支上做** —— 开工前先读该分支的
 `build/113/NOTES-p5-osmesa.md`（那里纠正了"四个 GL 头门禁卡住"这条**误判**）。
@@ -1068,6 +1069,46 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 - **安全**：实验前后部署件 sha256 都是 `bac48adb960c9c79…`（`site/` 与
   `o113:/src/websrc/out/` 两侧都核过）。
 
+### 5.12 T8 + 覆盖率收口（2026-09-22）——**桌面可调用名字 926/926**
+
+**这一批的缘起是一个可复现的度量**：宿主机上正好是**同版 Octave 11.3.0**，把它的
+`__list_functions__`（927 个可调用名字）逐个拿去浏览器里 `exist()`。对照结果：
+
+| | 数量 |
+|---|---|
+| 桌面可调用名字 | 927 |
+| **浏览器里可用**（装载懒加载资产后） | **926** |
+| 唯一"缺" | `debian_missing_handler` —— **不是 Octave 的东西**（在 `/usr/share/octave/**site**/m/`、属 Debian 的 `octave-common` 包，是上游 `distro_missing_handler.m` 的改名版） |
+
+⇒ **按 Octave 真实能力面算 = 926/926。** 那 5 个名字都是**用官方源码真补上**的，
+不是桩；完整查证过程（含 6 条实测/源码发现与复现命令）见
+**`build/113/NOTES-coverage-100.md`**。要点：
+
+- **`__init_gnuplot__` / `__have_gnuplot__`**：官方 `.cc` **零外部依赖**（上游 `_LIBADD`
+  只有 liboctinterp）⇒ 直接编成 side module。行为与"桌面没装 gnuplot"**一字不差**：
+  `__have_gnuplot__()` 返回 0，`__init_gnuplot__()` 报上游原话
+  `the gnuplot program is not available, see 'gnuplot_binary'`。
+- **`__init_fltk__` / `__fltk_check__`**：官方 `.cc` 的 FLTK 部分是 `#if HAVE_FLTK` 包起来的，
+  但 DEFUN **无条件存在**、缺 FLTK 时报 `err_disabled_feature` ⇒ 编出来就是
+  **上游"没编 FLTK"的官方行为**（模块只有 2545 字节）。
+- **`__fltk_uigetfile__`**：官方那个要 FLTK 头 ⇒ **我们自己写**（`build/webfilepick.cc`）。
+  **为什么必须是 `.oct`**：`uigetfile` 的调用链是
+  `uigetfile.m → __get_funcname__ → __uigetfile_fltk__.m（m/gui/private/）→ __fltk_uigetfile__`，
+  而中间那层开头就是 `if (exist("__fltk_uigetfile__") != 3) error("fltk graphics toolkit required")`
+  ⇒ 纯 `.m` 覆写**满足不了这道门禁**。
+  **为什么是两步**：选择框异步 + Octave 一阻塞页面就停摆（§5.10 坑 1）⇒
+  第一次调用弹框并**明确报错**提示"选好后请再执行一次"，第二次返回结果。
+  验收 `accept-t8-uigetfile` **19/19**（Playwright `fileChooser` 把选单个/取消/多选三种场景都走完）。
+- 顺带两个坑：`MultiSelect` 传过来是**字符串** `"on"`（不是逻辑值，第一版多选因此失效）；
+  FLTK 过滤器串**自带制表符**，入队前必须消毒否则请求被拆段。
+- 一个**化妆品级噪音**（上游行为，没改）：工具架不是 `fltk` 时 `__get_funcname__` 会打
+  `warning: uigetfile: no implementation for toolkit 'web', using 'fltk' instead`。
+- **`help uigetfile` 仍报 makeinfo 错** —— 那是 `.m` docstring 的既存缺口（§5.6 / C7），
+  **不是本批引入**；验收里专门用一条断言把它钉成"已知缺口"。
+
+**本批之后，非图形只剩两件**：G1 `MAIN_MODULE=2` + keep 清单（体积，Lane B）、
+以及 `help` 覆盖 `.m` 的 docstring（约 1010 个 `.m`）。
+
 ---
 
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
@@ -1083,7 +1124,7 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **28 套 719 项全绿** | 同左（两份各跑一遍） |
+| 验收 | **29 套 738 项全绿** | 同左（两份各跑一遍） |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
@@ -1129,7 +1170,7 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
   （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
   `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
   `build/forge-preload/` 并由 `link-web.sh` 预加载）。
-  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7 后为 **28 套 719 项**）。
+  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7 后为 **29 套 738 项**）。
   清单与决策记录见 `build/113/PROMOTION.md`。
 - **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
   `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
@@ -1321,7 +1362,7 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    T6 `audiodevinfo` + `doc` + **页面输出落点**（计划外但必需）；
    T7 `audiorecorder`（19 个 `__recorder_*` + MediaRecorder 桥，`recordblocking` 如实报错）；
    T10 Asyncify 实验 → **结论不可采用**（与 `-fwasm-exceptions` 互斥）。
-   全部走资产车道，**主 wasm 零改动**；8761 全量 28 套 719 项全绿。
+   全部走资产车道，**主 wasm 零改动**；8761 全量 29 套 738 项全绿。
 10. ⬜ **仍待办三件（非图形）**：G1 `MAIN_MODULE=2` + keep 清单（Lane B）；
     `help` 覆盖 `.m` docstring（预渲染）；H2 `uigetfile`（走非标准异步 API）。
     详见 **§8 的"仍待办"** 与 `build/GAPS-2.md` 顶部的状态表。

@@ -254,14 +254,18 @@ def gen_manifest(site):
 
 
 def sync_js(site, names):
-    """把 `assets/{m,pkg}/*.js` 的清单条目**定点**同步（新增或更新摘要），别的字段一律不碰。
+    """把 `assets/{m,pkg}/*.js` 与 `assets/oct/*.oct` 的清单条目**定点**同步，
+    别的条目一律不碰（缺的补上、摘要变了就更新）。
 
     为什么不能用 `gen-manifest` 干这件事：它**整份重算**，而 11.3.0 站点的
     `file` 类资产挂载路径是 11.3.0 专属的（`<prefix>/share/octave/11.3.0/etc/`），
     拿 7.2 时代的生成逻辑重算会把它们算错（见 `build/recover.sh` 的注释）。
-    所以改完某个 `.js` 包（或新增一个）之后，只能定点同步它自己那一条。
 
-    用法：sync-js <站点目录> [资产名…]      # 不给名字 = 同步全部 js
+    `.oct` 按惯例挂到 `<prefix>/m/oct/`（与既有 9 个 dldfcn 资产同目录）；
+    多函数模块靠 `meta.json` 里的 `aliases` 建符号链接（Octave 按**文件名**找 `.oct`，
+    见 HANDOFF §4.11）。
+
+    用法：sync-js <站点目录> [资产名…]      # 不给名字 = 同步全部 js 与 .oct
     """
     assets_dir = os.path.join(site, "assets")
     mp = os.path.join(assets_dir, "manifest.json")
@@ -278,6 +282,31 @@ def sync_js(site, names):
 
     want = set(names) if names else None
     added = updated = 0
+
+    def handle(name, rel, digest, defaults):
+        nonlocal added, updated
+        e = by_name.get(name)
+        if e is None:
+            entry = {"name": name, "url": rel, "sha256": digest, "deps": []}
+            entry.update(defaults)
+            entry.update(meta.get(name, {}))
+            entry["name"] = name      # meta 不该改名；改了也不许生效
+            entry["url"] = rel
+            entry["sha256"] = digest  # meta 里不该带摘要；带上也不许盖掉真值
+            entry["kind"] = defaults["kind"]
+            if defaults.get("mount"):
+                entry["mount"] = defaults["mount"]
+            if defaults.get("addpath"):
+                entry["addpath"] = defaults["addpath"]
+            entries.append(entry)
+            by_name[name] = entry
+            added += 1
+            print(f"  + {name} ({rel})")
+        elif e.get("sha256") != digest:
+            print(f"  ~ {name}: {str(e.get('sha256'))[:12]}… → {digest[:12]}…")
+            e["sha256"] = digest
+            updated += 1
+
     for sub in ("m", "pkg"):
         d = os.path.join(assets_dir, sub)
         if not os.path.isdir(d):
@@ -288,27 +317,25 @@ def sync_js(site, names):
             name = fn[:-3]
             if want is not None and name not in want:
                 continue
-            rel = f"assets/{sub}/{fn}"
-            digest = sha256(os.path.join(d, fn))
-            e = by_name.get(name)
-            if e is None:
-                e = {"name": name, "kind": "js", "url": rel, "sha256": digest, "deps": []}
-                e.update(meta.get(name, {}))
-                e["sha256"] = digest    # meta 里不该带摘要；带上也不许盖掉真值
-                e["url"] = rel
-                entries.append(e)
-                by_name[name] = e
-                added += 1
-                print(f"  + {name} ({rel})")
-            elif e.get("sha256") != digest:
-                print(f"  ~ {name}: {str(e.get('sha256'))[:12]}… → {digest[:12]}…")
-                e["sha256"] = digest
-                updated += 1
+            handle(name, f"assets/{sub}/{fn}", sha256(os.path.join(d, fn)),
+                   {"kind": "js"})
+
+    oct_dir = os.path.join(assets_dir, "oct")
+    if os.path.isdir(oct_dir):
+        for fn in sorted(os.listdir(oct_dir)):
+            if not fn.endswith(".oct"):
+                continue
+            name = fn[:-4]
+            if want is not None and name not in want:
+                continue
+            handle(name, f"assets/oct/{fn}", sha256(os.path.join(oct_dir, fn)),
+                   {"kind": "oct", "mount": f"{OCTAVE_M}/oct/{fn}",
+                    "addpath": f"{OCTAVE_M}/oct"})
 
     if want is not None:
         for n in sorted(want - set(by_name)):
-            print(f"  警告：清单里没有 {n}（也没有 assets/{{m,pkg}}/{n}.js，"
-                  f"或名字对不上）", file=sys.stderr)
+            print(f"  警告：清单里没有 {n}（也没有对应的 assets/{{m,pkg}}/{n}.js "
+                  f"或 assets/oct/{n}.oct，或名字对不上）", file=sys.stderr)
 
     with open(mp, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, ensure_ascii=False, indent=2)

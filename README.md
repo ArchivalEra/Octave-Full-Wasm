@@ -81,7 +81,7 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 | 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
 | `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
 | 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260922`，首包 gzip ≈11.6MB |
-| 验收 | ✅ **28 套 719 项全绿**（含需求级 `accept-requirements`） |
+| 验收 | ✅ **29 套 738 项全绿**（含需求级 `accept-requirements`） |
 
 ### 已知偏差（如实）
 - ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
@@ -101,13 +101,18 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 
 **T1** `help`（构建期 makeinfo 预渲染）、**T2** graphics 句柄半真化（薄 `web` toolkit）、
 **T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`、
-**T6** `audiodevinfo` + `doc`（+ 页面输出落点）、**T7** `audiorecorder`
-—— ✅ **七项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
+**T6** `audiodevinfo` + `doc`（+ 页面输出落点）、**T7** `audiorecorder`、
+**T8** `uigetfile`（浏览器文件选择器）、**T10** Asyncify 实验（结论：不可采用）
+—— ✅ **八项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
 `accept-fileops` 20、`accept-pkg` 16、`accept-input` 9、`accept-t6-audio-doc` 33、
-`accept-t7-recorder` 40）。
+`accept-t7-recorder` 40、`accept-t8-uigetfile` 19）。
 
-剩余：**T9** `MAIN_MODULE=2`（体积优化，Lane B）→ **T10** Asyncify 最小实验（只实验，
-`recordblocking` 与 `uigetfile` 都卡在它上面）→ **T8** `uigetfile`（依赖 T10 结论）。
+**覆盖率已收口**：拿**同版桌面 Octave 11.3.0** 的 `__list_functions__`（927 个可调用名字）
+逐个在浏览器里 `exist()` 对照 → **926/926 可用**；唯一不在的是 Debian 打包产物
+`debian_missing_handler`（不属 Octave）。详见 `build/113/NOTES-coverage-100.md`。
+
+剩余（非图形两件）：**T9/G1** `MAIN_MODULE=2` + keep 清单（体积，Lane B）→
+**`help` 覆盖 `.m` 文件的 docstring**（约 1010 个 `.m`，`help ode45` 仍报 makeinfo 错）。
 
 依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
 （外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
@@ -148,27 +153,29 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/pre-commit` (378 bytes)
 - `.githooks/pre-push` (337 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (1592 bytes)
+- `.gitignore` (1637 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (105939 bytes)
+- `HANDOFF.md` (109178 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
-- `bridge/index.html` (10924 bytes)
+- `bridge/index.html` (11603 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (6457 bytes)
 - `bridge/webaudio.js` (6864 bytes)
 - `bridge/webaudiorec.js` (11827 bytes)
+- `bridge/webfilepick.js` (6076 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
+- `build/113/NOTES-coverage-100.md` (8206 bytes)
 - `build/113/NOTES-lsode.md` (12160 bytes)
 - `build/113/NOTES-p5-osmesa.md` (14821 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
-- `build/113/PROMOTION.md` (6441 bytes)
+- `build/113/PROMOTION.md` (6444 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
 - `build/113/STATUS.md` (8407 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
@@ -200,14 +207,14 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/BASELINE-10.3.md` (8216 bytes)
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5640 bytes)
-- `build/CLIBS.md` (65835 bytes)
-- `build/GAPS-2.md` (27600 bytes)
+- `build/CLIBS.md` (69328 bytes)
+- `build/GAPS-2.md` (27682 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
 - `build/Makefile` (9242 bytes)
 - `build/NOTES.md` (1657 bytes)
-- `build/assets-meta.json` (5767 bytes)
-- `build/assets.py` (14485 bytes)
+- `build/assets-meta.json` (7139 bytes)
+- `build/assets.py` (15591 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
 - `build/build_pkg_oct.sh` (11790 bytes)
@@ -300,7 +307,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/reconf-bench.sh` (3857 bytes)
 - `build/reconf-pic.sh` (2810 bytes)
 - `build/reconf.sh` (3004 bytes)
-- `build/recover.sh` (7126 bytes)
+- `build/recover.sh` (7163 bytes)
 - `build/render-docstrings.py` (8474 bytes)
 - `build/second_stub.f` (358 bytes)
 - `build/webaudio/__pba_enqueue__.m` (828 bytes)
@@ -367,6 +374,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webfile/copyfile.m` (6270 bytes)
 - `build/webfile/ls.m` (5013 bytes)
 - `build/webfile/movefile.m` (5640 bytes)
+- `build/webfilepick.cc` (9043 bytes)
 - `build/webgraphics/PKG_ADD` (1490 bytes)
 - `build/webimage.cc` (7177 bytes)
 - `build/webio.cc` (18583 bytes)
@@ -410,6 +418,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/accept-t2-graphics.mjs` (8603 bytes)
 - `test/browser/accept-t6-audio-doc.mjs` (7930 bytes)
 - `test/browser/accept-t7-recorder.mjs` (12071 bytes)
+- `test/browser/accept-t8-uigetfile.mjs` (8469 bytes)
 - `test/browser/bench-core.mjs` (5350 bytes)
 - `test/browser/fixtures/p5-graphics-probe.m` (3048 bytes)
 - `test/browser/fixtures/t2-graphics-probe.m` (2587 bytes)

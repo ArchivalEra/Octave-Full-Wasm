@@ -119,6 +119,24 @@
     "note": "T7/B1：19 个 __recorder_* 纯 .m；页面侧 webaudiorec.js 用 getUserMedia + MediaRecorder 真采集",
     "deps": []
   },
+  "__init_gnuplot__": {
+    "aliases": [
+      "__have_gnuplot__"
+    ],
+    "note": "官方 libinterp/dldfcn/__init_gnuplot__.cc **原样**编成 side module（上游 LIBADD 只有 liboctinterp，零外部依赖）。本构建没有 gnuplot 二进制 ⇒ __have_gnuplot__() 为 false、__init_gnuplot__ 走「没找到 gnuplot」那条路 —— 与桌面没装 gnuplot 时**完全一致**，不是桩。",
+    "deps": []
+  },
+  "__init_fltk__": {
+    "aliases": [
+      "__fltk_check__"
+    ],
+    "note": "官方 libinterp/dldfcn/__init_fltk__.cc **原样**编成 side module。HAVE_FLTK 未定义 ⇒ FLTK 部分被条件编译掉（模块只有 2545 字节），但 DEFUN 仍存在并报 err_disabled_feature(\"__fltk_check__\", \"OpenGL and FLTK\") —— 这正是上游「没编 FLTK」时的官方行为。",
+    "deps": []
+  },
+  "__fltk_uigetfile__": {
+    "deps": [],
+    "note": "T8/H2：**我们自己写的**浏览器实现（build/webfilepick.cc），替掉官方那个需要 FLTK 的模块。为什么必须是 .oct：__uigetfile_fltk__.m 开头的门禁是 exist(...)==3（纯 .m 满足不了）。为什么是**两步**：选择框异步、而 Octave 一阻塞页面就停摆 ⇒ 第一次调用弹框并报错提示「选好后再跑一次」，第二次返回结果并把文件字节复制进当前目录。页面侧是 bridge/webfilepick.js。"
+  },
   "webnet": {
     "note": "R5：urlread/urlwrite/webread/websave 的浏览器侧桥",
     "deps": [
