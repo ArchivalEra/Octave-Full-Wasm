@@ -139,7 +139,7 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
-- `bridge/index.html` (7841 bytes)
+- `bridge/index.html` (7856 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (6457 bytes)
 - `bridge/webaudio.js` (6864 bytes)
