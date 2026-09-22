@@ -972,3 +972,114 @@ fullfile (user_config_dir(), "octave", __octave_config_info__("api_version"), "o
 `test/browser/accept-input.mjs`（**9 项，9/9 绿**）：表达式模式（含在 caller 的
 workspace 里求值 `k*2 → 42`）、字符串模式（不求值）、连续两次 `input()` 各拿各的、
 无对话框时 `eval` 不残留状态、以及最后一条"EOF 报错与本机一字不差"。
+
+---
+
+# 批次 T6 / T7 / T10（2026-09-22）—— 浏览器宿主语义：音频设备 / 文档 / 录音 / Asyncify
+
+> 全部走**资产车道**（T6/T7）或**独立目录实验**（T10），**主 wasm 零改动**。
+> 完整记录另见 `build/113/NOTES-t6-t7-hostlayer.md` 与 `build/113/NOTES-asyncify.md`
+> （后者含复现命令）。这里只收**可复用的坑**。
+
+## 坑 1 ★ 测"宿主是否让出事件循环"必须只数**区间内**的 tick
+
+第一版测 `pause(1)` 是否让出主线程，只看了"定时器总共跑了多少次"——
+把 eval **之前**和**之后**的 tick 都算进去了，于是得出"跑了约 5 次 → 会让出"。
+**这个结论是错的。**
+
+正确做法：记录每个 tick 的**时刻**，再与 eval 的起止时刻（同一时钟
+`performance.now()`）比较，只数落在 `(t_start, t_end)` 内的。
+
+正确测量的结果（三种写法一致）：
+
+| 表达式 | 区间内 tick | 理论上限 |
+|---|---|---|
+| `pause(1)` | **0** | 20 |
+| `pause(2)` | **0** | 40 |
+| `for k=1:10, pause(0.1), endfor` | **0** | 20 |
+
+⇒ **`pause()` 期间浏览器事件循环完全停摆**（阻塞式睡眠）。
+
+**推论（三条都验证过或已解释）**：
+- `recordblocking`（等页面录完）与 `uigetfile`（等用户选文件）**都做不到**——
+  它们要等一个异步浏览器 API，而页面被冻住；
+- `input()` 反而能用，因为 `window.prompt` 是**同步**的浏览器 API；
+- **写验收时等待要在 JS 侧做**（`page.evaluate(() => new Promise(r => setTimeout(r, ms)))`），
+  不能用 Octave 的 `pause`。这也正是真人用 REPL 的节奏：命令返回 → 页面自由 →
+  下一条命令读数据。
+
+## 坑 2 ★ Asyncify 与 `-fwasm-exceptions` **互斥**（所以本构建用不了它）
+
+- `emcc.py:438` 原文警告：`ASYNCIFY=1 is not compatible with -fwasm-exceptions.
+  Parts of the program that mix ASYNCIFY and exceptions will not compile.`
+- 实测 `wasm-opt --asyncify` 直接失败：
+  `Fatal: Module::getFunction: __asyncify_get_call_index does not exist`（返回 1），
+  `octave.js` 根本没生成。
+- **为什么代价不成比例**：本构建**必须**用 `-fwasm-exceptions`（见本文件"真 .oct
+  动态装载"与 HANDOFF §10.3 坑 1）——JS 式异常会引入只在胶水里的 `invoke_*`/`__cxa_*`，
+  side module 装载即崩。上 Asyncify 等于**放弃整条 `.oct` 资产车道**。
+- **别把中间产物体积当结论**：换旗标后（Asyncify pass **之前**）的 wasm 41.17MB
+  vs 部署版 35.97MB，但那不是有效产物。
+
+## 坑 3 ★ `__recorder_getaudiodata__` 的朝向是**声道 × 帧**，空数据也得有那一行
+
+读 `@audiorecorder/getaudiodata.m` 的收尾才定出来的：
+
+```matlab
+if (get (recorder, "NumberOfChannels") == 2)
+  data = data.';        # 立体声：原样转置
+else
+  data = data(1,:).';   # 单声道：**取第 1 行**
+endif
+```
+
+⇒ 必须交回 **声道×帧**；单声道还必须**至少有 1 行**，否则 `data(1,:)` 直接
+`out of bound 0`（第一版返回 `zeros(0,nch)`，单声道路径一读就报错）。空数据返回 **nch×0**。
+
+同类教训（与批次 12/13 同源）：**这类 builtin 的返回约定要去读调用它的官方 `.m`**，
+不要按"看起来合理"的形状写。
+
+## 坑 4 浏览器授权是异步的：`stop` 可能先于 `getUserMedia` resolve 到达
+
+`record(r); stop(r)` 连打时，若在 `getUserMedia` 尚未 resolve 时把 `stop` 丢掉，
+随后 resolve 会**开始无限录音**（实测踩到）。修法：rec 上记 `stopRequested`，
+resolve 后若已请求停止就"录一瞬即收"；空 blob 直接记 `done/0 帧`，
+**不要送进解码器**（那只会得到一句难懂的"解码失败"）。
+
+## 坑 5 Chromium 的**假麦克风是双声道**
+
+写"假设备只有一路所以会被复制补齐"是想当然：实测 `actualChans = 2`。
+验收因此改为断言"两声道都有信号 + 有限"，不断言两者相等。
+（用假设备做确定性验收是对的，但**别猜它的通道数**。）
+
+## 坑 6 `audiodevinfo` 的两个易错语义（照抄官方才没写错）
+
+- `audiodevinfo(io)` 返回的是**设备个数**（不是结构体数组）；
+- `audiodevinfo(io, id)` 返回的是**设备名字符串**（不是结构体）；
+- 第三参数官方**只认** `"DriverVersion"`。
+
+## 坑 7 页面输出落点：上游骨架的 `<pre id="output">` **从来没人往里写**
+
+8761 页面实测**什么都不显示**（`disp(42)` 后 `body.innerText` 仍是空串），
+输出只进浏览器控制台 —— 而验收套件读的就是 console，所以这个缺口**一直没被测出来**。
+补法：给 `Module.print`/`printErr` 各加一句**额外**写 DOM，
+**仍然照常 `console.log`/`console.warn`**（只写 DOM 会把 26 套全打掉）。
+
+**通用教训**：凡"验收读 console"的项目，"人能不能看见输出"这件事**不在测试覆盖内**，
+得单独看一眼。
+
+## 坑 8 资产元数据不在 git 里（可复现性缺口）
+
+`assets/meta.json` 承载 `deps`/`note`/**`aliases`**，却**只存在于磁盘站点**。
+后果：只拿仓库**重建不出站点**（`aliases` 一丢，`__web_zip__` 等 6 个函数挂不上）。
+已纳入仓库 `build/assets-meta.json`。
+
+顺带补了工具 **`build/assets.py sync-js <站点> [名字…]`**：定点同步 `assets/{m,pkg}/*.js`
+的清单条目（缺的补上、摘要变了就更新），其余原样保留 —— **不能用 `gen-manifest`**：
+它整份重算，会把 11.3.0 站点里 `file` 类资产的 11.3.0 专属 mount 路径算错。
+
+## 验收
+
+- `accept-t6-audio-doc` **33/33**（含"文档正文真的出现在页面 DOM 里"这条硬断言）
+- `accept-t7-recorder` **40/40**（Chromium 假麦克风，确定性；含权限三态）
+- 8761 全量：**692 PASS / 0 FAIL + pkgoct 27 = 28 套 719 项全绿**

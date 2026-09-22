@@ -1,5 +1,46 @@
 # 缺口清单 v2（2026-09-21 实测）—— 全部剩余缺口，按可做性排序
 
+> ## ⚠️ 当前状态（2026-09-22 更新）—— 请先看这张表再往下读
+>
+> 这份清单是 **2026-09-21 的实测快照**，**不是当前待办**。到今天为止的结果：
+>
+> | 条目 | 状态（2026-09-22） | 证据 |
+> |---|---|---|
+> | **A1** 图形栈（薄 toolkit） | ✅ **已完成**（T2） | `web` toolkit 登记+装载；`accept-t2-graphics` 26/26。**没走 Lane B** —— 见 HANDOFF §5.5.1 |
+> | **B1** `audiorecorder` | ✅ **已完成**（T7） | 19 个 `__recorder_*` 纯 `.m` + getUserMedia/MediaRecorder 桥；`accept-t7-recorder` 40/40。**`recordblocking` 如实报错**（需 Asyncify，实测不可用，见 G2） |
+> | **B2** `audiodevinfo` | ✅ **已完成**（T6） | 静态"浏览器默认设备"模型；`accept-t6-audio-doc` 33/33 |
+> | **C1** 文件操作（`copyfile` 等） | ✅ **已完成**（T3） | 无 shell 进程内实现；`accept-fileops` 20/20 |
+> | **D1** `help` 渲染 | ✅ **已完成**（T1） | 构建期 makeinfo 预渲染；`accept-help` 12/12。**仍缺**：`.m` 文件的 docstring（`help ode45`）—— 见下方"剩余" |
+> | **D2a** `doc` | ✅ **已完成**（T6） | help 文本 + 页面 DOM 落点；见 HANDOFF §5.10 |
+> | **D2b** `publish` | ❌ 仍暂缓 | 外部审核判定，会被 graphics/文件/页面 UI 一串拖住 |
+> | **E1** `input()` | ✅ **已完成**（T5） | 本就可用，只加官方 `Module.stdin` 扩展点；`accept-input` 9/9 |
+> | **E2** `keyboard`/`kbhit`/`pause` | ❌ 仍暂缓 | 需要 Asyncify；而 **Asyncify 已实测不可用**（见 G2） |
+> | **G1** `MAIN_MODULE=2` + keep 清单 | ⬜ **仍待做** | Lane B；见下方"剩余" |
+> | **G2** Asyncify 最小实验 | ✅ **已实验（T10）—— 结论：不可采用** | `-s ASYNCIFY=1` 与 `-fwasm-exceptions` 互斥，`wasm-opt --asyncify` 直接失败；见 `build/113/NOTES-asyncify.md` |
+> | **G3** pkg 语义 | ✅ **已完成**（T4） | `accept-pkg` 16/16 |
+> | **H1** `voronoi` 单输出 | ⬜ **仍不可用，且根因变了** | T2 之后已能走到绘图，终点是 plot 桥不支持 `plot(hax,…)` 这类"首参是句柄"的调用形态 |
+> | **H2** `uigetfile` | ⬜ **仍待做** | **Asyncify 路线已被 G2 实测排除** ⇒ 只能走**非标准异步 API**（路线 B） |
+> | **H3** `getframe`/`movie` | ⬜ 仍暂缓 | 现在报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）；属图形线 |
+> | **H4** `inputname`/`nargin` 反射 | ⬜ 仍暂缓 | 优先级低，未测 |
+>
+> ### 剩余（非图形）三件，以及它们为什么还没做
+>
+> 1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化。
+>    要点：从每个 `.oct` 的 import 表/dylink 段生成保活集喂主链，
+>    **但不要把 import 原样抄成导出清单**（要看 mangling 与 JS 库导入）。
+>    验收：体积显著下降 **且** 全量 28 套全绿。
+> 2. **D1 的剩余部分：`.m` 文件的 docstring**（约 1010 个）：`help ode45` 仍会撞
+>    makeinfo。可行的做法是**构建期预渲染 .m 的 docstring**（与 T1 同一技术），
+>    代价是要动 `octave.data`（重链）或走资产车道做 MEMFS 覆写。
+>    **`doc-cache` 注入已实测无效，别再试。**
+> 3. **H2 `uigetfile`**：走**非标准异步 API**（如 `web_uigetfile()` 两段式/Promise），
+>    并如实标注"与 MATLAB 语义不同"。
+>
+> **不属于本清单的非图形长尾**：control 包 SLICOT 编译件（`ss`/`step`/`tf2ss`，
+> 见 `HANDOFF.md` §4.12 —— 处置是先做一次"静态注册最小实验"，且要重链主 wasm）。
+
+---
+
 > **用途**：交给外部检索模型（GPT 等）审出方案。
 > **与 `GAPS.md` 的关系**：那份是**第一批**需求书（R1–R11），**R1–R10 已全部落地**；
 > 这份是**当时没写进计划、或写进"已论证不做"但现在值得重审**的缺口。
