@@ -1,9 +1,10 @@
-# NOTES · P5 图形线重构（OSMesa）—— **步骤① 已完成；步骤② 推进到一半**（2026-09-22）
+# NOTES · P5 图形线重构（OSMesa）—— **步骤① 已完成；步骤② 的"卡点"已更正为误判**
 
 > 计划里 P5 分三步，并**明确允许"只完成第 1 步并如实记录"**（HANDOFF §9.3）。
-> 本文件记录：步骤① 已通过（硬断言）、步骤② 的进展与**卡点**（还有一个 🚨 主树混态警告）。
+> 本文件记录：步骤① 已通过（硬断言）、步骤② 做到的库层面工作、
+> **以及一次源码级核查推翻的误判**（原先记的"四个 GL 头门禁卡住"是错的）。
 >
-> **接手先看两段**：① 本文件末尾的「步骤② 进展」；② HANDOFF §9 里带 🚨 的那段。
+> **接手先看本文件末尾两节**：「~~卡在哪~~ → 更正」与「图形分支上的下一步」。
 
 ## 一、结论先说
 
@@ -156,37 +157,78 @@ bash /src/bin/osmesa-smoke.sh                  # 编 + 用 node 跑，逐像素�
    返回 0，`config.h` 里 **`#define HAVE_OPENGL 1`**。
    日志：`/src/libwork/reconf-opengl.log`。
 
-## ⚠️ 卡在哪（下次接着做，就一条）
+## ~~⚠️ 卡在哪~~ → **更正：那不是卡点，是误判**（2026-09-22 源码级核查）
 
-`config.h` 里这几个门禁**还是 `#undef`**：
+原先这里记着"`config.h` 里四个门禁还是 `#undef` ⇒ `gl-render.cc` 编不过"，
+并把"查这四个头探测为什么失败"列为下一步。**核查后发现这个判断是错的**：
 
 ```
-/* #undef HAVE_OPENGL_GL_H */
-/* #undef HAVE_OPENGL_GLU_H */
-/* #undef HAVE_OPENGL_GLEXT_H */
-/* #undef HAVE_GLUTESSCALLBACK_THREEDOTS */
+/* #undef HAVE_OPENGL_GL_H */        ← Apple 目录布局（OpenGL/gl.h）的宏
+/* #undef HAVE_OPENGL_GLU_H */       ← 同上（OpenGL/glu.h）
+/* #undef HAVE_OPENGL_GLEXT_H */     ← 同上（OpenGL/glext.h）
+/* #undef HAVE_GLUTESSCALLBACK_THREEDOTS */  ← 只在 macOS framework 分支里才查
 ```
 
-而 `gl-render.cc` 的 `#include` 块正是靠 `HAVE_OPENGL_GL_H`/`GLEXT_H`/`GLU_H` 决定
-包哪个头（`acinclude.m4:1565/1616/1621/1648`）。**它们全 undef ⇒ gl-render.cc 编不过**
-（一个 GL 头都不会被包含）。
+逐条的事实（都有文件行号）：
 
-⇒ **下一步就一件事**：查这几个头探测为什么失败并修好（八成是探测用的 include 路径
-没吃到我们传的 `CPPFLAGS`，或者它按 macOS 的 `OpenGL/gl.h` 风格试的）。
-修好后 `HAVE_OPENGL 1` + 这四个门禁一起为真，才能真正开编。
+1. `m4/acinclude.m4:1544` 是 `AC_CHECK_HEADERS([GL/gl.h OpenGL/gl.h])` ——
+   **同一个 break 循环**，`GL/gl.h` 先成功就 `break`，所以
+   `<OpenGL/gl.h>` **根本没被探测**（`ac_cv_header_OpenGL_gl_h` 压根不存在）。
+   `GL/glu.h` 同理。⇒ 这两个 `#undef` 是**正确的、预期的**结果。
+2. `HAVE_OPENGL_GLEXT_H` 对应 `<OpenGL/glext.h>`，我们**确实没有** `OpenGL/` 目录
+   （glshim 只有 `include/GL/`）⇒ 也是正确结果。
+3. `HAVE_GLUTESSCALLBACK_THREEDOTS` 的检查（`acinclude.m4:469`）**唯一调用点在
+   `acinclude.m4:1536`**，而那句在 `if test $have_framework_opengl = yes` 分支里 ——
+   非 macOS 上**从不执行**。而且它只与 `HAVE_FRAMEWORK_OPENGL` 一起被消费
+   （`gl-render.cc:345`）。
+4. **真正的门禁是 `HAVE_GL_GL_H` / `HAVE_GL_GLU_H` / `HAVE_GL_GLEXT_H`**，
+   而它们在当时的 config.h 里**已经全是 1**（`oct-opengl.h:29-51` 正是用这三个
+   决定包哪组 GL 头）。
 
-## 🚨 主树现在的状态（**接手的人务必先看这段**）
+⇒ **`gl-render.cc` 不是"编不过"，是从没试过编。** 下一步不是查探测，而是**直接编**。
 
-- `/src/work/octave-11.3.0/config.h` **已经是 opengl 版**（`HAVE_OPENGL 1`），
-  但 `liboctave.a` / `libinterp.a` / `.o` **都是 opengl 之前的产物** ——
-  **配置与产物不一致（混态）**。
-- **部署产物没被动过**：8761/8762/磁盘 `site/`/`/src/websrc/out/` 都还是
-  `bac48adb960c9c79…`（T2 那版，09:09 生成），本次只改配置、**没有 make、没有重链、没有部署**。
-- **要退回"与部署一致"的配置**（下次想重链出部署同款 wasm 时必须先做）：
-  ```bash
-  cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh   # 不带 WITH_OPENGL
-  ```
-  （备份在 `/src/libwork/config.h.pre-opengl`，可用于比对。）
-- 想继续步骤②：先修上面那四个门禁，再 `PATH=/src/bin:$PATH make -k -j24 DLDFCN_LIBS=`
-  （config.h 变了 ⇒ 大部分会重编）→ `link-web.sh` → **验证过再部署**。
+## 顺带核清的三件事（都影响做法，别再假设）
+
+- **11.3.0 里 `gl-render.cc` 是*无条件*编译的**（`libinterp/corefcn/module.mk:182`，
+  全树**没有** `AMCOND_HAVE_OPENGL` 门）⇒ 配置里开着 opengl 它就会编进去。
+- **11.3.0 没有 `__init_opengl__.cc`**（`ls` 确认不存在）—— opengl toolkit 已经搬到
+  **libgui 的 `GLCanvas`** 里。⇒ **没有现成的 toolkit 可以抄**，要像 T2 那样自己写一个
+  （`libgui/graphics/GLCanvas.cc:66-83` 的 `draw`/`begin_rendering` 是那份最小配方：
+  `set_viewport` → `opengl_renderer::draw(go)`）。
+- **ABI 已核，可以走资产车道**：安装头树里 `HAVE_OPENGL`/`HAVE_GL_` **零命中**
+  （`octave-config.h` 由 `mk-octave-config-h.sh` 生成，只搬 `OCTAVE_*`/ABI 宏），
+  唯一相关的 `oct-opengl.h` 只在 `#include` 与 inline 函数体上开门，
+  `opengl_functions` 两种配置下都只是 `{vptr}`。
+  ⇒ **可以在 opengl-on 的配置下编我们的 `.oct`，而主 wasm 保持 opengl-off**
+  （`oct-opengl.h` 的类体是 inline 包装 `::glXxx`，把 OSMesa 静态链进 `.oct` 就行）。
+- **文本需要 freetype**：现在 `--without-freetype` ⇒ `text_to_pixels` 返回空
+  （`text-renderer.cc:130-151`），刻度/title 会**空白但不崩**。要出文字得先建 freetype
+  + 解决无 fontconfig 的字体查找。
+- **唯一的真未知**：主模块里**已经有 stub 版 `opengl_renderer` 符号**
+  （`gl-render.cc` 的方法体总是编译，只是 opengl-off 时走 `err_disabled_feature`）。
+  要实测确认 side module 绑的是**它自己那份定义**。
+
+## ✅ 主树混态**已清除**（2026-09-22 收尾时做的）
+
+- 已跑 `SKIP= bash configure-113-full.sh`（**不带** `WITH_OPENGL`）；
+  `config.h` 与 `/src/libwork/config.h.pre-opengl` **逐行一致**。
+- opengl-on 那份 `config.h` + `Makefile` **备份在 `/src/libwork/config.h.opengl-on`**
+  （`Makefile.opengl-on` 同目录）—— 图形分支直接拿来 diff 或复用。
+- 部署产物全程未动：`site/`、`site113/`、`o113:/src/websrc/out/` 的
+  `octave.wasm` sha256 都是 `bac48adb960c9c79…`。
+
+## 图形分支上的下一步（本文件写在这里，分支自带计划）
+
+1. 先把主树切回 opengl-on：`WITH_OPENGL=1 SKIP= bash configure-113-full.sh`
+   （glshim 已在 `/src/deps/glshim`，`libGL.a` 就是 `libOSMesa.a`）。
+2. 写 `osmesa_toolkit.cc`：`base_graphics_toolkit` 子类，内含
+   `opengl_functions m_glfcns; opengl_renderer m_renderer;` + OSMesa context；
+   `redraw_figure(go)` = `set_viewport` → `m_renderer.draw(go)` → `glReadPixels`
+   → 写 MEMFS → 通知页面贴 canvas（`EM_ASM` 在 side module 里不可用，见 §4.13）。
+3. 编成 `.oct`（`build/113/build-oct.sh --cc`，用 `OCT_DEFS/OCT_INCS/OCT_LIBS` 挂
+   `libOSMesa.a` + `libGLU.a` + `libsoftpipe.a` + `blake3` + `--start-group` + `-lz`
+   + `osmesa-stubs.c`），**主 wasm 零改动**。
+4. **先验符号绑定**（文件末尾那条"唯一真未知"），再谈渲染。
+5. 步骤③：`plot/surf/mesh/contour` 逐个出图并与 plot 桥产物对照。
+6. 回退不变：**plot 桥 + `print -dsvg` 保持可用**，两者不冲突。
 
