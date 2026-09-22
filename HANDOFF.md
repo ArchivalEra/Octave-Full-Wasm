@@ -1,10 +1,12 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-22**（第三轮 T1–T7 全部完成、T10 实验有结论；
-> 8761 当前 = Octave 11.3.0，**29 套 738 项全绿**）。
-> **接续先读 §8（一句话接续，含"仍待办三件"）与 §10（第四轮实况）**；
-> §9 是当时的计划。图形线（P5）在 **`graphics-osmesa` 分支**。
+> 最后更新：**2026-09-22（非图形收尾轮）**：T1–T8 全完成、T10 实验有结论、
+> `help <mfile>` 已可用（P1）、`@ftp` 预载 bug 已修（体积 −1.8MB）。
+> 8761 当前 = Octave 11.3.0（P1 构建，wasm sha `bac48adb…`），**30 套**。
+> **接续先读 §8（一句话接续，含"仍待办"与"**下一步第一件事：补跑 8761 全量**"）
+> 与 §5.13/§5.14（本轮实况）**；§9 是当时的计划、§10 是第四轮实况。
+> 图形线（P5）在 **`graphics-osmesa` 分支**。
 
 ---
 
@@ -687,8 +689,10 @@ makeinfo 生成 doc-cache）。
   or disabled when Octave was built`（`text-renderer.cc:53` 的 `static bool warned`，
   所以只在首次建 axes 时打一次），之后文本能力静默缺失。数值与 plot 桥不受影响。
 - ~~**`doc`** 报 `unable to find the Octave info manual`（无 shell 起不了 info 浏览器）~~
-  → **T6 已修**（`build/webdoc/doc.m`，资产车道，见 §5.10）。**仍缺**：带 texinfo 标记的
-  `.m` 文件走运行时路径仍会撞 makeinfo（与下面那条同源）。
+  → **T6 已修**（`build/webdoc/doc.m`，资产车道，见 §5.10）。
+  → **`.m` 文件的 docstring 也已修（P1，2026-09-22）**：构建期预渲染 + 去标记，
+  1043/1043 渲染成功、离线对照 **25/25 与桌面 `help` 逐字一致**，见 **§5.14**。
+  **⇒ `help` 这条偏差已彻底消除**（内建走 `built-in-docstrings`、`.m` 走预渲染）。
 - **`audiorecorder` 的 `recordblocking` 不可用**（T7）：语义是"等页面把录音做完"，
   而**实测 `pause()` 期间浏览器事件循环完全停摆**（区间内 tick = 0）⇒ 必须 Asyncify。
   本构建**如实报错**并给出替代用法（`record(r,len)` + `getaudiodata`），不静默降级。
@@ -716,7 +720,7 @@ makeinfo 生成 doc-cache）。
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
 **`-O2`** 编译（11.3.0 车道的口径；`-O1` 是 7.2 时代的 R10 结论，见 `build/BENCH.md`），
-**dldfcn 走官方 dlopen 装载**。全量 **29 套 738 项全绿**
+**dldfcn 走官方 dlopen 装载**。全量 **30 套 756 项全绿**
 （11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8 四套，在 8761/8762 上各跑一遍都全绿），
 含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
 （197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
@@ -1217,6 +1221,49 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 
 ---
 
+### 5.14 非图形收尾轮（2026-09-22）—— 四件事 + 一条待补的验证
+
+本轮按"彻底收尾非图形"的口径做了四件，**两件落地、两件探到确切的墙并如实留档**。
+每件都有独立 NOTES；这里只给索引与**接手必须知道的状态**。
+
+| # | 事 | 结果 | 记录 |
+|---|---|---|---|
+| ① | **`@ftp` 预载路径错位**（emscripten 按第一个 `@` 切 `src@dst`，而 `m/@ftp` 源路径自带 `@`） | ✅ **已修并上线**：`octave.data` 13.83MB→**6.99MB**（gz −1.31MB），wasm 逐字节未变；并在 `link-web.sh` 末尾加了构建期自检（产物出现 `/ftp@` 记录直接 FATAL） | **§5.13 ②** |
+| ② | **`help <mfile>`**（`.m` docstring 撞运行时 makeinfo） | ✅ **已修并上线**：构建期预渲染（1043/1043），离线对照 **25/25 与桌面逐字一致**，`accept-t9-helpm` 18/18 | **§5.13 ①** |
+| ③ | **`MAIN_MODULE=2`（体积）** | ⚠️ **不采纳，留档**。体积收益是真的（wasm 35.97→**27.73MB**、gzip **−1.81MB**，且能开页、`accept-full` 20/20），但撞两道墙：官方"把 `.oct` 上主链"那条会让 Emscripten **启动时自动加载 dylib**（`404 __bfgsmin.oct`）；补 JS 库符号时又发现 `emscripten_run_script` **不是 wasm 导出**，M2 下网络那一路（R5）会挂 | **`build/113/NOTES-main-module-2.md`** |
+| ④ | **SLICOT（control 的 `ss`/`step`/`tf2ss`）** | ⚠️ **探针完成，根因更正**：不是"签名不匹配"，是那 48 个例程**在主 wasm 里定义了 0 个**（库从未编过）；库**能编**（f2c 614/614、emcc 613/613 → 5.0MB 归档）；真卡点是控制包手写声明 vs f2c 生成的 **CHARACTER 隐藏长度参数**分歧（`dggev_` 17 vs 19），**静态注册同样会撞** | **`build/113/NOTES-slicot.md`** |
+
+#### 🚨 接手第一件事：补跑 8761 的全量回归
+
+本轮最后一次 8761 全量跑到 `accept-help`（约一半）时**被人工中断，已跑部分全绿**。
+P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败是 `accept-t8` 里
+**"`.m` docstring 是已知缺口"的旧护栏**——P1 补上缺口后它如实报错（护栏该有的行为），
+已翻正为正向断言并在 8761 上复验 **20/20**。
+⇒ **30 套 756 项**这个数字是按"728 + 那 1 项翻正 + pkgoct 27"推的，
+**请在 8761 上补跑一遍确认**：
+
+```bash
+/tmp/sweep.sh http://127.0.0.1:8761/     # 或逐套 harness/run.sh test/browser/accept-*.mjs http://127.0.0.1:8761/
+```
+
+#### ⚠️ 本轮踩到的一个操作陷阱（会污染结论）
+
+**后台 sweep 正在跑时，不要手动跑 harness 测试。** `harness/run.sh` 把脚本固定拷到
+`$H/_run.mjs`，两边并发会互相覆盖 —— 我因此得到过一轮"假失败"（M2 首轮的 2 FAIL
+一度被我当成抢文件的产物），干净重跑后才发现**那是真的回归**。
+规则：**同一时间只让一个东西写 `_run.mjs`**。
+
+#### 本轮新增/修改的工具与测试
+
+- `build/prerender-m-docstrings.py`（抽取 + 写回 + 3 条自检 + `--verify-desktop` 离线对照）
+- `build/render_docstring_batch.m`（**渲染走官方 `__makeinfo__`**；文件名必须与函数名一致）
+- `build/113/link-web.sh`：新增 `M_SRC`（预载源树，指向 staged 树）、`EXPORTED_FUNCS`
+  （M2 车道要把 JS 库符号列进导出，**写在 EXTRA_LDFLAGS 里会被后面那行覆盖**）、
+  末尾的预载路径自检
+- `test/browser/accept-t9-helpm.mjs`（18 项）、`accept-t8-uigetfile.mjs`（护栏翻正 → 20 项）
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
@@ -1230,7 +1277,7 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **29 套 738 项全绿** | 同左（两份各跑一遍） |
+| 验收 | **30 套 756 项全绿** | 同左（两份各跑一遍） |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
@@ -1276,7 +1323,7 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
   （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
   `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
   `build/forge-preload/` 并由 `link-web.sh` 预加载）。
-  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7 后为 **29 套 738 项**）。
+  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7/T8/P1 后为 **30 套 756 项**）。
   清单与决策记录见 `build/113/PROMOTION.md`。
 - **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
   `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
@@ -1468,7 +1515,7 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    T6 `audiodevinfo` + `doc` + **页面输出落点**（计划外但必需）；
    T7 `audiorecorder`（19 个 `__recorder_*` + MediaRecorder 桥，`recordblocking` 如实报错）；
    T10 Asyncify 实验 → **结论不可采用**（与 `-fwasm-exceptions` 互斥）。
-   全部走资产车道，**主 wasm 零改动**；8761 全量 29 套 738 项全绿。
+   全部走资产车道，**主 wasm 零改动**；全量套件全绿。
 10. ⬜ **仍待办三件（非图形）**：G1 `MAIN_MODULE=2` + keep 清单（Lane B）；
     `help` 覆盖 `.m` docstring（预渲染）；H2 `uigetfile`（走非标准异步 API）。
     详见 **§8 的"仍待办"** 与 `build/GAPS-2.md` 顶部的状态表。
