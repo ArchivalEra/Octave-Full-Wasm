@@ -128,6 +128,20 @@ grep -qE "^postdeps_CXX='.+'$" configure && sed -i "s/^postdeps_CXX=.*/postdeps_
 # emscripten 下跳过 AX_PTHREAD（保留 pthread.h 检测）—— 闸门③ 的关键
 bash /src/bin/patch-ax-pthread.sh "$SRCDIR"
 
+# P5 步骤②：要不要开 OpenGL？
+#   默认仍然 `--without-opengl`（与之前逐字节一致）。
+#   `WITH_OPENGL=1` 时**不开** --without-opengl，并把 /src/deps/glshim 摆到搜索路径上
+#   —— 那个前缀里 libGL.a 就是 **libOSMesa.a**、libGLU.a 是给 wasm 编的 libGLU，
+#   头文件用 Mesa 的（legacy API 声明齐全）。也就是"把 OSMesa 冒充成 GL"，
+#   好让 Octave 的 gl-render.cc 编出来、并链到软件光栅化那条路。
+OPENGL_FLAG="${OPENGL_FLAG:---without-opengl}"
+if [ "${WITH_OPENGL:-0}" = "1" ]; then
+  OPENGL_FLAG=""
+  CPPFLAGS="${CPPFLAGS:-} -I/src/deps/glshim/include"
+  LDFLAGS="${LDFLAGS:-} -L/src/deps/glshim/lib"
+  echo "=== WITH_OPENGL=1：开 OpenGL，GL 由 OSMesa 冒充（glshim）==="
+fi
+
 echo "=== configure（全开）"
 emconfigure ./configure \
   --host=wasm32-unknown-emscripten \
@@ -138,7 +152,7 @@ emconfigure ./configure \
   --disable-shared --enable-static \
   --disable-readline --disable-docs --disable-java \
   --disable-threads \
-  --without-qt --without-fltk --without-opengl \
+  --without-qt --without-fltk ${OPENGL_FLAG} \
   --without-freetype --without-fontconfig \
   --without-curl --without-magick --without-portaudio \
   --without-spqr \

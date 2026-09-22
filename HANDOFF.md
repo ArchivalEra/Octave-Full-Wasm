@@ -880,10 +880,32 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
   pkg-config 跨机器、meson 不用 CPPFLAGS、`shared-glapi` 是 shared 目标、
   `detect_os.h` 看预编译宏、垫片）。
 - **体积代价（步骤②的决策依据）**：`libOSMesa.a` 20.1MB；最小 smoke 的 wasm 11.3MB。
-- **步骤②③ 还没做**：② 把 T2 薄 toolkit 的 `redraw_figure` 接上 OSMesa
-  （要 `--with-opengl` 重编主树 + 一个新的 toolkit 资产）；
-  ③ `plot/surf/mesh/contour` 逐个出图并与 7.2 桥产物对照。
-  **回退不变**：plot 桥 + `print -dsvg` 保持可用，两者不冲突。
+- **步骤② 的进展（2026-09-22 打断处，详见 `build/113/NOTES-p5-osmesa.md` 的"步骤② 进展"）**：
+  · **libGLU 9.0.3 已建到 wasm**（`/src/libwork/glu-build/src/libGLU.a`，685742 字节）——
+    它只带 meson、没有 configure；用 `-Dgl_provider=osmesa` + **手写 `osmesa.pc`**
+    （Mesa 自产那份是交叉半成品，带 `-pthread`/`-sPTHREAD_POOL_SIZE` 垃圾，别用）。
+  · **GLU 剖分已在 OSMesa 上验证通过**（`build/113/osmesa-glu-smoke.c` + `.sh`）：
+    凹 L 形多边形，横杠/竖杠内=黄、**凹口内=黑**、界外=黑，四条像素断言全 PASS
+    ⇒ 步骤② 的**最后一个库层面未知被消掉**。（顺带发现 GLU 默认吐 `GL_TRIANGLE_FAN`
+    而不是 `GL_TRIANGLES` —— 按错的类型画过一版，碰巧像素对，已改。）
+  · **`glshim`**（`/src/deps/glshim`）：`libGL.a`=`libOSMesa.a`、`libGLU.a`=上面的 GLU、
+    头用 Mesa 的 —— 把 OSMesa **冒充成 `-lGL`/`-lGLU`**，让 `--with-opengl` 落在软光栅路上。
+  · **`configure-113-full.sh` 加了 `WITH_OPENGL=1`**（默认仍是 `--without-opengl`），
+    带 OpenGL 的 **configure 已跑通：`config.h` 里 `#define HAVE_OPENGL 1`**。
+  · **卡点（下次就修这一条）**：`HAVE_OPENGL_GL_H` / `HAVE_OPENGL_GLU_H` /
+    `HAVE_OPENGL_GLEXT_H` / `HAVE_GLUTESSCALLBACK_THREEDOTS` **还是 undef**，
+    而 `gl-render.cc` 的 `#include` 块正是靠它们（`acinclude.m4:1565/1616/1621/1648`）
+    ⇒ 一个 GL 头都不会被包含、编不过。要查这几个头探测为什么失败（疑似吃不到我们传的
+    `CPPFLAGS`，或按 macOS `OpenGL/gl.h` 风格试的）。
+  · **③ 还没开始**：`plot/surf/mesh/contour` 逐个出图并与 7.2 桥产物对照。
+  · **回退不变**：plot 桥 + `print -dsvg` 保持可用，两者不冲突。
+
+> 🚨 **主树现在是"混态"，接手务必先看**：`/src/work/octave-11.3.0/config.h` 已带
+> `HAVE_OPENGL 1`，但所有 `.o`/`.a` 仍是 opengl 之前的产物（本次**没有 make、没有重链、
+> 没有部署**）。要回到"与部署一致"的配置：
+> `cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`（不带 `WITH_OPENGL`）；
+> 备份在 `/src/libwork/config.h.pre-opengl`。部署产物（8761/8762/磁盘/`/src/websrc/out/`）
+> 全程仍是 `bac48adb960c9c79…`，未受影响。
 
 **P6 · 收尾**：全量验收、重打交付包、文档、逐阶段提交 + `docker commit`
 
@@ -1163,10 +1185,16 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    **资产车道、主 wasm 零改动**（计划原记的 Lane B 不需要）。
    `accept-t2-graphics` **26/26**；全量 **26 套 646 项全绿**。
    详见 **§5.5.1** 与 `build/113/NOTES-t2-graphics.md`（含 6 条踩坑记录）。
-9. **P5 OSMesa 图形线**：**步骤① 已完成并实测通过**（OSMesa 在 wasm 里渲出正确的
-   三角形、含立即模式；见 §9 的"步骤① 已完成"小节与 `build/113/NOTES-p5-osmesa.md`）。
-   **步骤②③（接进 toolkit + 逐图型对照）仍在本轮范围外** —— 它们要 `--with-opengl`
-   重编主树，是计划里写明的下一个阶段；计划本身也写明"允许只完成第 1 步并如实记录"。
+9. **P5 OSMesa 图形线**（本轮到此为止，进度见 §9 与 `build/113/NOTES-p5-osmesa.md`）：
+   - **步骤① ✅ 已完成**：OSMesa 在 wasm 里渲出正确三角形、含立即模式（提交 `4821a5f`）。
+   - **步骤② 推进到一半**：libGLU 建好、**GLU 剖分在 OSMesa 上验证通过**、glshim 就绪、
+     `WITH_OPENGL=1` 的 **configure 跑通（`HAVE_OPENGL 1`）**；
+     **卡在四个 GL 头门禁仍是 undef**（`HAVE_OPENGL_{GL,GLU,GLEXT}_H` /
+     `HAVE_GLUTESSCALLBACK_THREEDOTS`）⇒ `gl-render.cc` 编不过。
+   - **步骤③ 未开始**。
+   - 🚨 **主树是混态**（config.h 已带 opengl、产物还是旧的）——想重链出部署同款 wasm
+     必须先 `SKIP= bash configure-113-full.sh`（**不带** `WITH_OPENGL`）回到原配置。
+     部署产物全程未动（`bac48adb960c9c79…`）。
 
 
 

@@ -1,7 +1,9 @@
-# NOTES · P5 图形线重构（OSMesa）—— **步骤① 已完成**（2026-09-22）
+# NOTES · P5 图形线重构（OSMesa）—— **步骤① 已完成；步骤② 推进到一半**（2026-09-22）
 
 > 计划里 P5 分三步，并**明确允许"只完成第 1 步并如实记录"**（HANDOFF §9.3）。
-> 本文件记录：步骤① 已通过（硬断言），以及 ②③ 的确切路径与代价。
+> 本文件记录：步骤① 已通过（硬断言）、步骤② 的进展与**卡点**（还有一个 🚨 主树混态警告）。
+>
+> **接手先看两段**：① 本文件末尾的「步骤② 进展」；② HANDOFF §9 里带 🚨 的那段。
 
 ## 一、结论先说
 
@@ -114,3 +116,77 @@ ninja -C /src/libwork/mesa-build -j24          # 806 个目标，全绿
 # 2) 步骤① 验证
 bash /src/bin/osmesa-smoke.sh                  # 编 + 用 node 跑，逐像素断言
 ```
+
+---
+
+# 步骤② 进展（2026-09-22，**未完成，且主树现在处于"配置与产物不一致"的状态**）
+
+## 已经做完的（都有实测）
+
+1. **libGLU 9.0.3 建到 wasm 了** ✔
+   - 来源：`https://archive.mesa3d.org/glu/glu-9.0.3.tar.xz`（219KB，走宿主 2080 代理，
+     落在 `third_party/glu-src.tar.xz`）。
+   - ⚠️ 它**只带 meson.build、没有 configure**（第一版 `emconfigure ./configure` 直接
+     报 `FileNotFoundError`）；用 meson + 我们那份交叉文件构建。
+   - 它的 meson 有 **`-Dgl_provider`** 三个选项 `glvnd|gl|osmesa` → 用 **`osmesa`** ✔，
+     配一份**手写的 `osmesa.pc`**（`/src/libwork/pc/osmesa.pc`）指向 Mesa 构建目录
+     —— Mesa 自己生成的那份是交叉构建半成品（带 `-pthread`/`-sPTHREAD_POOL_SIZE` 垃圾，
+     且 prefix 指向还没 install 的目录，别用）。
+   - 产物 `/src/libwork/glu-build/src/libGLU.a`（**685742 字节**，90 个目标全绿）。
+
+2. **GLU 剖分在 OSMesa 上验证通过** ✔（`build/113/osmesa-glu-smoke.c` + `.sh`）
+   - 为什么单独验它：Octave 的 `gl-render.cc` 用 GLU **只为一件事** —— 多边形剖分
+     （`gluNewTess`/`gluTessBeginPolygon`/`gluTessVertex`/`gluTessEndPolygon`/…，实测 grep 全族）。
+     所以"GLU 剖分能跑"= 步骤② 的**最后一个库层面未知**被消掉。
+   - 硬断言（读像素）：凹的 **L 形**多边形，剖分后画进 OSMesa：
+     L 形横杠内=黄 PASS、竖杠内=黄 PASS、**凹口内=黑 PASS**、界外=黑 PASS。
+   - 顺带记一个 API 细节：**GLU 默认吐的是 `GL_TRIANGLE_FAN`（type=6），不是 `GL_TRIANGLES`**
+     —— 第一版把它按独立三角形画，恰好那 6 个顶点两两凑对、像素断言居然全过（运气），
+     已改成**按 GLU 给的类型重画**。
+
+3. **`glshim`：把 OSMesa 冒充成 `-lGL`/`-lGLU`** ✔（`/src/deps/glshim`）
+   - `lib/libGL.a` = `libOSMesa.a`（软链式拷贝）、`lib/libGLU.a` = 上面那个 GLU；
+     `include/GL/` 用 Mesa 的 `gl.h`/`glext.h`/`glx.h` + libGLU 的 `glu.h`。
+   - 目的：让 Octave 的 `--with-opengl` 探测与最终链接都落在**软件光栅化**这条路上。
+
+4. **`configure-113-full.sh` 加了 `WITH_OPENGL=1` 开关** ✔（默认仍是 `--without-opengl`，
+   与之前逐字节一致）；打开时把 glshim 摆进 `CPPFLAGS`/`LDFLAGS`。
+
+5. **带 OpenGL 的 configure 跑通了** ✔ —— `WITH_OPENGL=1 SKIP= bash configure-113-full.sh`
+   返回 0，`config.h` 里 **`#define HAVE_OPENGL 1`**。
+   日志：`/src/libwork/reconf-opengl.log`。
+
+## ⚠️ 卡在哪（下次接着做，就一条）
+
+`config.h` 里这几个门禁**还是 `#undef`**：
+
+```
+/* #undef HAVE_OPENGL_GL_H */
+/* #undef HAVE_OPENGL_GLU_H */
+/* #undef HAVE_OPENGL_GLEXT_H */
+/* #undef HAVE_GLUTESSCALLBACK_THREEDOTS */
+```
+
+而 `gl-render.cc` 的 `#include` 块正是靠 `HAVE_OPENGL_GL_H`/`GLEXT_H`/`GLU_H` 决定
+包哪个头（`acinclude.m4:1565/1616/1621/1648`）。**它们全 undef ⇒ gl-render.cc 编不过**
+（一个 GL 头都不会被包含）。
+
+⇒ **下一步就一件事**：查这几个头探测为什么失败并修好（八成是探测用的 include 路径
+没吃到我们传的 `CPPFLAGS`，或者它按 macOS 的 `OpenGL/gl.h` 风格试的）。
+修好后 `HAVE_OPENGL 1` + 这四个门禁一起为真，才能真正开编。
+
+## 🚨 主树现在的状态（**接手的人务必先看这段**）
+
+- `/src/work/octave-11.3.0/config.h` **已经是 opengl 版**（`HAVE_OPENGL 1`），
+  但 `liboctave.a` / `libinterp.a` / `.o` **都是 opengl 之前的产物** ——
+  **配置与产物不一致（混态）**。
+- **部署产物没被动过**：8761/8762/磁盘 `site/`/`/src/websrc/out/` 都还是
+  `bac48adb960c9c79…`（T2 那版，09:09 生成），本次只改配置、**没有 make、没有重链、没有部署**。
+- **要退回"与部署一致"的配置**（下次想重链出部署同款 wasm 时必须先做）：
+  ```bash
+  cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh   # 不带 WITH_OPENGL
+  ```
+  （备份在 `/src/libwork/config.h.pre-opengl`，可用于比对。）
+- 想继续步骤②：先修上面那四个门禁，再 `PATH=/src/bin:$PATH make -k -j24 DLDFCN_LIBS=`
+  （config.h 变了 ⇒ 大部分会重编）→ `link-web.sh` → **验证过再部署**。
+
