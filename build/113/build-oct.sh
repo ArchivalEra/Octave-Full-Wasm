@@ -40,8 +40,32 @@ FLAGS=(
   -I/src/deps/fftw/include -I/src/deps/suitesparse/include -I/src/deps/hdf5/include
   -I/src/deps/zlibbz2/include -I/src/deps/arpack/include -I/src/deps/rapidjson/include
   -I/usr/local/include
+  -I/src/vendor/stb          # webimage.cc 用 stb_image / stb_image_write（header-only）
   -std=c++17 -O2 -fwasm-exceptions -fPIC
 )
+
+# ---- 我们自己的 .cc（不是 Octave 的 dldfcn）也走同一条路 -------------------
+# 用法：OUT=/src/octs CC_SRCS="webio:/src/websrc/webio.cc webimage:/src/websrc/webimage.cc" \
+#        bash build-oct.sh --cc
+# 这些模块导出的是 __web_*__，靠 manifest 的 aliases 建符号链接才挂得上名字。
+if [ "${1:-}" = "--cc" ]; then
+  : "${CC_SRCS:?用法: CC_SRCS=\"名字:/路径.cc 名字:/路径.cc\" bash build-oct.sh --cc}"
+  n=0; bad=0
+  for spec in $CC_SRCS; do
+    name="${spec%%:*}"; src="${spec#*:}"
+    [ -f "$src" ] || { echo "  ✗ $name: 没有 $src" >&2; bad=$((bad+1)); continue; }
+    if ccache em++ "${FLAGS[@]}" -c "$src" -o "$OUT/$name.oct.o" 2> "$OUT/$name.cxx.log"; then
+      ccache em++ -sSIDE_MODULE=1 -fPIC -O2 -fwasm-exceptions -shared \
+          -o "$OUT/$name.oct" "$OUT/$name.oct.o" 2> "$OUT/$name.link.log" \
+        && { printf "  ✅ %-16s %s 字节\n" "$name" "$(stat -c%s "$OUT/$name.oct")"; n=$((n+1)); } \
+        || { echo "  ✗ $name 链接失败:" >&2; tail -4 "$OUT/$name.link.log" >&2; bad=$((bad+1)); }
+    else
+      echo "  ✗ $name 编译失败:" >&2; grep -E "error:" "$OUT/$name.cxx.log" | head -4 >&2; bad=$((bad+1))
+    fi
+  done
+  echo "== 成功 $n 个，失败 $bad 个 → $OUT"
+  exit $(( bad > 0 ))
+fi
 
 cd "$OCT"
 ok=0; bad=0
