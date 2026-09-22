@@ -90,11 +90,24 @@ export CFLAGS="-O2 -fPIC"
 export CXXFLAGS="-O2 -fexceptions -fPIC"
 export LDFLAGS="-L$DEPS/lib -fPIC"
 
-# ---- ccache：让整棵树的编译都进缓存（LAPACK 那种量重跑时省的是整段） --------
+# ---- ccache：让整棵树的编译都进缓存 ----------------------------------------
+# ⚠️ 实测坑（第一版就是错的）：**`emconfigure` 会把 CC/CXX 覆盖掉**——
+#    未过 emconfigure:  CC=[ccache emcc]      CXX=[ccache em++]
+#    过了 emconfigure:  CC=[/emsdk/.../emcc]  CXX=[/emsdk/.../em++]
+#    结果：Octave 自己那 1400+ 个对象**一个都没进缓存**。
+#    证据：ccache 累计 Cacheable calls=1990，而依赖那批（libf2c 165 + BLAS 149
+#    + LAPACK 1660）恰好约 1990；缓存目录只有 24MB，装不下 Octave 的对象。
+#    （依赖能进缓存是因为 build-deps.sh/emf77 直接用 `ccache emcc` 调，绕过了 emconfigure。）
+#
+# 修法：把 CC/CXX 作为 **configure 的命令行参数**传（见下面调用末尾）。
+#   autoconf 对「命令行赋值的 precious 变量」直接采用，优先级高于环境变量，
+#   所以能压过 emconfigure 的覆盖。仅 export 是不够的。
+#
+# 收益的边界（如实）：只在「参数完全相同的重复构建」上兑现。今天五次构建每次
+#   flag/config.h 都不同（pthread 预设、--enable-shared、AX_PTHREAD 补丁），
+#   注定全 miss。真正省时间的是 S4/S5 反复调库、反复改 .oct 的时候。
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
 export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-20G}"
-export CC="ccache emcc"
-export CXX="ccache em++"
 
 # ---- configure 期那些「需要真跑一下」的探测：wasm 下必然假失败，直接预置 -----
 # （HANDOFF §4.7 记过：容器里的运行期测试会因 Node 太旧/不可执行而假失败）
@@ -167,6 +180,16 @@ emconfigure ./configure \
   --without-amd --without-camd --without-colamd --without-ccolamd \
   --without-cholmod --without-cxsparse --without-klu --without-umfpack \
   --without-bz2 --without-fontconfig \
+  CC="ccache emcc" CXX="ccache em++" \
   || { echo "=== configure 失败，config.log 尾部 ==="; tail -n 80 config.log; exit 1; }
 
 echo "=== configure 成功"
+# 复核 ccache 真的进了构建系统（这是上面那个坑的回归护栏）
+_cfgline_cc=$(grep -m1 "^CC = " Makefile 2>/dev/null || true)
+_cfgline_cxx=$(grep -m1 "^CXX = " Makefile 2>/dev/null || true)
+case "$_cfgline_cc $_cfgline_cxx" in
+  *ccache*) echo "  ✅ ccache 已进 Makefile：$_cfgline_cc / $_cfgline_cxx" ;;
+  *) echo "  ⚠️  Makefile 里没看到 ccache —— 本树的编译不会进缓存：" >&2
+     echo "      CC  = $_cfgline_cc" >&2
+     echo "      CXX = $_cfgline_cxx" >&2 ;;
+esac
