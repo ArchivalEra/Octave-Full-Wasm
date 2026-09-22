@@ -1,8 +1,8 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：2026-09-21（第三轮 T1/T3/T4/T5 已落地；**第四轮换基线到
-> **Octave 11.3.0** 的决策与计划见 §9**，事实依据 `build/BASELINE-11.3.md`）。
+> 最后更新：2026-09-22（**第四轮 11.3.0 已实际落地到 10 套验收 194/195**
+> —— **接续先读 §10**，它包含本轮全部已验事实、坑与剩余待办；§9 是当时的计划）。
 
 ---
 
@@ -548,6 +548,16 @@ makeinfo 生成 doc-cache）。
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
 | `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
 | `build/BASELINE-11.3.md` | **第四轮当前依据**：11.x 收益核实、19 patch 漂移实测、Edge-Tools 11.1.0 配方全文（5 处 sed / `emf77` / webgl toolkit / 接口 / COI 代价）、5 条 sed 对 11.3.0 命中实测、vanilla 11.3.0 三项核对、ccache 实测 |
+| `build/113/configure-113-full.sh` | **11.3.0 全开 configure**：依赖写成**一张表 + `SKIP` 变量**（按库集合二分只需改一行；`SKIP=umfpack` 即精确关单个库，且会**显式加 `--without-umfpack`**——仅不传 `--with-*` 不够） |
+| `build/113/build-libs.sh` | **② 的 11 个库**逐库独立构建（每库独立 prefix `/src/deps/<lib>` + 符号自检）。踩过的坑全在注释里（hdf5 交叉编译、zlib 非 autoconf、CHOLMOD 的 NPARTITION、rapidjson、bzip2 的 CC=gcc…） |
+| `build/113/build-oct.sh` | 编 `.oct` side module。两种模式：dldfcn（`build-oct.sh convhulln …`）与**我们自己的 `.cc`**（`OUT=… CC_SRCS="webio:/路径/webio.cc" build-oct.sh --cc`） |
+| `build/113/link-web.sh` | 11.3.0 的 **web 主链**（含 `--whole-archive` 的教训与定点 `-Wl,-u` 的 zlib 符号拉取） |
+| `build/113/patch-ax-pthread.sh` | **闸门③**：emscripten 下跳过 `AX_PTHREAD`，但**保留 `pthread.h` 检测** |
+| `build/113/probe-side-module.sh` | **闸门②**：不碰 Octave，30 秒验证 MAIN_MODULE+SIDE_MODULE 机制 |
+| `build/113/apply-platform-patches.sh` `emf77` `build-deps.sh` `fix-rapidjson.py` | 平台补丁 / f2c 包装 / 早期四库 / rapidjson 补丁。**`ss-long64.h` 已被证伪，勿用** |
+| `build/113/NOTES-umfpack.md` | **UMFPACK 整页 trap 的调查记录**：含**一个被实测证伪的假设**（索引宽度）与下一步该查什么 |
+| `build/113/NOTES-archive.md` | **gzip/zip 两个整页 trap 的根因与修法**（zlib 不在主模块）+ 三条走过的弯路 |
+| `build/113/GATE3-QUESTION.md` | 闸门③ 当时的求判问题单（顶部已有解题记录，余下留档）
 | `build/BASELINE-10.3.md` | 前一份（10.3 方向）依据：10.3 wasm recipe 原文摘录（19 patch、Flang 工具链、他们关掉的库）+ edgetools.io 图形撞墙记录。**保留作历史记录** |
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
@@ -617,13 +627,9 @@ makeinfo 生成 doc-cache）。
 **R1–R10 全部落地**；**第三轮 T1 + T3 + T4 + T5 已完成**（`help` §5.6；文件操作 §5.7；pkg 语义 §5.8；`input()` §5.9）。
 **下一批是 T2 图形句柄半真化**（§5.5 表，唯一要重链主 wasm 的一批，做前先跑零重链探针）。
 
-**⚠️ 新方向：第四轮换基线到 **Octave 11.3.0** + 重构图形线（OSMesa），见 §9**
-（事实依据 `build/BASELINE-11.3.md`）。
-计划是 P0 建 `o113` 容器并复现 11.3.0 → P1 接站点 → P2 长尾回归 → P3 `.oct` 车道 →
-P4 宿主层 → P5 OSMesa 图形 → P6 收尾。
-**7.2 基线（8761）在 11.3.0 通过等价验收前不动。**
-其余顺序：T2 图形句柄 → T6 audiodevinfo/doc → T7 audiorecorder → T8 uigetfile →
-T9 MAIN_MODULE=2 → T10 Asyncify 实验（这些在 11.3.0 上重做，见 §5.5）。
+**⚠️ 第四轮（11.3.0）已经**实际落地**，不再是"待执行"：见 **§10**。
+8762 跑着 11.3.0 的站点，10 套验收 **194/195**；**8761（7.2）全程未动、仍绿**。
+§9 保留为当时的计划与决策记录。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 **改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
@@ -843,3 +849,132 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 **测试顺序因此有意义**：EOF 断言必须放最后，否则污染后面全部断言。
 
 **验收**：`accept-input.mjs` **9/9 绿**。
+
+---
+
+## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
+
+> **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
+> 全部结论都有实测；细节另见 `build/BASELINE-11.3.md`（外部事实）、
+> `build/113/`（脚本与三份 NOTES）。
+
+### 10.1 现在是什么状态
+
+| | 7.2 基线 | **11.3.0 staging** |
+|---|---|---|
+| 站点 | **8761**（`/mnt/hdd/octave-wasm-build/site`） | **8762**（`.../site113`） |
+| 容器 | `obuild`/`odld`/`obench` | **`o113`**（`emsdk 5.0.7`，Ubuntu 24.04） |
+| 验收 | 19 套 475 项全绿 | **10 套 194/195** |
+
+**8761 全程未动**（本轮所有动作都在 o113 + site113/8762 上）。
+
+11.3.0 上的 10 套（`http://127.0.0.1:8762/`）：
+`accept-113-boot` 10/10、`accept-113-oct` 8/8、`accept-113-assets` 16/16、
+`accept-113-libs` 11/12、`accept-fileops` 20/20、`accept-image` 17/17、
+`accept-help` **12/12**、`accept-pkg` 16/16、`accept-net` 30/30、`accept-audio` 47/47。
+
+**2 个 FAIL 都是已知缺口**（见 10.6）。
+
+### 10.2 三道闸门（P0）全部通过
+
+| 闸门 | 结果 | 关键 |
+|---|---|---|
+| ① 能编能跑、数值对 | ✅ | `A\b`/`det`/`svd`/`eig` 与本机同版 11.3.0 **逐位一致** |
+| ② `.oct` side module 可用 | ✅ | `build/113/probe-side-module.sh`：emsdk 5.0.7 上 MAIN_MODULE+SIDE_MODULE 得 43 |
+| ③ 免 COI（非共享内存） | ✅ | `patch-ax-pthread.sh`：解耦「有无 pthread.h」与「要不要线程」→ `shared:true` 1→0 |
+
+### 10.3 本轮的**关键坑**（都踩过、都有实测，别再走）
+
+1. **异常模式必须全树 + `.oct` 统一用 `-fwasm-exceptions`**。
+   JS 式异常（`-fexceptions`）会引入 `invoke_*`/`__cxa_*` 这些**只存在于 JS 胶水里**的
+   符号，side module 靠主模块**导出表**解析导入 → 装载即
+   `could not load dynamic lib … TypeError: Cannot read properties of undefined`。
+   我之前判断反了方向（把 main.o 改成 -fexceptions 去"对齐树"），正解是**把树也改过来**。
+   副作用是好的：wasm 35.75MB → 27.67MB。
+2. **`automake` 不会因「编译命令行变了」而重编** → 只改 CXXFLAGS 再 make 会得到
+   **混编**，链接期断言 `invoke_ functions … exceptions and longjmp are both disabled`。
+   **必须先 `make clean`**（7.2 的 reconf-pic.sh 注释警告过这条）。
+3. **zlib 不在主模块里 → `gzip`/`zip` 调用即整页 trap**（本轮抓到并修好）。
+   两半缺一不可：① zlib 构建必须 `-fPIC`（它的 configure 靠**环境变量**收 CFLAGS）；
+   ② 主链**定点** `-Wl,-u,<sym>` 拉进 `.oct` 需要的那几个 zlib 符号
+   （核心自己只用到一小部分，按需拉取不会带进来）。
+   **⚠️ 不要用 `--whole-archive`**：那样也修好 gzip/zip，却**把 convhulln/glpk 弄崩**
+   （整库符号撞车）。详见 `build/113/NOTES-archive.md`。
+4. **判定缺陷的唯一可靠手段是「装载之后真的调用」**。`exist('gzip')==3` 放行了，
+   但 trap 是到回归护栏才暴露。**装载类断言不够。**
+5. **别用 `nm`/`grep JS` 判 wasm 符号**：`nm` 读不了 wasm 对象（用 `emnm`）；
+   grep JS 会假阳性（MAIN_MODULE 的导出在 wasm 导出段）。**要解析导入/导出段。**
+   而**「缺导入」也不能预测 trap**——7.2 能用的那一对缺 68 个，我们缺 26 个却炸。
+6. **`emconfigure` 会覆盖 `CC`/`CXX`** → ccache 要用 **configure 命令行参数**传
+   （仅 export 无效）。实测接对后同样重复编译 **5 hits / 0 misses**。
+7. **资产命名与依赖**：`.oct` 叫 `X-oct`、`.m` 注册层叫 `X`（7.2 惯例）；
+   `X`(js) **必须显式声明 `deps: ['X-oct']`**（loader 的自动注入只对 `js→octdir` 生效），
+   否则别名（`__web_imwrite__` 之类）建不出来。
+8. **挂载路径要跟着版本走**：T1 的 `built-in-docstrings`/`doc-cache`/`macros.texi`
+   要挂到 11.3.0 的 etc 目录（`<prefix>/share/octave/11.3.0/etc/`），
+   而且 **`macros.texi` 与 `plotbridge` 都要进 `index.html` 的启动装载清单**——
+   否则 `help plot` 会走到 stock 的 texinfo `.m` 上、触发运行时 makeinfo 报错。
+9. **`SuiteSparse` 用 `static` 目标**（不要 `library`：它末尾会编 `.so`，
+   而 `SO_OPTS` 带 `-Wl,--no-undefined`，wasm-ld 不认识）；
+   **`CHOLMOD_CONFIG=-DNPARTITION`**（否则引 METIS，而我们没建）。
+10. **hdf5 是交叉编译经典问题**：`H5lib_settings.c`/`H5Tinit.c` 由**刚编出来的程序**
+    在运行时生成，Node 下看不到宿主文件 → 必须用**宿主原生 gcc** 编那两个构建期工具并运行。
+11. **rapidjson 1.1.0 与新 clang 不兼容**（`GenericStringRef` 的 const 成员赋值）→
+    已用 `build/113/fix-rapidjson.py` 改 no-op。
+12. **bzip2 的 Makefile 里 `CC=gcc` 是普通赋值，连 make 命令行的 CC 都压不住** →
+    绕开它的 Makefile、直接编那 7 个源文件。**zlib 的 configure 不是 autoconf**
+    （不接受 `CC=...` 参数，只能走环境变量）。
+
+### 10.4 已经做出来的东西
+
+- **`o113` 容器**：emsdk 5.0.7；依赖装在 `/usr/local`（libf2c/refblas/lapack/pcre2）
+  与 **`/src/deps/<lib>`（每库独立 prefix）**：glpk、fftw(3+3f)、qhull、sndfile、
+  rapidjson、hdf5、zlibbz2、arpack、qrupdate、suitesparse(9 个 .a)。
+- **`build/113/` 全部脚本**（每个都带实测注释与守卫）：
+  `apply-platform-patches.sh`（Edge-Tools 那 5 处）、`patch-ax-pthread.sh`（闸门③）、
+  `emf77`（f2c 包装）、`build-deps.sh`（早期四库）、`build-libs.sh`（② 的 11 个库，
+  逐库独立 prefix + 符号自检）、`configure-113-full.sh`（**依赖表 + SKIP 变量**，
+  供按库集合二分）、`build-oct.sh`（dldfcn 与**我们自己的 `.cc`** 两种模式）、
+  `link-web.sh`（11.3.0 的 web 主链）、`probe-side-module.sh`（闸门②）、
+  `fix-rapidjson.py`、`ss-long64.h`（**已被证伪，勿用**）。
+- **site113 资产**：`assets/oct/` 8 个 `.oct`（7 个核心 dldfcn + webio + webimage-oct +
+  webnet-oct + `__ode15__`（桩））、`assets/m/`（webfile/pkgfix/webshell/webaudio/
+  webnet/webimage/plotbridge）、`assets/pkg/`（12 个纯 `.m` Forge 包）、
+  `assets/octdir/`（**7.2 编的 `.oct`，待按 11.3.0 重编**）、`assets/data/`（T1 三件）。
+- **仓库补的可复现性缺口**：`post.js`、`build/webshell/` 的 6 个 `.m`
+  （此前只在 7.2 站点的压缩 bundle 里）。
+- **三份 NOTES**（都在 `build/113/`）：`NOTES-umfpack.md`（**被证伪的假设**）、
+  `NOTES-archive.md`（gzip/zip 两个 trap 的**根因与修法**）、`GATE3-QUESTION.md`。
+
+### 10.5 恢复流程（断电/新会话）
+
+```bash
+sudo docker start obuild odld obench o113
+sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover.sh     # 8761（7.2）
+cd /mnt/hdd/octave-wasm-build/site113 && setsid nohup python3 -m http.server 8762 --bind 127.0.0.1 --protocol HTTP/1.1 &
+```
+**检查点**：`octave-build:113-assets-full`（最新，o113 全状态）。
+更早：`113-pkg` / `113-trapfix` / `113-hostlayer` / `113-oct-assets` / `113-no-umfpack` /
+`113-full-deps` / `113-libs2` / `113-libs1` / `113-wasm-eh` / `113-base`。
+
+重启后 **gh token 会失效**：`gh auth setup-git` 有时能救、有时要重新 `gh auth login`。
+
+### 10.6 剩余待办（按建议顺序）
+
+1. **SUNDIALS → R1 `ode15s`**：源码在盘上（`sundials-6.1.1.tar.gz`）。
+   现在 `__ode15__.oct` 是**桩**（configure 时 `--without-sundials_*`），
+   实测行为正确（exist=3、调用时**干净报错**而非 trap）。
+   要真跑需：建 SUNDIALS 到 wasm → 重配（开 sundials）→ 重编 → 重链 → 重编 `__ode15__.oct`。
+2. **⑤ Packages 的 `.oct` 重编**：`assets/octdir/` 现在是 **7.2 编的**。
+   实测它们在 11.3.0 上能装载能调用（`fminunc` 成功），但按计划应重编以消除 ABI 风险。
+   需要移植 `build/build_pkg_oct.sh`（现在硬编码 7.2 的 PREFIX/emsdk/`-std=c++11`）。
+   （纯 `.m` 包已够 `accept-pkg` 16/16。）
+3. **`accept-print` 的测试自身有病**：崩在 `r.texts is undefined`（测试助手），
+   **产物侧 R9 已由直连探针证明可用**（`print -dsvg` 写 4591 字节）。
+4. **稀疏 `lu`（UMFPACK）**：整页 trap 已改为**干净报错**（当前把 UMFPACK 关掉）。
+   根因**未查明**——「索引宽度」假设已被实测证伪，详见 `NOTES-umfpack.md`。
+5. **S6 换基线到 8761**：需求级 `accept-requirements` 全绿才换；
+   **并且必须同时改 `build/recover.sh`**（它现在从 `obench` 拉 7.2 的三大件重建 8761，
+   不改的话**下次断电恢复会把 8761 打回 7.2**）与 `dist/DEPLOY.md`。
+6. （不在本轮范围）P5 OSMesa 图形线。
+
