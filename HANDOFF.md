@@ -406,7 +406,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | # | 批次 | 内容 | 工作量估计 | 车道 |
 |---|---|---|---|---|
 | ~~1~~ | ~~**T1**~~ | ✅ **已完成**：`help` 走**构建期 makeinfo 预渲染**（不是覆写渲染器）。见 §5.6 | — | 资产（零重链） |
-| 2 | **T2** | **A1/A2 图形句柄半真化**：写 `__init_web__.cc` → `web_graphics_toolkit`（`initialize` 允许 figure、`redraw_figure` 先 no-op、`get_canvas_size` 给默认值）。**目标只是救活 `gca/gcf/get/set/figure` 的语义**，不碰绘图重构 | 1–3 d | Lane B（重链） |
+| ~~2~~ | ~~**T2**~~ | ✅ **已完成（2026-09-22）**：`web` graphics toolkit 挂上，`figure/gcf/gca/get/set/title/allchild/close` 全部可用。**实际走的是资产车道、主 wasm 零改动**（计划记的 Lane B 不需要 —— `available_graphics_toolkits()` 是**运行时注册表**，且有内建 `register_graphics_toolkit()` 可登记）。见 §5.5 之后的 T2 小节与 `build/113/NOTES-t2-graphics.md` | — | **资产（零重链）** |
 | ~~3~~ | ~~**T3**~~ | ✅ **已完成**：`copyfile`/`movefile`/`ls` 进程内实现（`build/webfile/`，纯 `.m`）。见 §5.7 | — | 资产 |
 | ~~4~~ | ~~**T4**~~ | ✅ **已完成**：还原被 fork 删掉的 `installed_packages.m` + 生成 pkg 数据库（`build/pkgfix/`）。见 §5.8 | — | 资产 |
 | ~~5~~ | ~~**T5**~~ | ✅ **已完成**：`input()` **本来就能用**（Emscripten 默认 stdin → `/dev/tty` → `window.prompt`），只加了官方扩展点 `Module.stdin` 让验收可确定性断言。见 §5.9 | — | 无需代码 |
@@ -419,6 +419,39 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 **明确暂缓（GPT 判断，采纳）**：`D2b publish`(2–4d)、`E2 keyboard/kbhit/pause`
 （等 Asyncify）、`H3 getframe/movie`（等 graphics 成熟）、`H4`、`H1 voronoi 单输出`
 （A1 的派生收益，不单独改）。
+
+### 5.5.1 T2 已完成（2026-09-22）——图形句柄半真化（`web` toolkit）
+
+**结论：T2 不需要重链主 wasm。** 原来记成 "Lane B"，是因为 `graphics_toolkit.m:86`
+ 有一道门禁 `if (! any (strcmp (available_graphics_toolkits (), name))) error ("%s toolkit
+ is not available")` —— 看着像"清单在编译期写死"。读源码发现不是：
+
+- `available_graphics_toolkits()` 返回的是**运行时注册表**（`gtk_manager::available_toolkits_list()`）；
+- 而且有**内建** `register_graphics_toolkit("web")` 能把名字加进去
+  （其文档明说"只是把字符串加进可能清单，不做校验"），`gtk_manager::register_toolkit`
+  在默认库为空时**还会顺手设为默认库**；
+- `load_toolkit()` 是头文件里的 inline，`register_toolkit` 符号由 `MAIN_MODULE=1` 导出；
+  `base_graphics_toolkit` / `gtk_manager.h` / `interpreter.h` 都在**安装树**里。
+
+⇒ 于是 T2 落成**资产**：`build/113/web_graphics_toolkit.cc` → `__init_web__.oct`（side module）
+ + `build/webgraphics/PKG_ADD`（Octave 在 `addpath` 时自动执行：登记 + 装载）
+ + `index.html` 启动装载清单里加 `webgraphics`
+ + `build/plotbridge/figure.m` 补上"同时建真对象"（**它以前是假的**，只记图号）。
+
+**契约要点**：`base_graphics_toolkit` 的默认实现都会 `gripe_if_tkit_invalid()`，而基类
+`is_valid()` 默认 **false** —— 所以至少要 `is_valid→true`、`initialize→true`、
+`redraw_figure` no-op。命名空间有坑：`graphics_object` 在 `octave::`，而 `Matrix`/
+`uint8NDArray`/`graphics_handle`/`octave_value_list` 在**全局**。
+
+**半真化的边界**：真对象存在、属性可读写往返（`set(gca,'xlim',[0 5])` → `get` 得 `[0 5]`），
+`line()`/`title()` 也落到真对象上；但 **plot 画的序列仍在 plot 桥自己的状态里**
+（渲染走桥出 SVG），所以 `get(gca,'children')` 不列 plot 的线、`xlim` 不自动跟随数据。
+这是"只救活句柄语义、不碰绘图重构"的直接后果。
+
+**验收**：`accept-t2-graphics` **26/26**（8761/8762 各一遍）。坑与诊断开关见
+`build/113/NOTES-t2-graphics.md`（含"side module 里 fprintf(stderr) 打不出来"、
+"浏览器缓存 .oct"、`get(ax,'title')` 返回句柄不是字符串、`figure(n)` 透传多余实参
+导致退回纯编号 等 6 条）。
 
 ### 5.6 T1 已完成（2026-09-21）——`help` 可读
 
@@ -620,7 +653,7 @@ makeinfo 生成 doc-cache）。
 
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **25 套 620 项全绿**
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **26 套 646 项全绿**
 （11.3.0 的 6 套 + 7.2 时代的 19 套，两套验收在 8761/8762 上各跑一遍都全绿），
 含需求级 `accept-requirements`。交付包重打：`sh build/make-dist.sh`。
 
@@ -631,8 +664,8 @@ makeinfo 生成 doc-cache）。
 **R1–R10 全部落地**；第三轮 T1 + T3 + T4 + T5 已完成（`help` §5.6；文件操作 §5.7；
 pkg 语义 §5.8；`input()` §5.9）。**第四轮（11.3.0 换基线）已完成，见 §10**，
 §9 保留为当时的计划与决策记录。
-**剩下的长尾**：`lsode` 整页 trap（§10.6 第 6 项，两代基线共有）、
-T2 图形句柄半真化（§5.5 表）、P5 OSMesa 图形线。
+**剩下的长尾**：P5 OSMesa 图形线（本轮范围外）。
+第四轮的 `lsode` 整页 trap 与 T2 图形句柄**都已完成**（见 §10.6 第 6 项、§5.5.1）。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 **改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
@@ -870,7 +903,7 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **25 套 620 项全绿** | 同左（两份各跑一遍） |
+| 验收 | **26 套 646 项全绿** | 同左（两份各跑一遍） |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
@@ -881,6 +914,7 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
   `accept-113-libs` **17**（含稀疏 `lu` 的六个形态）、`accept-113-ode15` **29**
   （含 5 条 `lsode` 断言 —— 2026-09-22 修好，原先那 1 项"已知缺陷"已转正）、
   `accept-113-pkgoct` **27**。
+- **图形句柄（T2）**：`accept-t2-graphics` **26**（`web` toolkit：figure/gcf/gca/get/set/title/close）。
 - **需求级**：`accept-requirements` **14/14**。
 - **7.2 时代的 19 套**（全部在新内容上复跑通过）：
   `accept-full` **20**、`accept-hdf5` 16、`accept-forge` **22**、`accept-forge-oct` 15、
@@ -1001,6 +1035,8 @@ fork `rwl/octave-wasm` 的改动，而 11.3.0 走 vanilla，那些坑**大部分
   **`dldprobe.cc`**（dlopen 自检探针的**源码** —— 此前只有 7.2 编出来的二进制，没源码）、
   **`patch-odepack-callback-arity.sh`**（修 `lsode`：给 odepack 的 7 处 `CALL F` 补第 5 个
   实参，与 Octave 的 `lsode_f` 对齐。**必须在编译主树之前跑**，或改后重编那 3 个 .f）。
+  **`web_graphics_toolkit.cc`**（T2：`web` graphics toolkit 的 side module —— 登记+装载，
+  渲染 no-op 交给 plot 桥；构建见文件头）
   诊断开关（`link-web.sh`，默认关、只写独立目录）：`DIAG_NAMES` / `DIAG_ASSERT` /
   `DIAG_SOURCEMAP` / `EXTRA_LDFLAGS`。
 - **站点资产**（`site/` 与 `site113/` 内容相同）：`assets/oct/` 11 个 `.oct`（7 个核心
@@ -1091,7 +1127,12 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 7. ✅ **`dist/` 重打包**：`octave-full-wasm-site-20260922`（78M，187 文件；
    `octave-full-wasm-site-20260922.tar.zst` 22.4MB）。重打：`sh build/make-dist.sh`。
    ⚠️ `lsode` 修好之后**需要再重打一次**（当前这一包是修复前的 wasm）。
-8. （不在本轮范围）P5 OSMesa 图形线；T2 图形句柄半真化（§5.5 表）。
+8. ✅ **T2/A1 图形句柄半真化**（2026-09-22）：`web` graphics toolkit 挂上，
+   `figure/gcf/gca/get/set/title/allchild/findall/close` 全部可用；
+   **资产车道、主 wasm 零改动**（计划原记的 Lane B 不需要）。
+   `accept-t2-graphics` **26/26**；全量 **26 套 646 项全绿**。
+   详见 **§5.5.1** 与 `build/113/NOTES-t2-graphics.md`（含 6 条踩坑记录）。
+9. （不在本轮范围）P5 OSMesa 图形线。
 
 
 

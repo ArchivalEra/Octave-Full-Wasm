@@ -71,9 +71,9 @@ if [ "${1:-}" = "--cc" ]; then
   for spec in $CC_SRCS; do
     name="${spec%%:*}"; src="${spec#*:}"
     [ -f "$src" ] || { echo "  ✗ $name: 没有 $src" >&2; bad=$((bad+1)); continue; }
-    if ccache em++ "${FLAGS[@]}" -c "$src" -o "$OUT/$name.oct.o" 2> "$OUT/$name.cxx.log"; then
+    if ccache em++ "${FLAGS[@]}" "${EXTRA[@]}" -c "$src" -o "$OUT/$name.oct.o" 2> "$OUT/$name.cxx.log"; then
       ccache em++ -sSIDE_MODULE=1 -fPIC -O2 -fwasm-exceptions -shared \
-          -o "$OUT/$name.oct" "$OUT/$name.oct.o" 2> "$OUT/$name.link.log" \
+          -o "$OUT/$name.oct" "$OUT/$name.oct.o" "${EXTRA_LIBS[@]}" 2> "$OUT/$name.link.log" \
         && { printf "  ✅ %-16s %s 字节\n" "$name" "$(stat -c%s "$OUT/$name.oct")"; n=$((n+1)); } \
         || { echo "  ✗ $name 链接失败:" >&2; tail -4 "$OUT/$name.link.log" >&2; bad=$((bad+1)); }
     else

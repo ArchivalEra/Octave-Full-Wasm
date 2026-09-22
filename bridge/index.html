@@ -102,7 +102,13 @@
         //     纯文本（见 build/render-docstrings.py），所以 help 不需要 makeinfo。
         //   doc-cache：`lookfor` 和 help 目录列表用的索引。
         // 两个合计约 2.5MB，相对首包不算小，但换的是"学生第一个命令就能用"。
-        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge'])
+        //   plotbridge：plot/print 的纯 .m 桥（渲染走它）。
+        //   webgraphics：**T2/A1 图形句柄**——它的 PKG_ADD 会 register+load 名为
+        //     `web` 的最小 graphics toolkit，使 `figure/gcf/gca/get/set/title` 这些
+        //     **图形对象句柄**真正存在（在此之前 figure 建不出来，gca 一律
+        //     "invalid handle"，只剩 plot 桥能出图）。**必须随页面装**，否则
+        //     用户第一个 `figure` 就撞 "no graphics toolkits are available!"。
+        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics'])
           .catch(function (e) {
             console.warn('[assets] help 数据装载失败（help/lookfor 将不可用）: ' + e.message);
             return null;

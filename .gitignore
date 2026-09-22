@@ -66,3 +66,5 @@
 !.githooks/pre-push
 !.githooks/update-readme.py
 !.githooks/check-whitelist.py
+!build/webgraphics/*
+!test/browser/fixtures/*

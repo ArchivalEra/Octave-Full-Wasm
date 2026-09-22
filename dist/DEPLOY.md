@@ -98,6 +98,10 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 - **dldfcn**：`convhulln` `delaunayn` `voronoi` `glpk` `fftw` `gzip`/`bzip2` `audioread` 系列
 - **图形**：plot 桥 v1/v2（2D + 3D：`plot3`/`mesh`/`surf`/`contour`/`subplot`）、
   `print -dsvg`（纯 `.m` SVG 生成器，不依赖 gnuplot）
+- **图形对象句柄**（T2/A1）：`web` graphics toolkit → `figure`/`gcf`/`gca`/`get`/`set`/
+  `title`/`allchild`/`findall`/`close` 全部可用（此前**建不出图形对象**，一律 invalid handle）。
+  ⚠️ 半真化边界：真对象与属性可用，但 **plot 的序列数据仍在 plot 桥的状态里**，
+  所以 `get(gca,'children')` 不列 plot 的线、`xlim` 不自动跟随数据
 - **图像**：`imread`/`imwrite`/`imfinfo`（stb_image）
 - **压缩归档**：`gzip`/`bzip2` + 进程内 `zip`/`unzip`/`tar`/`untar`/`gunzip`/`bunzip2`（无 shell）
 - **音频**：`audioread` 系列 + `audioplayer`（WebAudio 桥）
@@ -106,7 +110,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**25 套 620 项全绿**，
+本包内容 = 最近一次在浏览器实测通过的构建。**26 套 646 项全绿**，
 在 `http://127.0.0.1:8761/`（**即本包内容**）与 `8762` 上各跑一遍。
 
 **需求级** `accept-requirements` **14/14**（R1–R10 各一条最小实测 + 架构护栏）。
@@ -115,6 +119,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | 套件 | 项数 | 覆盖 |
 |---|---|---|
 | accept-requirements | 14 | **需求级**：R1–R10 + 架构护栏 |
+| accept-t2-graphics | 26 | **图形对象句柄**（`web` toolkit：figure/gcf/gca/get/set/title/close） |
 | accept-113-boot | 10 | 11.3.0 能起、能 eval |
 | accept-113-oct | 8 | 真 `.oct` side module 能被装载并调用 |
 | accept-113-assets | 16 | 资产车道语义 |

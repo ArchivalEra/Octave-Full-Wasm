@@ -1,0 +1,23 @@
+## Octave-Full-Wasm — T2/A1：把 `web` 图形 toolkit 挂上（图形句柄半真化）
+## 这份 `PKG_ADD` 由 **Octave 自己在 `addpath` 本目录时执行**（资产加载器不需要手动 run ——
+## 见 bridge/assets-loader.js 的注释）。所以"加载 `webgraphics` 资产"就等于"挂上 toolkit"。
+##
+## 两步**顺序不能反**（这是 T2 能做成资产车道的关键，详见 build/113/web_graphics_toolkit.cc 的注释）：
+##   ① `register_graphics_toolkit` 是**内建**，只把名字登记进运行时注册表。
+##      登记之后 `available_graphics_toolkits()` 才包含 "web" —— 那正是
+##      `graphics_toolkit.m:86` 的门禁（`"%s toolkit is not available"`）。
+##      附带好处：默认库为空时，`gtk_manager::register_toolkit` 会顺手把它设为默认库，
+##      于是 `figure` 开箱就用 web，不需要用户显式指定。
+##   ② 再调 `graphics_toolkit("web")` 去触发 `feval("__init_web__")` **装载实例**；
+##      不装载的话 `loaded_graphics_toolkits()` 里没有它，会报 "not correctly loaded"。
+##      （`__init_web__.oct` 由本资产的 `deps` 先装载，见 manifest。）
+##
+## 两个 `if` 只为幂等：资产被加载两次、或本目录被重复 addpath 时不会重复动作。
+
+if (! any (strcmp (available_graphics_toolkits (), "web")))
+  register_graphics_toolkit ("web");
+endif
+
+if (! any (strcmp (loaded_graphics_toolkits (), "web")))
+  graphics_toolkit ("web");
+endif
