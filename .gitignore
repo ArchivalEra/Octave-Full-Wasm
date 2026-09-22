@@ -43,6 +43,8 @@
 !bridge/index.html
 !build/assets.py
 !build/render-docstrings.py
+!build/render_docstring_batch.m
+!build/prerender-m-docstrings.py
 !build/check_m.py
 !build/forge-preload/*
 !build/webfile/*

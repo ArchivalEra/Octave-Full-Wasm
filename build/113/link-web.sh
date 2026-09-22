@@ -22,23 +22,50 @@ OCT="$(cd /src/work/octave-11.3.0 && pwd)"
 INST=/src/work/octave-install
 MV="11.3.0"
 M="$INST/share/octave/$MV/m"
+# M_SRC：预载的**源**树。默认就是安装树；`build/prerender-m-docstrings.py` 会产出一棵
+# staged 树（docstring 已渲染成纯文本、去掉 `-*- texinfo -*-` 标记），把它指过来即可。
+# **运行期路径完全不变**（仍是 /usr/src/octave/m/...），只是 .m 文件里的 docstring 变了，
+# 于是 `help ode45` 这类 .m 文件不再触发运行时的 makeinfo（本构建没有 shell）。
+M_SRC="${M_SRC:-$M}"
 SRC=/src/websrc
 DEPS=/usr/local
 
 [ -f "$SRC/main.o" ] || { echo "FATAL: 缺 $SRC/main.o（先编 main.cc）" >&2; exit 2; }
 [ -f "$SRC/post.js" ] || { echo "FATAL: 缺 $SRC/post.js" >&2; exit 2; }
-[ -d "$M" ] || { echo "FATAL: 缺 $M（Octave 装了没）" >&2; exit 2; }
+[ -d "$M_SRC" ] || { echo "FATAL: 缺 $M_SRC（Octave 装了没 / staged 树生成了没）" >&2; exit 2; }
 
 mkdir -p "$OUT"
 
 # ---- preload：11.3.0 的 m 子目录逐个映射到 /usr/src/octave/m/<name> ----------
 # （main.cc 里硬编码的就是 /usr/src/octave/m/... 这套路径）
+#
+# ⚠️ `--preload-file` 按**第一个 `@`** 把参数切成 `src@dst`。而 `m/` 下正好有个
+#    `@ftp` 目录 —— 它的**源路径自带 `@`**，于是那条参数被切错：
+#        src = `.../m/`                （少了一层，变成整个 m/）
+#        dst = `ftp@/usr/src/octave/m/@ftp`
+#    实测后果：`octave.js` 的文件表里多出 **1087 条记录 / 5.25MB**（占文件表 44%）
+#    的**整棵 m/ 副本**，而 `@ftp` 自己的文件**没有**落在正确路径上
+#    （`/usr/src/octave/m/@ftp/loadobj.m` 查无此文件）。
+#    修法：源路径里带 `@` 的目录先拷到一个**名字里没有 `@`** 的暂存目录再预载；
+#    目的地仍然写成正确的 `/usr/src/octave/m/@ftp`（dst 里可以有 `@`，切在第一个之后）。
 PRELOAD=()
-for d in "$M"/*/; do
+PRELOAD_AT="${PRELOAD_AT:-/src/work/m-preload}"
+for d in "$M_SRC"/*/; do
   n="$(basename "$d")"
-  PRELOAD+=("--preload-file" "${d%/}@/usr/src/octave/m/$n")
+  s="${d%/}"
+  case "$s" in
+    *@*)
+      safe="$(printf '%s' "$n" | tr '@' '_')"
+      mkdir -p "$PRELOAD_AT"
+      rm -rf "$PRELOAD_AT/$safe"
+      cp -a "$s" "$PRELOAD_AT/$safe"
+      echo "== preload 路径含 '@'：$n 暂存到 $PRELOAD_AT/$safe（否则整棵 m/ 会被复制错位）"
+      s="$PRELOAD_AT/$safe"
+      ;;
+  esac
+  PRELOAD+=("--preload-file" "$s@/usr/src/octave/m/$n")
 done
-echo "== preload ${#PRELOAD[@]} 项（含 +matlab/+containers/@ftp），来自 $M"
+echo "== preload ${#PRELOAD[@]} 项（含 +matlab/+containers/@ftp），来自 $M_SRC"
 
 # ---- forge 预装集（20 个 .m）→ /usr/src/octave/m/forge ----------------------
 # 为什么要有这一项：7.2 的站点上 `exist("normpdf")` **不加载任何资产就是 2**，
@@ -156,6 +183,17 @@ em++ --bind \
   "${LIBS[@]}" \
   -o "$OUT/octave.js" "$SRC/main.o"
 set +x
+
+# ---- 自检：预载路径有没有错位 ------------------------------------------------
+# 专防上面那个 `@ftp` 坑复发：`--preload-file` 按第一个 `@` 切 src@dst，源路径里
+# 只要有 `@`，整棵目录就会被搬到错误的地方（实测代价：**5.25MB 重复数据 /
+# octave.data 翻倍**）。跑完直接查文件表，错位就**明确失败**，别静默出包。
+if grep -q 'filename:"/ftp@' "$OUT/octave.js"; then
+  echo "FATAL: 预载路径错位 —— octave.js 里出现 /ftp@/ 前缀的记录" >&2
+  echo "       说明 m/ 下某个源目录名里含 '@' 且没走 PRELOAD_AT 暂存那条路" >&2
+  echo "       （octave.data 会比正常大一倍，且该目录的文件不在正确路径上）" >&2
+  exit 3
+fi
 
 echo "== 产物:"
 ls -la "$OUT"
