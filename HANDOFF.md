@@ -1,8 +1,10 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：2026-09-22（**第四轮 11.3.0 已实际落地到 10 套验收 194/195**
-> —— **接续先读 §10**，它包含本轮全部已验事实、坑与剩余待办；§9 是当时的计划）。
+> 最后更新：**2026-09-22**（第三轮 T1–T7 全部完成、T10 实验有结论；
+> 8761 当前 = Octave 11.3.0，**28 套 719 项全绿**）。
+> **接续先读 §8（一句话接续，含"仍待办三件"）与 §10（第四轮实况）**；
+> §9 是当时的计划。图形线（P5）在 **`graphics-osmesa` 分支**。
 
 ---
 
@@ -87,6 +89,9 @@ graphics 对象、文件操作、pkg 语义、`input()`、录音、文件选择�
 | **12** | signal + control 包（补 R2 缺口）+ SLICOT 崩溃根因 | 42/42 | `3fe0551` |
 | **13** | **dldfcn 回归官方 dlopen 装载**（摘掉静态注册） | 68/68，`exist` 5→3、`which` 指向 `.oct` | `632231b` `4292a01` |
 | **交付** | 整站打包（可静态托管） | 包内 **14 套 402 项全绿**；首包 gzip ≈11.6MB | `dist/octave-full-wasm-site-20260921` |
+| **T6** | `audiodevinfo` shim + `doc`（浏览器）+ **页面输出落点** | `accept-t6-audio-doc` **33/33**；资产车道零重链 | `e86ebb0` |
+| **T7** | `audiorecorder`（19 个 `__recorder_*` + getUserMedia/MediaRecorder 桥） | `accept-t7-recorder` **40/40**（Chromium 假麦克风）；`recordblocking` 如实报错 | `e86ebb0` |
+| **T10** | Asyncify 最小实验 → **结论不可采用** | `-s ASYNCIFY=1` 与 `-fwasm-exceptions` 互斥，`wasm-opt --asyncify` 直接失败 | `6a5ed8e` |
 
 ### 2.1.1 交付包（不在 git 里，在磁盘上）
 ```
@@ -680,17 +685,31 @@ makeinfo 生成 doc-cache）。
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
 `-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **28 套 719 项全绿**
 （11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7 三套，在 8761/8762 上各跑一遍都全绿），
-含需求级 `accept-requirements`。交付包重打：`sh build/make-dist.sh`。
+含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
+（197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
+`bac48adb960c9c79…`）；重打命令 `sh build/make-dist.sh`。
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M）。
 回退：`cp -a site-72bak/. site/`（**注意** `build/recover.sh` 已是 11.3.0 口径，
 回退后要用它得先把取值源改回 `obench`，见 git 历史）。
 
-**R1–R10 全部落地**；第三轮 T1 + T3 + T4 + T5 已完成（`help` §5.6；文件操作 §5.7；
-pkg 语义 §5.8；`input()` §5.9）。**第四轮（11.3.0 换基线）已完成，见 §10**，
-§9 保留为当时的计划与决策记录。
-**剩下的长尾**：P5 OSMesa 图形线（本轮范围外）。
-第四轮的 `lsode` 整页 trap 与 T2 图形句柄**都已完成**（见 §10.6 第 6 项、§5.5.1）。
+**R1–R10 全部落地**；第三轮 **T1–T7 全部完成**（T1 `help` §5.6；T2 图形句柄 §5.5.1；
+T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/文档/输出落点** 与
+**T7 录音** §5.10；**T10 Asyncify 实验=不可采用** §5.11）。
+**第四轮（11.3.0 换基线）已完成，见 §10**；§9 保留为当时的计划与决策记录。
+
+### ⬜ 仍待办（非图形，三件 —— 图形线开工前建议先清掉）
+1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化。
+   从每个 `.oct` 的 import 表/dylink 段生成保活集喂主链；
+   **不要把 import 原样抄成导出清单**。验收：体积降 **且** 28 套全绿。
+2. **`help` 覆盖 `.m` 文件的 docstring**（`help ode45` 仍报 makeinfo 错，约 1010 个 `.m`）：
+   做法是**构建期预渲染**（与 T1 同技术）；要么重链 `octave.data`，要么走资产车道
+   在加载时覆写 MEMFS 里的 `.m`。**`doc-cache` 注入已实测无效，别再试。**
+3. **H2 `uigetfile`**：**Asyncify 路线已被 T10 实测排除** ⇒ 只能走**非标准异步 API**，
+   并如实标注与 MATLAB 语义不同。
+
+图形线（P5 OSMesa）**在 `graphics-osmesa` 分支上做** —— 开工前先读该分支的
+`build/113/NOTES-p5-osmesa.md`（那里纠正了"四个 GL 头门禁卡住"这条**误判**）。
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 **改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
@@ -1287,24 +1306,39 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    `DIAG_NAMES=1`（保留 name 段）/ `DIAG_ASSERT=1`（`-s ASSERTIONS=1`）/
    `DIAG_SOURCEMAP=1`（`-g -gsource-map`，把 wasm 偏移翻成源码行 —— 这次就是靠它
    定位到 `dlsode.c:1618`）/ `EXTRA_LDFLAGS`。
-7. ✅ **`dist/` 重打包**：`octave-full-wasm-site-20260922`（78M，187 文件；
-   `octave-full-wasm-site-20260922.tar.zst` 22.4MB）。重打：`sh build/make-dist.sh`。
-   ⚠️ `lsode` 修好之后**需要再重打一次**（当前这一包是修复前的 wasm）。
+7. ✅ **`dist/` 重打包**：**`octave-full-wasm-site-20260922`**。2026-09-22 重打过两次，
+   最后一版含 T6/T7 的新资产（197 文件；wasm raw 34.30MB / gz 7.78MB；
+   `octave-full-wasm-site-20260922.tar.zst` 22.47MB）。重打：`sh build/make-dist.sh`。
+   **已核实包内 `octave.wasm` 与部署件同 sha**（`bac48adb…`）—— 早先那句"这一包是
+   lsode 修复前的 wasm"是**冻的**，不必再补打。
 8. ✅ **T2/A1 图形句柄半真化**（2026-09-22）：`web` graphics toolkit 挂上，
    `figure/gcf/gca/get/set/title/allchild/findall/close` 全部可用；
    **资产车道、主 wasm 零改动**（计划原记的 Lane B 不需要）。
-   `accept-t2-graphics` **26/26**；全量 **26 套 646 项全绿**（再加 T6/T7 后为 **28 套 719 项**）。
+   `accept-t2-graphics` **26/26**。半真化的**边界**已实测记进 §7（`get(gca,'children')`=0、
+   `plot` 返回空句柄、`plot(hax,…)` 不支持、`getframe` 报像素捕获失败）。
    详见 **§5.5.1** 与 `build/113/NOTES-t2-graphics.md`（含 6 条踩坑记录）。
-9. **P5 OSMesa 图形线**（本轮到此为止，进度见 §9 与 `build/113/NOTES-p5-osmesa.md`）：
-   - **步骤① ✅ 已完成**：OSMesa 在 wasm 里渲出正确三角形、含立即模式（提交 `4821a5f`）。
-   - **步骤② 推进到一半**：libGLU 建好、**GLU 剖分在 OSMesa 上验证通过**、glshim 就绪、
-     `WITH_OPENGL=1` 的 **configure 跑通（`HAVE_OPENGL 1`）**；
-     **卡在四个 GL 头门禁仍是 undef**（`HAVE_OPENGL_{GL,GLU,GLEXT}_H` /
-     `HAVE_GLUTESSCALLBACK_THREEDOTS`）⇒ `gl-render.cc` 编不过。
-   - **步骤③ 未开始**。
-   - 🚨 **主树是混态**（config.h 已带 opengl、产物还是旧的）——想重链出部署同款 wasm
-     必须先 `SKIP= bash configure-113-full.sh`（**不带** `WITH_OPENGL`）回到原配置。
-     部署产物全程未动（`bac48adb960c9c79…`）。
+9. ✅ **T6 / T7 / T10**（2026-09-22，见 **§5.10** 与 **§5.11**）：
+   T6 `audiodevinfo` + `doc` + **页面输出落点**（计划外但必需）；
+   T7 `audiorecorder`（19 个 `__recorder_*` + MediaRecorder 桥，`recordblocking` 如实报错）；
+   T10 Asyncify 实验 → **结论不可采用**（与 `-fwasm-exceptions` 互斥）。
+   全部走资产车道，**主 wasm 零改动**；8761 全量 28 套 719 项全绿。
+10. ⬜ **仍待办三件（非图形）**：G1 `MAIN_MODULE=2` + keep 清单（Lane B）；
+    `help` 覆盖 `.m` docstring（预渲染）；H2 `uigetfile`（走非标准异步 API）。
+    详见 **§8 的"仍待办"** 与 `build/GAPS-2.md` 顶部的状态表。
+11. ⏭️ **P5 OSMesa 图形线** → **`graphics-osmesa` 分支**（不在 main 上做）：
+    - **步骤① ✅ 已完成**：OSMesa 在 wasm 里渲出正确三角形、**含立即模式**（提交 `4821a5f`）。
+    - **步骤② 的卡点已澄清（不是卡点）**：原先记的"四个 GL 头门禁仍是 undef"
+      是**误判** —— 那四个是 **Apple 目录布局**的宏（`HAVE_OPENGL_GL_H` 等），
+      `acinclude.m4:1544` 的 break 循环让 Apple 那支根本没被探测；
+      真门禁 `HAVE_GL_GL_H/_GLU_H/_GLEXT_H` **当时就全是 1**。
+      并且 **11.3.0 里 `gl-render.cc` 是无条件编译的**、**没有 `__init_opengl__.cc`**
+      （opengl toolkit 在 libgui 的 GLCanvas）⇒ 没有现成 toolkit 可抄。
+      **ABI 已核**：安装头里零个 `HAVE_OPENGL`/`HAVE_GL_`，所以可以在 opengl-on 的配置下
+      编我们的 `.oct`，而主 wasm 保持 opengl-off ⇒ **仍可走资产车道**。
+      详见该分支上的 `build/113/NOTES-p5-osmesa.md`。
+    - **主树混态已清除**：`SKIP= bash configure-113-full.sh`（不带 `WITH_OPENGL`）跑过，
+      `config.h` 与 `config.h.pre-opengl` **逐行一致**；
+      opengl-on 那份备份在 **`/src/libwork/config.h.opengl-on`**（给图形分支复用）。
 
 
 

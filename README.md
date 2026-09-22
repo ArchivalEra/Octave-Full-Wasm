@@ -150,7 +150,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (1592 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (102803 bytes)
+- `HANDOFF.md` (105939 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
