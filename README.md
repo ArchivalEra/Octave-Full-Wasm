@@ -81,7 +81,7 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 | 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
 | `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
 | 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260922`，首包 gzip ≈11.6MB |
-| 验收 | ✅ **26 套 646 项全绿**（含需求级 `accept-requirements`） |
+| 验收 | ✅ **28 套 719 项全绿**（含需求级 `accept-requirements`） |
 
 ### 已知偏差（如实）
 - ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
@@ -100,13 +100,14 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 （完整计划见 `HANDOFF.md` §5.5）：
 
 **T1** `help`（构建期 makeinfo 预渲染）、**T2** graphics 句柄半真化（薄 `web` toolkit）、
-**T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`
-—— ✅ **五项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
-`accept-fileops` 20、`accept-pkg` 16、`accept-input` 9）。
+**T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`、
+**T6** `audiodevinfo` + `doc`（+ 页面输出落点）、**T7** `audiorecorder`
+—— ✅ **七项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
+`accept-fileops` 20、`accept-pkg` 16、`accept-input` 9、`accept-t6-audio-doc` 33、
+`accept-t7-recorder` 40）。
 
-剩余（按依赖顺序）：**T6** `audiodevinfo` 最小 shim + `doc` → **T7** `audiorecorder`
-（`record`/`stop`/`getaudiodata`，不需 Asyncify）→ **T9** `MAIN_MODULE=2`（体积优化）→
-**T10** Asyncify 最小实验（只实验）→ **T8** `uigetfile`（依赖 T10 结论）。
+剩余：**T9** `MAIN_MODULE=2`（体积优化，Lane B）→ **T10** Asyncify 最小实验（只实验，
+`recordblocking` 与 `uigetfile` 都卡在它上面）→ **T8** `uigetfile`（依赖 T10 结论）。
 
 依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
 （外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
@@ -147,22 +148,24 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/pre-commit` (378 bytes)
 - `.githooks/pre-push` (337 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (1508 bytes)
+- `.gitignore` (1592 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (94873 bytes)
+- `HANDOFF.md` (100589 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (11190 bytes)
-- `bridge/index.html` (8426 bytes)
+- `bridge/index.html` (10924 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (6457 bytes)
 - `bridge/webaudio.js` (6864 bytes)
+- `bridge/webaudiorec.js` (11827 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-lsode.md` (12160 bytes)
 - `build/113/NOTES-p5-osmesa.md` (11517 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
+- `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
 - `build/113/PROMOTION.md` (6441 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
@@ -202,7 +205,8 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/GPT-REVIEW-2.md` (24185 bytes)
 - `build/Makefile` (9242 bytes)
 - `build/NOTES.md` (1657 bytes)
-- `build/assets.py` (11273 bytes)
+- `build/assets-meta.json` (5767 bytes)
+- `build/assets.py` (14485 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
 - `build/build_pkg_oct.sh` (11790 bytes)
@@ -295,7 +299,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/reconf-bench.sh` (3857 bytes)
 - `build/reconf-pic.sh` (2810 bytes)
 - `build/reconf.sh` (3004 bytes)
-- `build/recover.sh` (7089 bytes)
+- `build/recover.sh` (7126 bytes)
 - `build/render-docstrings.py` (8474 bytes)
 - `build/second_stub.f` (358 bytes)
 - `build/webaudio/__pba_enqueue__.m` (828 bytes)
@@ -324,6 +328,34 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webaudio/__player_set_tag__.m` (458 bytes)
 - `build/webaudio/__player_set_userdata__.m` (473 bytes)
 - `build/webaudio/__player_stop__.m` (676 bytes)
+- `build/webaudio/audiodevinfo.m` (5793 bytes)
+- `build/webaudiorec/__pra_enqueue__.m` (707 bytes)
+- `build/webaudiorec/__pra_get__.m` (557 bytes)
+- `build/webaudiorec/__pra_id__.m` (987 bytes)
+- `build/webaudiorec/__pra_init__.m` (2771 bytes)
+- `build/webaudiorec/__pra_new__.m` (264 bytes)
+- `build/webaudiorec/__pra_progress__.m` (1740 bytes)
+- `build/webaudiorec/__pra_put__.m` (392 bytes)
+- `build/webaudiorec/__recorder_audiorecorder__.m` (1724 bytes)
+- `build/webaudiorec/__recorder_get_channels__.m` (184 bytes)
+- `build/webaudiorec/__recorder_get_fs__.m` (170 bytes)
+- `build/webaudiorec/__recorder_get_id__.m` (306 bytes)
+- `build/webaudiorec/__recorder_get_nbits__.m` (180 bytes)
+- `build/webaudiorec/__recorder_get_sample_number__.m` (430 bytes)
+- `build/webaudiorec/__recorder_get_tag__.m` (203 bytes)
+- `build/webaudiorec/__recorder_get_total_samples__.m` (200 bytes)
+- `build/webaudiorec/__recorder_get_userdata__.m` (189 bytes)
+- `build/webaudiorec/__recorder_getaudiodata__.m` (2982 bytes)
+- `build/webaudiorec/__recorder_isrecording__.m` (807 bytes)
+- `build/webaudiorec/__recorder_pause__.m` (344 bytes)
+- `build/webaudiorec/__recorder_record__.m` (913 bytes)
+- `build/webaudiorec/__recorder_recordblocking__.m` (1973 bytes)
+- `build/webaudiorec/__recorder_resume__.m` (259 bytes)
+- `build/webaudiorec/__recorder_set_fs__.m` (535 bytes)
+- `build/webaudiorec/__recorder_set_tag__.m` (175 bytes)
+- `build/webaudiorec/__recorder_set_userdata__.m` (185 bytes)
+- `build/webaudiorec/__recorder_stop__.m` (285 bytes)
+- `build/webdoc/doc.m` (2618 bytes)
 - `build/webfile/__wf_basename__.m` (1758 bytes)
 - `build/webfile/__wf_copy_dir__.m` (2672 bytes)
 - `build/webfile/__wf_copy_file__.m` (2282 bytes)
@@ -375,6 +407,8 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/accept-print.mjs` (11210 bytes)
 - `test/browser/accept-requirements.mjs` (5411 bytes)
 - `test/browser/accept-t2-graphics.mjs` (8603 bytes)
+- `test/browser/accept-t6-audio-doc.mjs` (7930 bytes)
+- `test/browser/accept-t7-recorder.mjs` (12071 bytes)
 - `test/browser/bench-core.mjs` (5350 bytes)
 - `test/browser/fixtures/p5-graphics-probe.m` (3048 bytes)
 - `test/browser/fixtures/t2-graphics-probe.m` (2587 bytes)

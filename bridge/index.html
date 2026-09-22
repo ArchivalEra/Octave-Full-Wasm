@@ -11,8 +11,36 @@
 <!-- WebAudio 播放桥：Octave 侧把播放意图写进队列，这一侧真开 AudioContext。
      浏览器要求用户手势才能出声，所以页面上任何一次点击都会尝试解锁。 -->
 <script type="text/javascript" src="webaudio.js"></script>
+<!-- WebAudio **录音**桥（T7）：Octave 侧把录音意图写进队列，这一侧用 getUserMedia +
+     MediaRecorder 真采集，再把 PCM 写回 MEMFS 供 getaudiodata 同步读取。
+     与播放桥分开两个文件，是因为录音还有权限三态要处理。 -->
+<script type="text/javascript" src="webaudiorec.js"></script>
 <script type="text/javascript">
+  // ── 输出落点（T6c）────────────────────────────────────────────────────────
+  // 上游骨架只留了一个空的 `<pre id="output">`，而且**没有人往里写东西**：
+  // 实测 `disp(42)` 之后 `document.body.innerText` 仍是空串 —— 所有 Octave 输出
+  // 都只进浏览器控制台，页面上什么也看不到。这对"打开链接就能用"是硬缺口，
+  // 所以这里把 stdout/stderr **同时**显示到页面。
+  //
+  // ⚠️ 仍然照常走 console：验收套件（test/browser/accept-*.mjs）读的就是 console
+  // 里的输出，只写 DOM 会把 26 套全打掉。是"额外再显示一份"，不是"改道"。
+  function octaveUiAppend(s) {
+    var el = document.getElementById('output');
+    if (!el) {
+      el = document.createElement('pre');
+      el.id = 'output';
+      document.body.appendChild(el);
+    }
+    el.appendChild(document.createTextNode(s));
+    // 只在页面真的可滚动时才跟到底部：输出多的时候避免每次写都做一次布局查询。
+    if (document.documentElement.scrollHeight > window.innerHeight) {
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+  }
+
   var Module = {
+    print: function (t) { console.log(t); octaveUiAppend(t + '\n'); },
+    printErr: function (t) { console.warn(t); octaveUiAppend(t + '\n'); },
     // stdin：Emscripten 的**官方扩展点**（`/dev/stdin` 的设备回调）。
     //
     // 必须在**启动前**定义：`library_fs.js` 只在 `FS.init()` 时做
@@ -108,22 +136,25 @@
         //     **图形对象句柄**真正存在（在此之前 figure 建不出来，gca 一律
         //     "invalid handle"，只剩 plot 桥能出图）。**必须随页面装**，否则
         //     用户第一个 `figure` 就撞 "no graphics toolkits are available!"。
-        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics'])
+        //   webdoc：**T6/D2a**——`doc` 的浏览器实现（官方 doc.m 末路是起 info
+        //     浏览器进程，本构建无 shell）。它很小，且 `doc` 属于"开箱就该能用"。
+        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc'])
           .catch(function (e) {
             console.warn('[assets] help 数据装载失败（help/lookfor 将不可用）: ' + e.message);
             return null;
           });
       }).then(function () {
-        // pkg 语义（T4）。两件事，缺一不可：
-        //   1. installed_packages.m —— **还原 upstream 的版本**。本构建的上游 fork
-        //      把「读 .octave_packages 数据库」的那 16 行换成了 3 行空赋值
-        //      （`local_packages = {}; global_packages = {};`），于是 pkg 永远
-        //      看不到任何包。我们没有另写实现，而是把官方文件放回去。
-        //   2. 生成数据库 —— Forge 包是由本加载器直接写进 FS + addpath 的，
-        //      pkg 的数据库文件因此是空的。写一份描述"磁盘上实际有什么"的库，
-        //      让 pkg list/load/describe 走**原生代码路径**。
-        // 先装 pkgfix（提供生成函数），再装还原文件，最后跑一次同步。
-        return OctaveAssets.load(['pkgfix', 'installed_packages.m'])
+        // pkg 语义（T4）。**11.3.0 车道只需要 pkgfix 那一半**：
+        //   pkgfix：从**磁盘现状**生成 pkg 数据库。Forge 包是由本加载器直接写进
+        //     FS + addpath 的，从不经过 `pkg install`，所以数据库原本是空的。
+        // ⚠️ **不要**再要求装 `installed_packages.m`：那是 **7.2 车道**的东西 ——
+        //   上游 fork rwl/octave-wasm 把「读 .octave_packages 数据库」的 16 行换成了
+        //   3 行空赋值，故当时要把官方文件放回去（build/pkgrestore/）。**vanilla
+        //   11.3.0 那个文件是完好的**（PROMOTION.md 已核实），不需要还原。
+        //   以前这里挂着它，清单里又没有这个资产 → 每次开页都打一句
+        //   "pkg 支持装载失败（pkg list/load 将不可用）"，而 pkg 其实是好的，
+        //   属**误导性告警**（accept-pkg 在 8761/8762 上都 16/16，已实测）。
+        return OctaveAssets.load(['pkgfix'])
           .then(function () {
             try {
               window.Module.eval_string(
@@ -154,6 +185,13 @@
         window.addEventListener('click', function once() {
           window.OctaveAudio.resume();
           window.removeEventListener('click', once);
+        });
+      }
+      // 录音桥：只轮询队列。麦克风权限**不在页面加载时要** —— 那会在用户还没
+      // 表达任何意图时弹权限框；真正要权限的时机是第一次 record()。
+      if (window.OctaveRec) {
+        window.OctaveRec.init().catch(function (e) {
+          console.warn('[audiorec] 桥未就绪: ' + e.message);
         });
       }
     }

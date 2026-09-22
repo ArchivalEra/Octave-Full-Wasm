@@ -16,6 +16,12 @@
 #       扫描 <站点目录>/assets/{oct,pkg,m}/ 生成 manifest.json。
 #       .oct 走 kind=oct（带 mount/addpath/sha256）；.js 走 kind=js。
 #       可选旁挂 <站点目录>/assets/meta.json 提供 {名称: {deps, note, addpath}}。
+#       ⚠️ **只在"从零组装站点"时用**：它整份重算，会把 11.3.0 站点里
+#       `file` 类资产的 11.3.0 专属 mount 路径算错。改单个 js 包用 sync-js。
+#
+#   sync-js <站点目录> [资产名…]
+#       只管 `assets/{m,pkg}/*.js` 的清单条目：缺的补上、摘要变了就更新，
+#       其余条目（尤其 file 类的 mount）原样保留。改完 .m 包之后用这个。
 #
 # 约定：挂在 /usr/src/octave/m 下（该目录已在 Octave 的 path 里）。
 import hashlib
@@ -247,6 +253,70 @@ def gen_manifest(site):
     return 0
 
 
+def sync_js(site, names):
+    """把 `assets/{m,pkg}/*.js` 的清单条目**定点**同步（新增或更新摘要），别的字段一律不碰。
+
+    为什么不能用 `gen-manifest` 干这件事：它**整份重算**，而 11.3.0 站点的
+    `file` 类资产挂载路径是 11.3.0 专属的（`<prefix>/share/octave/11.3.0/etc/`），
+    拿 7.2 时代的生成逻辑重算会把它们算错（见 `build/recover.sh` 的注释）。
+    所以改完某个 `.js` 包（或新增一个）之后，只能定点同步它自己那一条。
+
+    用法：sync-js <站点目录> [资产名…]      # 不给名字 = 同步全部 js
+    """
+    assets_dir = os.path.join(site, "assets")
+    mp = os.path.join(assets_dir, "manifest.json")
+    with open(mp, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    entries = manifest.get("assets", [])
+    by_name = {e.get("name"): e for e in entries}
+
+    meta_path = os.path.join(assets_dir, "meta.json")
+    meta = {}
+    if os.path.isfile(meta_path):
+        with open(meta_path, encoding="utf-8") as fh:
+            meta = json.load(fh)
+
+    want = set(names) if names else None
+    added = updated = 0
+    for sub in ("m", "pkg"):
+        d = os.path.join(assets_dir, sub)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if not fn.endswith(".js"):
+                continue
+            name = fn[:-3]
+            if want is not None and name not in want:
+                continue
+            rel = f"assets/{sub}/{fn}"
+            digest = sha256(os.path.join(d, fn))
+            e = by_name.get(name)
+            if e is None:
+                e = {"name": name, "kind": "js", "url": rel, "sha256": digest, "deps": []}
+                e.update(meta.get(name, {}))
+                e["sha256"] = digest    # meta 里不该带摘要；带上也不许盖掉真值
+                e["url"] = rel
+                entries.append(e)
+                by_name[name] = e
+                added += 1
+                print(f"  + {name} ({rel})")
+            elif e.get("sha256") != digest:
+                print(f"  ~ {name}: {str(e.get('sha256'))[:12]}… → {digest[:12]}…")
+                e["sha256"] = digest
+                updated += 1
+
+    if want is not None:
+        for n in sorted(want - set(by_name)):
+            print(f"  警告：清单里没有 {n}（也没有 assets/{{m,pkg}}/{n}.js，"
+                  f"或名字对不上）", file=sys.stderr)
+
+    with open(mp, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    print(f"sync-js: {mp}（新增 {added}，更新 {updated}）")
+    return 0
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -260,6 +330,8 @@ def main():
         return 0
     if cmd == "gen-manifest" and len(sys.argv) == 3:
         return gen_manifest(sys.argv[2])
+    if cmd == "sync-js" and len(sys.argv) >= 3:
+        return sync_js(sys.argv[2], sys.argv[3:])
     print(__doc__)
     return 2
 

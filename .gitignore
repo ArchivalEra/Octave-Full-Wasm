@@ -26,6 +26,7 @@
 !build/reconf-bench.sh
 !build/plotbridge/*
 !build/webaudio/*
+!build/webaudiorec/*
 !build/webnet/*
 !build/webnet.cc
 !build/fftw_threads_stub.c
@@ -57,6 +58,7 @@
 !bridge/octplot.html
 !bridge/plotbridge.js
 !bridge/webaudio.js
+!bridge/webaudiorec.js
 !bridge/webnet.js
 !vendor/MANIFEST.md
 !vendor/forge/*
@@ -67,4 +69,6 @@
 !.githooks/update-readme.py
 !.githooks/check-whitelist.py
 !build/webgraphics/*
+!build/webdoc/*
+!build/assets-meta.json
 !test/browser/fixtures/*

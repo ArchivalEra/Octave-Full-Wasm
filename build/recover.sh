@@ -70,7 +70,8 @@ else
   sudo docker cp o113:/src/websrc/out/octave.data "$SITE/"
   # 桥从仓库取当前版本（仓库是这些文件的唯一真相源）
   cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" \
-     "$REPO/bridge/webaudio.js" "$REPO/bridge/webnet.js" "$SITE/"
+     "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
+     "$REPO/bridge/webnet.js" "$SITE/"
   echo "octave-11.3.0" > "$SITE/VERSION"
   sudo chown -R "$(id -u):$(id -g)" "$SITE"
 fi

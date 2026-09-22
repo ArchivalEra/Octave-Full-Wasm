@@ -410,11 +410,11 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | ~~3~~ | ~~**T3**~~ | ✅ **已完成**：`copyfile`/`movefile`/`ls` 进程内实现（`build/webfile/`，纯 `.m`）。见 §5.7 | — | 资产 |
 | ~~4~~ | ~~**T4**~~ | ✅ **已完成**：还原被 fork 删掉的 `installed_packages.m` + 生成 pkg 数据库（`build/pkgfix/`）。见 §5.8 | — | 资产 |
 | ~~5~~ | ~~**T5**~~ | ✅ **已完成**：`input()` **本来就能用**（Emscripten 默认 stdin → `/dev/tty` → `window.prompt`），只加了官方扩展点 `Module.stdin` 让验收可确定性断言。见 §5.9 | — | 无需代码 |
-| 6 | **T6** | **B2 `audiodevinfo`** 最小 shim（浏览器默认设备）+ **D2a `doc`**（help → DOM） | <1 d | 资产 |
-| 7 | **T7** | **B1 `audiorecorder`**：`record/stop/getaudiodata` 先做（**不需 Asyncify**），`recordblocking` 后做 | 1–4 d | 资产+B 桥 |
-| 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS（同步性要靠 Asyncify 或改非标准异步 API） | 1–2 d | 需 G2 先验 |
+| ~~6~~ | ~~**T6**~~ | ✅ **已完成（2026-09-22）**：`audiodevinfo` 最小 shim + `doc` 的浏览器实现 + **输出落点**（计划外，见下）。`accept-t6-audio-doc` **33/33**。见 **§5.10** 与 `build/113/NOTES-t6-t7-hostlayer.md` | — | **资产（零重链）** |
+| ~~7~~ | ~~**T7**~~ | ✅ **已完成（2026-09-22）**：19 个 `__recorder_*` 纯 `.m` + `getUserMedia`/`MediaRecorder` 桥；权限三态各自明确报错。`accept-t7-recorder` **40/40**。**`recordblocking` 如实报错**（实测需要 Asyncify，见 §5.10） | — | **资产+JS 桥（零重链）** |
+| 8 | **T8** | **H2 `uigetfile`**：`<input type=file>` → MEMFS（**已实测确认**：同步性必须靠 Asyncify —— `pause()` 会完全阻塞页面，所以"轮询等待"那条路走不通，见 §5.10 坑 1） | 1–2 d | 需 G2 先验 |
 | 9 | **T9** | **G1 `MAIN_MODULE=2` + 自动 keep 清单**：读每个 `.oct` 的 wasm import 表 → 生成保活集 → 跑全量回归验证 | 1–3 d | Lane B |
-| 10 | **T10** | **G2 Asyncify 最小实验**（**只实验不采用**）：用 `ASYNCIFY_IMPORTS/ONLY/REMOVE` 限制插桩范围，测体积/性能/回归 | 0.5–1 d | 独立容器 |
+| 10 | **T10** | **G2 Asyncify 最小实验**（**只实验不采用**）：用 `ASYNCIFY_IMPORTS/ONLY/REMOVE` 限制插桩范围，测体积/性能/回归。**优先级因 T7 的实测而上调**：`recordblocking` 与 `uigetfile` 都卡在这 | 0.5–1 d | 独立容器 |
 
 **明确暂缓（GPT 判断，采纳）**：`D2b publish`(2–4d)、`E2 keyboard/kbhit/pause`
 （等 Asyncify）、`H3 getframe/movie`（等 graphics 成熟）、`H4`、`H1 voronoi 单输出`
@@ -656,8 +656,17 @@ makeinfo 生成 doc-cache）。
   `opengl_renderer::render_text: support for rendering text (FreeType) was unavailable
   or disabled when Octave was built`（`text-renderer.cc:53` 的 `static bool warned`，
   所以只在首次建 axes 时打一次），之后文本能力静默缺失。数值与 plot 桥不受影响。
-- **`doc`** 目前报 `doc: unable to find the Octave info manual, Octave installation is
-  incomplete`（11.3.0 的 `doc.m` 末路是 `system()` 起 info 浏览器，本构建无 shell）。
+- ~~**`doc`** 报 `unable to find the Octave info manual`（无 shell 起不了 info 浏览器）~~
+  → **T6 已修**（`build/webdoc/doc.m`，资产车道，见 §5.10）。**仍缺**：带 texinfo 标记的
+  `.m` 文件走运行时路径仍会撞 makeinfo（与下面那条同源）。
+- **`audiorecorder` 的 `recordblocking` 不可用**（T7）：语义是"等页面把录音做完"，
+  而**实测 `pause()` 期间浏览器事件循环完全停摆**（区间内 tick = 0）⇒ 必须 Asyncify。
+  本构建**如实报错**并给出替代用法（`record(r,len)` + `getaudiodata`），不静默降级。
+  **`record`/`stop`/`getaudiodata` 正常**（`accept-t7-recorder` 40/40）。
+- **`pause()` 会完全阻塞页面**（行为事实，不是缺陷）：这条同时决定了
+  `recordblocking` 与 `uigetfile`（T8）都必须走 Asyncify；
+  反过来也解释了 `input()` 为什么能用 —— `window.prompt` 是**同步**的浏览器 API。
+  写验收时**等待要在 JS 侧做**（`setTimeout`），不能用 Octave 的 `pause`。
 - **control 包的 SLICOT 编译件未发布**（§4.12）：`ss`/`step`/`tf2ss` 不可用；
   `tf`/`tfdata`/`dcgain`/`pole`/`zero`/`feedback`/`bode` 等纯 `.m` 面正常。
 - `voronoi` 的**单输出形式**（要画图）：T2 之后**已能走到绘图**，但终点是 plot 桥的
@@ -669,8 +678,8 @@ makeinfo 生成 doc-cache）。
 
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
-`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **26 套 646 项全绿**
-（11.3.0 的 6 套 + 7.2 时代的 19 套，两套验收在 8761/8762 上各跑一遍都全绿），
+`-O1` 编译，**dldfcn 走官方 dlopen 装载**。全量 **28 套 719 项全绿**
+（11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7 三套，在 8761/8762 上各跑一遍都全绿），
 含需求级 `accept-requirements`。交付包重打：`sh build/make-dist.sh`。
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M）。
@@ -959,6 +968,64 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 
 ---
 
+### 5.10 T6 + T7 已完成（2026-09-22）——浏览器宿主语义（音频设备 / 文档 / 录音）
+
+**结论：两批都走资产车道，主 wasm 零改动。** 各批的验收：
+`accept-t6-audio-doc` **33/33**、`accept-t7-recorder` **40/40**（用 Chromium 假麦克风，确定性）。
+完整一手记录（含 4 个坑与复现命令）见 **`build/113/NOTES-t6-t7-hostlayer.md`**。
+
+**T6 = 三件事**（比计划多一件）：
+
+1. **`audiodevinfo` 最小 shim**（`build/webaudio/audiodevinfo.m`）：没有 PortAudio →
+   内建整个被编掉（`exist` = **0**）。给一个静态"浏览器默认设备"模型
+   （输入/输出各一台、ID 恒为 0、名字如实写 `Browser …`，**不假装**是真硬件）。
+   **语义上最容易写错的一条**：`audiodevinfo(io)` 返回的是**设备个数**，
+   `audiodevinfo(io, id)` 返回的是**名字字符串**；第三参数官方只认 `"DriverVersion"`。
+2. **`doc` 的浏览器实现**（`build/webdoc/doc.m`）：官方 `doc.m` 末路是 `system()` 起
+   info 浏览器进程（无 shell → 实测报"info manual 缺失"，**那句错还误导**）。
+   改成只负责"取文本并显示"，文本仍走官方 `help()`，**不自研 texinfo 渲染**（T1 的教训）。
+3. **输出落点（计划外，但它是 2 的前提）**：实测发现 8761 的页面**什么都不显示** ——
+   `disp(42)` 之后 `document.body.innerText` 仍是空串、上游骨架那个 `<pre id="output">`
+   **从来没人往里写**。给 `Module.print`/`printErr` 各加一句**额外**写 DOM
+   （仍照常走 console，否则 26 套全打掉）。**这才让"显示到页面"这条验收有意义。**
+4. 顺手摘掉一个**误导性告警**：`index.html` 的启动清单挂着 7.2 车道的
+   `installed_packages.m`，而清单里没有该资产 → 每次开页都喊
+   "pkg 支持装载失败"，而 `pkg` 其实好着（`accept-pkg` 16/16）。
+
+**T7 = `audiorecorder`**（19 个 `__recorder_*` 纯 `.m` + JS 桥）：
+
+- 不移植 PortAudio；句柄是 `struct("Id",id)`，状态在全局表，动作走
+  `/tmp/pra_queue.txt`，页面 `bridge/webaudiorec.js` 落实，
+  PCM 写回 `/tmp/pra_<id>.f64` 供 Octave **同步**读取。
+- **为什么用 MediaRecorder**：它不走主线程；AudioWorklet 要 SharedArrayBuffer，
+  而本构建刻意**不要求 COI**。代价：只有 stop 后解码完才知道真实样本数。
+- 权限三态（允许/拒绝/无安全上下文）各自一句能照着做的错误，**绝不假装麦克风永远存在**。
+
+**★ 本批最重要的实测结论（推翻了我中途的一个错判断）**：
+**`pause()` 期间浏览器事件循环完全停摆**（区间内 tick = 0；`pause(1)`/`pause(2)`/
+`for pause(0.1)` 三种写法都一样）。我先前的测量把 eval **前后**的 tick 也算进去了，
+据此得出过"pause 会让出主线程"——**那是错的**。三条推论：
+
+1. **`recordblocking` 需要 Asyncify**（要等页面跑完而 Octave 一阻塞页面就停）
+   → 本构建**如实报错**并在错误里给出替代用法（`record(r,len)` + `getaudiodata`）。
+2. **`uigetfile`（T8）同病**，计划里记的"需 G2 先验"是对的；
+   反过来也解释了 `input()` 为什么能用 —— `window.prompt` 是**同步**的浏览器 API。
+3. **写验收时的等待必须发生在 JS 侧**（`setTimeout`），不能用 Octave 的 `pause`。
+   这也正是真人用 REPL 的节奏：命令返回 → 页面自由 → 下条命令读数据。
+
+**其它两个坑（详见 NOTES）**：`__recorder_getaudiodata__` 必须返回**声道×帧**，
+且空数据也要有那一行（`@audiorecorder/getaudiodata.m` 单声道路径会做 `data(1,:)`，
+返回 `0×1` 直接 "out of bound 0"）；`getUserMedia` 是异步的，**还没授权时来的
+`stop` 必须记下来**，否则随后 resolve 会开始**无限录音**。
+
+**顺手补的可复现性缺口**：`assets/meta.json`（承载 `deps`/`note`/**`aliases`**）
+**只存在于磁盘站点、不在 git** → 只拿仓库重建不出站点。已纳入仓库
+`build/assets-meta.json`，并补了工具 **`build/assets.py sync-js`**
+（不能用 `gen-manifest`：它整份重算，会把 11.3.0 站点 `file` 类资产的
+11.3.0 专属 mount 路径算错）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
@@ -972,12 +1039,12 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **26 套 646 项全绿** | 同左（两份各跑一遍） |
+| 验收 | **28 套 719 项全绿** | 同左（两份各跑一遍） |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
 
-**26 套的构成**（`http://127.0.0.1:8761/` 与 `8762` 上各跑一遍都全绿；逐套实测见
+**28 套的构成**（`http://127.0.0.1:8761/` 与 `8762` 上各跑一遍都全绿；逐套实测见
 下；`accept-113-pkgoct` 的自有汇总格式是「27 个模块：OK 27」，不是 `PASS/FAIL` 那套）：
 
 - **11.3.0 侧 6 套**：`accept-113-boot` 10、`accept-113-oct` 8、`accept-113-assets` 16、
@@ -1018,7 +1085,7 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
   （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
   `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
   `build/forge-preload/` 并由 `link-web.sh` 预加载）。
-  换完之后这些套件在 8761 上复跑全绿（补上 T2 后为 **26 套 646 项**）。
+  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7 后为 **28 套 719 项**）。
   清单与决策记录见 `build/113/PROMOTION.md`。
 - **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
   `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
@@ -1201,7 +1268,7 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 8. ✅ **T2/A1 图形句柄半真化**（2026-09-22）：`web` graphics toolkit 挂上，
    `figure/gcf/gca/get/set/title/allchild/findall/close` 全部可用；
    **资产车道、主 wasm 零改动**（计划原记的 Lane B 不需要）。
-   `accept-t2-graphics` **26/26**；全量 **26 套 646 项全绿**。
+   `accept-t2-graphics` **26/26**；全量 **26 套 646 项全绿**（再加 T6/T7 后为 **28 套 719 项**）。
    详见 **§5.5.1** 与 `build/113/NOTES-t2-graphics.md`（含 6 条踩坑记录）。
 9. **P5 OSMesa 图形线**（本轮到此为止，进度见 §9 与 `build/113/NOTES-p5-osmesa.md`）：
    - **步骤① ✅ 已完成**：OSMesa 在 wasm 里渲出正确三角形、含立即模式（提交 `4821a5f`）。
