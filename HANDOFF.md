@@ -732,13 +732,23 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 **第四轮（11.3.0 换基线）已完成，见 §10**；§9 保留为当时的计划与决策记录。
 
 ### ⬜ 仍待办（非图形，一件 + 一条长尾 —— 图形线开工前建议先清掉）
-1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（体积优化）。
-   **更新（2026-09-22 调查）**：Emscripten **自己就会生成保活集** —— 只要把 side module
-   放在**主链命令行上**，它就把其 import 表喂进 `SIDE_MODULE_IMPORTS`/`EXPORT_IF_DEFINED`
-   保活（`tools/link.py:2829-2881`）；我们现在**一个 `.oct` 都没传给主链**，所以只能靠
-   M1 全导出。另外**文档里"import 在 `dylink.0` 段"是错的**（实测那 7 字节不含符号名），
-   真工具是 `wasm-dis`（`emnm -u` 读不出来、`wasm-objdump` 在 o113 里不存在）。
-   验收：体积降 **且** 30 套全绿。
+1. **G1 `MAIN_MODULE=2`** —— **2026-09-22 已实测到"差一件事"**（见
+   `build/113/NOTES-main-module-2.md`，含复现命令与产物留档）：
+   · **体积收益是真的**：自己生成保活清单（`wasm-dis` 读 import 段 →
+     `-Wl,--export-if-defined=`）链出来的 M2 构建是 wasm **27.73MB**（M1 35.97MB）、
+     js **339KB**、三大件 gzip **7.82MB（−1.81MB）**，而且**能开页**、`accept-full` 20/20
+     （含 `.oct` 的 dlopen 与真调用）。
+   · **两道墙**：① 把 `.oct` 放主链命令行那条"官方自动保活"路会让 Emscripten 把它们记成
+     **启动时要加载的 dylib**（实测 `404 : …/__bfgsmin.oct`），懒加载设计直接破功；
+     ② 更麻烦的是 **JS 库符号**：`webnet.cc` 要的 `emscripten_run_script` **不是 wasm 导出**，
+     M1 下所有 JS 库函数对 side module 可见、M2 下只有 `EXPORTED_FUNCTIONS +
+     SIDE_MODULE_IMPORTS` 里的才可见，而 `EXPORTED_FUNCTIONS` 对非 wasm 导出名**直接报错**
+     ⇒ M2 构建的**网络那一路（R5）会挂**。
+   · **所以下一步不是"再做一遍"，而是挑一条**（NOTES 第三节给了三条候选，其中
+     "把 R5 换成纯 .m 队列桥、彻底不用 `emscripten_run_script`"最符合本项目架构）。
+   · 文档更正：`CLIBS.md` 说"imported symbols 在 `dylink.0` 段"**是错的**（那 7 字节不含
+     符号名），真工具是 `wasm-dis`。
+   验收：体积降 **且** 全量套件全绿。
 2. ~~**`help` 覆盖 `.m` 文件的 docstring**~~ → ✅ **已完成（2026-09-22）**：构建期预渲染
    （`build/prerender-m-docstrings.py` + 官方 `__makeinfo__` 驱动 + `link-web.sh` 的
    `M_SRC`），1043/1043 渲染成功、离线对照 **25/25 与桌面逐字一致**、

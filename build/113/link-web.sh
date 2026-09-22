@@ -94,6 +94,21 @@ SFLAGS=( -s WASM=1 -s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1
          -s ERROR_ON_UNDEFINED_SYMBOLS=0
          -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 )
 
+# EXPORTED_FUNCS：逗号分隔的导出符号名（默认只有 `_main`）。
+# ⚠️ 为什么要有这个口子：`MAIN_MODULE=2`（DCE 版）下，**JS 库符号也要列进导出**
+#    才会进 JS 胶水的符号表（`tools/emscripten.py:868-884` 只把
+#    `EXPORTED_FUNCTIONS + SIDE_MODULE_IMPORTS` 里的库函数加进去）——
+#    side module 里的 `emscripten_run_script`（webnet 那套同步 XHR）就靠它解析。
+#    实测踩过：把它写进 EXTRA_LDFLAGS **没用**，因为下面那行 `-s EXPORTED_FUNCTIONS=`
+#    在后面会把它覆盖掉（`-s` 后者胜）。
+#    M2 车道用：EXPORTED_FUNCS="_main,emscripten_run_script,exit,__assert_fail"
+EXPORTED_FUNCS="${EXPORTED_FUNCS:-_main}"
+EF_JSON="["
+IFS=',' read -r -a _ef <<< "$EXPORTED_FUNCS"
+for _f in "${_ef[@]}"; do EF_JSON="$EF_JSON\"$_f\","; done
+EF_JSON="${EF_JSON%,}]"
+echo "== EXPORTED_FUNCTIONS = $EF_JSON"
+
 LIBS=(
   # Octave 自身的三个归档
   "$OCT/libinterp/.libs/liboctinterp.a"
@@ -174,7 +189,7 @@ em++ --bind \
   "${DIAG[@]}" \
   "${SFLAGS[@]}" \
   ${EXTRA_LDFLAGS:-} \
-  -s EXPORTED_FUNCTIONS='["_main"]' \
+  -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS"]' \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
   "${PRELOAD[@]}" \
