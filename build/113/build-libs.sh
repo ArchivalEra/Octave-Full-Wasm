@@ -201,6 +201,99 @@ do_hdf5 () {
   echo "  ✅ hdf5 → $P（H5Fopen 在）"
 }
 
+
+# ---------------------------------------------------------------------------
+# arpack-ng（Fortran；需要 -fPIC）
+#   7.2 当年为了绕开「COMMON 块重复定义」被迫把全部源 cat 成单个 TU。
+#   我们现在终链有 -Wl,--allow-multiple-definition，**先试逐文件编译**——
+#   若可行就省掉那个技巧（更干净、也能并行）。
+#   归一化：arpack-ng 用 `!` 注释与 `&` 续行，f2c 吃不了，必须先用
+#   build/normalize_arpack.py 转成严格 F77。
+# ---------------------------------------------------------------------------
+do_arpack () {
+  say "arpack-ng-3.7.0"
+  unpack "arpack-ng-3.7.0.tar.gz" arpack-ng-3.7.0
+  local P="$DEPS/arpack"; mkdir -p "$P/lib"
+  python3 /src/bin/normalize_arpack.py "$WORK/arpack-ng-3.7.0/SRC"  "$WORK/arpack-src"  >/dev/null
+  python3 /src/bin/normalize_arpack.py "$WORK/arpack-ng-3.7.0/UTIL" "$WORK/arpack-util" >/dev/null
+  local o=() f
+  # f2c 的 INCLUDE 相对 cwd 解析 → 必须在本目录里编（归一化器已把 debug.h 一起拷来）
+  cd "$WORK/arpack-src"
+  for f in *.f; do emf77 -O2 -fPIC -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
+  cd "$WORK/arpack-util"
+  for f in *.f; do
+    # 跳过 second.f：它用系统计时函数 etime，f2c 报
+    #   "Declaration error for etime: unknown intrinsic function"
+    # 我们用自己的 second_stub.f 代替（7.2 也是这么做的）
+    [ "$f" = "second.f" ] && { echo "   （跳过 UTIL/second.f，用 second_stub.f 代替）"; continue; }
+    emf77 -O2 -fPIC -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o")
+  done
+  emf77 -O2 -fPIC -c /src/bin/second_stub.f -o "$WORK/second_stub.o"; o+=("$WORK/second_stub.o")
+  emar rcs "$P/lib/libarpack.a" "${o[@]}"
+  for sym in dsaupd_ dseupd_ dnaupd_; do
+    grep -q " $sym$" <(emnm "$P/lib/libarpack.a") || { echo "FATAL: libarpack.a 缺 $sym" >&2; exit 1; }
+  done
+  echo "  ✅ arpack → $P（dsaupd_/dseupd_/dnaupd_ 在；逐文件编译成功）"
+}
+
+# ---------------------------------------------------------------------------
+# qrupdate（Fortran，源码在磁盘上是已解包目录）
+# ---------------------------------------------------------------------------
+do_qrupdate () {
+  say "qrupdate-1.1.2"
+  if [ ! -d "$WORK/qrupdate-1.1.2" ]; then
+    [ -d "$SRC/qrupdate-1.1.2" ] || { echo "FATAL: 找不到 qrupdate 源码目录" >&2; exit 2; }
+    cp -r "$SRC/qrupdate-1.1.2" "$WORK/"
+  fi
+  local P="$DEPS/qrupdate"; mkdir -p "$P/lib"
+  cd "$WORK/qrupdate-1.1.2/src"
+  local o=() f
+  for f in *.f; do emf77 -O2 -fPIC -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
+  emar rcs "$P/lib/libqrupdate.a" "${o[@]}"
+  grep -q ' dqrinc_$' <(emnm "$P/lib/libqrupdate.a") || { echo "FATAL: libqrupdate.a 缺 dqrinc_" >&2; exit 1; }
+  echo "  ✅ qrupdate → $P（dqrinc_ 在）"
+}
+
+
+# ---------------------------------------------------------------------------
+# SuiteSparse 5.4.0（Octave 要的 C 部分）
+#   机制：各子库 Makefile 都 `include ../SuiteSparse_config/SuiteSparse_config.mk`，
+#   而里面 `CC = gcc` 是**普通赋值** → **make 命令行覆盖能压过它**。
+#   只建 `library` 目标（不建 demos —— demos 是程序、在交叉编译下跑不了）。
+#   **必须 CFOPENMP= 关掉**：我们整棵树是单线程（--disable-threads）。
+#   只建 Octave --with-* 真正要的那几个；SPQR 不做（R7 已论证 spqr 非缺口）。
+# ---------------------------------------------------------------------------
+do_suitesparse () {
+  say "SuiteSparse-5.4.0（AMD/CAMD/COLAMD/CCOLAMD/CHOLMOD/UMFPACK/KLU/CXSparse）"
+  unpack "suitesparse-full-5.4.0.tar.gz" SuiteSparse-5.4.0
+  local P="$DEPS/suitesparse"; mkdir -p "$P/lib" "$P/include"
+  cd "$WORK/SuiteSparse-5.4.0"
+  local OV=( CC="$CCACHE_CC" CXX="$CCACHE_CXX" AR=emar RANLIB=emranlib
+             CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC" CFOPENMP=
+             BLAS="-lrefblas" LAPACK="-llapack" )
+  # 用 **static** 目标，不用 library：后者末尾会 `make install` 去编 .so，
+  # 而 SO_OPTS 里带 `-Wl,--no-undefined`（wasm-ld 不认识）→ 必失败。
+  # static 只产 .a，正好是我们要的。
+  for lib in SuiteSparse_config AMD CAMD COLAMD CCOLAMD CHOLMOD UMFPACK KLU CXSparse; do
+    echo "  --- $lib"
+    ( cd "$lib" && emmake make static "${OV[@]}" > "$WORK/ss-$lib.log" 2>&1 ) \
+      || { echo "FATAL: SuiteSparse/$lib 构建失败，见 $WORK/ss-$lib.log" >&2; tail -12 "$WORK/ss-$lib.log" >&2; exit 1; }
+  done
+  # 收拢产物到独立 prefix
+  local n=0 f
+  for f in */Lib/*.a */*.a; do [ -f "$f" ] && { cp -f "$f" "$P/lib/"; n=$((n+1)); }; done
+  cp -f SuiteSparse_config/SuiteSparse_config.h "$P/include/" 2>/dev/null || true
+  for f in */Include/*.h; do [ -f "$f" ] && cp -f "$f" "$P/include/"; done
+  echo "  收集到 $n 个 .a：$(cd "$P/lib" && ls *.a | tr '\n' ' ')"
+  # 自检：每个子库一个代表符号
+  local chk="libamd.a:amd_2 libcamd.a:camd_2 libcolamd.a:colamd libccolamd.a:ccolamd libcholmod.a:cholmod_start libumfpack.a:umfpack_di_solve libklu.a:klu_analyze libcxsparse.a:cs_di_sqr"
+  for pair in $chk; do
+    local l="${pair%%:*}" sym="${pair##*:}"
+    grep -q " $sym$" <(emnm "$P/lib/$l" 2>/dev/null) || { echo "FATAL: $l 缺 $sym" >&2; exit 1; }
+  done
+  echo "  ✅ SuiteSparse → $P（8 个库的代表符号全在）"
+}
+
 case "${1:-list}" in
   zlibbz2)   do_zlibbz2 ;;
   glpk)      do_glpk ;;
@@ -209,8 +302,11 @@ case "${1:-list}" in
   sndfile)   do_sndfile ;;
   rapidjson) do_rapidjson ;;
   hdf5)      do_hdf5 ;;
-  all)       do_zlibbz2; do_glpk; do_fftw; do_qhull; do_sndfile; do_rapidjson; do_hdf5 ;;
-  list)      echo "可建：zlibbz2 glpk fftw qhull sndfile rapidjson hdf5（以及后续的 suitesparse/arpack/qrupdate）" ;;
+  arpack)    do_arpack ;;
+  qrupdate)  do_qrupdate ;;
+  suitesparse) do_suitesparse ;;
+  all)       do_zlibbz2; do_glpk; do_fftw; do_qhull; do_sndfile; do_rapidjson; do_hdf5; do_arpack; do_qrupdate; do_suitesparse ;;
+  list)      echo "可建：zlibbz2 glpk fftw qhull sndfile rapidjson hdf5 arpack qrupdate suitesparse" ;;
   *)         echo "未知库：$1" >&2; exit 2 ;;
 esac
 
