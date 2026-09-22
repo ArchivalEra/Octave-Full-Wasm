@@ -145,6 +145,7 @@ R1–R10 已全部落地，第三轮做的是**浏览器环境语义**——剩�
 - `bridge/webaudio.js` (6864 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
+- `build/113/NOTES-archive.md` (3273 bytes)
 - `build/113/NOTES-umfpack.md` (3952 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
 - `build/113/STATUS.md` (6867 bytes)
