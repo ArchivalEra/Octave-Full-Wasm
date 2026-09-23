@@ -148,6 +148,37 @@ if [ "${WITH_OPENGL:-0}" = "1" ]; then
   echo "=== WITH_OPENGL=1：开 OpenGL（头/库走 /src/deps/glshim，内容已是 gl4es+GLU）==="
 fi
 
+# §8 待办 2：FreeType 文字渲染（默认仍关 = 与既有产物逐字节一致）。
+#   `WITH_FREETYPE=1` 时不传 `--without-freetype`，并把我们自己的 `freetype2.pc` 摆到
+#   pkg-config 搜索路径上 —— configure 的探测是
+#   `PKG_CHECK_MODULES([FT2],[freetype2])` + `$PKG_CONFIG freetype2 --atleast-version=9.03`，
+#   全靠 pkg-config（没有 `--with-freetype=` 那种带路径的写法）。
+#   库由 `build/113/build-freetype.sh` 建到 `/src/deps/freetype`（**-fPIC 是硬要求**：
+#   主链可重定位，混进非 PIC 归档会在 dylink 那层出问题）。
+#   ⚠️ **fontconfig 仍然关着**（有意）：无 fontconfig 时 `ft-text-renderer.cc` 的回落是
+#   `oct_fonts_dir()` 下的 `FreeSans[Bold][Oblique].otf`，而 Octave 自带那几个字体
+#   （`etc/fonts/`，装到 `<datadir>/octave/<ver>/fonts`）→ 预载它们即可，见 link-web.sh。
+#   代价（如实）：`fontname` 属性被忽略（任何字体名都落到 FreeSans）、`listfonts` 为空。
+FREETYPE_FLAG="${FREETYPE_FLAG:---without-freetype}"
+if [ "${WITH_FREETYPE:-0}" = "1" ]; then
+  FREETYPE_FLAG=""
+  PKG_CONFIG_PATH="/src/deps/freetype/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export PKG_CONFIG_PATH
+  # ⚠️ **还必须设 `EM_PKG_CONFIG_PATH`**：`emconfigure` 会把 emscripten sysroot 的
+  #    pkgconfig 目录摆到 pkg-config 搜索路径**最前面**，于是 `freetype2` 解析到
+  #    **emsdk 端口**那份 .pc（内容 `Libs/Cflags: -sUSE_FREETYPE`）而不是我们这份 ——
+  #    实测：只设 PKG_CONFIG_PATH 时 Makefile 里 `FT2_LIBS = -sUSE_FREETYPE`，
+  #    于是一串 in-tree 链接（octave-cli 等）报 `undefined symbol: FT_Done_Face`。
+  #    `EM_PKG_CONFIG_PATH` 是 emscripten 给的这个口子，优先级高于它自己的 sysroot。
+  EM_PKG_CONFIG_PATH="/src/deps/freetype/lib/pkgconfig:${EM_PKG_CONFIG_PATH:-}"
+  export EM_PKG_CONFIG_PATH
+  CPPFLAGS="${CPPFLAGS:-} -I/src/deps/freetype/include"
+  LDFLAGS="${LDFLAGS:-} -L/src/deps/freetype/lib"
+  pkg-config --modversion freetype2 >/dev/null 2>&1 || {
+    echo "FATAL: pkg-config 找不到 freetype2（先跑 build/113/build-freetype.sh）" >&2; exit 2; }
+  echo "=== WITH_FREETYPE=1：开 FreeType（/src/deps/freetype，$(pkg-config --libs freetype2)）==="
+fi
+
 # gl2ps：要不要让 Octave 的 print 支持矢量输出？
 #   默认不开（与之前逐字节一致）。
 #   `WITH_GL2PS=1` 时把 /src/deps/gl2ps 摆到搜索路径上 —— 那里有给 wasm 编的
@@ -178,7 +209,7 @@ emconfigure ./configure \
   --disable-readline --disable-docs --disable-java \
   --disable-threads \
   --without-qt --without-fltk ${OPENGL_FLAG} \
-  --without-freetype --without-fontconfig \
+  ${FREETYPE_FLAG} --without-fontconfig \
   --without-curl --without-magick --without-portaudio \
   --without-spqr \
   --without-sundials_core --without-sundials_ida \
@@ -188,6 +219,25 @@ emconfigure ./configure \
   || { echo "=== configure 失败，config.log 尾部 ==="; tail -n 100 config.log; exit 1; }
 
 echo "=== configure 成功"
+
+# ---- GL 头相关的两个探测：重跑 configure 会把它们翻成 undef，这里显式恢复 ----
+# 为什么会翻：这两个都是**看 GL 头/库**的探测（`GL_GLEXT_PROTOTYPES`、
+# `glBlendFuncSeparate`），而 `/src/deps/glshim/include` 的内容在 2026-09-23 从 Mesa 头
+# 换成了 gl4es+GLU 头（`build/113/gl-headers-webgl.sh`）。那次只做了**增量重编**
+# （3 个 TU，config.h 没重生成）⇒ **部署版是在这两个 = 1 的状态下编出来的**。
+# 为什么恢复成 1 而不是接受 undef：**这一批（FreeType）不该顺带改图形行为**；
+# 而且 gl4es 实测提供 glBlendFuncSeparate —— `/src/deps/glshim/lib/libGL.a` 里有 4 个
+# 相关符号，部署的 wasm 里也确实有 `gl4es_glBlendFuncSeparate` 的引用。
+# 要改这条，先跑一遍图形套件（accept-p5-graphics / accept-print / accept-plotv2 / -3d）
+# 证明行为不变，再改。
+if [ "${WITH_OPENGL:-0}" = "1" ]; then
+  for h in GL_GLEXT_PROTOTYPES HAVE_GLBLENDFUNCSEPARATE; do
+    if grep -qE "^/\* #undef $h \*/" config.h; then
+      sed -i "s|^/\* #undef $h \*/|#define $h 1|" config.h
+      echo "   ★ 恢复 $h = 1（gl4es 头不声明、但部署版就是 1；见脚本内注释）"
+    fi
+  done
+fi
 # 汇报实际开起来了什么（这是 ③ 的可读证据）
 for h in HAVE_GLPK HAVE_QHULL_R HAVE_FFTW3 HAVE_FFTW3F HAVE_SNDFILE HAVE_HDF5 \
          HAVE_ZLIB HAVE_BZ2 HAVE_ARPACK HAVE_AMD HAVE_CHOLMOD HAVE_UMFPACK \

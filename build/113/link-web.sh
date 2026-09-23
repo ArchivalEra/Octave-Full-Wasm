@@ -17,6 +17,11 @@
 #
 set -euo pipefail
 
+# 本脚本所在目录的**绝对**路径：脚本中途会 `cd`（到 $SRC 去链接），到那时
+# `$(dirname "$0")` 就解成相对当前目录的 `.` 了 —— 实测踩过：M2 的保活自检因此
+# 报 `can't open file '/src/websrc/./check-oct-imports.py'`（而链接本身是成功的）。
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
 OUT="${1:-/src/websrc/out}"
 OCT="$(cd /src/work/octave-11.3.0 && pwd)"
 INST=/src/work/octave-install
@@ -84,15 +89,73 @@ else
   echo "⚠ 缺 $FORGE_SRC/*.m —— 主链会少掉 7.2 就有的 forge 预装（normpdf 等会变成需懒加载）"
 fi
 
+# ---- FreeType 字体预载（WITH_FREETYPE=1 时）----------------------------------
+# 为什么需要：`--without-fontconfig` 是**有意保留**的（见 configure-113-full.sh 的注释），
+# 于是 `ft-text-renderer.cc` 的回落路径是 `OCTAVE_FONTS_DIR`（环境变量，我们没设）→
+# `SYSTEM_FREEFONT_DIR`（编译期，未定义）→ `config::oct_fonts_dir()`，在**那个目录**里找
+# `FreeSans[Bold][Oblique].otf`。Octave **自带**这几个字体（源码 `etc/fonts/`，`make install`
+# 装进 configure 的 `octfontsdir`）⇒ 把它们预载到**同一个绝对路径**即可。
+#
+# ⚠️ **挂载点不猜**（这是本仓的硬规矩，见 HANDOFF §0 第 6 条）：直接从构建树的 Makefile
+#    读 configure 产物 `octfontsdir`。注意它与 main.cc 那套 `/usr/src/octave/m/...`
+#    **不是一回事**：m/ 树是 main.cc 自己 addpath 的，字体走 defaults.cc 的
+#    `prepend_octave_home(OCTAVE_OCTFONTSDIR)`，实测 = configure prefix
+#    `/src/work/octave-install/share/octave/$MV/fonts`（站点里 doc-cache 等 file 资产的
+#    mount 也是这个前缀 —— 两处对得上）。
+#    只预载 4 个 FreeSans*（无 fontconfig 时**只有**它们会被用到；FreeMono 那 4 个是
+#    绘图/打印用不到的），省 1MB。
+FONTS_PRELOAD_TAG=""
+if [ "${WITH_FREETYPE:-0}" = "1" ]; then
+  fontsdir="$(grep -m1 '^octfontsdir' "$OCT/Makefile" 2>/dev/null | sed 's/^octfontsdir *= *//')"
+  [ -n "$fontsdir" ] || { echo "FATAL: 读不到 $OCT/Makefile 的 octfontsdir" >&2; exit 2; }
+  [ -d "$fontsdir" ] || { echo "FATAL: $fontsdir 不存在（先 emmake make install）" >&2; exit 2; }
+  stage_fonts="$PRELOAD_AT/fonts"
+  rm -rf "$stage_fonts"; mkdir -p "$stage_fonts"
+  for f in FreeSans.otf FreeSansBold.otf FreeSansOblique.otf FreeSansBoldOblique.otf; do
+    [ -f "$fontsdir/$f" ] || { echo "FATAL: 缺字体 $fontsdir/$f" >&2; exit 2; }
+    cp -a "$fontsdir/$f" "$stage_fonts/"
+  done
+  PRELOAD+=("--preload-file" "$stage_fonts@$fontsdir")
+  FONTS_PRELOAD_TAG="FreeSans.otf"
+  echo "== preload FreeType 字体 4 个 → $fontsdir（$(du -sb "$stage_fonts" | cut -f1) 字节）"
+fi
+
 # ---- 主链 ---------------------------------------------------------------
-#  MAIN_MODULE=1 + ALLOW_TABLE_GROWTH=1：为 .oct side module 的 dlopen 服务
-#  （闸门②探针已实测 emsdk 5.0.7 上可行）
+#  MAIN_MODULE_LEVEL（1|2）：主模块的链接模型层级（`-s MAIN_MODULE=`）。
+#    1（默认）= 不做 DCE、导出全部符号：`.oct` 随便解析，首包大（wasm 35.97MB）。
+#    2 = 做 DCE，**只保活导出的符号**：wasm 实测 27.73MB / 三大件 gzip −1.81MB，
+#        但要自己把保活集算出来喂给它（KEEP_LIST），见 build/113/gen-keep-list.sh
+#        与 NOTES-main-module-2.md。**M2 是有前提的**：链完必须过
+#        build/113/check-oct-imports.py（下面的自检会替你做）。
+#  ALLOW_TABLE_GROWTH=1：为 .oct side module 的 dlopen 服务（闸门②探针实测 emsdk 5.0.7 可行）
 #  -Wl,--allow-multiple-definition：f2c 把每个 COMMON 块渲染成逐文件 tentative
 #  definition，clang 默认 -fno-common 会变成冲突的强定义（dls001_/globe_…），
 #  而 -fcommon 不能用（wasm-ld 没有 common symbol 链接）
-SFLAGS=( -s WASM=1 -s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1
+MAIN_MODULE_LEVEL="${MAIN_MODULE_LEVEL:-1}"
+case "$MAIN_MODULE_LEVEL" in 1|2) ;; *) echo "FATAL: MAIN_MODULE_LEVEL 只能是 1 或 2" >&2; exit 2;; esac
+SFLAGS=( -s WASM=1 -s "MAIN_MODULE=$MAIN_MODULE_LEVEL" -s ALLOW_TABLE_GROWTH=1
          -s ERROR_ON_UNDEFINED_SYMBOLS=0
          -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 )
+echo "== MAIN_MODULE=$MAIN_MODULE_LEVEL$([ "$MAIN_MODULE_LEVEL" = 2 ] && echo '（DCE：保活集由 KEEP_LIST 提供）')"
+
+# KEEP_LIST：**文件路径**，一行一个符号名 —— M2 车道用它喂 `-Wl,--export-if-defined=`
+#   （由 build/113/gen-keep-list.sh 从所有 `.oct` 的 IMPORT 段生成）。
+#   没有它就别想 M2：`.oct` 走资产车道、不在主链命令行上，拿不到 Emscripten 的自动保活。
+KEEP_LIST="${KEEP_LIST:-}"
+if [ -n "$KEEP_LIST" ]; then
+  [ -s "$KEEP_LIST" ] || { echo "FATAL: KEEP_LIST 指向的文件不存在或为空：$KEEP_LIST" >&2; exit 2; }
+  n_keep=$(grep -c . "$KEEP_LIST" || true)
+  # 与 EXPORT_IF_DEFINED（下面那个逗号串口子）合并：两条路都是 --export-if-defined
+  EXPORT_IF_DEFINED="${EXPORT_IF_DEFINED:-}"
+  KEEP_FLAGS=()
+  while read -r _sym; do
+    [ -n "$_sym" ] || continue
+    KEEP_FLAGS+=( "-Wl,--export-if-defined=$_sym" )
+  done < "$KEEP_LIST"
+  echo "== KEEP_LIST：$n_keep 个保活符号（$KEEP_LIST）"
+else
+  KEEP_FLAGS=()
+fi
 
 # GL_LIBS=1 时给**最终链接**补 GLES 仿真旗标：
 #   · `-sFULL_ES2=1` 是 gl4es 的 COMPILE.md **要求** —— 真 GLES2 入口（以及 gl4es 用来取
@@ -258,6 +321,19 @@ LIBS=(
   -lm
 )
 
+# ---- FreeType（WITH_FREETYPE=1）：文字渲染 ------------------------------------
+# `ft-text-renderer.o` 现在会引用 `FT_*`（HAVE_FREETYPE=1），必须链进主模块。
+# 用**我们自己那份 PIC 归档**（`build/113/build-freetype.sh` → /src/deps/freetype），
+# 而不是 emscripten 端口的（那份非 PIC，与 MAIN_MODULE 的可重定位要求不是一路）。
+# 定序：freetype 依赖 zlib（`FT_CONFIG_OPTION_SYSTEM_ZLIB`）⇒ 放在 `-lz -lbz2` **之后**
+# （静态库左到右解析）。
+if [ "${WITH_FREETYPE:-0}" = "1" ]; then
+  [ -f /src/deps/freetype/lib/libfreetype.a ] || {
+    echo "FATAL: 缺 /src/deps/freetype/lib/libfreetype.a（先跑 build/113/build-freetype.sh）" >&2; exit 2; }
+  LIBS+=( -L/src/deps/freetype/lib -lfreetype )
+  echo "== FreeType：链 /src/deps/freetype/lib/libfreetype.a"
+fi
+
 #  ---- 异常模式：必须与整棵树一致 -------------------------------------------
 #  实测坑：给 main.o 用 `-fwasm-exceptions`（原生 wasm 异常）而树用 `-fexceptions`
 #  （emscripten 的 JS 式异常，链接行里带 -mllvm -enable-emscripten-cxx-exceptions
@@ -336,6 +412,7 @@ em++ --bind \
   ${GL_INC_FLAGS[@]+"${GL_INC_FLAGS[@]}"} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
+  ${KEEP_FLAGS[@]+"${KEEP_FLAGS[@]}"} \
   ${LF_FLAGS[@]+"${LF_FLAGS[@]}"} \
   -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS"]' \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
@@ -379,6 +456,40 @@ if [ "${GL_LIBS:-0}" = "1" ]; then
     exit 3
   fi
   echo "== GL 自检: gl4es_gl* 出现 $(grep -oa 'gl4es_gl' "$OUT/octave.wasm" | wc -l) 次，OSMesa 残留 0 处，octave.wasm $(stat -c%s "$OUT/octave.wasm") 字节"
+fi
+
+# ---- 自检（M2 专用）：**保活完整性** ------------------------------------------
+# 为什么必须在**链接这一层**做：M2 只导出保活集，而 `.oct` 的导入在**装载期**才解析 ——
+# 缺一个符号，链接期一声不响，运行期炸成 `TypeError: resolved is not a function` 或
+# `Cannot read properties of undefined (reading 'value')`（后者连符号名都看不见）。
+# 判据见 check-oct-imports.py 的文件头：与**基线（今天在跑的 M1 产物）**差分 ——
+# 只在"基线导得出、新构建导不出"时报失败；JS 库符号（M1 靠 JS 胶水全可见）单列一类。
+if [ "$MAIN_MODULE_LEVEL" = "2" ]; then
+  OCT_SCAN_DIRS="${OCT_SCAN_DIRS:-}"
+  if [ -z "$OCT_SCAN_DIRS" ]; then
+    echo "⚠ MAIN_MODULE=2 但没给 OCT_SCAN_DIRS ⇒ **跳过保活完整性检查**" >&2
+    echo "  （别这么部署：给一个能扫到全部 .oct 的目录列表，例如站点 assets 下那几个）" >&2
+  else
+    # --js-provided：把 LIB_FUNCS 里显式暴露过的 JS 库符号告进去 —— 它们在 wasm 导出表里
+    # 查不到（不是 wasm 导出），但 M2 下**确实**能解析（实测：emscripten_run_script /
+    # __assert_fail / abort / exit 四个都靠 LIB_FUNCS 在 M2 上跑通了 accept-net / image /
+    # slicot / forge2）。不告的话闸门会把一个合法产物拦下来。
+    python3 "$HERE/check-oct-imports.py" "$OUT/octave.wasm" $OCT_SCAN_DIRS \
+      ${LIB_FUNCS:+--js-provided "$LIB_FUNCS"} \
+      ${BASELINE_WASM:+--baseline "$BASELINE_WASM"} || {
+        echo "FATAL: M2 产物的保活集不完整（见上面逐条）—— 不部署" >&2; exit 4; }
+  fi
+fi
+
+# ---- 自检：FreeType 字体到底进没进产物 ----------------------------------------
+# 与 /ftp@ 那条同类：预载**成功**与"字体真的在产物里"是两件事（路径写错、`@` 切错、
+# 文件系统上没有都会静默少东西），而少字体的表现是"文字空白"——在浏览器里很难一眼看出
+# 是"没编 FreeType"还是"没预载字体"。所以直接查产物。另外查 HAVE_FREETYPE 的反面：
+# 产物里**不该**再出现 `FreeType) was unavailable or disabled` 的警告文案。
+if [ -n "$FONTS_PRELOAD_TAG" ]; then
+  grep -q "FreeSans.otf" "$OUT/octave.js" || {
+    echo "FATAL: octave.js 里没有 FreeSans.otf 的预载记录 ⇒ 文字会空白" >&2; exit 3; }
+  echo "== FreeType 自检: 产物里含 $(grep -o 'FreeSans[A-Za-z]*\.otf' "$OUT/octave.js" | sort -u | tr '\n' ' ')"
 fi
 
 echo "== 产物:"
