@@ -188,7 +188,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 
 <!-- AUTO:FILES -->
 - `.githooks/check-consistency.py` (7950 bytes)
-- `.githooks/check-handoff.py` (7906 bytes)
+- `.githooks/check-handoff.py` (7961 bytes)
 - `.githooks/check-whitelist.py` (1251 bytes)
 - `.githooks/handoff-context.py` (2903 bytes)
 - `.githooks/handoff_facts.py` (7496 bytes)
@@ -200,7 +200,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.gitignore` (1890 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (2593 bytes)
-- `HANDOFF.md` (176037 bytes)
+- `HANDOFF.md` (177526 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)
@@ -453,7 +453,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webnet/urlwrite.m` (2168 bytes)
 - `build/webnet/webread.m` (1573 bytes)
 - `build/webnet/websave.m` (1366 bytes)
-- `dist/DEPLOY.md` (13194 bytes)
+- `dist/DEPLOY.md` (13238 bytes)
 - `dist/serve.py` (2668 bytes)
 - `test/browser/accept-113-assets.mjs` (6244 bytes)
 - `test/browser/accept-113-boot.mjs` (5607 bytes)
