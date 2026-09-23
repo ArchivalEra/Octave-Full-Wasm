@@ -95,6 +95,13 @@ await ev('play(lp); disp(isplaying(lp))', '★ isplaying 为真（长素材）',
 await ev('play(lp); pause(lp); disp(isplaying(lp))', '★ pause 后不再 isplaying', '0');
 await ev('id=__pba_id__(struct(lp).player); disp(__pba_get__(id,"Running"))', '内部状态 paused', 'paused');
 await ev('resume(lp); disp(isplaying(lp))', '★ resume 后恢复 isplaying', '1');
+// ★ 回归（胶水层审计候选 5）：**resume 必须保留采样率与通道数**。
+//   此前页面侧 `doResume` 把参数写死成 8000/单声道，于是"恢复一个 44100 的立体声播放器"
+//   会变成 8k 单声道 —— 而原有断言只 resume 过单声道 8k 的 lp，所以一直绿着。
+//   判据用**入队那一行本身**：它是 `.m` 与页面之间唯一的接口（页面侧就照着它重建播放）。
+//   清两次队列是为了只读 resume 那一行：to/rate/nch 必须是 0/44100/2。
+await ev('fid=fopen("/tmp/pba_queue.txt","w"); fclose(fid); play(q); pause(q); fid=fopen("/tmp/pba_queue.txt","w"); fclose(fid); resume(q); fid=fopen("/tmp/pba_queue.txt"); L=fgetl(fid); fclose(fid); s=strsplit(L,char(9)); disp([str2double(s{4}) str2double(s{5}) str2double(s{6})])',
+  '★ resume 保留采样率/通道数（44100 立体声 → to/rate/nch = 0 44100 2）', '0 44100 2');
 await ev('stop(lp); disp(lp.CurrentSample)', 'stop 后归零', '0');
 await ev('disp(isplaying(lp))', 'stop 后不 isplaying', '0');
 await ev('disp(isempty(__pba_get__(__pba_id__(struct(lp).player),"StartTime")))', 'stop 清掉调度区间', '1');

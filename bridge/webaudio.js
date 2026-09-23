@@ -157,7 +157,10 @@
   }
 
   function doResume(a) {
-    if (!S.nodes.has(a.id)) doPlay({ id: a.id, args: [a.args[0] || 0, 0, 8000] });
+    // 参数原样转发给 doPlay：`.m` 侧现在按 play 的同一条形状入队
+    // `[from, to, rate, nch]`（以前这里写死 8000/单声道，于是 44100 立体声一 resume
+    // 就变成 8k 单声道 —— 见 build/webaudio/__player_resume__.m 的注释）。
+    if (!S.nodes.has(a.id)) doPlay({ id: a.id, args: a.args });
   }
 
   const HANDLERS = { play: doPlay, stop: doStop, pause: doPause, resume: doResume };
