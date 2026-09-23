@@ -12,8 +12,9 @@
 >   两次 `path` 手术"是**错的**：真凶是**冷启动**，见 NOTES-webgl.md §4.5.13）。
 > · 验收：`accept-p5-graphics` **54 → 64 项**（新增 10 条，含 pie/contour/legend 嵌套与 DEPTH 复位
 >   的护栏）；**8761 与 8768 全量各 32 套 / 848 项全绿**（838 → +10）。
-> 8761 当前 = Octave 11.3.0（wasm sha `bac48adb…`，**本批开始时未动**；本批要把带 GL 的那份推上去，
-> 见 §5.21 的"上线"小节）；图形线在 **8768** 上做。
+> 8761 当前 = Octave 11.3.0**（带 GL）**，wasm sha `6c75a4942df286826f8f02c1…`、
+> 默认 toolkit = `webgl`、全量 **32 套 848 项全绿**（见 §5.21 的"上线"小节）；
+> 本批**之前** 8761 是 `bac48adb…`（不带 GL），那份站点留档在 `site-prewebgl-bak/`。
 > **接续先读 §8（一句话接续 + 仍待办）与 §5.13–§5.21（近几轮实况）；§9 是当时的计划、§10 是第四轮实况。**
 > ⚠️ 四条必须在动手前知道的：
 > ① **构建主树现在是 opengl-ON + gl2ps-ON，且 GL 头已换成 gl4es+GLU 的**（见 §5.16 末尾"怎么切回去"
@@ -752,13 +753,11 @@ makeinfo 生成 doc-cache）。
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
 **`-O2`** 编译（11.3.0 车道的口径；`-O1` 是 7.2 时代的 R10 结论，见 `build/BENCH.md`），
-**dldfcn 走官方 dlopen 装载**。全量 **31 套 784 项全绿**
-（11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8/T9 五套；**2026-09-23 在 8761 上实测补齐**：
-**31 套 / 784 PASS / 0 FAIL**，见 §5.15 —— SLICOT 上线后补了 `accept-slicot` 25 项
-并与护栏翻正后的 `accept-forge2`（44）一起复跑），
-含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
-（197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
-`bac48adb960c9c79…`）；重打命令 `sh build/make-dist.sh`。
+**dldfcn 走官方 dlopen 装载**。全量 **32 套 848 项全绿**（2026-09-23 收口后实测；
+构成见 §5.21 与 `dist/DEPLOY.md` 的表），含需求级 `accept-requirements` 与图形线
+`accept-p5-graphics`（**64 项**，8761 上真跑）。
+交付包：**`dist/octave-full-wasm-site-20260923`**（209 文件；wasm raw 35.15MB / gz 8.04MB；
+**包内 wasm sha 与部署件同** `6c75a4942df286826f8f02c1…`）；重打命令 `sh build/make-dist.sh`。
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M）。
 回退：`cp -a site-72bak/. site/`（**注意** `build/recover.sh` 已是 11.3.0 口径，

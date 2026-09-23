@@ -55,10 +55,11 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 （依赖写成一张表，`SKIP=<库名>` 可按库集合二分；7.2 时代的 `build/reconf-pic.sh`
 保留作历史记录）。配方与坑见 `build/CLIBS.md`。
 
-## 状态（2026-09-22 实测）
+## 状态（2026-09-23 实测）
 
-**基线 = Octave 11.3.0**。`http://127.0.0.1:8761/` 服务的就是**最近一次通过浏览器
-实测**的构建（wasm sha256 `bac48adb…`）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
+**基线 = Octave 11.3.0（带真渲染器）**。`http://127.0.0.1:8761/` 服务的就是**最近一次通过
+浏览器实测**的构建（wasm sha256 `6c75a4942df286826f8f02c1…`，**默认 toolkit = `webgl`**；
+全量回归 **32 套 848 项全绿**）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
 （见 `build/GAPS.md` 的需求书与 `HANDOFF.md` §5 / §10 的结论表）。
 
 | 项 | 结果 |
@@ -170,10 +171,11 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
   9 个长尾库（glpk/qhull/fftw3+3f/sndfile/qrupdate/hdf5/arpack/SuiteSparse）全部重开。
 - **换基线时补的三处内容缺口**：`dldprobe.oct` 的源码入仓、`lanetest` 资产、
   `m/forge` 的 20 个预装 `.m`（否则 `normpdf` 从"开箱即有"退化成"要先加载包"）。
-- **图形**：plot 桥 + `print -dsvg` 是**默认（`web` toolkit）**的可用路径；
-  **OSMesa 软件光栅化线已在 8763 上打通步骤①②③**（真渲出像素、15 种图非空白，
-  `accept-p5-graphics.mjs` 54 PASS / 0 FAIL），但**没上 8761**（体积 +11.3MB raw 待谈）。
-  见上一条引用框与 `build/113/GRAPHICS-BRANCH.md`。
+- **图形**（2026-09-23 已更新，见上一条引用框）：**默认 toolkit = `webgl`**（gl4es → WebGL2/GPU），
+  开箱 `plot(...); drawnow` 就出真图、`getframe` 真像素；plot 桥 + `print -dsvg` 仍是
+  **唯一的矢量输出**路径（核心那条要 shell 管道 + gs，本构建没有 shell 是有意的）。
+  （历史：OSMesa 软件光栅化线曾在 8763 上打通步骤①②③，后被 gl4es 取代并**退役**。）
+  见 `build/113/GRAPHICS-BRANCH.md`、`build/113/NOTES-webgl.md`。
 
 > **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
 > `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
@@ -188,7 +190,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (1702 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (161105 bytes)
+- `HANDOFF.md` (161086 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)
