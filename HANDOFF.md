@@ -12,9 +12,10 @@
 >   两次 `path` 手术"是**错的**：真凶是**冷启动**，见 NOTES-webgl.md §4.5.13）。
 > · 验收：`accept-p5-graphics` 由 54 增到 64 项（新增 10 条：pie/contour/legend 的嵌套转发、
 >   DEPTH 复位、默认 toolkit）。**全量套件数/项数见文末 `AUTO:STATE` 区块。**
-> 8761 当前 = Octave 11.3.0**（带 GL）**，wasm sha `6c75a4942df286826f8f02c1…`、
-> 默认 toolkit = `webgl`、全量 **32 套 848 项全绿**（见 §5.21 的"上线"小节）；
-> 本批**之前** 8761 是 `bac48adb…`（不带 GL），那份站点留档在 `site-prewebgl-bak/`。
+> 8761 当前 = Octave 11.3.0**（带 GL、默认 toolkit `webgl`）**。**部署件 sha、体积、最近一次
+> 全绿回归的套件数与项数一律见文末 `AUTO:STATE` 区块**（脚本从产物重算，别在这里手写 ——
+> 2026-09-23 就是这条被 promote 后的新 sha 抓红了一次）。
+> 审计批**之前**的 8761 是不带 GL 的那份，站点留档在 `site-prewebgl-bak/`。
 > **接续先读 §8（一句话接续 + 仍待办）与 §5.13–§5.21（近几轮实况）；§9 是当时的计划、§10 是第四轮实况。**
 > ⚠️ 四条必须在动手前知道的：
 > ① **构建主树现在是 opengl-ON + gl2ps-ON，且 GL 头已换成 gl4es+GLU 的**（见 §5.16 末尾"怎么切回去"
@@ -786,8 +787,8 @@ makeinfo 生成 doc-cache）。
 **dldfcn 走官方 dlopen 装载**。全量 **32 套 848 项全绿**（2026-09-23 收口后实测；
 构成见 §5.21 与 `dist/DEPLOY.md` 的表），含需求级 `accept-requirements` 与图形线
 `accept-p5-graphics`（**64 项**，8761 上真跑）。
-交付包：**`dist/octave-full-wasm-site-20260923`**（209 文件；wasm raw 35.15MB / gz 8.04MB；
-**包内 wasm sha 与部署件同** `6c75a4942df286826f8f02c1…`）；重打命令 `sh build/make-dist.sh`。
+交付包与包内 wasm 的 sha **见文末 `AUTO:STATE` 区块**（那里还自动核对"包内 wasm 与部署件同 sha"
+这条硬证据）；重打命令 `sh build/make-dist.sh`。
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M）。
 回退：`cp -a site-72bak/. site/`（**注意** `build/recover.sh` 已是 11.3.0 口径，
@@ -2166,12 +2167,12 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 
 | 项 | 值 |
 |---|---|
-| `octave.wasm` | 36,858,059 B raw / 8,430,732 B gz | sha256 `6c75a4942df28682…` |
-| `octave.js` | 744,750 B raw / 160,981 B gz | sha256 `0714229914e64c10…` |
+| `octave.wasm` | 36,858,344 B raw / 8,428,657 B gz | sha256 `c6f4be190756c92c…` |
+| `octave.js` | 744,750 B raw / 160,980 B gz | sha256 `b18f02ea995c47d9…` |
 | `octave.data` | 6,804,767 B raw / 1,314,025 B gz | sha256 `6bece3d87ab3aa3a…` |
-| 三大件 gzip 合计 | **9,905,738 B** | |
+| 三大件 gzip 合计 | **9,903,662 B** | |
 | 资产条目 | 47 | |
 | 最近一次**全绿**回归 | `20260923-8761-webgl-clean` · **32 套 / 848 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260923` · tar.zst 25,983,323 B · `8e0d22a2bca8e2b2…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 交付包 | `octave-full-wasm-site-20260923` · tar.zst 25,983,323 B · `8e0d22a2bca8e2b2…` | 包内 wasm （**与部署件不一致** ✗） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-23 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
