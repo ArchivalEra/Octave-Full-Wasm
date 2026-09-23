@@ -6,6 +6,10 @@
 ## Points are projected to 2D and drawn with the normal marker renderer;
 ## SIZE and COLOR vectors are accepted but only their first element is used
 ## (v1 of the bridge has one marker size per series).
+##
+## ★ **已记录的降级（有意）**：SIZE/COLOR 与 `"filled"` 只被**接受**、不参与渲染 —— 与 pie
+##   的 EXPLODE/LABELS 同类（没有输入被当成别的东西，点照画、位置是对的）。钉在
+##   `accept-plot3d.mjs`（5 参形态必须成功）。
 
 function h = scatter3 (varargin)
 

@@ -23,15 +23,10 @@ function [h_out, obj_out, plot_out, labels_out] = legend (varargin)
   labels_out = [];
 
   s = __pstate__ ();
-  labels = {}; loc = "";
-  i = 1;
-  while (i <= numel (varargin))
-    if (ischar (varargin{i}) && strcmpi (varargin{i}, "location") && i + 1 <= numel (varargin))
-      loc = varargin{i+1}; i += 2;
-    else
-      labels{end+1} = varargin{i}; i += 1;
-    endif
-  endwhile
+  ## 标签/位置的拆分下沉到纯 helper（可在宿主 `%!test`，见 __pb_legend_args__.m）。
+  ## ★ 以前这里把**每一个**非 "Location" 的参数都当标签 —— `legend(h, "a")`（核心的句柄
+  ##   形态）会在图例里多出一条内容是数字的条目，用户给的对象一个都没挂上。
+  [labels, loc] = __pb_legend_args__ (varargin);
   s.legend = labels; s.legloc = loc;
   __pstate__ (s);
   __pb_mirror__ ("legend", varargin{:});

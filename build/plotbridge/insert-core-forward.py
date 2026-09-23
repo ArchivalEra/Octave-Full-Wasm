@@ -61,10 +61,10 @@ S = {
     "stem":     (["h"], ["h"], 1, ["varargin"], "varargin{:}"),
     "subplot":  (["h"], ["h"], 1, ["varargin"], "varargin{:}"),
     "surf":     (["h"], ["h"], 1, ["varargin"], "varargin{:}"),
-    "title":    ([], ["h_out"], 1, ["t", "varargin"], "t, varargin{:}"),
-    "xlabel":   ([], ["h_out"], 1, ["t"], "t"),
+    "title":    ([], ["h_out"], 1, ["varargin"], "varargin{:}"),
+    "xlabel":   ([], ["h_out"], 1, ["varargin"], "varargin{:}"),
     "xlim":     ([], ["lim_out"], 1, ["varargin"], "varargin{:}"),
-    "ylabel":   ([], ["h_out"], 1, ["t"], "t"),
+    "ylabel":   ([], ["h_out"], 1, ["varargin"], "varargin{:}"),
     "ylim":     ([], ["lim_out"], 1, ["varargin"], "varargin{:}"),
 }
 
@@ -160,8 +160,15 @@ def main():
             errs.append("%s.m: 形参是 %s，期望 %s（签名漂移了？）" % (name, fparams, params))
             continue
         if MARK in src:
+            # 自检④（2026-09-23 加）：**已插过前导的文件**也要核对"转发实参"与表一致。
+            # 否则改了签名（例如 title/xlabel/ylabel 从 `(t, …)` 放宽到 `(varargin)`）会留下
+            # 一个引用了**不存在变量**的前导 —— 那条路只在"核心内部调同名函数"时走到
+            # （`__pie__` 调 `axis(h,…)` 那种），平时整个套件都可能看不出来。
             if outs != target:
                 errs.append("%s.m: 已有标记但签名不是目标签名" % name)
+            elif ('__pb_core__ ("%s", %s);' % (name, fwd)) not in src:
+                errs.append("%s.m: 前导的转发实参与表不符（期望 `__pb_core__ (\"%s\", %s);`）"
+                            % (name, name, fwd))
             else:
                 skipped.append(name)
             continue

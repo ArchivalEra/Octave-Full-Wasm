@@ -28,12 +28,20 @@ targets = {"copyfile", "movefile", "ls", ...
            "__pkgfix_basename__", "__pkgfix_forge_root__", ...
            "__pkgfix_local_list__", "__pkgfix_make_packinfo__", ...
            "__pb_palette__", "__pb_fields__", "__pb_publish__", ...
-           "__pba_transition__"};
+           "__pba_transition__", ...
+           "__pb_axes_arg__", "__pb_strip_axes__", "__pb_bar_args__", ...
+           "__pb_legend_args__", "__pb_surf_args__"};
 
 ## plotbridge 那三个是 2026-09-23 审计之后加的（候选 4）：字段表与调色板的单一真源
 ## 靠它们自己的 `%!test` 钉住（表自洽、取色循环、stamp/restore 往返）。
 ## `__pba_transition__` 是候选 5：把播放状态机收成一个 module 之后，它第一次能**脱离
 ## 浏览器**被测（play/pause/resume/tick/finish/stop 的全套迁移 + play 必须清 PausedAt）。
+##
+## 末五个（`__pb_axes_arg__` … `__pb_surf_args__`）是 §8 待办 7 那批：**参数校验从 shim
+## 下沉成纯 helper** 之后才测得到。以前 `xlim(hax,[0 1])` 把句柄当限值、`bar(Y,W)` 把宽度
+## 当 X 数据、`surf(Z,C)` 把颜色矩阵丢掉，全是"静默做错" —— 现在这些判定都在纯函数里，
+## 宿主与浏览器两侧都跑它们自己的 `%!test`（`__pb_strip_axes__` 那三条会真建图，
+## 因为"是不是当前 axes"只能用真句柄问）。
 ##
 ## 说明：**不含** `build/forge-preload/*.m` 那 16 个文件 —— 它们是上游 Forge 的函数，
 ## 不是我们的胶水；它们的 `%!test` 是上游的，失败不欠我们的债（要跑另开一轮）。

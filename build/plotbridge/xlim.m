@@ -18,11 +18,31 @@ function lim_out = xlim (varargin)
   ## Octave 的**输出个数检查发生在函数体之前**，声明少了上面那段转发根本进不来，实测）。
   lim_out = [];
 
+  ## 首参可能是**目标 axes 句柄**（核心允许 `xlim(hax, …)`）：桥只接受"就是当前 axes"的
+  ## 那一个，别的**明确报错** —— 以前这里会把句柄当限值静默存进状态（`xlim(hax,[0 1])`
+  ## 实测把句柄存成了 xlim），图照画、没人看得出错。见 `__pb_strip_axes__.m`。
+  args = __pb_strip_axes__ ("xlim", varargin);
+
   s = __pstate__ ();
-  if (nargin == 0 || (ischar (varargin{1}) && strcmpi (varargin{1}, "auto")))
-    s.xlim = [];
+  if (numel (args) == 0)
+    ## 核心的 `xlim()` 是"回报当前限值"；桥没有可回报的值（`lim_out` 只为对齐输出个数
+    ## 而声明）⇒ 什么都不做。以前这里会清空 s.xlim：一个**查询**悄悄改了状态。
+    return;
+  endif
+  a = args{1};
+  if (ischar (a))
+    if (strcmpi (a, "auto"))
+      s.xlim = [];
+    elseif (strcmpi (a, "manual"))
+      ## no-op：核心的 `xlim("manual")` 也只是把 mode 设成 manual，限值不变。
+    else
+      error ('xlim: unrecognized argument "%s"', a);
+    endif
+  elseif (isnumeric (a) && numel (a) == 2)
+    s.xlim = a(:).';
   else
-    s.xlim = varargin{1}(:).';
+    ## 报错文本与核心一致（core 的 `__axis_limits__.m`）
+    error ("xlim: LIMITS must be a 2-element vector");
   endif
   __pstate__ (s);
   __pb_mirror__ ("xlim", varargin{:});

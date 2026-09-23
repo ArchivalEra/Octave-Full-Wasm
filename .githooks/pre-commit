@@ -13,4 +13,5 @@ python3 "$HOOK_DIR/update-handoff.py"
 git add HANDOFF.md
 python3 "$HOOK_DIR/check-handoff.py"
 python3 "$HOOK_DIR/check-consistency.py"
+python3 "$HOOK_DIR/check-wants.py"
 python3 "$HOOK_DIR/check-whitelist.py"

@@ -40,6 +40,18 @@ for (let i = 0; i < 300; i++) {
 await sleep(500);
 console.log(`URL=${URL}`);
 
+// ★ 匹配规则（`.githooks/check-wants.py` 会查这一条）：**单个数字**的 want 按「数字边界」匹配，
+//   不是裸子串 —— `want='0'` 绝不该被输出里的 `10`/`100`/`13` 满足（`accept-hdf5` 就这么
+//   假过了几个月：它查的 `__have_hdf5__` 在 11.3.0 里根本不存在，靠加载器日志里的杂数字对上）。
+//   **点也算边界字符**：捕获窗口里有 `11.3.0` 这类版本号，`want='0'` 不该被它最后那位满足
+//   （探针 `test/browser/probe-want-matcher.mjs` 把这几条钉在真浏览器里）。
+//   多字符 want 保持子串匹配（`'0.7071'`、`'100 100'` 已足够具体；而 Octave 打印 1.5 是
+//   `1.5000`，对它用严格词边界反而会误红）。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
+
 let pass = 0, fail = 0;
 function check(ok, label, detail) {
   ok ? pass++ : fail++;
@@ -57,7 +69,7 @@ for (const a of ['webfile', 'pkgfix']) {
 logs.length = 0;
 await page.evaluate(() => window.Module.eval_string('disp(exist("copyfile"))'));
 await sleep(400);
-check(logs.join(' ').includes('2'), '★ webfile 的 copyfile 已影子核心实现（exist=2）',
+check(wantHit(logs.join(' '), '2'), '★ webfile 的 copyfile 已影子核心实现（exist=2）',
   logs.join(' ').trim().slice(-40));
 
 // ② 把驱动源码读进来执行（它必须**没有函数定义**，才能 eval）

@@ -79,6 +79,7 @@
 !.githooks/handoff-context.py
 !.zcode/config.json
 !.githooks/check-whitelist.py
+!.githooks/check-wants.py
 !build/webgraphics/*
 !build/webdoc/*
 !build/assets-meta.json

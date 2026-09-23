@@ -9,6 +9,12 @@
 ## gets the same closed polylines.
 ##
 ## Wedges are emitted as (x,y) rings: centre -> arc points -> centre.
+##
+## ★ **已记录的降级（有意，不是遗漏）**：`EXPLODE` 与 `LABELS` 两个可选参数**被忽略** ——
+##   饼本身照画（数据一个字不改），只是没有扇区标签、也没有被"炸开"的扇区。这与那几条
+##   "静默做错"的契约不同：**没有任何输入被当成别的东西**，用户看到的就是一个正常的饼图。
+##   边界由 `test/browser/accept-plotv2.mjs` 的"参数契约"节钉住（断言它不报错且出 3 个扇形）。
+##   （另一半理由写在 `axis.m` 的文件头：教学脚本不该因为一个不支持的样式参数整张图挂掉。）
 
 function h = pie (varargin)
 

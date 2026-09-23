@@ -1,5 +1,5 @@
 ## ylabel for the plot bridge (own code, repo license).
-function h_out = ylabel (t)
+function h_out = ylabel (varargin)
 
   ## ── __PB_CORE_FORWARD__（由 build/plotbridge/insert-core-forward.py 插入，勿手改）──────
   ## 核心调用期间（`__pb_core__` 的深度 > 0）**本名字必须解析回核心实现** —— 这是旧
@@ -8,9 +8,9 @@ function h_out = ylabel (t)
   ## `legend(gca(),…)`），所以每个挡住核心名字的 shim 都得有这一段。见 `__pb_core__.m`。
   if (__pb_in_core__ ())
     if (nargout > 0)
-      h_out = __pb_core__ ("ylabel", t);
+      h_out = __pb_core__ ("ylabel", varargin{:});
     else
-      __pb_core__ ("ylabel", t);
+      __pb_core__ ("ylabel", varargin{:});
     endif
     return;
   endif
@@ -18,6 +18,12 @@ function h_out = ylabel (t)
   ## Octave 的**输出个数检查发生在函数体之前**，声明少了上面那段转发根本进不来，实测）。
   h_out = [];
 
+  ## 与 xlabel 同一条契约：核心允许 `ylabel(hax, TEXT)`，签名从 `(t)` 放宽到 `(varargin)`。
+  args = __pb_strip_axes__ ("ylabel", varargin);
+  if (numel (args) < 1 || ! ischar (args{1}))
+    error ("ylabel: TEXT must be a string");
+  endif
+  t = args{1};
   s = __pstate__ (); s.ylabel = t; __pstate__ (s);
   __pb_mirror_text__ ("ylabel", t);   ## T2：同步到真 axes 属性
 endfunction

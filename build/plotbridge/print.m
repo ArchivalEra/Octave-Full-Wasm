@@ -19,6 +19,11 @@
 ##   plot (1:10); print -dsvg /tmp/p.svg;
 ##   plot (1:10); print ("/tmp/p.svg");          # extension picks the format
 ##   saveas (gcf (), "/tmp/p.svg");
+##
+## ★ **已记录的降级（有意）**：`-color` / `-mono` / `-landscape` / `-r<dpi>` 这类**不属于
+##   格式选择**的选项被**忽略**（见下面识别 `-d` 的那段）。与 pie 的 EXPLODE/LABELS 同类：
+##   没有任何输入被当成别的东西，出的图是对的，只是选项没生效。钉在
+##   `accept-plotv2.mjs` 的"参数契约"节（`print(file, "-r300", "-dsvg")` 必须成功）。
 
 function [out1, out2] = print (varargin)
 

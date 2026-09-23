@@ -50,6 +50,18 @@ await page.evaluate(async () => {
 logs.length = 0;
 
 let pass = 0, fail = 0;
+// ★ 匹配规则（`.githooks/check-wants.py` 会查这一条）：**单个数字**的 want 按「数字边界」匹配，
+//   不是裸子串 —— `want='0'` 绝不该被输出里的 `10`/`100`/`13` 满足（`accept-hdf5` 就这么
+//   假过了几个月：它查的 `__have_hdf5__` 在 11.3.0 里根本不存在，靠加载器日志里的杂数字对上）。
+//   **点也算边界字符**：捕获窗口里有 `11.3.0` 这类版本号，`want='0'` 不该被它最后那位满足
+//   （探针 `test/browser/probe-want-matcher.mjs` 把这几条钉在真浏览器里）。
+//   多字符 want 保持子串匹配（`'0.7071'`、`'100 100'` 已足够具体；而 Octave 打印 1.5 是
+//   `1.5000`，对它用严格词边界反而会误红）。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
+
 async function ev(expr, label, want) {
   logs.length = 0;
   let r;
@@ -57,8 +69,9 @@ async function ev(expr, label, want) {
     r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 120)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 550));
-  const out = [...logs].join(' ').replace(/\s+/g, ' ').trim().slice(0, 190);
-  const ok = r.rc === 0 && (!want || out.includes(want));
+  const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
+  const out = full.slice(0, 190);      // ★ 只用于显示；匹配必须用 full（不许先截断再匹配）
+  const ok = r.rc === 0 && (!want || wantHit(full, want));
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 140))}`);
 }

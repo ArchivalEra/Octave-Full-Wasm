@@ -19,6 +19,11 @@ function h = scatter (varargin)
   ## Octave 的**输出个数检查发生在函数体之前**，声明少了上面那段转发根本进不来，实测）。
   h = [];
 
+  ## 先查参数个数：以前少了守卫，`scatter(1)` 会去取 `varargin{2}` ⇒ 报的是
+  ## "index out of bounds" 这种与用法无关的错。核心同处报的是用法信息。
+  if (numel (varargin) < 2)
+    print_usage ("scatter");
+  endif
   s = __pstate__ ();
   if (! s.hold)
     s = __pb_clear_series__ (s);

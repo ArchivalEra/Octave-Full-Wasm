@@ -39,6 +39,18 @@ function check(ok, label, detail) {
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label.padEnd(50)} :: ${detail ?? ''}`);
 }
+// ★ 匹配规则（`.githooks/check-wants.py` 会查这一条）：**单个数字**的 want 按「数字边界」匹配，
+//   不是裸子串 —— `want='0'` 绝不该被输出里的 `10`/`100`/`13` 满足（`accept-hdf5` 就这么
+//   假过了几个月：它查的 `__have_hdf5__` 在 11.3.0 里根本不存在，靠加载器日志里的杂数字对上）。
+//   **点也算边界字符**：捕获窗口里有 `11.3.0` 这类版本号，`want='0'` 不该被它最后那位满足
+//   （探针 `test/browser/probe-want-matcher.mjs` 把这几条钉在真浏览器里）。
+//   多字符 want 保持子串匹配（`'0.7071'`、`'100 100'` 已足够具体；而 Octave 打印 1.5 是
+//   `1.5000`，对它用严格词边界反而会误红）。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
+
 async function ev(code, wait = 400) {
   logs.length = 0;
   let rc = 'TRAP';
@@ -82,7 +94,7 @@ check(/no-context|WebGL2 context/i.test(r1.out), '★ toolkit 明确报了"建�
 // ── ①②：信号文件 + 桥的判定 ──────────────────────────────────────────────────
 const nogl = await fsRead('/tmp/p5_nogl.txt');
 check(!!nogl && nogl.length > 0, '★ toolkit 落了 /tmp/p5_nogl.txt 信号', nogl ? nogl.trim().slice(0, 60) : '(没有)');
-check((await ev('disp(__pb_real_renderer__())')).out.includes('0'),
+check(wantHit((await ev('disp(__pb_real_renderer__())')).out, '0'),
   '★ 桥判定"没有真渲染器"（__pb_real_renderer__ 为假）', '0');
 
 // ── ③：桥出了 SVG，页面贴上去了 ──────────────────────────────────────────────
@@ -118,7 +130,7 @@ check(!!svg2 && svg2.length !== before && /<rect/.test(svg2),
 
 // ── 矢量导出这条路不受影响 ───────────────────────────────────────────────────
 const rp = await ev('print("/tmp/fb.svg","-dsvg"); d=dir("/tmp/fb.svg"); disp(d.bytes>500)', 600);
-check(rp.rc === 0 && rp.out.includes('1'), '★ print -dsvg 仍可用（导出路径没被牵连）', rp.out.slice(-40));
+check(rp.rc === 0 && wantHit(rp.out, '1'), '★ print -dsvg 仍可用（导出路径没被牵连）', rp.out.slice(-40));
 
 check(!/RuntimeError: unreachable|\[pageerror\]/.test(logs.join(' ') + r1.out), '无整页 trap', 'ok');
 

@@ -32,8 +32,19 @@ await new Promise(r => setTimeout(r, 500));
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
 let pass = 0, fail = 0;
+// ★ 匹配规则（`.githooks/check-wants.py` 会查这一条）：**单个数字**的 want 按「数字边界」匹配，
+//   不是裸子串 —— `want='0'` 绝不该被输出里的 `10`/`100`/`13` 满足（`accept-hdf5` 就这么
+//   假过了几个月：它查的 `__have_hdf5__` 在 11.3.0 里根本不存在，靠加载器日志里的杂数字对上）。
+//   **点也算边界字符**：捕获窗口里有 `11.3.0` 这类版本号，`want='0'` 不该被它最后那位满足
+//   （探针 `test/browser/probe-want-matcher.mjs` 把这几条钉在真浏览器里）。
+//   多字符 want 保持子串匹配（`'0.7071'`、`'100 100'` 已足够具体；而 Octave 打印 1.5 是
+//   `1.5000`，对它用严格词边界反而会误红）。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
 // 每个用例先 reset 状态，避免上一例的 figure/panel 残留影响判定
-async function ev(expr, label) {
+async function ev(expr, label, want) {
   logs.length = 0;
   let r;
   try {
@@ -43,10 +54,27 @@ async function ev(expr, label) {
     }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 130)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 550));
-  const out = [...logs].join(' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-  const ok = r.rc === 0;
+  const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
+  const out = full.slice(0, 200);          // ★ 只用于显示；匹配必须用 full
+  const ok = r.rc === 0 && (!want || wantHit(full, want));
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 150))}`);
+}
+// 反向断言：这条调用**必须报错**，且错误里含 want（用来钉"不许静默曲解"那些契约）
+async function evErr(expr, label, want) {
+  logs.length = 0;
+  let r;
+  try {
+    r = await page.evaluate(x => {
+      const rc = window.Module.eval_string(x);
+      return { rc, err: window.Module.last_error_message() };
+    }, expr);
+  } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 130)}`); fail++; return; }
+  await new Promise(rr => setTimeout(rr, 550));
+  const full = [...logs].join(' ').replace(/\s+/g, ' ').trim() + ' ' + r.err;
+  const ok = r.rc !== 0 && wantHit(full, want);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${full.slice(0, 200)}`);
 }
 // 生成 SVG 并统计图元（用浏览器自己的 XML 解析器）
 async function svg(path, label, checks = {}) {
@@ -168,6 +196,50 @@ await ev(`${reset} plot(1:5, (1:5).^2, 'g^'); print('/tmp/pv_p3.svg','-dsvg')`, 
 await svg('/tmp/pv_p3.svg', '(X,Y,"g^") → 5 个三角标记（无线）', { polyg: 5 });
 await ev(`${reset} plot(1:5, (1:5).^2, 'g^-'); print('/tmp/pv_p4.svg','-dsvg')`, '(X,Y,"g^-")');
 await svg('/tmp/pv_p4.svg', '(X,Y,"g^-") → 折线 + 三角标记', { poly: 1, polyg: 5 });
+
+console.log('--- 参数契约：不许静默曲解（HANDOFF §8 待办 7）---');
+// 桥的原则：**能做对就做对，做不了就明确报错，绝不静默把输入当成别的东西**。
+// 下面每一条以前都是"静默做错"（句柄被当限值/标题文字、宽度被当 X 数据、颜色矩阵被丢掉、
+// 句柄被当图例标签），现在各自有明确的错或明确的对。判定逻辑都在纯 helper 里，
+// 宿主侧的 `%!test`（`sh build/glue-selftest.sh`）跑同一批契约。
+// ① 句柄优先形态：核心合法 ⇒ 桥必须接受（以前把句柄存成了限值/标题）
+await ev(`${reset} plot(1:10); xlim(gca(), [2 8]); disp(mat2str(__pstate__().xlim))`,
+  '★ xlim(hax, [2 8])（核心合法形态）被接受，且限值真的设上了', '[2 8]');
+await ev(`${reset} plot(1:10); ylim(gca(), [0 5]); disp(mat2str(__pstate__().ylim))`,
+  '★ ylim(hax, [0 5]) 同上', '[0 5]');
+await ev(`${reset} plot(1:10); title(gca(), 'TTL'); disp(__pstate__().title)`,
+  '★ title(hax, "TTL") 不再把句柄当标题文字', 'TTL');
+await ev(`${reset} plot(1:10); xlabel(gca(), 'XX'); disp(__pstate__().xlabel)`,
+  '★ xlabel(hax, "XX")（以前报 too many inputs）', 'XX');
+await ev(`${reset} plot(1:10); ylabel(gca(), 'YY'); disp(__pstate__().ylabel)`,
+  '★ ylabel(hax, "YY") 同上', 'YY');
+// ② 不是当前 axes 的句柄：明确报错（不猜、不静默忽略）
+await evErr(`${reset} subplot(1,2,1); ax = gca(); subplot(1,2,2); xlim(ax, [0 1])`,
+  '★ xlim(别的 axes 句柄, …) 明确报错（桥只跟踪当前 axes）', 'only tracks the current axes');
+// ③ 参数非法：报错文本与核心一致
+await evErr(`${reset} xlim(5)`, '★ xlim(5) 报「LIMITS must be a 2-element vector」（与核心同文）',
+  'LIMITS must be a 2-element vector');
+await evErr(`${reset} ylim([1 2 3])`, '★ ylim([1 2 3]) 同上', 'LIMITS must be a 2-element vector');
+await evErr(`${reset} xlim('nope')`, '★ xlim("nope") 报 unrecognized argument（与核心同文）',
+  'unrecognized argument');
+// ④ 桥画不出来的形态：明确报错（以前是把宽度当 X 数据、把颜色矩阵丢掉）
+await evErr(`${reset} bar([1 2 3 4 5], 0.5)`, '★ bar(Y, W) 的宽度参数明确报错（不静默当 X 数据）',
+  'width argument is not supported');
+await evErr(`${reset} surf(peaks(6), peaks(6))`, '★ surf(Z, C) 的颜色矩阵明确报错（不静默丢掉）',
+  'colour-matrix form');
+await evErr(`${reset} legend(5, 'a')`, '★ legend(句柄, …) 明确报错（不静默当标签）',
+  'numeric or handle arguments are not supported');
+// ⑤ 用法错误也报得清楚（以前是 index out of bounds）
+await evErr(`${reset} scatter(1)`, '★ scatter(1) 报用法（以前是下标越界）', 'scatter');
+// ⑥ 有意的降级：钉住，避免以后被当成回归
+await ev(`${reset} pie([1 2 3], [1 0 0], {'a','b','c'}); print('/tmp/pv_deg1.svg','-dsvg')`,
+  '已记录的降级：pie 的 EXPLODE/LABELS 被忽略（饼照画，不报错）');
+await svg('/tmp/pv_deg1.svg', 'pie 降级后仍是正常饼图（3 个扇形）', { polyg: 3 });
+await ev(`${reset} print('/tmp/pv_deg2.svg', '-r300', '-dsvg')`,
+  '已记录的降级：print 的不支持选项（-r300）被忽略');
+await ev(`${reset} t = linspace(0,1,20); plot3(t, t.^2, t); print('/tmp/pv_deg3.svg','-dsvg')`,
+  '有意分歧：plot3(X,Y) 抬成 z=y（核心会报错，脚本里它是"这条线用 3D 看"）');
+await svg('/tmp/pv_deg3.svg', 'plot3(X,Y) 的抬升形态确实出了图', { poly: 1 });
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();

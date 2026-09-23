@@ -54,10 +54,22 @@ async function run (code, timeoutMs = 25000, useSentinel = true) {
   return { rc, out, seen, err: await page.evaluate(() => window.Module.last_error_message()) };
 }
 
+// ★ 匹配规则（`.githooks/check-wants.py` 会查这一条）：**单个数字**的 want 按「数字边界」匹配，
+//   不是裸子串 —— `want='0'` 绝不该被输出里的 `10`/`100`/`13` 满足（`accept-hdf5` 就这么
+//   假过了几个月：它查的 `__have_hdf5__` 在 11.3.0 里根本不存在，靠加载器日志里的杂数字对上）。
+//   **点也算边界字符**：捕获窗口里有 `11.3.0` 这类版本号，`want='0'` 不该被它最后那位满足
+//   （探针 `test/browser/probe-want-matcher.mjs` 把这几条钉在真浏览器里）。
+//   多字符 want 保持子串匹配（`'0.7071'`、`'100 100'` 已足够具体；而 Octave 打印 1.5 是
+//   `1.5000`，对它用严格词边界反而会误红）。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
+
 async function ev (name, code, expect) {
   const r = await run(code);
   let ok = r.seen && r.rc === 0 && !/^error/i.test(r.out);
-  if (ok && expect !== undefined) ok = r.out.includes(expect);
+  if (ok && expect !== undefined) ok = wantHit(r.out, expect);
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${name.padEnd(28)} :: ${(r.out || r.err || '(空)').slice(0, 88)}`);
 }

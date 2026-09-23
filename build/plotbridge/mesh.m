@@ -31,7 +31,7 @@ function h = mesh (varargin)
     s = __pb_clear_series__ (s);
   endif
 
-  [x, y, z, spec] = __pb_surf_args__ (varargin);
+  [x, y, z, spec] = __pb_surf_args__ ("mesh", varargin);
   s = __pb_surface__ (s, x, y, z, "mesh", spec);
   __pstate__ (s);
   h = [];

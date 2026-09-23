@@ -50,6 +50,18 @@ console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 await page.addScriptTag({ content: readFileSync('/mnt/hdd/zcode-projects/Octave-Full-Wasm/bridge/webnet.js', 'utf8') });
 
 let pass = 0, fail = 0;
+// ★ 匹配规则（`.githooks/check-wants.py` 会查这一条）：**单个数字**的 want 按「数字边界」匹配，
+//   不是裸子串 —— `want='0'` 绝不该被输出里的 `10`/`100`/`13` 满足（`accept-hdf5` 就这么
+//   假过了几个月：它查的 `__have_hdf5__` 在 11.3.0 里根本不存在，靠加载器日志里的杂数字对上）。
+//   **点也算边界字符**：捕获窗口里有 `11.3.0` 这类版本号，`want='0'` 不该被它最后那位满足
+//   （探针 `test/browser/probe-want-matcher.mjs` 把这几条钉在真浏览器里）。
+//   多字符 want 保持子串匹配（`'0.7071'`、`'100 100'` 已足够具体；而 Octave 打印 1.5 是
+//   `1.5000`，对它用严格词边界反而会误红）。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
+
 async function ev(expr, label, want) {
   logs.length = 0;
   let r;
@@ -60,7 +72,7 @@ async function ev(expr, label, want) {
   // ⚠️ **匹配用完整输出，只有显示才截断**（同 accept-dldfcn/forge2/net 那三条的坑：
   //    slice 之后再 includes，会让"要匹配的东西落在截断之外"变成假红）。
   const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
-  const ok = r.rc === 0 && (!want || full.includes(want));
+  const ok = r.rc === 0 && (!want || wantHit(full, want));
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${(full || ('rc=' + r.rc + ' ' + r.err)).slice(0, 200)}`);
 }
@@ -117,7 +129,15 @@ await ev('disp(isequal(fileread("/tmp/n_wr.json"), s2))', '★ 落盘内容与 u
 await ev(`[~,ok5]=urlwrite("${ORIGIN}nope.txt","/tmp/n_x.txt"); disp(ok5)`, 'urlwrite 失败返回 0', '0');
 
 console.log('--- POST ---');
-await ev(`[s6,ok6]=urlread("${ORIGIN}index.html","post",{"a","1"}); disp(ok6)`, '★ POST 形式可调用（服务端按 GET 处理）', '1');
+// ⚠️ 这条**原来假过了几个月**：写的是 `disp(ok6)` + want='1'，而本地预览服务器
+//    （`python3 -m http.server`）**不支持 POST**，返回 `501`，ok6 实际是 `0` ——
+//    老断言的裸子串匹配靠错误消息里 `501` 的那个 `1` 满足了自己。
+//    批次 A 的 `wantHit`（单个数字按数字边界）把它暴露出来，见 probe-want-matcher.mjs。
+// 现在钉的是**如实回报**：POST 请求真的发出去了（走 XHR 的 POST 分支），服务器不支持时
+// 返回 ok=0、不崩、不假装成功。要验"POST 成功"得有一个支持 POST 的服务器 ——
+// 交付的静态托管同样做不到，所以这里如实按环境断言（见 HANDOFF §7 的偏差条目）。
+await ev(`[s6,ok6]=urlread("${ORIGIN}index.html","post",{"a","1"}); disp(sprintf("postok=%d", ok6))`,
+  '★ POST 形态：请求发出去了，服务器不支持 POST 时如实回报 postok=0（不假装成功）', 'postok=0');
 
 console.log('--- 二进制安全 ---');
 await ev(`urlwrite("${ORIGIN}octave.wasm","/tmp/n_bin.wasm"); d=dir("/tmp/n_bin.wasm"); disp(d.bytes>1000000)`, '★ 取回 1MB+ 二进制不损坏', '1');

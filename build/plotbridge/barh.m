@@ -33,11 +33,8 @@ function h = barh (varargin)
     s = __pb_clear_series__ (s);
   endif
 
-  if (numel (varargin) >= 2 && isnumeric (varargin{2}))
-    x = varargin{1}; y = varargin{2};
-  else
-    x = []; y = varargin{1};
-  endif
+  ## 与 bar.m 共用同一个拆分 helper（`barh(Y, W)` 的宽度参数同样**明确报错**）。
+  [x, y] = __pb_bar_args__ ("barh", varargin);
 
   ## barh swaps the roles: the category runs along y and the length along x.
   ## Store as (category, length) so both vectors are the same length, and let

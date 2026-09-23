@@ -24,11 +24,10 @@ function h = bar (varargin)
   if (! s.hold)
     s = __pb_clear_series__ (s);
   endif
-  if (numel (varargin) >= 2 && isnumeric (varargin{2}))
-    x = varargin{1}; y = varargin{2};
-  else
-    x = []; y = varargin{1};
-  endif
+  ## 拆分下沉到纯 helper（宿主 `%!test` 覆盖，见 __pb_bar_args__.m）：
+  ## `bar(Y)` / `bar(X,Y)` 照旧，而 `bar(Y, W)`（核心把第二个标量当**宽度**）**明确报错**
+  ## —— 以前桥把 W 当成 X 数据静默画错。
+  [x, y] = __pb_bar_args__ ("bar", varargin);
   s = __pb_add__ (s, x, y, "", "boxes");
   __pstate__ (s);
   h = [];

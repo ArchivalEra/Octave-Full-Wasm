@@ -18,11 +18,29 @@ function lim_out = ylim (varargin)
   ## Octave 的**输出个数检查发生在函数体之前**，声明少了上面那段转发根本进不来，实测）。
   lim_out = [];
 
+  ## 首参可能是**目标 axes 句柄**（核心允许 `ylim(hax, …)`）—— 与 xlim 同一条契约，
+  ## 见 `__pb_strip_axes__.m`。
+  args = __pb_strip_axes__ ("ylim", varargin);
+
   s = __pstate__ ();
-  if (nargin == 0 || (ischar (varargin{1}) && strcmpi (varargin{1}, "auto")))
-    s.ylim = [];
+  if (numel (args) == 0)
+    ## 核心的 `ylim()` 是"回报当前限值"；桥没有可回报的值 ⇒ 什么都不做（以前会清空状态）。
+    return;
+  endif
+  a = args{1};
+  if (ischar (a))
+    if (strcmpi (a, "auto"))
+      s.ylim = [];
+    elseif (strcmpi (a, "manual"))
+      ## no-op（与核心一致：只改 mode）
+    else
+      error ('ylim: unrecognized argument "%s"', a);
+    endif
+  elseif (isnumeric (a) && numel (a) == 2)
+    s.ylim = a(:).';
   else
-    s.ylim = varargin{1}(:).';
+    ## 报错文本与核心一致（core 的 `__axis_limits__.m`）
+    error ("ylim: LIMITS must be a 2-element vector");
   endif
   __pstate__ (s);
   __pb_mirror__ ("ylim", varargin{:});
