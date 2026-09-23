@@ -747,9 +747,9 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > **30 套 / 757 PASS / 0 FAIL**（原推算值 756，实测 757；用 `/mnt/hdd/octave-wasm-build/sweep.sh`
 > 跑的，脚本落在持久盘上，日志在 `sweep-logs/`）。见 **§5.14**。
 >
-> **▶ 现在接手第一件事：SLICOT（见 §5.15）** ——
-> 签名分歧已修、`step` 已出真值；**卡在"再链 PIC libf2c 后装载期失败"**，
-> 三条候选路线写在 §5.15 / NOTES 5.6。**这是非图形最后一件**。
+> **▶ 非图形已全部清零**（SLICOT 2026-09-23 修好并上线，31 套 784 项全绿，见 §5.15）。
+> **接手第一件事：图形线（P5）** —— 在 **8763**（`siteP5`）上做，8761 不动；
+> 现状与做法见 §5.16 与 `build/113/NOTES-p5-osmesa.md`。
 
 （非图形：一条待办 + 一条长尾 —— 图形线开工前建议先清掉）
 1. **G1 `MAIN_MODULE=2`** —— **2026-09-22 已实测到"差一件事"**（见
@@ -1280,7 +1280,7 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
 
 ---
 
-### 5.15 SLICOT 实修进行中（2026-09-23）—— **卡点从"签名"推进到"装载"**，`step` 已出真值
+### 5.15 SLICOT **已修好并上线**（2026-09-23）—— 非图形最后一件清零
 
 一手记录在 **`build/113/NOTES-slicot.md` 第五节**（新增 7 小节，含全部复现命令与判据陷阱）。
 这里只给**接续必须知道的**：
@@ -1303,21 +1303,26 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
 `pole(tf(1,[1 1]))` = `-1`、**`step(ss(-1,1,1,0),0:0.5:2)` = `0 0.3935 0.6321 0.7769 0.8647`
 （解析解 `1-e^-t`，逐位吻合）**。（修之前 `ss`/`step` 是**整页崩**。）
 
-**当前卡点（下次从这继续）**：再链进 PIC `libf2c` 后**装载期**失败：
-`TypeError: Cannot read properties of undefined (reading 'value')`，且**连累同页后续 dlopen**。
-线索：`dylink.0` 的 MEM_INFO 变了 —— a/b 是 `tableSize=0 tableAlign=0`，
-**c 是 `tableSize=13 tableAlign=0`**（libf2c 带进了模块自己的表条目）。
-三条候选路线（见 NOTES 5.6）：① 只链 libf2c 里真正要用的那 40 来个目标文件；
-② 改走"主链导出"（`link-web.sh` 的口子**已加好**：`EXPORT_IF_DEFINED="…"`
-→ `-Wl,--export-if-defined=<sym>`；**注意 `-s EXPORT_IF_DEFINED=` 是内部设置、命令行会被拒**）；
-③ 弄清 side module 为什么会有 `tableSize>0`。
+**④ 最后两个卡点也都解了（2026-09-23，路线① 成功）**：
+  · **表条目**：I/O 子系统那批 libf2c 成员会在 side module 里造出**模块自己的表条目**
+    （`dylink.0` 的 `tableSize` 13→1）。做成**精简归档 `libf2c-subset.a`**（剔掉
+    open/close/fmt/fmtlib/dfe/due/dolio/lread/lwrite/rsfe/wsfe/…）后，剩下的 1 个不影响装载。
+  · **那个假报错的真身**：`tableSize` 只是引子，真正的崩点是加载器的
+    `reportUndefinedSymbols()` —— 碰到"**必需但解析不到**"的符号时它去读 `undefined.value`，
+    抛出的是 `TypeError: Cannot read properties of undefined (reading 'value')`，
+    **完全看不出是缺符号**。给 staging 的 `octave.js` 加一句日志才看到真名：
+    `P5DBG-undef: sym=f__w_mode required=true`（libf2c 的**数据**符号，引用走 GOT.mem ⇒ 必需）。
+    修法：`build/113/f2c-io-shim.c` 给 `f__r_mode`/`f__w_mode` 一个最小定义（空表，只在 I/O 错误路径用）。
 
 **可复用的诊断手段**：给 staging 的 `octave.js` 打一句补丁让 stub 打出**缺失符号名**
 （`MISSING-OCT-SYMBOL: pow_di` 就是这么拿到的；`site113/octave.js.orig` 是原样备份）。
 
-**产物与站点状态**：`/mnt/hdd/octave-wasm-build/slicot-fix/` 存了三个版本的 `.oct` + `README.txt`；
-**8762（`site113/`）当前是实验态**（装了 oct-c，且 manifest 已加该文件与 49 个 `__sl_*__` 别名），
-回基线命令写在 `README.txt` 末尾。容器检查点 **`octave-build:113-slicot-abi`**。
+**已上线（8761）**：`site/assets/octdir/control/__control_slicot_functions__.oct`（8.1MB，自包含）
++ manifest 里 49 个 `__sl_*__` 别名（`{file,names}` 形态）。
+**实测（8761）**：`norm(tf(1,[1 1]))`=0.7071、`step(ss(-1,1,1,0))`=1−e^-t（误差 1.1e-16）、
+`lyap(-1,1)`=0.5、`dlyap(0.5,0.75)`=1、`care(0,1,1,1)`=1、`tf2ss` 反算=5/12。
+新套件 **`test/browser/accept-slicot.mjs` 25/25**；`accept-forge2` 的两条旧护栏已翻正（42→**44**）。
+**全量回归 31 套 784 项全绿**。产物留档在 `/mnt/hdd/octave-wasm-build/slicot-fix/`（a–e 五个版本）。
 
 > ⚠️ **两条判据陷阱（新踩，别再踩）**：
 > ① 主 wasm **根本没有 name 段**（只有 `dylink.0`）⇒ `emnm` 读到的名字**就是导出段**，

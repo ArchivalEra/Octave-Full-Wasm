@@ -9,10 +9,10 @@
 //   signal  1.4.6  纯 .m（181 个）—— 滤波器设计/变换，教学里最常写的那类
 //   control 4.1.3  314 个 .m（LTI 建模与频域分析）
 //
-// **control 的编译件（SLICOT）不发布**：它们作为 side module 调用主模块的
-// Fortran 符号时签名不匹配，一调就把页面弄崩（见 CLIBS.md 坑 11）。
-// 因此本套件既测可用面，也**明确断言那条边界**——否则将来有人看到
-// `ss`/`step` 存在、以为能用，一跑就白屏。
+// **control 的编译件（SLICOT）已发布**（2026-09-23）：它们曾经作为 side module
+// 调用主模块的 Fortran 符号时整页崩，原因查清并修好了（ABI 的 CHARACTER 隐藏长度
+// 分歧 + 主模块不导出 LAPACK/BLAS + 精简 libf2c + 数据垫片，见
+// `build/113/NOTES-slicot.md` 第五/六节）。完整数值覆盖在 `accept-slicot.mjs`。
 //
 // 断言的是**真数值**，不是"函数存在"：滤波器直流增益、传递函数系数、
 // 反馈后的直流增益都要对得上。
@@ -58,8 +58,10 @@ console.log('  已加载:', await page.evaluate(async () => {
 }));
 await ev('disp(exist("butter"))', '★ signal 已装载', '2');
 await ev('disp(exist("tf"))', '★ control 由依赖自动带出', '2');
-// SLICOT 编译件不在发布清单里（见文件头注释）——这条断言是**有意**的护栏
-await ev('disp(exist("__sl_td04ad__"))', '★ SLICOT 编译件未发布（有意）', '0');
+// SLICOT 编译件**已发布**（2026-09-23 修好：ABI 对齐 + 自包含 PIC LAPACK/libf2c，
+// 见 build/113/NOTES-slicot.md 第五/六节）。这条护栏原先断言它"未发布"，
+// 现在翻正为正向断言 —— 详细数值由 accept-slicot.mjs 覆盖。
+await ev('disp(exist("__sl_td04ad__"))', '★ SLICOT 编译件已发布', '3');
 await ev('disp(exist("__lti_input_idx__"))', '★ 基础编译件已发布（tf 依赖它）', '3');
 
 console.log('--- signal：滤波器设计（真数值）---');
@@ -101,11 +103,16 @@ await ev('[m,p,w]=bode(G,{0.1,10}); disp(abs(abs(m(1))-1/abs(0.99+0.2i))<1e-12)'
 await ev('disp(abs(dcgain(G*G)-1)<1e-12)', '串联系统直流增益仍为 1', '1');
 await ev('disp(abs(dcgain(G/(1+G))-0.5)<1e-12)', '手动闭环与 feedback 一致', '1');
 
-console.log('--- 不可用面必须清晰（不能崩页面）---');
-// 这些走 SLICOT，编译件未发布 → 应当是"函数不存在"的清晰报错，
-// 而不是 wasm 层崩溃（那种崩会让整个页面不可用）。
-await ev('disp(exist("ss"))', 'ss 的 .m 在（但依赖编译件）', '2');
-await ev('disp(exist("__sl_td04ad__"))', '★ SLICOT 后端确实未发布', '0');
+console.log('--- SLICOT 面：已可用且数值正确（原先这里断言"不可用"）---');
+// 2026-09-23 之前这一节是**负向**护栏：SLICOT 编译件不发布，调用会把整页弄崩，
+// 所以断言的是 exist()==0 且"不要碰它"。修好之后翻成正向断言 ——
+// 这里只放两条最硬的数值（完整覆盖在 accept-slicot.mjs 的 25 项里），
+// 目的是保证**这一套**也能独立发现 SLICOT 退化。
+await ev('disp(exist("ss"))', 'ss 的 .m 在', '2');
+await ev('disp(exist("__sl_td04ad__"))', '★ SLICOT 后端已发布', '3');
+await ev('s = ss(-1,1,1,0); disp(s.a); disp(s.c)', '★ ss(-1,1,1,0) 构造真对象', '-1 1');
+await ev('t=0:0.5:1; disp(max(abs(step(ss(-1,1,1,0),t)(:) - (1-exp(-t(:))))))',
+         '★ step 与解析解 1-e^-t 一致', '0');
 
 console.log('--- 与核心 Octave 协同 ---');
 await ev('disp(numel(eig(magic(4))))', 'eig 不受影响', '4');
