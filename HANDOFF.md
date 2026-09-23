@@ -1,8 +1,8 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-23（图形线收口：桥句柄缓存 → `webgl` 变默认 → 砍 OSMesa）**：
-> · **非图形已清零**：SLICOT 修好并上线（见 §5.15）⇒ 8761 全量 31 套 784 项全绿。
+> 最后更新：**2026-09-23（图形线收口：桥句柄缓存 → `webgl` 变默认 → OSMesa 后端退役）**：
+> · **非图形已清零**：SLICOT 修好并上线（见 §5.15）。**8761 的实际套件数/项数见文末 `AUTO:STATE` 区块**（由脚本从最近一次全绿回归里读，别在这里手写）。
 > · **图形线只剩一条后端**：**`webgl`（gl4es → GLES2 → WebGL2/GPU）**。2026-09-23 用户拍板的
 >   "A" 一次做完：**默认 toolkit = webgl**（开箱 `plot(...); drawnow` 就出真图）、加 `FULL_ES3`、
 >   **OSMesa 后端退役**（7 个仓内文件删除、脚本分支删掉、脚本与配方留在 git 历史）。
@@ -10,8 +10,8 @@
 > · **plot 桥的镜像层改成"一次性句柄缓存 + 深度转发"**（§5.21）：**一次镜像 146 → 1.5 ms（~97×）**，
 >   一张图的**温开销 395 → 94 ms（4.2×）**。顺带**更正**了 §5.20 那条归因（"剩下的 480 ms 是
 >   两次 `path` 手术"是**错的**：真凶是**冷启动**，见 NOTES-webgl.md §4.5.13）。
-> · 验收：`accept-p5-graphics` **54 → 64 项**（新增 10 条，含 pie/contour/legend 嵌套与 DEPTH 复位
->   的护栏）；**8761 与 8768 全量各 32 套 / 848 项全绿**（838 → +10）。
+> · 验收：`accept-p5-graphics` 由 54 增到 64 项（新增 10 条：pie/contour/legend 的嵌套转发、
+>   DEPTH 复位、默认 toolkit）。**全量套件数/项数见文末 `AUTO:STATE` 区块。**
 > 8761 当前 = Octave 11.3.0**（带 GL）**，wasm sha `6c75a4942df286826f8f02c1…`、
 > 默认 toolkit = `webgl`、全量 **32 套 848 项全绿**（见 §5.21 的"上线"小节）；
 > 本批**之前** 8761 是 `bac48adb…`（不带 GL），那份站点留档在 `site-prewebgl-bak/`。
@@ -19,11 +19,19 @@
 > ⚠️ 四条必须在动手前知道的：
 > ① **构建主树现在是 opengl-ON + gl2ps-ON，且 GL 头已换成 gl4es+GLU 的**（见 §5.16 末尾"怎么切回去"
 >    与 §5.21 / `build/113/gl-headers-webgl.sh`）；
-> ② `github.com` 被网络层拦，推送改走 GitHub API（见 §5.17，含下次对齐命令）；
+> ② 推送：`github.com` 2026-09-23 晚已恢复，`main` 已推到 `origin/main`；**若又被拦**，改走 GitHub API + 持久盘镜像（见 §5.17，含对齐命令）；
 > ③ **容器里的构建脚本是另一份拷贝** —— 改完仓库的 `configure-113-full.sh`/`link-web.sh`
 >    必须 `docker cp` 进容器，否则跑的是旧的（§5.20 末为此白跑两个大重建）；
 > ④ `print` 的矢量输出依赖 **gl2ps + shell 管道 + (gs|svgconvert)**，本构建**没有 shell 是
 >    有意的** ⇒ **plot 桥自己那份 SVG 是唯一能出矢量的实现**，别把它当冗余砍掉（§5.20）。
+>
+> **文档约定（`.githooks/check-handoff.py` 按此执行，别违反）**
+> · **§5.x / §9 / §10 是历史记录（append-only）**：里面的数字与判断是"当时如此"，不必与今天一致。
+> · **头部 + §0–§4 / §6–§8 是活状态**：那里的断言必须与产物一致，否则 pre-commit 直接拦。
+> · 活状态里要引用旧值（"本批之前是 X"），就在**那一行**写清 `历史` / `退役` / `之前`，检查器认这个标记。
+> · 机器维护的数字（部署件 sha 与体积、最近一次**全绿**回归、交付包、资产条目）在**文末
+>   `AUTO:STATE` 区块**：由 `.githooks/update-handoff.py` 从持久盘产物重算，**别手写、别手改**。
+>
 
 ---
 
@@ -191,7 +199,8 @@ owasm    旧的线上构建，端口 8757，别动
   用 `CC="ccache emcc"` / `CXX="ccache em++"` 包。
   **⚠️ 构建目录的路径必须逐字固定**——绝对 `-I` 会进 hash，换路径就整片失效（实测）。
   缓存不进镜像，`docker commit` 不会把它塞进 image。宿主已装 `meson 1.12.0` /
-  `ccache 4.13.6` / `ninja 1.13.2`；**但 OSMesa 要的 meson 是容器里那份**。
+  `ccache 4.13.6` / `ninja 1.13.2`。
+  （历史：退役的 OSMesa 线要的是**容器里**那份 meson，不是宿主的 —— 见 §5.16。）
 
 ### 3.2 起服务与预览（**断电后一条命令**）
 ```bash
@@ -656,7 +665,7 @@ makeinfo 生成 doc-cache）。
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `bridge/octplot.html` | plot 桥 PoC 页（含运行时注入胶水 + 4 个 demo 按钮） |
 | `bridge/plotbridge.js` | spec→gnuplot 脚本 + marker 表（marker 表已按肉眼锁定） |
-| `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：15 套 418 项 — `full`(20) `hdf5`(16) `forge`(22) `forge-oct`(15) `forge2`(42) `dldfcn`(68) `ode15`(14) `archive`(20) `image`(17) `print`(43) `plotv2`(54) `plot3d`(34) `audio`(47) `net`(30) `requirements`(16) |
+| `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
 | `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
 | `build/BENCH.md` | **R10 结论**：O0/O1/O2 矩阵与采纳依据（取 O1） |
@@ -770,8 +779,8 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 
 ### ⬜ 仍待办
 
-> **✅ 接手第一件事（已完成，2026-09-23）**：8761 全量回归已补齐 ——
-> **30 套 / 757 PASS / 0 FAIL**（原推算值 756，实测 757；用 `/mnt/hdd/octave-wasm-build/sweep.sh`
+> **✅ 接手第一件事（历史：2026-09-23 已完成）**：8761 全量回归当时补到 ——
+> **30 套 / 757 PASS / 0 FAIL**（**历史数值**；原推算 756、实测 757；用 `/mnt/hdd/octave-wasm-build/sweep.sh`
 > 跑的，脚本落在持久盘上，日志在 `sweep-logs/`）。见 **§5.14**。
 >
 > **▶ 非图形已全部清零**（SLICOT 2026-09-23 修好并上线，见 §5.15）。
@@ -784,7 +793,7 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > **仍待办（按建议顺序）**：
 > 1. ~~桥剩下的 ~480 ms~~ → ✅ **已完成（§5.21）**：换成一次性句柄缓存 + 深度转发，
 >    镜像一次 **146 → 1.5 ms**；并更正了旧归因（那 480 ms 的真凶是**冷启动**）。
-> 2. ~~A：`webgl` 变默认 + `FULL_ES3` + 砍 OSMesa 残留~~ → ✅ **已完成（§5.21）**。
+> 2. ~~A：`webgl` 变默认 + `FULL_ES3` + OSMesa 后端退役~~ → ✅ **已完成（§5.21）**。
 > 3. **上线** → ✅ **已推上 8761**（`build/promote-webgl.sh`；8768 全绿后执行）。
 >    **体积账（实测，raw / `gzip -9`）**：
 >
@@ -848,8 +857,7 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 `/ftp@/usr/src/octave/m/@ftp/`**（实测文件表 2181 条里 1087 条是重复，5.25MB / 44%），
 且 `@ftp` 自己的文件不在正确路径上。修法与收益见 §5.13。
 
-图形线（P5 OSMesa）**在 `graphics-osmesa` 分支上做** —— 开工前先读该分支的
-`build/113/NOTES-p5-osmesa.md`（那里纠正了"四个 GL 头门禁卡住"这条**误判**）。
+（历史：图形线最早叫 P5 OSMesa，在 `graphics-osmesa` 分支上做；那条线**已退役**，全过程留档在 `build/113/NOTES-p5-osmesa.md`。现在的图形线只有 `webgl`，见 §5.21。）
 
 **起手体检**：`harness/run.sh test/browser/accept-requirements.mjs` —— 一屏看全十条需求。
 **改 `.m` 前先跑** `python3 build/check_m.py <目录>`（宿主秒级语法预检，见 §5.6）。
@@ -2013,3 +2021,22 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
       切回"与 8761 部署一致"的配置：`cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`
       （不带 `WITH_OPENGL`）+ 重编；两份 `config.h` 备份在 `/src/libwork/config.h.pre-opengl-p5`
       （本轮 opengl 前）与 `/src/libwork/config.h.pre-opengl`（更早那份）。**详见 §5.16 末尾。**
+
+---
+
+## 附 · 机器维护的状态区块（**自动生成，别手改**）
+
+<!-- AUTO:STATE -->
+> 本区块由 `.githooks/update-handoff.py` 重算，**不要手改**（pre-commit 会刷新并 `git add`；pre-push 会 `--check`）。
+
+| 项 | 值 |
+|---|---|
+| `octave.wasm` | 36,858,059 B raw / 8,430,732 B gz | sha256 `6c75a4942df28682…` |
+| `octave.js` | 744,750 B raw / 160,981 B gz | sha256 `0714229914e64c10…` |
+| `octave.data` | 6,804,767 B raw / 1,314,025 B gz | sha256 `6bece3d87ab3aa3a…` |
+| 三大件 gzip 合计 | **9,905,738 B** | |
+| 资产条目 | 47 | |
+| 最近一次**全绿**回归 | `20260923-8761-webgl-clean` · **32 套 / 848 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260923` · tar.zst 25,983,323 B · `8e0d22a2bca8e2b2…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 仓库 | 分支 `main` · HEAD 提交日期 2026-09-23 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
+<!-- /AUTO:STATE -->

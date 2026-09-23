@@ -1,11 +1,15 @@
 #!/bin/sh
-# Octave-Full-Wasm — pre-commit：重算 README 的 AUTO 区块并校验白名单
+# Octave-Full-Wasm — pre-commit：重算 README/HANDOFF 的 AUTO 区块并校验白名单
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# pre-commit：重算 README AUTO 区块并暂存，再做白名单校验。
+# 两个 AUTO 区块都是**机器维护**的（README 的文件清单 / HANDOFF 的部署状态），
+# 提交前重算并暂存；再把"活状态断言不得与产物矛盾"与"白名单"两道闸门跑一遍。
 set -e
 HOOK_DIR="$(dirname "$0")"
 python3 "$HOOK_DIR/update-readme.py"
 git add README.md
+python3 "$HOOK_DIR/update-handoff.py"
+git add HANDOFF.md
+python3 "$HOOK_DIR/check-handoff.py"
 python3 "$HOOK_DIR/check-whitelist.py"

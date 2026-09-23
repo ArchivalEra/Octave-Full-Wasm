@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "enabled": true,
+    "timeoutMs": 120000,
+    "events": {
+      "SessionStart": [
+        {
+          "matcher": "startup|resume|clear|compact",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python3 \"${ZCODE_PROJECT_DIR}/.githooks/handoff-context.py\"",
+              "timeout": 60,
+              "statusMessage": "注入 HANDOFF 当前状态"
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python3 \"${ZCODE_PROJECT_DIR}/.githooks/update-handoff.py\" --quiet",
+              "timeout": 60,
+              "statusMessage": "刷新 HANDOFF 机器块"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

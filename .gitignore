@@ -71,6 +71,11 @@
 !.githooks/pre-commit
 !.githooks/pre-push
 !.githooks/update-readme.py
+!.githooks/update-handoff.py
+!.githooks/check-handoff.py
+!.githooks/handoff_facts.py
+!.githooks/handoff-context.py
+!.zcode/config.json
 !.githooks/check-whitelist.py
 !build/webgraphics/*
 !build/webdoc/*

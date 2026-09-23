@@ -1,9 +1,13 @@
 #!/bin/sh
-# Octave-Full-Wasm — pre-push：校验 README 的 AUTO 区块是否新鲜
+# Octave-Full-Wasm — pre-push：校验 README/HANDOFF 的 AUTO 区块是否新鲜、活状态断言是否与产物一致
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# pre-push：README 不新鲜直接拒推（强制先提交再推，不自动改历史）。
+# pre-push：不新鲜就直接拒推（强制先提交再推，**不自动改文件、不动历史**）。
+# 为什么在 pre-push 也要查一遍：pre-commit 会自动重算，但**部署件可能在上次提交之后
+# 又变了**（跑了 sweep、promote 了新构建）—— 那种情况下推出去的文档就已经是旧的了。
 set -e
 HOOK_DIR="$(dirname "$0")"
 python3 "$HOOK_DIR/update-readme.py" --check
+python3 "$HOOK_DIR/update-handoff.py" --check
+python3 "$HOOK_DIR/check-handoff.py"
