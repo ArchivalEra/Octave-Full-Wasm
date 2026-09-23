@@ -94,6 +94,34 @@ def main():
         else:
             notes.append(f"启动清单 {len(boot)} 个名字都在清单里（清单共 {len(names)} 条）")
 
+    # ── 2b) 每个 assets/m/*.js 的 addpath 必须等于 assets-meta.json 的声明 ───
+    # 为什么要有这条：**挂载点一旦猜错，症状是"某个函数解析不到"而不是"装不上"**
+    # （2026-09-23 实测：把 pkgfix 猜成 m/pkgfix ⇒ private get_description 解析不到 ⇒
+    #  `pkg list` 整个坏掉，而加载器一声不响）。
+    meta_path = os.path.join(REPO, "build", "assets-meta.json")
+    mdir = os.path.join(SITE, "assets", "m")
+    if not (os.path.exists(meta_path) and os.path.isdir(mdir)):
+        notes.append("挂载点核对**跳过**（读不到 assets-meta.json 或站点 assets/m/）")
+    else:
+        meta = json.load(open(meta_path, encoding="utf-8"))
+        bad = []
+        for fn in sorted(os.listdir(mdir)):
+            if not fn.endswith(".js"):
+                continue
+            name = fn[:-3]
+            txt = open(os.path.join(mdir, fn), encoding="utf-8", errors="replace").read()
+            m = re.search(r"addpath:\s*(\[[^\]]*\])", txt)
+            if not m:
+                continue
+            want = meta.get(name, {}).get("mount") or f"{py_root or '/usr/src/octave/m'}/{name}"
+            got = json.loads(m.group(1))[0] if json.loads(m.group(1)) else None
+            if got != want:
+                bad.append(f"{name}: 部署是 {got}，声明是 {want}")
+        if bad:
+            problems.append(("资产挂载点与声明不符", "; ".join(bad[:4])))
+        else:
+            notes.append(f"assets/m/ 里各包的挂载点与 assets-meta.json 声明一致")
+
     # ── 3) 11.3.0 车道里没有 7.2 路径 ─────────────────────────────────────────
     hits = []
     for entry in LANE:

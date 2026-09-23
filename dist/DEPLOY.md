@@ -137,6 +137,9 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-requirements | 14 | **需求级**：R1–R10 + 架构护栏 |
 | accept-p5-graphics | **64** | **真渲染（webgl → WebGL2/GPU）**：PNG/`getframe`/15 种图非空白 + 镜像层与 DEPTH 复位护栏 |
 | accept-t2-graphics | 26 | **图形对象句柄**（`web` toolkit：figure/gcf/gca/get/set/title/close） |
+| **accept-p5-fallback** | **15** | **没有 WebGL2 的设备上也要看得见图**：`--disable-webgl` 下桥用 SVG 回落（信号/判定/图元/文字/页面贴图/第二条命令更新） |
+| **accept-selftest** | **25** | **胶水层自带的 `%!test`**（webfile/pkgfix/plotbridge 的字段表与调色板/播放状态机）——此前从没人跑过 |
+| **accept-queue-drift** | **12** | **MEMFS 队列的行格式漂移**：`.m`/`.cc` 生产侧与 JS 读侧在同一条断言里相遇 |
 | accept-113-boot | 10 | 11.3.0 能起、能 eval |
 | accept-113-oct | 8 | 真 `.oct` side module 能被装载并调用 |
 | accept-113-assets | 16 | 资产车道语义 |
@@ -181,6 +184,11 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 - `system`/`unix`/`popen` 清晰报错（有意保持，wasm 无 shell）。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
 - `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。
+- **没有 WebGL2 的设备：图以 SVG 显示**（回落）。没有抗锯齿/硬件加速；页面每 250 ms 采样一次，
+  所以最后一张图最多晚 250 ms 出现。矢量导出 `print -dsvg` 不受影响。
+- **`audioplayer`/`audiorecorder` 每个对象占一个 slot + 一个 MEMFS 文件**，生命周期与对象
+  一致 —— 本构建没有可靠的『对象已销毁』信号（`@audioplayer` 没有 `delete.m`，且 `stop`
+  之后还能重播），所以不做清理。一次会话内增长有界。
 - **文字渲染仍缺**（`--without-freetype`）：刻度/title 空白但不崩；且**每次会话**在第一条
   axes 上打一条 warning（`opengl_renderer::render_text: support for rendering text (FreeType)
   was unavailable…`，带调用栈）。数值与绘图本身不受影响。

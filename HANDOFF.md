@@ -664,6 +664,12 @@ makeinfo 生成 doc-cache）。
 | `build/plotbridge/__pb_fields__.m` | **单个面板的字段表**（名字/默认值/新轴是否重置）——那三处的单一真源 |
 | `build/plotbridge/__pb_palette__.m` | 唯一的 7 色调色板（取色 `k` 从 1 起循环） |
 | `build/plotbridge/__pb_publish__.m` | **无 GL 设备的显示回落**：把当前状态渲成 SVG 交给页面（见 §5.22） |
+| `.githooks/update-handoff.py` | **HANDOFF 自更新**：从持久盘产物重算文末 `AUTO:STATE`（部署件 sha/体积、最近一次全绿回归、交付包…） |
+| `.githooks/check-handoff.py` | **陈旧断言闸门**：活状态段落（头部 + §0–§4/§6–§8）与产物矛盾就拒提交；§5/§9/§10 是历史记录，不查 |
+| `.githooks/check-consistency.py` | 挂载根/启动清单/车道路径的一致性检查（pre-commit + pre-push） |
+| `.githooks/handoff-context.py` | ZCode `SessionStart` hook 的输出（把"先读 §8 + 当前状态"注入会话；`.zcode/config.json`） |
+| `build/glue-selftest.m` `build/glue-selftest.sh` | **胶水层自带测试的统一驱动**（目标名单单一真源；宿主秒级 / 浏览器 `accept-selftest`） |
+| `bridge/queue.js` | MEMFS 队列的**协议无关部分**（取 fs / 读走清空 / 切分），四个宿主桥共用 |
 | `bridge/assets-loader.js` | **资产懒加载器**（manifest → fetch → 写 FS → addpath；支持 `aliases` 符号链接） |
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
@@ -721,6 +727,16 @@ makeinfo 生成 doc-cache）。
 - **（新，2026-09-23）桥的参数宽容度**：桥比核心宽容的写法（如 `plot(x,x,'+','')`）以前收下，
   现在默认有真渲染器 ⇒ 会走到核心实现 ⇒ **按核心（=桌面）的严格性报错**。这是向桌面看齐，
   但"凡桥比核心松的写法都要重新核"（§8 待办 8）。
+- **（新，2026-09-23）`audioplayer`/`audiorecorder` 每个对象占一个 slot + 一个 MEMFS 文件**：
+  生命周期与对象一致，本构建**没有可靠的"对象死了"信号** —— `@audioplayer` 的 classdef
+  里**没有 `delete.m`**（`ls m/audio/@audioplayer/` 只有 get/set/play/pause/… 12 个文件），
+  没有析构钩子可挂；而 `stop` 之后**还能再 `play(p)` 重播**（数据属于对象），所以在 stop 时
+  删 `/tmp/pba_<id>.f64` 会弄坏重播。⇒ 如实记录，不做"看起来干净"的清理。
+  （审计候选 5 原本的建议是"stop 时 unlink"，落地时按上面两条实测改成记录偏差。）
+- **（新，2026-09-23）`bridge/webnet.js` 现在**被 `index.html` 加载**了**：此前它一直被部署、
+  却没被页面加载（而 `accept-net` 的注释以为站点会加载 ⇒ 只有那个自己注入脚本的测试里它才
+  存在）。`OctaveNet.prefetch/get` 目前唯一调用者就是那条测试；同步的 `urlread` 那族**不依赖
+  它**（入口自包含在 `webnet.cc` 的内联 JS 里）。
 - **（新，2026-09-23）没有 WebGL2 的设备也能看见图**（此前是**静默空白**）：浏览器拿不到
   GL 上下文时（旧设备、GPU 被 blocklist、`--disable-webgl`），toolkit 落一个信号
   `/tmp/p5_nogl.txt` ⇒ 桥把自己渲的 **SVG** 交给页面显示（`accept-p5-fallback` 15 项钉住）。
@@ -1803,6 +1819,46 @@ sweep）。**当场抓到一条真 bug**：`__wf_basename__("/")` 返回 `""` �
 信号、判定、SVG 图元与文字、页面 blob、第二次绘图更新、`print -dsvg` 不受牵连）、
 `accept-p5-graphics` **65/65**（新增"GL 在线时不再产 SVG 回落"）、`accept-selftest` 24/24、
 `accept-plotv2` 54 / `accept-plot3d` 34 / `accept-print` 43 / `accept-t2-graphics` 26 全绿。
+
+**候选 5 · 播放状态机收成一个 module（并先修掉一个实测 bug）**
+审计里唯一的**实测行为缺陷**：`resume` 把 44100 立体声播成 8k 单声道 —— 根因是两侧各一半
+（`.m` 侧只入队播放位置、JS 侧把 rate/channels 写死成 8000/单声道），而套件里唯一的 resume
+断言用的恰好是单声道 8k 的素材，**与默认值巧合掩盖了它**。先单独提交修掉（入队按 play 的
+`[from,to,rate,nch]` 形状带全参数）+ 加断言（读入队那一行 = 两侧唯一的接口，实测
+`0 44100 2`）。随后新增 `build/webaudio/__pba_transition__.m`：**只有它写那六个状态字段**
+（play/pause/resume/stop/tick/finish + 一个只回报时长的 duration），六个 `__player_*` 保留
+原签名只做 dispatch（diff **−68/+21 行**）。顺带修掉旧洞：`play` 没清 `PausedAt` ⇒
+`play; pause; play` 之后 `CurrentSample` 会算成负数。**回报**：状态机第一次能脱离浏览器测
+（`%!test` 覆盖全套迁移 + 两个 no-op 边界），并接进了宿主/浏览器的自带测试名单。
+
+**候选 2 · MEMFS 队列："协议无关部分"收成一个 primitive + 行漂移测试**
+四个宿主桥各自实现同一形状（追加一行 → 页面读走清空 → 结果写回），"取 fs 的守卫"抄了五遍、
+`readQueue` 抄了三遍，而**没有一处声明过行格式** ⇒ 已经漂移两次。新增 `bridge/queue.js`
+（`window.OctaveQueue`：取 fs / 读走清空 / 按制表切分，仅此三件），四个桥改用它，
+**各自的 codec 仍留在本文件**并把行格式写成可执行的声明（导出的 `parseLine`）。
+新增 `test/browser/accept-queue-drift.mjs` **12/12**：从 Octave 侧用**真的生产函数**入队，
+用页面侧**真的解析函数**读回比对 —— 包括 **ufp 走真的 C++ 生产者**（C++ 与 JS 两种语言之间
+最该测的一条）。**不上生成器**（审计结论 a+c）：把四种 codec 合成一个对象等于把字节布局从
+生产者旁边搬走，拿 locality 换行数；测试是更便宜的接口证据。
+★ **顺带查出一处真部署缺口**：`bridge/webnet.js` 一直被部署、却**没被 `index.html` 加载**
+（而 `accept-net` 的注释以为站点会加载它 ⇒ 只有那个自己注入脚本的测试里它才存在）。
+已补上 `<script>` 并更正注释（`urlread` 那类**同步**网络不依赖它 —— 那次入口自包含在
+`webnet.cc` 的内联 JS 里）。
+
+**候选 6 · 删掉会引人犯错的死字段；"7.2 残留"查清其实是对的；加一致性闸门**
+ · 清单里的 `run` 字段：声明"加载时请手动执行 PKG_ADD"，而**加载器从来不看它**，
+   而 `assets-loader.js` 恰好有一段注释**警告别手动跑**（会让 `imformats("add")` 这类注册
+   重复执行）⇒ 是个陷阱字段，已从两个 emitter 删净（并写明"别再引入"）。
+ · `build/Makefile` 的 `OCTAVE_VER = 7.2.0`：审计列为"7.2 残留"，**实为误读** —— 它是
+   **7.2 车道的上游配方**（`rwl/octave-wasm`），11.3.0 容器里根本没有这个文件（重链走
+   `build/113/link-web.sh`）⇒ 加说明而非改路径（改了反而错）。
+ · 新增 `.githooks/check-consistency.py`（pre-commit + pre-push）：挂载根三处是否一致
+   （实测 `main.cc` 的 18 条路径都在 `/usr/src/octave/m` 下）、`index.html` 启动清单的 14 个
+   名字是否都在清单里（站点读不到就明确跳过）、11.3.0 车道里是否混进 `/7.2.0/` 路径
+   （`build/Makefile` 例外且有说明）。
+ · **一处没按 Q8 的答案做**：启动清单**没有**改成"从 manifest 派生" —— 那份清单不是数据而是
+   产品决策，`index.html` 里它带着三段注释解释"为什么这些要随页面装"；派生只能把理由挪走或
+   丢掉，而防名字拼错的收益已被检查拿到，且不必碰启动路径（最容易把整站搞挂的地方）。
 
 **踩坑记（两处，都值得记）**：
  · **`{函数调用}` 在 Octave 里不是合法 cell** —— `{struct ("a", 1)}` 会掉进命令语法

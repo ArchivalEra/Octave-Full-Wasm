@@ -781,7 +781,57 @@ osmesa-smoke.sh,osmesa-glu-smoke.c,osmesa-glu-smoke.sh,patch-mesa-osmesa-static.
 为什么值得加：`ERROR_ON_UNDEFINED_SYMBOLS=0` 会把未定义符号**静默放过**，历史真踩过
 （gl4es 入口没解析、链接"成功"、运行期第一次 GL 调用才炸）。
 
-## 五、开工前必须知道的（**继承自 OSMesa 线的教训 + 本线新增的**）
+## 四点七、★ 无 WebGL2 的设备上也要看得见图：**SVG 显示回落**（2026-09-23，胶水层审计候选 1）
+
+**先复现那个坑（可复现，不用改代码）**：Chromium 加 `--disable-webgl`（= 旧设备 / GPU 被
+blocklist / 关掉 3D 的那种情形）打开站点，`figure(1); clf; plot(1:10); drawnow` ——
+实测结果是：**不报错、MEMFS 里没有 `/tmp/p5_fig.png`、页面一片空白**。
+用户看到的是"命令成功、什么也没发生"。这正是审计说的"显示这条 seam 少一个能用的 adapter"。
+
+**修法：承认 toolkit 出不了像素，改用仓库里已有的那个 SVG 渲染器出图。**
+三段，全都不碰 GL：
+
+| 环节 | 做什么 | 在哪 |
+|---|---|---|
+| ① 信号 | toolkit 建不出上下文时落 `/tmp/p5_nogl.txt` | `build/113/webgl_toolkit.cc`（`P5_NOGL_PATH`） |
+| ② 判定 | **选中了 toolkit ≠ 它出得了像素**：有信号 ⇒ `__pb_real_renderer__` 为假 ⇒ 不镜像、保留数据管线 | `build/plotbridge/__pb_real_renderer__.m` |
+| ③ 出图 | 桥把当前状态渲成 SVG 落进 MEMFS，页面采样后贴成 `<img>` | `build/plotbridge/__pb_publish__.m` + `bridge/p5canvas.js` |
+
+**为什么用 `__svg_render__` 而不是把旧的 `bridge/plotbridge.js` 接回来**：那个文件是
+`spec → gnuplot 6 脚本`，要**把 gnuplot-wasm（`gp/`，raw 1.7 MiB / gz 0.68 MB）重新请回站点**
+才能渲染；而 `__svg_render__` 是 `print -dsvg` 用的那个纯 `.m` 渲染器，**仓库里最被测过的**
+（`accept-print` 43 项 + `accept-plotv2`/`accept-plot3d` 全部按它的元素数断言），
+而且**它有文字**（刻度/title）—— 反而比无 FreeType 的 GL 那条更完整（实测回落 SVG 里有 17 个
+`<text>`）。⇒ 顺手把 `bridge/plotbridge.js`、`bridge/octplot.html`、spec JSON 发射器
+（`__pb_emit__.m`）全删了：**一个渲染器替代了两个**，字段表里那一列 `spec_key` 也随之消失。
+
+**为什么是"采样"而不是"逐次推送"**（实测撑腰，宿主 Octave）：
+
+| 图 | 渲一张 SVG 的耗时 |
+|---|---|
+| `plot(1:100)` | **31.7 ms** |
+| `surf(peaks(40))` | **437.5 ms** |
+| `contour(peaks(20))` | **384.5 ms** |
+
+跟着每个绘图命令推一次太贵（一个 surf 脚本能翻十几倍）。所以：`__pstate__` 每次状态变更
+**只写一个便宜的修订号** `/tmp/pb_rev.txt`（`time()`），页面 250 ms 采样一次，
+发现变了就请 `__pb_publish__` 渲**最新那一张** —— 代价与命令数无关。
+（`/tmp/p5_nogl.txt` 那一路是补**第一条命令**的：上下文在第一次 redraw 时才建，
+那条命令写修订号时"有没有 GL"还没暴露。）
+
+**验收**：`test/browser/accept-p5-fallback.mjs` **15/15**（Chromium 带 `--disable-webgl`）：
+前提（本机确实拿不到 GL）、信号文件、桥的判定、SVG 有图元有文字、页面 blob 的 MIME 是
+`image/svg+xml`、第二条命令后 SVG 跟着更新（`bar` → `<rect>`）、`print -dsvg` 不受牵连、无 trap。
+另有 `accept-p5-graphics` 增加一条反向断言：**GL 在线时桥不再产 SVG 回落**（先删残留、画完仍不存在）。
+
+**边界（如实）**：
+ · 回落只是"看得见"：没有抗锯齿、没有硬件加速；页面显示的是 SVG，不是像素缓冲。
+ · 页面侧采样率 250 ms ⇒ 极端情况下最后一张图最多晚 250 ms 出现。
+ · `show()` 以前把 MIME 写死成 `image/png`（贴不了 SVG），现在按扩展名定 —— 这条改动
+   是回落的必要前提。
+
+## 五、开工前必须知道的
+（**继承自 OSMesa 线的教训 + 本线新增的**）
 
 1. **任何碰 Octave 头文件的 TU 都要先 `#include "config.h"`，而且要在所有 include 最前面**
    —— 见 `CLIBS.md` 坑 1 与 `NOTES-p5-osmesa.md` §8.1。少了它症状是"运行期在**别人的**

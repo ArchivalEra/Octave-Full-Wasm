@@ -151,7 +151,10 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 > （顺带更正：之前把"端到端 2.1s"归因成 path 手术是**错的**，真凶是**首帧冷启动 ~0.6s**。）
 >
 > **已上线 8761**（换装脚本 `build/promote-webgl.sh`）：首包 gzip 9.62MB → 9.91MB。
-> **文字渲染仍缺**（`--without-freetype` ⇒ 刻度/title 空白但不崩）。
+> **没有 WebGL2 的设备也能看见图**（2026-09-23 起）：浏览器拿不到 GL 上下文时（旧设备、
+> GPU 被 blocklist、`--disable-webgl`）桥把自己渲的 **SVG** 交给页面显示
+> —— 此前是『命令成功、页面静默空白』。见 `HANDOFF.md` §5.22 / `NOTES-webgl.md` §4.7。
+> **文字渲染仍缺**（`--without-freetype` ⇒ 刻度/title 空白但不崩；SVG 回落那条反而有文字）。
 > 一手记录：**`build/113/NOTES-webgl.md`**（§4.5.12 / §4.5.13 / §4.6）、
 > `build/113/GRAPHICS-BRANCH.md`、`HANDOFF.md` §5.20 / §5.21。
 
@@ -184,7 +187,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 ## 目录
 
 <!-- AUTO:FILES -->
-- `.githooks/check-consistency.py` (6390 bytes)
+- `.githooks/check-consistency.py` (7950 bytes)
 - `.githooks/check-handoff.py` (7906 bytes)
 - `.githooks/check-whitelist.py` (1251 bytes)
 - `.githooks/handoff-context.py` (2903 bytes)
@@ -197,7 +200,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.gitignore` (1890 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (2593 bytes)
-- `HANDOFF.md` (168853 bytes)
+- `HANDOFF.md` (174827 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)
@@ -219,7 +222,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
-- `build/113/NOTES-webgl.md` (52757 bytes)
+- `build/113/NOTES-webgl.md` (56300 bytes)
 - `build/113/PROMOTION.md` (6444 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
 - `build/113/STATUS.md` (8407 bytes)
@@ -264,7 +267,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/GPT-REVIEW-2.md` (24185 bytes)
 - `build/Makefile` (9811 bytes)
 - `build/NOTES.md` (1657 bytes)
-- `build/assets-meta.json` (7139 bytes)
+- `build/assets-meta.json` (7320 bytes)
 - `build/assets.py` (16114 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
@@ -450,7 +453,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webnet/urlwrite.m` (2168 bytes)
 - `build/webnet/webread.m` (1573 bytes)
 - `build/webnet/websave.m` (1366 bytes)
-- `dist/DEPLOY.md` (12173 bytes)
+- `dist/DEPLOY.md` (13194 bytes)
 - `dist/serve.py` (2668 bytes)
 - `test/browser/accept-113-assets.mjs` (5474 bytes)
 - `test/browser/accept-113-boot.mjs` (4837 bytes)

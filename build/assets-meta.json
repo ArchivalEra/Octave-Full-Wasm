@@ -177,8 +177,9 @@
     "deps": []
   },
   "pkgfix": {
-    "note": "T4：从磁盘现状生成 pkg 数据库（复用官方 get_description，故必须挂在 m/pkg/ 以解析 private 函数）",
-    "deps": []
+    "note": "T4：从磁盘现状生成 pkg 数据库（复用官方 get_description，故必须挂在 m/pkg/ 以解析 private 函数）。⚠️ mount 是**声明**：换装/打包脚本必须读它，不许猜 m/<名字> （2026-09-23 就是猜错这个把 pkg 弄坏了）。",
+    "deps": [],
+    "mount": "/usr/src/octave/m/pkg"
   },
   "installed_packages.m": {
     "note": "T4：还原 upstream 的 installed_packages.m（fork 把读数据库的 16 行换成 3 行空赋值）",
