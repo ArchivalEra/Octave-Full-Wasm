@@ -56,6 +56,16 @@ async function ev (name, code, expect) {
   console.log(`${ok ? 'PASS' : 'fail'} | ${name.padEnd(26)} :: ${(r.out || r.err || '(空)').slice(0, 88)}`);
 }
 
+// ⚠️ **还要等启动资产装完**（`window.__octaveReady` 在 index.html 里是"整条启动链跑完"
+//    —— 含 help 数据与 webgraphics —— 才置真的）。只等解释器可用就往下跑时，页面侧的
+//    资产加载器会继续打 `[assets] …就绪` 日志，那些行落进前几次 eval 的捕获窗口，
+//    把要匹配的文本挤出截断窗口 ⇒ **偶发假红**（2026-09-23 实测：accept-hdf5 与
+//    accept-net 各中过一次；这两条的根因是同一个，不是两条独立的毛病）。
+for (let _w = 0; _w < 600; _w++) {
+  if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) break;
+  await new Promise(r => setTimeout(r, 300));
+}
+await new Promise(r => setTimeout(r, 400));
 console.log(`URL=${URL}`);
 await page.goto(URL, { waitUntil: 'load', timeout: 300000 });
 

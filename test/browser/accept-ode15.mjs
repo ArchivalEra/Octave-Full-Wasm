@@ -18,6 +18,16 @@ while (Date.now() - t < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
   if (ok) break; await new Promise(r => setTimeout(r, 800));
 }
+// ⚠️ **还要等启动资产装完**（`window.__octaveReady` 在 index.html 里是"整条启动链跑完"
+//    —— 含 help 数据与 webgraphics —— 才置真的）。只等解释器可用就往下跑时，页面侧的
+//    资产加载器会继续打 `[assets] …就绪` 日志，那些行落进前几次 eval 的捕获窗口，
+//    把要匹配的文本挤出截断窗口 ⇒ **偶发假红**（2026-09-23 实测：accept-hdf5 与
+//    accept-net 各中过一次；这两条的根因是同一个，不是两条独立的毛病）。
+for (let _w = 0; _w < 600; _w++) {
+  if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) break;
+  await new Promise(r => setTimeout(r, 300));
+}
+await new Promise(r => setTimeout(r, 400));
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
 // index.html 会在 ready 之后自动装载 dldfcn 核心组，那批日志（资产清单、
