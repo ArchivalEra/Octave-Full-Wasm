@@ -163,6 +163,8 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 - **control 包的 SLICOT 编译件不发布**：它们要 Fortran 的 `slicotlibrary.a`（本仓不建）。
   故 `sl_*` 系列不可用；`tf`/`tfdata`/`dcgain`/`pole`/`bode`/`feedback` 等纯 `.m` 面正常，
   `is_*`/`lti_input_idx`/`__control_helper_functions__` 等 8 个编译件正常。
+  ⚠️ **这一条只对 2026-09-22 那一版交付包有效**：SLICOT 已于 2026-09-23 修好并上线
+  （HANDOFF §5.15），**重新打包后应删掉本条**。
 - `voronoi` 的**单输出形式**（要画图）不可用；两输出形式正常。
 - **`help` 走构建期预渲染**，不再有运行时 `makeinfo` 子进程 —— 内建（T1）与
   `.m` 文件的 docstring（P1，`accept-t9-helpm` 18/18）都覆盖了；

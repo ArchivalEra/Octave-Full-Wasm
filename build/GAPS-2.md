@@ -10,7 +10,7 @@
 > | **B1** `audiorecorder` | ✅ **已完成**（T7） | 19 个 `__recorder_*` 纯 `.m` + getUserMedia/MediaRecorder 桥；`accept-t7-recorder` 40/40。**`recordblocking` 如实报错**（需 Asyncify，实测不可用，见 G2） |
 > | **B2** `audiodevinfo` | ✅ **已完成**（T6） | 静态"浏览器默认设备"模型；`accept-t6-audio-doc` 33/33 |
 > | **C1** 文件操作（`copyfile` 等） | ✅ **已完成**（T3） | 无 shell 进程内实现；`accept-fileops` 20/20 |
-> | **D1** `help` 渲染 | ✅ **已完成**（T1） | 构建期 makeinfo 预渲染；`accept-help` 12/12。**仍缺**：`.m` 文件的 docstring（`help ode45`）—— 见下方"剩余" |
+> | **D1** `help` 渲染 | ✅ **已完成**（T1）+ **`.m` 的 docstring 也已修**（P1，2026-09-23） | 构建期预渲染；`accept-help` 12/12、`accept-t9-helpm` 18/18（离线对照 25/25 与桌面逐字一致）。见 HANDOFF §5.13 |
 > | **D2a** `doc` | ✅ **已完成**（T6） | help 文本 + 页面 DOM 落点；见 HANDOFF §5.10 |
 > | **D2b** `publish` | ❌ 仍暂缓 | 外部审核判定，会被 graphics/文件/页面 UI 一串拖住 |
 > | **E1** `input()` | ✅ **已完成**（T5） | 本就可用，只加官方 `Module.stdin` 扩展点；`accept-input` 9/9 |
@@ -20,12 +20,15 @@
 > | **G3** pkg 语义 | ✅ **已完成**（T4） | `accept-pkg` 16/16 |
 > | **H1** `voronoi` 单输出 | ⬜ **仍不可用，且根因变了** | T2 之后已能走到绘图，终点是 plot 桥不支持 `plot(hax,…)` 这类"首参是句柄"的调用形态 |
 > | **H2** `uigetfile` | ✅ **已完成（T8）** | 走官方缝 `__fltk_uigetfile__`（必须是 `.oct` —— 中间层门禁 `exist==3`）；**两步**语义（异步/同步硬冲突），`accept-t8-uigetfile` 19/19 |
-> | **H3** `getframe`/`movie` | ⬜ 仍暂缓 | 现在报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）；属图形线 |
+> | **H3** `getframe`/`movie` | ⬜ 仍暂缓（图形线在做） | 仍报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）。图形线已推进到"主 wasm 带 GL + toolkit 编进主模块"，见 HANDOFF §5.16 |
 > | **H4** `inputname`/`nargin` 反射 | ⬜ 仍暂缓 | 优先级低，未测 |
 >
-> ### 剩余（非图形）三件，以及它们为什么还没做
+> ### 剩余（非图形）—— **只剩 G1 一件**（下表是 2026-09-22 的原文，已逐条收口）
+
+> 收口情况（2026-09-23）：**D1 的 `.m` docstring 已修**（HANDOFF §5.13）、
+> **H2 `uigetfile` 已完成**（§5.12）、**SLICOT 已修好并上线**（§5.15）。
 >
-> 1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化。
+> 1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化 —— **现在只剩这一件**。
 >    要点：从每个 `.oct` 的 import 表/dylink 段生成保活集喂主链，
 >    **但不要把 import 原样抄成导出清单**（要看 mangling 与 JS 库导入）。
 >    验收：体积显著下降 **且** 全量 28 套全绿。
@@ -36,11 +39,10 @@
 > 3. **H2 `uigetfile`**：走**非标准异步 API**（如 `web_uigetfile()` 两段式/Promise），
 >    并如实标注"与 MATLAB 语义不同"。
 >
-> **不属于本清单的非图形长尾**：control 包 SLICOT 编译件（`ss`/`step`/`tf2ss`）。
-> **2026-09-22 探针更正**（见 `build/113/NOTES-slicot.md`）：不是"签名不匹配"而是那些符号
-> **根本不存在**；库**能编**（f2c 614/614、emcc 613/613）；真正卡点是控制包手写声明 vs
-> f2c 生成的 **CHARACTER 隐藏长度参数**分歧，**static 与 side 都会撞**。做法 = 逐个对齐
-> 声明（粗查 47 个候选符号），估 1–3 天。
+> **~~不属于本清单的非图形长尾~~**：control 包 SLICOT 编译件（`ss`/`step`/`tf2ss`）
+> → ✅ **2026-09-23 已修好并上线**（HANDOFF §5.15、`build/113/NOTES-slicot.md` 第五/六节）。
+> （原先记的"签名不匹配"是错的：真因是那些符号**根本不存在**，加上控制包手写声明与 f2c 之间
+> 在 **CHARACTER 隐藏长度参数**上的分歧。最终做法 = 对齐声明 + `.oct` 自包含 PIC 库 + 精简 libf2c。）
 
 ---
 

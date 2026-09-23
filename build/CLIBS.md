@@ -623,6 +623,13 @@ TypeError: Cannot read properties of undefined (reading 'apply')
 或让所有 Fortran 库的签名在主链里统一（那会动到已验证的 PIC 基线）。
 代价与收益不成比例。
 
+> ✅ **2026-09-23 已修好并上线**（本条上面的"结论"已被后续工作推翻）：做法不是"签名字典"，
+> 而是 ① 把控制包手写声明缺的 **CHARACTER 隐藏长度参数**补齐（`build/113/fix-slicot-abi.py`）
+> ② 让 `.oct` **自包含**：内嵌 `slicotlibrary` + **PIC 版** LAPACK/BLAS（`rebuild-pic-blas.sh`）
+> + **精简 libf2c**（剔 I/O 子系统，`tableSize` 13→1）+ `f2c-io-shim.c` 补数据符号。
+> 实测 `step` 与 `1-e^-t` 误差 1.1e-16；`accept-slicot` 25/25；全量 31 套 784 项全绿。
+> **完整记录见 `build/113/NOTES-slicot.md` 第五、六节**；HANDOFF §5.15。
+
 **已做的处置**：
 - signal 全量发布（纯 .m，无此问题）。
 - control 只发布**纯 .m 部分**（tf/tfdata/dcgain/pole/zero/feedback/bode/... 全都

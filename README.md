@@ -87,11 +87,13 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 - ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
   构建期用**真 makeinfo 预渲染** `built-in-docstrings`（与 Octave 自己的
   `mk-doc-cache.pl` 同一技术），运行时零新代码。`help sin`/`help sqrt`/`help disp` 可用。
-  **仍缺**：`help ode45` 这类 `.m` 的 docstring 走运行时路径，不吃该表，仍报 makeinfo 错误。
+  （**2026-09-23 更新**：`help ode45` 这类 `.m` 的 docstring 也修好了 —— 构建期预渲染 + 去标记，
+  见 HANDOFF §5.13；`accept-t9-helpm` 18/18。**该缺口已彻底消除。**）
 - `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
 - `system`/`unix`/`popen` 清晰报错（有意保持）。
-- **control 包的 SLICOT 编译件未发布**：side module 引用主模块 Fortran 符号时
-  签名不匹配会整页崩，故 `ss`/`step`/`tf2ss` 不可用（`tf`/`dcgain`/`bode` 等正常）。
+- ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（HANDOFF §5.15）：
+  `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全可用且数值正确
+  （`step` 与解析解 `1-e^-t` 误差 1.1e-16）。
 - `voronoi` 单输出形式（要画图）不可用；两输出形式正常。
 
 ## 下一步（第三轮：浏览器环境语义）
@@ -155,7 +157,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (1702 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (129687 bytes)
+- `HANDOFF.md` (133480 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)
@@ -167,6 +169,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `bridge/webfilepick.js` (6076 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
+- `build/113/GRAPHICS-BRANCH.md` (3663 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
@@ -214,8 +217,8 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/BASELINE-10.3.md` (8216 bytes)
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
-- `build/CLIBS.md` (69757 bytes)
-- `build/GAPS-2.md` (27968 bytes)
+- `build/CLIBS.md` (70399 bytes)
+- `build/GAPS-2.md` (28350 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
 - `build/Makefile` (9242 bytes)
@@ -397,7 +400,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webnet/urlwrite.m` (2168 bytes)
 - `build/webnet/webread.m` (1573 bytes)
 - `build/webnet/websave.m` (1366 bytes)
-- `dist/DEPLOY.md` (9677 bytes)
+- `dist/DEPLOY.md` (9848 bytes)
 - `dist/serve.py` (2668 bytes)
 - `test/browser/accept-113-assets.mjs` (5474 bytes)
 - `test/browser/accept-113-boot.mjs` (4837 bytes)

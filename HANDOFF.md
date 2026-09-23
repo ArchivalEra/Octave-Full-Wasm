@@ -1,12 +1,16 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-23（SLICOT 实修轮）**：全量回归**实测补齐 30 套 757 项全绿**；
-> SLICOT 的签名分歧已修、`step` 已出真值，**卡在装载期**（见 §5.15，非图形最后一件）。
-> 8761 当前 = Octave 11.3.0（P1 构建，wasm sha `bac48adb…`），**30 套**。
-> **接续先读 §8（一句话接续，含"仍待办"与"**下一步第一件事：SLICOT**"）
-> 与 §5.13/§5.14/§5.15（近两轮实况）**；§9 是当时的计划、§10 是第四轮实况。
-> 图形线（P5）在 **`graphics-osmesa` 分支**。
+> 最后更新：**2026-09-23（图形线 P5 轮）**：
+> · **非图形已清零**：SLICOT 修好并上线（见 §5.15）⇒ 全量 **31 套 784 项全绿**。
+> · **图形线推进到"主 wasm 带 GL + toolkit 编进主模块"**（见 §5.16）：`osmesa` toolkit 能装载、
+>   figure/clf/line 都通；**渲染卡在 OSMesa 上下文那一步的 GL 调用**（有精确坐标）。
+> 8761 当前 = Octave 11.3.0（wasm sha `bac48adb…`，**未被本轮触碰**），
+> 图形线在 **8763**（`siteP5`，wasm 45.58MB）上做。
+> **接续先读 §8（一句话接续 + 仍待办）与 §5.13–§5.17（近三轮实况）；§9 是当时的计划、§10 是第四轮实况。**
+> ⚠️ 两条必须在动手前知道的：
+> ① **构建主树现在是 opengl-ON**（为 B 档重配过，见 §5.16 末尾"怎么切回去"）；
+> ② 本轮 `github.com` 被网络层拦，推送改走 GitHub API（见 §5.17，含下次对齐命令）。
 
 ---
 
@@ -703,11 +707,11 @@ makeinfo 生成 doc-cache）。
   `recordblocking` 与 `uigetfile`（T8）都必须走 Asyncify；
   反过来也解释了 `input()` 为什么能用 —— `window.prompt` 是**同步**的浏览器 API。
   写验收时**等待要在 JS 侧做**（`setTimeout`），不能用 Octave 的 `pause`。
-- **control 包的 SLICOT 编译件未发布**（§4.12）：`ss`/`step`/`tf2ss` 不可用；
-  `tf`/`tfdata`/`dcgain`/`pole`/`zero`/`feedback`/`bode` 等纯 `.m` 面正常。
-  **2026-09-23 进展（见 §5.15）**：签名分歧已修、`slicotlibrary` + PIC LAPACK 已能链进去，
-  **`ss`/`pole`/`step` 在 staging 上已出真值**（`step` 与 `1-e^-t` 逐位吻合）；
-  **仍未发布** —— 卡在再链 PIC `libf2c` 后的**装载期**失败。8761 上**现状未变**（如实）。
+- ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（§5.15）：
+  `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全部可用且数值正确
+  （`step` 与 `1-e^-t` 误差 1.1e-16）。`accept-slicot.mjs` 25/25。
+  **两个卡点的根因**（都在 `build/113/NOTES-slicot.md`）：精简 libf2c 去掉 I/O 子系统
+  （表条目 13→1）+ 给 `f__r_mode`/`f__w_mode` 一个数据垫片。
 - `voronoi` 的**单输出形式**（要画图）：T2 之后**已能走到绘图**，但终点是 plot 桥的
   `plot(hax, x, y)` 调用形态不支持（见上面的边界条目）→ 报 `X and Y sizes do not match`。
   两输出形式正常。**根因在 plot 桥，不在句柄系统。**
@@ -725,9 +729,10 @@ makeinfo 生成 doc-cache）。
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
 **`-O2`** 编译（11.3.0 车道的口径；`-O1` 是 7.2 时代的 R10 结论，见 `build/BENCH.md`），
-**dldfcn 走官方 dlopen 装载**。全量 **30 套 757 项全绿**
+**dldfcn 走官方 dlopen 装载**。全量 **31 套 784 项全绿**
 （11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8/T9 五套；**2026-09-23 在 8761 上实测补齐**：
-`30 套 / 757 PASS / 0 FAIL`，见 §5.14 —— 原推算值 756 差 1，实测为准），
+**31 套 / 784 PASS / 0 FAIL**，见 §5.15 —— SLICOT 上线后补了 `accept-slicot` 25 项
+并与护栏翻正后的 `accept-forge2`（44）一起复跑），
 含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
 （197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
 `bac48adb960c9c79…`）；重打命令 `sh build/make-dist.sh`。
@@ -1019,15 +1024,13 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
     而 `gl-render.cc` 的 `#include` 块正是靠它们（`acinclude.m4:1565/1616/1621/1648`）
     ⇒ 一个 GL 头都不会被包含、编不过。要查这几个头探测为什么失败（疑似吃不到我们传的
     `CPPFLAGS`，或按 macOS `OpenGL/gl.h` 风格试的）。
-  · **③ 还没开始**：`plot/surf/mesh/contour` 逐个出图并与 7.2 桥产物对照。
+  · **③ 还没开始**（截至 §9.3 当时）：`plot/surf/mesh/contour` 逐个出图并与 7.2 桥产物对照。
+    **2026-09-23 实况见 §5.16**：已走到"主 wasm 带 GL + toolkit 编进主模块"，渲染卡在
+    OSMesa 上下文那一步的 GL 调用。
   · **回退不变**：plot 桥 + `print -dsvg` 保持可用，两者不冲突。
 
-> 🚨 **主树现在是"混态"，接手务必先看**：`/src/work/octave-11.3.0/config.h` 已带
-> `HAVE_OPENGL 1`，但所有 `.o`/`.a` 仍是 opengl 之前的产物（本次**没有 make、没有重链、
-> 没有部署**）。要回到"与部署一致"的配置：
-> `cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`（不带 `WITH_OPENGL`）；
-> 备份在 `/src/libwork/config.h.pre-opengl`。部署产物（8761/8762/磁盘/`/src/websrc/out/`）
-> 全程仍是 `bac48adb960c9c79…`，未受影响。
+> ~~🚨 主树现在是"混态"~~（**2026-09-22 已清除；2026-09-23 又因 B 档重新切成 opengl-ON** ——
+> 见 §5.16 末尾"主树当前状态与怎么切回去"，那份说明才是最新的）。
 
 **P6 · 收尾**：全量验收、重打交付包、文档、逐阶段提交 + `docker commit`
 
@@ -1185,6 +1188,8 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 
 **本批之后，非图形只剩两件**：G1 `MAIN_MODULE=2` + keep 清单（体积，Lane B）、
 以及 `help` 覆盖 `.m` 的 docstring（约 1010 个 `.m`）。
+（**收口情况**：`help`-.m 已在 P1 完成（§5.13）、SLICOT 已在 §5.15 完成并上线；
+**只剩 G1**。）
 
 ### 5.13 P1 已完成（2026-09-22）——`help <mfile>` 可用 + 修掉"数据里带整棵重复树"
 
@@ -1250,14 +1255,14 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
 | ③ | **`MAIN_MODULE=2`（体积）** | ⚠️ **不采纳，留档**。体积收益是真的（wasm 35.97→**27.73MB**、gzip **−1.81MB**，且能开页、`accept-full` 20/20），但撞两道墙：官方"把 `.oct` 上主链"那条会让 Emscripten **启动时自动加载 dylib**（`404 __bfgsmin.oct`）；补 JS 库符号时又发现 `emscripten_run_script` **不是 wasm 导出**，M2 下网络那一路（R5）会挂 | **`build/113/NOTES-main-module-2.md`** |
 | ④ | **SLICOT（control 的 `ss`/`step`/`tf2ss`）** | ⚠️ **探针完成，根因更正**：不是"签名不匹配"，是那 48 个例程**在主 wasm 里定义了 0 个**（库从未编过）；库**能编**（f2c 614/614、emcc 613/613 → 5.0MB 归档）；真卡点是控制包手写声明 vs f2c 生成的 **CHARACTER 隐藏长度参数**分歧（`dggev_` 17 vs 19），**静态注册同样会撞** | **`build/113/NOTES-slicot.md`** |
 
-#### 🚨 接手第一件事：补跑 8761 的全量回归
+#### ✅ 接手第一件事（**已于 2026-09-23 完成**）：补跑 8761 的全量回归
 
 本轮最后一次 8761 全量跑到 `accept-help`（约一半）时**被人工中断，已跑部分全绿**。
 P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败是 `accept-t8` 里
 **"`.m` docstring 是已知缺口"的旧护栏**——P1 补上缺口后它如实报错（护栏该有的行为），
 已翻正为正向断言并在 8761 上复验 **20/20**。
-⇒ **30 套 756 项**这个数字是按"728 + 那 1 项翻正 + pkgoct 27"推的，
-**请在 8761 上补跑一遍确认**：
+⇒ 当时按"728 + 那 1 项翻正 + pkgoct 27"推成 **756**；**实测 757**（2026-09-23 已补跑确认，
+见 §5.15；SLICOT 上线后是 31 套 784）。跑法：
 
 ```bash
 /tmp/sweep.sh http://127.0.0.1:8761/     # 或逐套 harness/run.sh test/browser/accept-*.mjs http://127.0.0.1:8761/
@@ -1362,6 +1367,48 @@ MAIN_MODULE 下的表/dispatch 机制 ③ 退到窄目标"只让 `print -dpng`/`
 
 **回退**：`siteP5` 是独立目录，删掉/重拷即可；8761 与 `site/` 未被触碰。
 
+
+#### 主树当前状态与怎么切回去（**动手前必读**）
+
+为 B 档，主树被**重新 configure 成 opengl-ON** 并**全量重编**过（`make clean` + `emmake make -k -j24`）：
+
+| | 现在 | 切回"与 8761 部署一致"（opengl-OFF） |
+|---|---|---|
+| `config.h` | 带 `#define HAVE_OPENGL 1` + `HAVE_GL_GL_H/_GLU_H/_GLEXT_H` | `cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`（**不带** `WITH_OPENGL`）|
+| `.o`/`.a`（libinterp/liboctave） | 与之一致（opengl 版，`gl-render.o` 有 11 个 `U gl*`）| 配置切回后**必须重编**（否则混编；automake 不会因 config.h 变而全量重编，`make clean` 最稳）|
+| 备份 | —— | `/src/libwork/config.h.pre-opengl-p5`（本轮 opengl 化之前那份）、`/src/libwork/config.h.pre-opengl`（更早一份）、opengl-on 那份在 `/src/libwork/config.h.opengl-on` |
+
+**部署产物未受影响**：`site/`（8761）的三大件仍是 `bac48adb…`；图形版只落在 `siteP5/`（8763）
+与容器 `/src/websrc/out-p5f/`。
+
+⚠️ 另记一条本轮的构建坑：**全量 `make` 必须 `-k`** —— `libinterp/dldfcn/__fltk_uigetfile__.oct`
+这个目标在 `--without-fltk` 下必然失败（`/usr/bin/install: omitting directory 'libinterp/dldfcn/.libs/'`）。
+
+---
+
+### 5.17 ⚠️ 本轮的网络异常：`github.com` 被拦，推送改走 GitHub API（2026-09-23 04:4x）
+
+**现象**：`git push` 一律 `Recv failure: 连接被对方重置`（直连、HTTP 代理 2080、
+SOCKS5、`http.version=HTTP/1.1` 全试过）；同时 **`gh api` 正常**（`api.github.com` 通）。
+⇒ `github.com` 这个域被网络层拦了，`api.github.com` 没被拦。
+
+**处置（已做）**：
+- 用 **GitHub API**（`gh api` 的 Git Data 接口：blobs → tree（`base_tree` + 改动路径，
+  模式取 `git ls-tree` 的真实值，**不能写死 100644**）→ commit → PATCH ref）把工作推上去；
+  **每个提交都校验 `tree` SHA 与本地一致**才更新 ref。
+- 结果：远端 `refs/heads/main = 51a276a`，其 **tree 与本地 `13288a6^{tree}` 逐位相同**
+  （`ab9b297`）✔；但因为它落在中断之后，**远端是两个本地提交合成的一个提交**
+  （消息取的是后一条 = HANDOFF §5.16 那条）。
+- 本地仍保留**两条提交的详细历史**（`8720eba`、`13288a6`），
+  并已推到一个**持久盘裸镜像** `/mnt/hdd/octave-wasm-build/mirror-Octave-Full-Wasm.git`
+  （remote 名 `mirror`）—— 网络恢复前它就是"已落盘"的凭据。
+
+**下一次要先做的对齐**（否则 `git push` 会因 non-fast-forward 被拒）：
+```bash
+git fetch origin && git reset --hard origin/main   # 工作区当时是干净的；内容与本地逐位相同
+```
+（想保两提交的形状，可先用 `git push mirror main` 确认镜像里有，再对齐。**不要 force-push**。）
+
 ---
 
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
@@ -1377,7 +1424,7 @@ MAIN_MODULE 下的表/dispatch 机制 ③ 退到窄目标"只让 `print -dpng`/`
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **30 套 757 项全绿**（2026-09-23 实测；8762 未复跑本轮） | 同左 |
+| 验收 | **30 套 757 项全绿**（2026-09-23 实测；8762 未复跑本轮）—— **SLICOT 上线后是 31 套 784，见 §5.15** | 同左 |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
@@ -1423,7 +1470,8 @@ MAIN_MODULE 下的表/dispatch 机制 ③ 退到窄目标"只让 `print -dpng`/`
   （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
   `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
   `build/forge-preload/` 并由 `link-web.sh` 预加载）。
-  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7/T8/P1 后，**2026-09-23 实测 30 套 757 项**）。
+  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7/T8/P1 后，**2026-09-23 实测 30 套 757 项**；
+  再加 SLICOT 那一套与护栏翻正后为 **31 套 784**，见 §5.15）。
   清单与决策记录见 `build/113/PROMOTION.md`。
 - **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
   `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
@@ -1616,9 +1664,9 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
    T7 `audiorecorder`（19 个 `__recorder_*` + MediaRecorder 桥，`recordblocking` 如实报错）；
    T10 Asyncify 实验 → **结论不可采用**（与 `-fwasm-exceptions` 互斥）。
    全部走资产车道，**主 wasm 零改动**；全量套件全绿。
-10. ⬜ **仍待办三件（非图形）**：G1 `MAIN_MODULE=2` + keep 清单（Lane B）；
-    `help` 覆盖 `.m` docstring（预渲染）；H2 `uigetfile`（走非标准异步 API）。
-    详见 **§8 的"仍待办"** 与 `build/GAPS-2.md` 顶部的状态表。
+10. ⬜ **非图形只剩一件**：G1 `MAIN_MODULE=2` + keep 清单（Lane B）。
+    ~~`help`-.m 预渲染~~ 已在 P1 完成（§5.13）；~~H2 `uigetfile`~~ 已在 T8 完成（§5.12）；
+    ~~SLICOT 编译件~~ 已修好并上线（§5.15）。详见 **§8 的"仍待办"**。
 11. ⏭️ **P5 OSMesa 图形线** → **`graphics-osmesa` 分支**（不在 main 上做）：
     - **步骤① ✅ 已完成**：OSMesa 在 wasm 里渲出正确三角形、**含立即模式**（提交 `4821a5f`）。
     - **步骤② 的卡点已澄清（不是卡点）**：原先记的"四个 GL 头门禁仍是 undef"
@@ -1630,10 +1678,8 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
       **ABI 已核**：安装头里零个 `HAVE_OPENGL`/`HAVE_GL_`，所以可以在 opengl-on 的配置下
       编我们的 `.oct`，而主 wasm 保持 opengl-off ⇒ **仍可走资产车道**。
       详见该分支上的 `build/113/NOTES-p5-osmesa.md`。
-    - **主树混态已清除**：`SKIP= bash configure-113-full.sh`（不带 `WITH_OPENGL`）跑过，
-      `config.h` 与 `config.h.pre-opengl` **逐行一致**；
-      opengl-on 那份备份在 **`/src/libwork/config.h.opengl-on`**（给图形分支复用）。
-
-
-
-
+    - **主树混态已清除**（2026-09-22）；**2026-09-23 图形线 B 档又把主树切成了 opengl-ON**：
+      现在 `config.h` 是带 `HAVE_OPENGL 1` 的那份，**已 `make clean` + 全量重编**（`.o`/`.a` 与之一致）。
+      切回"与 8761 部署一致"的配置：`cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`
+      （不带 `WITH_OPENGL`）+ 重编；两份 `config.h` 备份在 `/src/libwork/config.h.pre-opengl-p5`
+      （本轮 opengl 前）与 `/src/libwork/config.h.pre-opengl`（更早那份）。**详见 §5.16 末尾。**
