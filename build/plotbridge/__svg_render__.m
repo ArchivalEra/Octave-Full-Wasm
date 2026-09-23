@@ -448,7 +448,7 @@ function out = __svg_series__ (s, sr, d, xlo, xhi, ylo, yhi, ML, MT, PW, PH)
   if (isempty (d)), return; endif
 
   col = sr.color;
-  if (isempty (col)), col = "#0072BD"; endif
+  if (isempty (col)), col = __pb_palette__ (1); endif
   dt = 0;
   if (isfield (sr, "dt") && ! isempty (sr.dt)), dt = sr.dt; endif
   mk = "none";
@@ -640,7 +640,7 @@ function out = __svg_legend__ (s, FONT, ML, MT, PW, PH)
     yy = ay + 5 + (i - 0.5) * sh;
     sr = real{i};
     col = sr.color;
-    if (isempty (col)), col = "#0072BD"; endif
+    if (isempty (col)), col = __pb_palette__ (1); endif
     mk = "none";
     if (isfield (sr, "marker") && ischar (sr.marker)), mk = sr.marker; endif
     st = sr.style;

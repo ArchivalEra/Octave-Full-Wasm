@@ -32,6 +32,13 @@ function __pb_emit__ ()
   endif
 
   ## --- flat (active) spec, with the panels field appended when present ---
+  ## ⚠️ 开头的 `{` 以前**从来没写过** —— 于是 /tmp/pb_spec.json 是一个**没有左花括号的
+  ##    对象体**，不是合法 JSON。唯一的读者 `bridge/octplot.html:127` 直接
+  ##    `JSON.parse(...)`，也就是说那个 PoC 页每次打开都在抛异常，而**没人发现**，
+  ##    因为没有任何套件碰这条 seam（审计里的原话就是"spec 的形状只在注释里"）。
+  ##    2026-09-23 接通 `%!test` 之后，本文件的覆盖面断言用 `jsondecode` 读回产物，
+  ##    才把这条抓出来（报错是 `parse error at offset 7`）。
+  fprintf (fid, '{');
   __pb_emit_body__ (fid, __pb__);
 
   if (isfield (__pb__, "panels") && numel (__pb__.panels) > 1)
@@ -118,3 +125,45 @@ function s = __pb_vec__ (v)
     s = [s "]"];
   endif
 endfunction
+
+%!test
+## ★ 覆盖面断言：**表里每个 spec_key 都真的出现在 JSON 里**。
+## 这是"字段表（__pb_fields__.m）与 emit 手写体"之间的唯一硬约束 —— 加字段时
+## 忘了在 emit 里写一行，这条就红（审计里那句"漏一处是静默的状态泄漏"靠它兜住）。
+%! global __pb__;
+%! saved = __pb__;                      # 快照，别污染调用方的状态
+%! unwind_protect
+%!   f = __pb_fields__ ();
+%!   st = struct ();
+%!   for k = 1:numel (f.names)
+%!     st.(f.names{k}) = f.defaults{k};
+%!   endfor
+%!   ## 给每个字段一个**可区分**的值（默认值很多是空串/空，验不出"有没有发"）
+%!   st.title = "T";  st.xlabel = "X";  st.ylabel = "Y";
+%!   st.xlim = [1 2];  st.ylim = [3 4];
+%!   st.grid = true;  st.logx = true;  st.logy = true;
+%!   st.hold = true;  st.legloc = "northeast";  st.axis = "equal";
+%!   st.legend = {"a"};
+%!   ## series 的每一项是 **struct**（见 __pb_add__.m 的 sr = struct(...)），不是键值 cell
+%!   sr = struct ("file", "/tmp/x.dat", "style", "lines", "color", "#000000", ...
+%!                "dt", 1, "pt", 6, "ps", 1, "marker", "", "title", "");
+%!   st.series = {sr};
+%!   st.panel_pos = [0.1 0.2 0.3 0.4];   # spec_key 是 "pos"（只有 4 元时才发）
+%!   st.panel_tag = "tag";               # spec_key 为空 ⇒ 不该出现在 JSON 里
+%!   st.n = 1;  st.panels = {};  st.active = 0;  st.figs = {};  st.fig_n = 1;
+%!   __pb__ = st;
+%!   __pb_emit__ ();
+%!   j = jsondecode (fileread ("/tmp/pb_spec.json"));
+%!   for k = 1:numel (f.names)
+%!     key = f.spec_key{k};
+%!     if (isempty (key)), continue; endif
+%!     assert (isfield (j, key), sprintf ("字段 %s 的 spec 键 \"%s\" 没出现在 JSON 里", f.names{k}, key));
+%!   endfor
+%!   ## 反向：不该出现的字段别偷偷发出去（panel_tag 没有 spec 键）
+%!   assert (! isfield (j, "panel_tag"));
+%! unwind_protect_cleanup
+%!   ## 先清掉全局再按需还原：不然"本来没有 __pb__"的情况会被 test 框架记成
+%!   ## "leaked global variables"（实测会打警告）
+%!   clear -g __pb__;
+%!   if (isstruct (saved)), __pb__ = saved; endif
+%! end_unwind_protect

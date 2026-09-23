@@ -6,15 +6,15 @@
 
 function s = __pb_apply_panel__ (s, p)
 
-  s.hold = p.hold;
-  s.title = p.title; s.xlabel = p.xlabel; s.ylabel = p.ylabel;
-  s.xlim = p.xlim; s.ylim = p.ylim;
-  s.grid = p.grid; s.legloc = p.legloc;
-  s.logx = p.logx; s.logy = p.logy;
-  s.axis = p.axis;
-  s.legend = p.legend;
-  s.series = p.series;
-  s.panel_pos = p.panel_pos;
-  s.panel_tag = p.panel_tag;
+  ## __pb_panel_fields__ 的逆：按同一张表放回（两边不可能再对不上）
+  f = __pb_fields__ ();
+  for k = 1:numel (f.names)
+    nm = f.names{k};
+    if (isfield (p, nm))
+      s.(nm) = p.(nm);
+    else
+      s.(nm) = f.defaults{k};
+    endif
+  endfor
 
 endfunction

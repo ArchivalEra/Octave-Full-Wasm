@@ -11,9 +11,8 @@ function s = __pb_add__ (s, x, y, spec, style)
   endif
 
   if (isempty (spec))
-    order = {"#0072BD", "#D95319", "#EDB120", "#7E2F8E", ...
-             "#77AC30", "#4DBEEE", "#A2142F"};
-    cc0 = order{mod (numel (s.series), 7) + 1};
+    ## 颜色来自唯一那份调色板（以前这张表在这里又抄了一遍，见 __pb_palette__.m）
+    cc0 = __pb_palette__ (numel (s.series) + 1);
     [ls, ~, mk] = __pb_linespec__ ("b");
     cc = cc0;
   else

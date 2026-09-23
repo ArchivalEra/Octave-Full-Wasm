@@ -7,16 +7,16 @@
 
 function p = __pb_panel_fields__ (s)
 
+  ## 字段集合由 __pb_fields__.m 声明（加字段只改那一张表，不再改这里）
+  f = __pb_fields__ ();
   p = struct ();
-  p.hold = s.hold;
-  p.title = s.title; p.xlabel = s.xlabel; p.ylabel = s.ylabel;
-  p.xlim = s.xlim; p.ylim = s.ylim;
-  p.grid = s.grid; p.legloc = s.legloc;
-  p.logx = s.logx; p.logy = s.logy;
-  if (isfield (s, "axis")), p.axis = s.axis; else, p.axis = ""; endif
-  p.legend = s.legend;
-  p.series = s.series;
-  if (isfield (s, "panel_pos")), p.panel_pos = s.panel_pos; else, p.panel_pos = []; endif
-  if (isfield (s, "panel_tag")), p.panel_tag = s.panel_tag; else, p.panel_tag = ""; endif
+  for k = 1:numel (f.names)
+    nm = f.names{k};
+    if (isfield (s, nm))
+      p.(nm) = s.(nm);
+    else
+      p.(nm) = f.defaults{k};   ## 老 shim 手工搭的 state 可能缺 v2 字段
+    endif
+  endfor
 
 endfunction

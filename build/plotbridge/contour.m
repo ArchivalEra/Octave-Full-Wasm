@@ -85,14 +85,15 @@ function [c_out, h] = contour (varargin)
 
   ## NOTE: __pb_linespec__ is a private subfunction of __pb_add__.m, so it
   ## cannot be called here (see CLIBS.md 批次 7a 坑 4).  Contour colours come
-  ## from the shared cycle; a SPEC string is applied to every level curve.
+  ## from the shared palette (__pb_palette__.m); a SPEC string is applied to
+  ## every level curve.
   k = 0;   # series counter, for a stable colour cycle
   for li = 1:numel (levels)
     lev = levels(li);
     k += 1;
     ## one colour per level curve, so nested levels stay distinguishable
     if (isempty (spec))
-      lspec = __pb_cycle_color__ (k);
+      lspec = __pb_palette__ (k);   # k 从 1 起，与 __pb_add__ 同一套取色语义
     else
       lspec = spec;
     endif

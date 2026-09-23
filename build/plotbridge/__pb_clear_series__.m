@@ -13,11 +13,13 @@
 
 function s = __pb_clear_series__ (s)
 
-  s.series = {};
-  s.title = ""; s.xlabel = ""; s.ylabel = "";
-  s.xlim = []; s.ylim = []; s.grid = false;
-  s.legend = {}; s.legloc = "";
-  s.logx = false; s.logy = false;
-  s.axis = "";
+  ## "新轴"要重置哪些字段也由表声明（cleared 那一列）；hold / panel_pos / panel_tag
+  ## 不在其中 —— 它们不是"轴内容"（见 __pb_fields__.m 的表说明与断言）
+  f = __pb_fields__ ();
+  for k = 1:numel (f.names)
+    if (f.cleared(k))
+      s.(f.names{k}) = f.defaults{k};
+    endif
+  endfor
 
 endfunction
