@@ -45,7 +45,16 @@ async function ev(expr, label, want) {
 }
 
 console.log('--- HDF5 ---');
-await ev('disp(exist("__have_hdf5__"))', 'exist __have_hdf5__', '1');
+// ── 这条断言**曾经是假的**（2026-09-23 查清）────────────────────────────────
+// 原来写的是 `disp(exist("__have_hdf5__"))` want='1'。而 `__have_hdf5__` **在 Octave
+// 11.3.0 里根本不存在** —— 源码树 / 安装树 / 核心 .m 里都搜不到（它不是上游的东西）。
+// 它之所以长期"绿"：want 是单个数字 `1`，而当时套件只等"解释器可用"，页面侧资产加载器的
+// 日志（`[assets] 清单就绪：47 个资产 …`）落在同一个捕获窗口里，随便哪个数字把它对上了。
+// ⇒ 两条教训（都记进 HANDOFF §8）：
+//   ① **单个数字当 want 是弱断言**，噪声里的同数字会让它假过；
+//   ② 套件必须等 `window.__octaveReady`（本轮 23 个套件都补上了），噪声才不会串窗。
+// 改成上游真正提供的探针：`__octave_config_info__("HDF5")`，返回 1/0 表示这个构建是否带 HDF5。
+await ev('disp(__octave_config_info__("HDF5"))', '★ 本构建带 HDF5（上游探针 __octave_config_info__）', '1');
 await ev("A=magic(4); B='hello'; C=struct('x',1.5); save('-hdf5','/tmp/t.h5','A','B','C'); disp(exist('/tmp/t.h5'))", 'save -hdf5 落盘', '2');
 await ev('clear A B C; load("/tmp/t.h5"); disp(A(1,1))', 'load 回读 A', '16');
 await ev('disp(B)', 'load 回读字符串 B', 'hello');
