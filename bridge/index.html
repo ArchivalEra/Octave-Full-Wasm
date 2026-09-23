@@ -8,6 +8,9 @@
 </head>
 <body>
 <script type="text/javascript" src="assets-loader.js"></script>
+<!-- MEMFS 队列的**协议无关**部分（取 fs / 读走并清空 / 切分）：四个宿主桥共用。
+     ⚠️ 必须在下面那几个桥之前加载（它们直接用 window.OctaveQueue）。 -->
+<script type="text/javascript" src="queue.js"></script>
 <!-- 真渲染后端（P5）：把 toolkit 渲好的 PNG（MEMFS 里）贴到页面。
      后端是 `webgl`（gl4es → GLES2 → **WebGL2/GPU**）；OSMesa（Mesa 软件光栅化）已于
      2026-09-23 退役（脚本与配方留在 git 历史的 graphics-osmesa 分支）。
@@ -27,6 +30,12 @@
      <input type=file>、把选中文件的字节写进 MEMFS，再由 Octave 复制进当前目录。
      因为是异步/同步的硬冲突，uigetfile 在这条路上是**两步**（详见桥里的说明）。 -->
 <script type="text/javascript" src="webfilepick.js"></script>
+<!-- 网络桥（R5）：`OctaveNet.prefetch/get` —— 页面侧异步取回 URL 写进 MEMFS，
+     让 Octave 侧**同步**读（同步 XHR 那条自包含在 webnet.cc 的内联 JS 里）。
+     ⚠️ 2026-09-23 审计查出：这个文件一直被部署、却**没被 index.html 加载**
+     （而 test/browser/accept-net.mjs 的注释以为站点会加载它 —— 于是只有注入脚本的
+     测试里它才存在）。这里补上那一行，让"部署的桥"与"加载的桥"一致。 -->
+<script type="text/javascript" src="webnet.js"></script>
 <script type="text/javascript">
   // ── 输出落点（T6c）────────────────────────────────────────────────────────
   // 上游骨架只留了一个空的 `<pre id="output">`，而且**没有人往里写东西**：

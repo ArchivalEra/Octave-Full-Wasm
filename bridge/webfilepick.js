@@ -28,25 +28,19 @@
 
   const S = { opened: 0, lastError: null, lastPick: null, busy: false, pollTimer: null };
 
-  function FS() {
-    const M = window.Module;
-    if (!M || !M.FS) throw new Error('OctaveFilePick: Module.FS 尚未就绪');
-    return M.FS;
+  // 共享 primitive（bridge/queue.js）
+  const Q = window.OctaveQueue;
+
+  // ── 本协议的行格式（**唯一声明**，页面侧）────────────────────────────────
+  //   <accept>\t<multiple:0|1>\t<title>     例：`*.m\t1\t选择文件`
+  //   生产侧：build/webfilepick.cc（C++ 那边有同一份说明，两边靠漂移测试对齐）
+  function parseLine(line) {
+    const p = Q.split(line);
+    return { accept: p[0] || '', multiple: p[1] === '1', title: p[2] || 'Select a file' };
   }
 
   function readQueue() {
-    let text = '';
-    try {
-      text = new TextDecoder().decode(FS().readFile(QUEUE));
-    } catch (e) {
-      return [];
-    }
-    if (!text) return [];
-    try { FS().writeFile(QUEUE, new Uint8Array(0)); } catch (e) {}
-    return text.split('\n').filter(Boolean).map((line) => {
-      const p = line.split('\t');
-      return { accept: p[0] || '', multiple: p[1] === '1', title: p[2] || 'Select a file' };
-    });
+    return Q.drain(QUEUE).map(parseLine);
   }
 
   function writeStatus(state, names) {
@@ -54,7 +48,7 @@
     const lines = ['state\t' + state, 'count\t' + list.length];
     list.forEach((n, k) => lines.push('name' + k + '\t' + n));
     try {
-      FS().writeFile(STATUS, new TextEncoder().encode(lines.join('\n') + '\n'));
+      Q.fs().writeFile(STATUS, new TextEncoder().encode(lines.join('\n') + '\n'));
     } catch (e) {
       S.lastError = '写状态文件失败: ' + e.message;
     }
@@ -110,12 +104,12 @@
     el.onchange = async () => {
       const files = Array.from(el.files || []);
       if (!files.length) return finish(null);
-      try { FS().mkdirTree(PICKED); } catch (e) {}
+      try { Q.fs().mkdirTree(PICKED); } catch (e) {}
       const names = [];
       for (const f of files) {
         try {
           const buf = new Uint8Array(await f.arrayBuffer());
-          FS().writeFile(PICKED + '/' + f.name, buf);
+          Q.fs().writeFile(PICKED + '/' + f.name, buf);
           names.push(f.name);
         } catch (e) {
           S.lastError = '读文件失败（' + f.name + '）: ' + e.message;
@@ -165,5 +159,5 @@
     return { opened: S.opened, busy: S.busy, lastPick: S.lastPick, lastError: S.lastError };
   }
 
-  window.OctaveFilePick = { init, drain, status, _state: S };
+  window.OctaveFilePick = { init, drain, status, _parseLine: parseLine, _state: S };
 })();

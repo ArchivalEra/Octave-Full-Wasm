@@ -31,11 +31,9 @@
   const LAST = '/tmp/webnet_last';
   const staged = new Set();
 
-  function fs() {
-    const M = window.Module;
-    if (!M || !M.FS) throw new Error('OctaveNet: Module.FS 尚未就绪（Octave 还没起来？）');
-    return M.FS;
-  }
+  // 取 fs 用共享那份（bridge/queue.js）。注意本桥**不吃"行 + 制表符"协议**：
+  // 它走的是四个单值文件（见下面 _paths 的声明），是同一族里的另一个形状。
+  const fs = () => window.OctaveQueue.fs();
 
   function put(path, text) {
     try { fs().writeFile(path, text, { encoding: 'utf8' }); } catch (e) {}

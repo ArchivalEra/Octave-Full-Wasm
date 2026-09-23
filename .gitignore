@@ -40,6 +40,7 @@
 !dist/DEPLOY.md
 !dist/serve.py
 !bridge/assets-loader.js
+!bridge/queue.js
 !bridge/index.html
 !build/assets.py
 !build/render-docstrings.py

@@ -37,25 +37,19 @@
     pollTimer: null,
   };
 
-  function FS() {
-    const M = window.Module;
-    if (!M || !M.FS) throw new Error('OctaveRec: Module.FS 尚未就绪（Octave 还没起来？）');
-    return M.FS;
+  // 共享 primitive（bridge/queue.js）：守卫/清空/切分只此一份
+  const Q = window.OctaveQueue;
+
+  // ── 本协议的行格式（**唯一声明**，页面侧）────────────────────────────────
+  //   <id>\t<action>[\t<arg>…]     例：`1\trecord\t8000\t16\t1\t2`
+  //   生产侧：build/webaudiorec/__pra_enqueue__.m
+  function parseLine(line) {
+    const p = Q.split(line);
+    return { id: Number(p[0]), action: p[1], args: p.slice(2).map(Number) };
   }
 
   function readQueue() {
-    let text = '';
-    try {
-      text = new TextDecoder().decode(FS().readFile(QUEUE));
-    } catch (e) {
-      return [];
-    }
-    if (!text) return [];
-    try { FS().writeFile(QUEUE, new Uint8Array(0)); } catch (e) {}
-    return text.split('\n').filter(Boolean).map((line) => {
-      const p = line.split('\t');
-      return { id: Number(p[0]), action: p[1], args: p.slice(2).map(Number) };
-    });
+    return Q.drain(QUEUE).map(parseLine);
   }
 
   function writeStatus(id, rec) {
@@ -67,7 +61,7 @@
       'err\t' + (rec.err || ''),
     ];
     try {
-      FS().writeFile(STATUS.replace('%d', id), new TextEncoder().encode(lines.join('\n') + '\n'));
+      Q.fs().writeFile(STATUS.replace('%d', id), new TextEncoder().encode(lines.join('\n') + '\n'));
     } catch (e) {
       S.lastError = '写状态文件失败: ' + e.message;
     }
@@ -212,7 +206,7 @@
           for (let i = 0; i < framesOut; i++) out[i * chans + c] = line[i];
         }
 
-        FS().writeFile(SAMPLES.replace('%d', id), new Uint8Array(out.buffer));
+        Q.fs().writeFile(SAMPLES.replace('%d', id), new Uint8Array(out.buffer));
         rec.frames = framesOut;
         rec.state = 'done';
         writeStatus(id, rec);
@@ -317,5 +311,5 @@
     return { recordings: out, drained: S.drained, lastError: S.lastError };
   }
 
-  window.OctaveRec = { init, drain, status, _state: S };
+  window.OctaveRec = { init, drain, status, _parseLine: parseLine, _state: S };
 })();

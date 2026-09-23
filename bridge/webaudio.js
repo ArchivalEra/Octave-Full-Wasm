@@ -31,26 +31,19 @@
     pollTimer: null,
   };
 
-  function fs() {
-    const M = window.Module;
-    if (!M || !M.FS) throw new Error('OctaveAudio: Module.FS 尚未就绪（Octave 还没起来？）');
-    return M.FS;
+  // 取 fs / 读走并清空 / 按制表符切分：共享实现在 bridge/queue.js（守卫只此一份）
+  const Q = window.OctaveQueue;
+
+  // ── 本协议的行格式（**唯一声明**，页面侧）────────────────────────────────
+  //   <id>\t<action>[\t<arg>…]     例：`1\tplay\t0\t8000\t44100\t2`
+  //   生产侧：build/webaudio/__pba_enqueue__.m（`.m` 与页面之间唯一的接口）
+  function parseLine(line) {
+    const p = Q.split(line);
+    return { id: Number(p[0]), action: p[1], args: p.slice(2).map(Number) };
   }
 
   function readQueue() {
-    let text = '';
-    try {
-      text = new TextDecoder().decode(fs().readFile(QUEUE));
-    } catch (e) {
-      return [];
-    }
-    if (!text) return [];
-    // consume: the actions are ours now
-    try { fs().writeFile(QUEUE, new Uint8Array(0)); } catch (e) {}
-    return text.split('\n').filter(Boolean).map((line) => {
-      const p = line.split('\t');
-      return { id: Number(p[0]), action: p[1], args: p.slice(2).map(Number) };
-    });
+    return Q.drain(QUEUE).map(parseLine);
   }
 
   function ensureContext() {
@@ -71,7 +64,7 @@
 
   // /tmp/pba_<id>.f64 is interleaved doubles; de-interleave into channel arrays.
   function loadChannels(id, channels, from, to) {
-    const raw = fs().readFile(SAMPLES.replace('%d', id));
+    const raw = Q.fs().readFile(SAMPLES.replace('%d', id));
     const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
     const total = Math.floor(raw.byteLength / 8 / Math.max(1, channels));
     const start = Math.max(0, from | 0);
@@ -208,5 +201,6 @@
     };
   }
 
-  window.OctaveAudio = { init, drain, resume, status, _state: S };
+  // `_parseLine` 暴露给漂移测试：让'生产侧写的行'与'读侧解析的行'能被同一条断言串起来
+  window.OctaveAudio = { init, drain, resume, status, _parseLine: parseLine, _state: S };
 })();

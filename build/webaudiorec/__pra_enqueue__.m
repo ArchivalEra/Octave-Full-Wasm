@@ -2,7 +2,8 @@
 ## SPDX-License-Identifier: AGPL-3.0-or-later
 ##
 ## One line per action, same shape as the playback queue:
-##   <id>\t<action>[\t<args…>]
+##   <id>\t<action>\t<arg…>    读侧声明见 bridge/webaudiorec.js 的 parseLine
+##     record  <rate> <bits> <channels> <seconds>（seconds=0 ⇒ 录到 stop）
 ## The page (bridge/webaudiorec.js) consumes the file, then writes progress and
 ## samples back to /tmp/pra_<id>.txt and /tmp/pra_<id>.f64.
 

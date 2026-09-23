@@ -42,7 +42,10 @@ while (Date.now() - t < 300000) {
 }
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
-// 页面侧异步桥：从仓库源码注入（站点 index.html 也会加载它，但测试不该依赖那点）。
+// 页面侧异步桥：从仓库源码注入。
+// ⚠️ 2026-09-23 更正：以前这里写"站点 index.html 也会加载它"—— **不实**：index.html
+//    当时根本没加载 webnet.js（那个文件一直是"部署了但没加载"）。已补上那一行；
+//    但测试仍然自己注入源码，**不依赖站点**（否则页面侧一改，测试就跟着变红/变绿）。
 // 用绝对路径：脚本会被 harness 复制到自己的目录再跑，相对路径不作数。
 await page.addScriptTag({ content: readFileSync('/mnt/hdd/zcode-projects/Octave-Full-Wasm/bridge/webnet.js', 'utf8') });
 
