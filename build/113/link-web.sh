@@ -129,6 +129,49 @@ if [ -n "$EXPORT_IF_DEFINED" ]; then
   echo "== EXPORT_IF_DEFINED = ${#_eid[@]} 个候选符号（未定义的静默忽略）"
 fi
 
+# LIB_FUNCS：逗号分隔的 **JS 库函数**名，加进主模块的 JS 胶水
+#   （`-s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=`）。
+# 为什么需要（2026-09-23，P5 的 OSMesa toolkit 撞上）：side module 能解析的 JS 库函数
+# 集合 = 主模块胶水里有的那些；而胶水的集合来自
+#   `EXPORTED_FUNCTIONS + SIDE_MODULE_IMPORTS + DEFAULT_LIBRARY_FUNCS_TO_INCLUDE`
+# （`tools/emscripten.py:880` 与 `tools/link.py:2876`）。后两者本是**给"主链命令行上的
+# side module"自动收集导入用的**，而我们的 `.oct` 走**资产车道**、不在主链命令行上
+# ⇒ 它们的 JS 导入不会被自动收进来。于是 `.oct` 里对 `emscripten_longjmp` 的引用
+# 成了"必需未定义"，加载器的 `reportUndefinedSymbols()` 去读 `undefined.value`，
+# 报出 `TypeError: Cannot read properties of undefined (reading 'value')` ——
+# 又是一条"报错骗人"（真名靠诊断补丁才看到）。
+# ⚠️ **别用 EXPORTED_FUNCTIONS 传这些名字**：实测 `undefined exported symbol`
+#   硬错误（带下划线 `_emscripten_longjmp` 与不带下划线都一样），因为那一路会被
+#   直接喂给 lld 当 `--export=`。
+# GL_LIBS=1：主链带上 OpenGL —— `glshim`（/src/deps/glshim）把 **OSMesa 冒充成
+# `-lGL`/`-lGLU`**。用途：P5 图形线走"**主 wasm 带 GL**"那条路
+# （A 档"把 Mesa 全打进 .oct"试到底后放弃，三道墙的实测见
+#  build/113/osmesa_toolkit.cc 的文件头注释）。
+# 为什么需要这个开关：树一旦用 `WITH_OPENGL=1` 重配，Octave 的
+# `LIBOCTINTERP_LINK_DEPS` 里就有 `-lGL -lGLU`，而本脚本的 web 主链是**自己写的链接行**，
+# 得自己把它们补上（补在归档**之后**：静态库按左到右解析）。
+GL_FLAGS=()
+if [ "${GL_LIBS:-0}" = "1" ]; then
+  # 用**绝对路径**而不是 `-lGL -lGLU`：实测 `-lGL` 能解析 `gl*`，但 `-lGLU` 没能解析
+  # `gluNewTess`/`gluTessCallback` 等 9 个（lld 报 undefined symbol 但链接"成功"——
+  # `ERROR_ON_UNDEFINED_SYMBOLS=0` 把未定义符号静默放过，运行期才会炸）。绝对路径消除搜索歧义。
+  GL_FLAGS=( /src/deps/glshim/lib/libGL.a /src/deps/glshim/lib/libGLU.a /src/websrc/osmesa-stubs.c )
+  # `osmesa-stubs.c` 补 emscripten 缺的 `sched_getcpu`/`pthread_setname_np`
+  # （Mesa 的 `u_thread.c` 用；纯装饰性）。
+  echo "== GL_LIBS=1：主链带 -lGL -lGLU（glshim → OSMesa + wasm 版 GLU）"
+fi
+
+LIB_FUNCS="${LIB_FUNCS:-}"
+LF_FLAGS=()
+if [ -n "$LIB_FUNCS" ]; then
+  IFS=',' read -r -a _lf <<< "$LIB_FUNCS"
+  LF_JSON="["
+  for _f in "${_lf[@]}"; do LF_JSON="$LF_JSON\"$_f\","; done
+  LF_JSON="${LF_JSON%,}]"
+  LF_FLAGS=( -s "DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$LF_JSON" )
+  echo "== DEFAULT_LIBRARY_FUNCS_TO_INCLUDE = $LF_JSON"
+fi
+
 LIBS=(
   # Octave 自身的三个归档
   "$OCT/libinterp/.libs/liboctinterp.a"
@@ -176,8 +219,31 @@ LIBS=(
 #  CXXFLAGS 的口径一致。
 EXC_FLAGS=( -O2 -fPIC -std=c++17 -fwasm-exceptions )
 
+# P5_TOOLKIT=1：把 **osmesa graphics toolkit 编进主模块**（不是 `.oct`）。
+# 为什么必须进主模块：`opengl_functions`（GL 函数表）的**虚表跨模块会失效** ——
+# `opengl_renderer`（opengl-on 后编在主模块里）通过 `m_glfcns.xxx()` 回调，
+# 对象若由 side module 创建，主模块那边的间接调用会打到不属于它的表槽上
+# （实测 `RuntimeError: table index is out of bounds`，栈顶正是
+#  `octave::opengl_renderer::set_viewport(int, int)`）。
+# Edge-Tools 的参考实现也是这个形态（toolkit 编进主模块）。
+# 依赖：`GL_LIBS=1`（主链带 OSMesa/GLU）+ 主树 `WITH_OPENGL=1` 重配重编。
+P5_OBJS=()
+if [ "${P5_TOOLKIT:-0}" = "1" ]; then
+  echo "== P5_TOOLKIT=1：编 osmesa graphics toolkit 进主模块"
+  em++ -I"$OCT" -I"$OCT/liboctave" -I"$OCT/liboctave/array" -I"$OCT/liboctave/util" \
+       -I"$OCT/libinterp" -I"$OCT/libinterp/corefcn" -I"$OCT/libinterp/octave-value" \
+       -I"$OCT/libinterp/parse-tree" -I"$INST/include/octave-$MV" \
+       -I"$INST/include/octave-$MV/octave" -I/src/deps/glshim/include \
+       -I/src/libwork/mesa-24.0.9/include -I/src/vendor/stb \
+       -DHAVE_CONFIG_H -DP5_OSMESA_TOOLKIT ${P5_GLPROBE:+ -DP5TK_GLPROBE} -std=c++17 \
+       "${EXC_FLAGS[@]}" -c "$SRC/osmesa_toolkit.cc" -o "$SRC/osmesa_toolkit.o"
+  echo "   osmesa_toolkit.o = $(stat -c%s "$SRC/osmesa_toolkit.o") 字节"
+  P5_OBJS=( "$SRC/osmesa_toolkit.o" )
+fi
+
 echo "== 编 main.cc"
 em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
+     ${P5_OBJS:+ -DP5_OSMESA_TOOLKIT} \
      "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
@@ -211,13 +277,15 @@ em++ --bind \
   ${EXTRA_LDFLAGS:-} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
+  ${LF_FLAGS[@]+"${LF_FLAGS[@]}"} \
   -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS"]' \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
   "${PRELOAD[@]}" \
   --post-js "$SRC/post.js" \
   "${EXC_FLAGS[@]}" -Wl,--allow-multiple-definition \
   "${LIBS[@]}" \
-  -o "$OUT/octave.js" "$SRC/main.o"
+  ${GL_FLAGS[@]+"${GL_FLAGS[@]}"} \
+  -o "$OUT/octave.js" "$SRC/main.o" ${P5_OBJS[@]+"${P5_OBJS[@]}"}
 set +x
 
 # ---- 自检：预载路径有没有错位 ------------------------------------------------

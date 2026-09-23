@@ -748,8 +748,9 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 跑的，脚本落在持久盘上，日志在 `sweep-logs/`）。见 **§5.14**。
 >
 > **▶ 非图形已全部清零**（SLICOT 2026-09-23 修好并上线，31 套 784 项全绿，见 §5.15）。
-> **接手第一件事：图形线（P5）** —— 在 **8763**（`siteP5`）上做，8761 不动；
-> 现状与做法见 §5.16 与 `build/113/NOTES-p5-osmesa.md`。
+> **接手第一件事：图形线（P5）** —— 在 **8763**（`siteP5`）上做，8761 不动。
+> **现状：已走到「主 wasm 带 GL + toolkit 编进主模块」，能建 figure；渲染卡在 GL 调用处
+> （`table index is out of bounds`）。见 §5.16 与 NOTES 第七节。**
 
 （非图形：一条待办 + 一条长尾 —— 图形线开工前建议先清掉）
 1. **G1 `MAIN_MODULE=2`** —— **2026-09-22 已实测到"差一件事"**（见
@@ -1329,6 +1330,37 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
 > 不是"所有符号"；未导出的函数连名字都不存在。**判"某符号在不在主模块里"不能只看名字**。
 > ② 用 `comm` 比对符号表前必须 `LC_ALL=C sort` —— Python 的码点序与 shell 的 locale 序不同，
 > 会凭空多出一堆"缺口"（第一批分析里 331 个缺口大多是这么来的）。
+
+---
+
+### 5.16 图形线（P5 步骤②）：A 档试到底 → **改走 B 档（主 wasm 带 GL）**，卡在 GL 调用处
+
+一手记录在 **`build/113/NOTES-p5-osmesa.md` 第七节**（七小节，含全部实测与复现命令）。
+这里只给接续必须知道的：
+
+**实验通道是 8763（`/mnt/hdd/octave-wasm-build/siteP5`）**；8761 **全程未动**
+（wasm 仍是 `bac48adb…`）。图形版的 `octave.wasm` 是 **45.58MB**（比基线 +11.3MB raw，因为
+OSMesa 进了主模块）——**这是 B 档的代价，也是它不能直接上 8761 的原因**。
+
+**已达成（实测）**：主树 `WITH_OPENGL=1` 重配重编 + 主链 `-lGL -lGLU`（glshim 把 OSMesa
+冒充成 GL）+ **toolkit 编进主模块** ⇒ 在 8763 上 `graphics_toolkit('osmesa')` = `osmesa` ✔、
+`figure(7)` 真对象 ✔、`clf`/`line()` ✔。
+
+**当前卡点**：`drawnow` → `RuntimeError: table index is out of bounds`，位置在
+`ensure_context()` 一带（`OSMesaCreateContextExt`/`OSMesaMakeCurrent`）—— 把**直接调 GL 入口**
+的探针（`P5_GLPROBE=1`）插在 `set_viewport` 之前，**探针一个字没打出来** ⇒ trap 更早。
+**已排除**：签名不一致（新工具 `build/113/check-dylink-signatures.py` 比对
+72 个导入 vs 42,267 个导出 ⇒ 0 处）、JS 库函数缺失、跨模块虚表（改成编进主模块后现象相同）。
+
+**A 档（Mesa 全打进 `.oct`）的三道墙**（都有实测，别再走）：① Chrome 禁主线程同步编译
+>8MB（已用页面侧异步预加载解）② `.oct` 需要的 JS 库函数不在主模块胶水里（已用 wasm-SjLj
+重编 Mesa/GLU 解）③ 10.8MB/表 12543 的 side module 装载期读到错位字符串（未解，故转 B 档）。
+
+**下一个动作（按代价）**：① 用 `DIAG_NAMES=1` 抓 trap 的函数名 ② 查 Mesa glapi 在
+MAIN_MODULE 下的表/dispatch 机制 ③ 退到窄目标"只让 `print -dpng`/`getframe` 走 OSMesa"
+④ 再退一步：A 档 + 把 `.oct` 压到 8MB 以下。
+
+**回退**：`siteP5` 是独立目录，删掉/重拷即可；8761 与 `site/` 未被触碰。
 
 ---
 

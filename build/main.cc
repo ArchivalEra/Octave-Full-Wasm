@@ -351,6 +351,11 @@ int EMSCRIPTEN_KEEPALIVE eval_string(std::string eval_str) {
 ////  return status;
 //}
 
+#if defined (P5_OSMESA_TOOLKIT)
+// P5：由 build/113/osmesa_toolkit.cc 提供（编进主模块，见该文件头）
+extern "C" void p5_install_osmesa_graphics_toolkit (octave::interpreter& interp);
+#endif
+
 int EMSCRIPTEN_KEEPALIVE execute_interp() {
   std::cout << "Starting GNU Octave interpreter..." << std::endl;
 
@@ -428,6 +433,23 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
   // No Phase 3 any more.  dldfcn modules arrive as .oct assets and are dlopen'd
   // on demand — see the note at the top of this file for why the old
   // hand-registration was removed.
+
+#if defined (P5_OSMESA_TOOLKIT)
+  // P5 图形线：登记 + 装载 `osmesa` 图形 toolkit（Octave 自己的 opengl_renderer
+  // 跑在 OSMesa 上）。**必须编进主模块**（不是 `.oct`）：`opengl_functions` 的虚表
+  // 一旦跨模块，`opengl_renderer::set_viewport` 这类回调就会打到表的空槽上
+  // （实测 `RuntimeError: table index is out of bounds`）。详见
+  // build/113/osmesa_toolkit.cc 的文件头与 link-web.sh 的 P5_TOOLKIT=1。
+  try {
+    p5_install_osmesa_graphics_toolkit (*interpreter);
+  } catch (const octave::exit_exception& ex) {
+    return ex.exit_status();
+  } catch (const octave::execution_exception& ex) {
+    interpreter->handle_exception(ex);
+    std::cerr << "warning: osmesa graphics toolkit not installed: "
+              << interpreter->get_error_system().last_error_message() << std::endl;
+  }
+#endif
 
   return 0;
 }

@@ -232,3 +232,124 @@ bash /src/bin/osmesa-smoke.sh                  # 编 + 用 node 跑，逐像素�
 5. 步骤③：`plot/surf/mesh/contour` 逐个出图并与 plot 桥产物对照。
 6. 回退不变：**plot 桥 + `print -dsvg` 保持可用**，两者不冲突。
 
+
+---
+
+## 七、2026-09-23：步骤② 实做（A 档试到底 → 改走 B 档），卡在 GL 调用处
+
+> 本节的每条结论都有实测；命令都可复现。**接手请先读"七.5 当前卡点"**。
+
+### 7.1 先把"现成实现"搜齐（这一轮的第一件事）
+
+| 来源 | 拿了什么 | 落地 |
+|---|---|---|
+| `github.com/Edge-Tools/octave-wasm` | `build/octave-patches/webgl-graphics-toolkit.cc`（7126B）、`MILESTONE-2.md`、`build-glu.sh`、`Dockerfile`、`README.txt` | `build/113/vendor-edge-tools/`（GPL-3.0-or-later，**用前须注明出处**）|
+| Octave 11.3.0 官方源码（宿主盘有整棵树：`/mnt/hdd/octave-wasm-build/probe11/octave-11.3.0/`）| `libgui/graphics/GLCanvas.cc:66-133`（`draw`/`do_getPixels`/`do_print` = **渲染三件套的官方最小配方**）、`qt-graphics-toolkit.cc`（toolkit 契约）、`__init_gnuplot__.cc`（薄 toolkit 模式）、`gl-render.h`、`oct-opengl.h`、`gl2ps-print.h` | 本仓 `build/113/osmesa_toolkit.cc` 直接照抄这三处 |
+| 本仓既有资产 | `web_graphics_toolkit.cc`（T2：登记/装载/`.oct` 打包/命名空间坑）、`webnet.cc`（`.oct`→JS 通道：`EM_ASM` 在 side module 不可用 ⇒ `emscripten_run_script` + MEMFS）、`webimage.cc`（`stbi_write_png_to_func` 回调式 PNG）| 同上 |
+| 本仓步骤① | `osmesa-smoke.c/.sh`（context 创建 + `glReadPixels` + 精确链接行）、`osmesa-stubs.c` | 同上 |
+
+**结论**：`osmesa_toolkit.cc` = **Edge-Tools 的骨架** + **GLCanvas 的三件套** + **webnet 的通道** + **smoke 的 context 代码**。没有从零设计。
+
+### 7.2 A 档（OSMesa 全打进 `.oct`）：试到底，三道墙
+
+做法：主树保持 opengl-off，把 `gl-render.cc`（改名 `p5_opengl_renderer` 避开与主模块同名符号的抢占）
+连同 Mesa/GLU 一起编进一个自包含 `.oct`。**三道墙，全部实测**：
+
+1. **Chrome 禁止主线程同步编译 >8MB 的 wasm**
+   `RangeError: WebAssembly.Compile is disallowed on the main thread, if the buffer size is larger than 8MB`
+   （`__dlopen_js` 恒走同步路径；SLICOT 那个 8.1MB 的模块刚好在限内，10.8MB 的不行）。
+   **已解**：页面侧**异步预加载** —— `Module.loadDynamicLibrary(path,{loadAsync:true})` 开头就查
+   `LDSO.loadedLibsByName`，命中即返回，Octave 之后同步 `dlopen` 不再编译。
+   接线：`build/post.js` 暴露 `Module.loadDynamicLibrary`；`bridge/assets-loader.js` 的
+   `SYNC_COMPILE_LIMIT` 对 >8MB 的 `kind: oct` 走这条路。
+2. **`.oct` 需要主模块胶水里的 JS 库函数**（`emscripten_longjmp`）。资产车道的 `.oct` 不在主链
+   命令行上 ⇒ 它们的 JS 导入不会被自动收进胶水（`tools/link.py:2876` 只对**命令行上的**
+   side module 做这件事）。**已解**：按主树同款（wasm-SjLj）重编 Mesa/GLU
+   （`-mllvm -wasm-enable-sjlj` ⇒ `longjmp` 落到主模块**已导出**的 `__wasm_longjmp`）。
+   顺带得到一条通用教训：`EXPORTED_FUNCTIONS` 传 JS 库函数名是**硬错误**
+   （`undefined exported symbol`，带不带下划线都一样）。
+3. **体量本身**：即使①②都解决，**10.8MB / 数据段 4.5MB / `dylink.0` `tableSize=12543`** 的
+   side module 在装载期会读到**错位的字符串** —— 实测 Octave 的 API 版本检查把
+   `__init_osmesa__` 错读成紧邻的 `__VERSION__`、把 `api-v61` 错读成 Mesa 的
+   `VARYING_SLOT_*` 串，于是报
+   `API version SLOT_VA found in .oct file function '__VERSION__'`。
+   **未解**，判定为"这个体量超出 side module 那条路能干净处理的范围" ⇒ 转 B 档。
+
+### 7.3 B 档（主 wasm 带 GL）：做法与实测进展
+
+1. 主树 `WITH_OPENGL=1 SKIP= bash configure-113-full.sh` → `config.h` 里
+   `HAVE_OPENGL/HAVE_GL_GL_H/HAVE_GL_GLU_H/HAVE_GL_GLEXT_H` 全 1 ✔
+2. **`make clean` + 全量重编**（`emmake make -k -j24`）：必须 `-k` ——
+   `libinterp/dldfcn/__fltk_uigetfile__.oct` 这个目标在 `--without-fltk` 下必然失败
+   （`/usr/bin/install: omitting directory 'libinterp/dldfcn/.libs/'`）。
+   验证 `gl-render.o` 真的带 GL：`emnm libinterp/corefcn/libcorefcn_la-gl-render.o | grep -c " U gl"` → 11 ✔
+3. 主链加 `-lGL -lGLU`：`link-web.sh` 新增 `GL_LIBS=1`。**必须用绝对路径**
+   （`/src/deps/glshim/lib/libGL.a`、`libGLU.a`）—— 实测 `-lGL` 能解析 `gl*`，
+   但 `-lGLU` **没能**解析 `gluNewTess` 等 9 个，而 `ERROR_ON_UNDEFINED_SYMBOLS=0`
+   把未定义符号静默放过（运行期才炸）。另需把 `/src/websrc/osmesa-stubs.c` 也加进去
+   （`sched_getcpu`/`pthread_setname_np`）。glshim 里的 `libGL.a/libGLU.a` 要指向
+   **wasm-SjLj 版**的 Mesa/GLU（否则 `emscripten_longjmp` 又冒出来）。
+4. **toolkit 必须编进主模块**（`link-web.sh` 的 `P5_TOOLKIT=1`，`main.cc` 里
+   `#if defined (P5_OSMESA_TOOLKIT)` 调 `p5_install_osmesa_graphics_toolkit()`）：
+   `opengl_functions` 的**虚表跨模块会失效** —— 对象若由 side module 创建，
+   主模块里 `opengl_renderer::set_viewport` 的回调会打到不属于它的表槽
+   （`RuntimeError: table index is out of bounds`，栈顶正是 `set_viewport`）。
+   Edge-Tools 的参考实现也是这个形态（toolkit 编进主模块）✔
+5. **产物**：`octave.wasm` 34.30MB → **45.58MB（+11.3MB raw）**；`octave.data` 不变；
+   toolkit 目标文件仅 78,731 字节（不内嵌 Mesa）。
+
+**实测进展（8763，`siteP5`）**：
+```
+graphics_toolkit('osmesa')  → osmesa          ✔ 装载成功
+figure(7)                   → figure，position 300 200 560 420   ✔ 真 figure
+clf / line([0 1],[0 1])     → ✔ 真图形对象（不经 plot 桥）
+drawnow                     → RuntimeError: table index is out of bounds   ✘ 卡在这里
+```
+
+### 7.4 已经排除的（别再重复排查）
+
+- **签名不一致** ✔ 排除：`build/113/check-dylink-signatures.py`（本轮新增）逐个比对
+  .oct 的 72 个函数导入 vs 主 wasm 的 42,267 个导出 ⇒ **0 处不匹配**。
+  （这个工具踩过两个假阳性坑，都写在它的文件头：rec-group 类型段编码、
+  `function` 段索引要减去导入函数个数。）
+- **JS 库函数缺失** ✔ 排除（`MISSING-OCT-SYMBOL` 诊断补丁无输出）。
+- **跨模块虚表** ✔ 排除（把 toolkit 编进主模块后现象相同，说明不是这条）。
+
+### 7.5 ★ 当前卡点（下一次从这里开始）
+
+`drawnow` → `redraw_figure` → **`ensure_context(w,h)` 一带**就 trap：
+`RuntimeError: table index is out of bounds`。位置是**推断 + 实测**得到的：
+在 `render()` 里 `set_viewport` 之前插了一段**直接调 GL 入口**的探针
+（`P5TK_GLPROBE`：`::glGetString(GL_VERSION)` / `::glClearColor` / `::glClear`），
+**探针一个字都没打出来** ⇒ trap 发生在更早的 `ensure_context()`
+（`OSMesaCreateContextExt` / `OSMesaMakeCurrent`）那一步。
+（`P5_GLPROBE=1` 是 `link-web.sh` 的口子，默认关、零开销。）
+
+**下一次的候选（按代价排序）**：
+1. 给这一版重新编一份带 `DIAG_NAMES=1` 的，把 trap 的函数名抓出来（本轮的命名版
+   抓到过 `octave::opengl_renderer::set_viewport(int, int)`，但那是 A 档的形态）。
+2. 查 **Mesa 的 glapi 在 MAIN_MODULE=1 下的表/dispatch 机制**：
+   `-Dshared-glapi=disabled` 下入口点是直接函数，但 `_glapi_tls_Context` 是 TLS；
+   主模块的 `__tls_base`/`__tls_size` 与它在同一次链接里，理论上没问题——
+   但"表槽越界"更像 **glapi 的 dispatch 表**（`_glapi_Dispatch`）或
+   `__indirect_function_table` 里的槽位没被填。可以用 `wasm-dis` 看
+   `set_viewport` 附近那条 `call_indirect` 的类型与表索引来源。
+3. 退一步的窄目标：**只让 `print -dpng` / `getframe` 走 OSMesa**（不做屏幕 toolkit），
+   减少一条调用链（`redraw_figure` 的 toolkit 契约不参与）。
+4. 再退一步：A 档 + 把 `.oct` 压到 8MB 以下（`-Oz`、剔 Mesa 的 GLSL/NIR 部分）——
+   但这要重编 Mesa 且收益不确定。
+
+### 7.6 本轮新增/修改的工具与文件
+
+- `build/113/osmesa_toolkit.cc`（**新**；骨架抄 Edge-Tools + 官方三件套）
+- `build/113/check-dylink-signatures.py`（**新**；side module ABI 检查器）
+- `build/113/vendor-edge-tools/`（**新**；上游参考实现与文档，GPL-3.0-or-later）
+- `bridge/p5canvas.js`（**新**；`OctaveP5.show/useOsmesa/useWeb/demo/status`）
+- `build/p5osmesa/PKG_ADD`（**新**；`.oct` 车道时的登记层；B 档下已不需要）
+- `test/browser/accept-p5-osmesa.mjs`（**新**；真渲染的验收，含 PNG 魔数/getframe/逐图类型）
+- `build/113/link-web.sh`：新增 `GL_LIBS` / `LIB_FUNCS` / `P5_TOOLKIT` / `P5_GLPROBE` 四个口子
+- `build/post.js`：暴露 `Module.loadDynamicLibrary`（>8MB `.oct` 的异步预加载）
+- `bridge/assets-loader.js`：`SYNC_COMPILE_LIMIT` + `preloadIfHuge()`
+- `build/main.cc`：`P5_OSMESA_TOOLKIT` 下安装 osmesa toolkit
+- **Mesa/GLU 用 wasm-SjLj 重编**：`/src/libwork/mesa-build-sjlj`、`/src/libwork/glu-build-sjlj`
+  （交叉文件 `emscripten-cross-sjlj.ini`：加 `-fwasm-exceptions -mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh`）

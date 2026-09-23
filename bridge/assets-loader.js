@@ -98,6 +98,34 @@
     return n;
   }
 
+  // Chrome 禁止在**主线程同步编译**大于 8MB 的 wasm 模块：
+  //     RangeError: WebAssembly.Compile is disallowed on the main thread,
+  //     if the buffer size is larger than 8MB.
+  // 而 Octave 的 dlopen 是**同步**的（emscripten 的 `__dlopen_js` 恒传 loadAsync:false），
+  // 所以超过这个尺寸的 `.oct` 必须**由这一侧先异步预加载**：
+  // `loadDynamicLibrary()` 开头就查 `LDSO.loadedLibsByName[libName]`，命中直接返回，
+  // 于是 Octave 之后同步 dlopen 时不会再编译一次。
+  // （`Module.loadDynamicLibrary` 由 `build/post.js` 暴露。实测边界：SLICOT 模块
+  //   8.1MB 能过、P5 的 OSMesa toolkit 10.8MB 不行。）
+  var SYNC_COMPILE_LIMIT = 8 * 1024 * 1024;
+
+  // 尺寸超限就先异步预加载。**失败不算致命** —— 交给 Octave 自己的 dlopen 报错，
+  // 那条信息（"could not load dynamic lib"）比这里更贴切。
+  function preloadIfHuge(name, mount, buf) {
+    if (buf.byteLength <= SYNC_COMPILE_LIMIT) return Promise.resolve();
+    var M = global.Module;
+    if (!M || typeof M.loadDynamicLibrary !== 'function') {
+      log(name + ' 超过 8MB 但 Module.loadDynamicLibrary 不可用（post.js 没烘进去？）');
+      return Promise.resolve();
+    }
+    return M.loadDynamicLibrary(mount, { loadAsync: true, global: true, nodelete: true })
+      .then(function () {
+        log(name + ' 异步预加载完成（' + buf.byteLength + ' 字节 > 8MB，绕开主线程同步编译限制）');
+      }, function (e) {
+        log(name + ' 异步预加载失败（交给 dlopen 报错）: ' + e);
+      });
+  }
+
   function addPaths(dirs) {
     var M = global.Module;
     if (!dirs || !dirs.length || !M || !M.eval_string) return;
@@ -137,19 +165,22 @@
             var mount = a.mount || (OCTAVE_M + '/oct/' + name + '.oct');
             mkdirp(mount.replace(/\/[^/]*$/, ''));
             fs().writeFile(mount, new Uint8Array(buf));
-            var dir = mount.replace(/\/[^/]*$/, '');
-            // Octave 按**文件名**找 .oct 模块：一个模块导出的函数若与文件名不同名，
-            // 必须像桌面版那样给每个函数名建符号链接（例如 bzip2.oct -> gzip.oct）。
-            // 否则 exist()/which() 都找不到——这是 webio.oct 六个内建第一次全失联的原因。
-            (a.aliases || []).forEach(function (fn) {
-              var link = dir + '/' + fn + '.oct';
-              try { fs().symlink(mount, link); } catch (e) { /* 已存在 */ }
+            // 超 8MB 的模块先异步预加载，再做原来的收尾（别名/加路径/登记）
+            return preloadIfHuge(name, mount, buf).then(function () {
+              var dir = mount.replace(/\/[^/]*$/, '');
+              // Octave 按**文件名**找 .oct 模块：一个模块导出的函数若与文件名不同名，
+              // 必须像桌面版那样给每个函数名建符号链接（例如 bzip2.oct -> gzip.oct）。
+              // 否则 exist()/which() 都找不到——这是 webio.oct 六个内建第一次全失联的原因。
+              (a.aliases || []).forEach(function (fn) {
+                var link = dir + '/' + fn + '.oct';
+                try { fs().symlink(mount, link); } catch (e) { /* 已存在 */ }
+              });
+              var dirs = a.addpath ? [a.addpath] : [dir];
+              addPaths(dirs);
+              loaded[name] = { files: 1, addpath: dirs };
+              log(name + ' 就绪（' + buf.byteLength + ' 字节 → ' + mount + '）');
+              return loaded[name];
             });
-            var dirs = a.addpath ? [a.addpath] : [dir];
-            addPaths(dirs);
-            loaded[name] = { files: 1, addpath: dirs };
-            log(name + ' 就绪（' + buf.byteLength + ' 字节 → ' + mount + '）');
-            return loaded[name];
           });
         });
       }

@@ -16,6 +16,26 @@
 //   `build/113/vendor-edge-tools/MILESTONE-2.md`，与本项目独立得到同一结论）。
 //   OSMesa 是**完整的 OpenGL**，只是渲进内存 —— 这一类 bug 从根上不存在。
 //
+// ── 这条线最终走的是"主 wasm 带 GL"（B 档），不是资产自包含（A 档）────────────
+// 先把 A 档（Mesa 全打进 `.oct`）试到底了，**三道墙都有实测记录**，最后放弃：
+//   ① Chrome 禁止主线程**同步编译 >8MB** 的 wasm（`WebAssembly.Compile is disallowed
+//      on the main thread, if the buffer size is larger than 8MB`）——`dlopen` 恒走同步路径；
+//      解法是页面侧**异步预加载**（`bridge/assets-loader.js` 的 `SYNC_COMPILE_LIMIT`
+//      + `build/post.js` 暴露 `Module.loadDynamicLibrary`）。
+//   ② `.oct` 需要主模块胶水里的 JS 库函数（`emscripten_longjmp`），而资产车道的
+//      `.oct` 不在主链命令行上 ⇒ 不会被自动收进来。解法见 `link-web.sh` 的 `LIB_FUNCS`
+//      与 Mesa/GLU 的 SjLj 模式重建（见下）。
+//   ③ 即使①②都解决，**10.8MB / 数据段 4.5MB / `dylink.0` tableSize=12543** 的
+//      side module 在装载期仍会读到**错位的字符串**（实测：Octave 的 API 版本检查
+//      把 `__init_osmesa__` 错读成紧邻的 `__VERSION__`、把 `api-v61` 错读成 Mesa 的
+//      `VARYING_SLOT_*` 串）⇒ 判定为"这个体量超出 side module 那条路能干净处理的范围"。
+// ⇒ **改为主 wasm 带 GL**：主树 `WITH_OPENGL=1` 重配重编 + 主链加 `-lGL -lGLU`
+//   （`glshim` 把 OSMesa 冒充成 GL）。于是 `opengl_renderer` 与 OSMesa 的
+//   `OSMesa*` 入口都在**主模块**里（MAIN_MODULE=1 全导出），本文件就退化成
+//   **一个薄 toolkit**：不内嵌任何 Mesa 代码，只 import 主模块的符号。
+//   代价：主 wasm 变大（OSMesa 20MB 归档里被引用到的部分）；收益：装载干净、
+//   `print -dpng` / `getframe` 也能走官方那条路。
+//
 // ── 骨架来自哪（**不是从零写的**）──────────────────────────────────────────
 //   · 骨架 / 生命周期 / `figure_pixsize` / `get_canvas_size` / 登记装载：
 //     Edge-Tools `octave-patches/webgl-graphics-toolkit.cc`（GPL-3.0-or-later，
@@ -37,11 +57,11 @@
 //   屏幕显示与 `print -dsvg`。`figure.m` 里两边都建（见该文件注释）。回退方案始终在：
 //   `graphics_toolkit('web')` 或干脆不加载本资产。
 //
-// 构建（容器内，side module；链接行照 `osmesa-smoke.sh`）：
-//   OUT=/src/octs-p5 OCT_INCS="-I$SRC -I$MESA_SRC/include -I$MESA_SRC/src -I$MESA_BUILD/src" \
-//   OCT_LIBS="/src/libwork/common-stubs.o <OSMesa/softpipe/mesa_util_sse41/blake3 + --start-group> -L/src/deps/zlibbz2/lib -lz" \
-//   CC_SRCS="__init_osmesa__:/src/websrc/osmesa_toolkit.cc" bash /src/bin/build-oct.sh --cc
-// 产物 `__init_osmesa__.oct` → 站点 `assets/oct/`，由 `p5osmesa` 资产在启动时登记 + 装载。
+// 构建（容器内；**主树须已 `WITH_OPENGL=1` 重配重编**，且主链已带 `-lGL -lGLU`）：
+//   cd /src/bin && OUT=/src/octs-p5 OCT_INCS="-I/src/work/octave-11.3.0 -I/src/deps/glshim/include" \
+//     CC_SRCS="__init_osmesa__:/src/websrc/osmesa_toolkit.cc" bash build-oct.sh --cc
+//   （不链任何库 —— OSMesa/GLU/renderer 全由主模块在 dlopen 时解析，与 dldfcn 同一套路）
+// 产物 `__init_osmesa__.oct` → 站点 `assets/oct/`，由 `p5osmesa` 资产在装载时登记 + 装载。
 //
 // ⚠️ 函数名与文件名必须一致（Octave 按 `<函数名>.oct` 找模块）：DEFUN_DLD(__init_osmesa__)
 //    ↔ `__init_osmesa__.oct`，所以**不需要**建别名符号链接。
@@ -319,6 +339,21 @@ private:
         return false;
       }
 
+#if defined (P5TK_GLPROBE)
+    // 诊断：直接调 GL 入口（不经 opengl_functions 虚表）。用来区分"GL 入口本身不可用"
+    // 与"经虚表的间接调用表槽不对"这两件事。
+    {
+      const GLubyte *ver = ::glGetString (GL_VERSION);
+      const GLubyte *ren = ::glGetString (GL_RENDERER);
+      octave_stdout << "P5TK GL_VERSION=" << (ver ? (const char *) ver : "(null)")
+                    << " GL_RENDERER=" << (ren ? (const char *) ren : "(null)")
+                    << std::endl;
+      ::glClearColor (1.0f, 1.0f, 1.0f, 1.0f);
+      ::glClear (GL_COLOR_BUFFER_BIT);
+      ::glFinish ();
+      octave_stdout << "P5TK direct glClear ok" << std::endl;
+    }
+#endif
     m_renderer.set_viewport (w, h);
     m_renderer.set_device_pixel_ratio (1.0);
     m_renderer.draw (go);
@@ -402,30 +437,33 @@ private:
   mutable uint8NDArray m_last_pixels;
 };
 
-DEFUN_DLD (__init_osmesa__, args, nargout,
-           "-*- texinfo -*-\n\
-@deftypefn {Loadable Function} {} __init_osmesa__ ()\n\
-Register and load the @code{osmesa} graphics toolkit: Octave's own\n\
-@code{opengl_renderer} running on OSMesa (software rasterisation into a memory\n\
-buffer).  Unlike the minimal @code{web} toolkit, this one really renders:\n\
-@code{redraw_figure} produces pixels and @code{get_pixels} returns them, so\n\
-@code{getframe} works too.\n\
-@end deftypefn")
+// ⚠️ **这个文件被编进主模块**（不是 `.oct`）：`main.cc` 在 addpath 之后调用
+//    `p5_install_osmesa_graphics_toolkit()` 登记 + 装载（见 link-web.sh 的 `P5_TOOLKIT=1`）。
+//    为什么不走 `.oct`：**`opengl_functions` 的虚表会跨模块** —— `opengl_renderer`
+//    （`gl-render.cc`，opengl-on 后编在主模块里）会通过 `m_glfcns.xxx()` 回调，
+//    而对象若由 side module 创建，那个间接调用就会在**主模块的调用点**打到不属于它的
+//    表槽上（实测：`RuntimeError: table index is out of bounds`,
+//    栈顶正是 `octave::opengl_renderer::set_viewport(int, int)`）。
+//    Edge-Tools 的参考实现也是把 toolkit **编进主模块**（他们追加到 `gl-render.cc`
+//    并从 `interpreter::initialize()` 调 installer）—— 这里沿用同一个形态。
+void
+p5_install_osmesa_graphics_toolkit (interpreter& interp)
 {
-  (void) args;
-  (void) nargout;
-
   P5TK_LOG ("__init_osmesa__ called\n");
 
-  octave::interpreter& interp = *octave::interpreter::the_interpreter ();
-  octave::gtk_manager& gtk_mgr = interp.get_gtk_manager ();
+  gtk_manager& gtk_mgr = interp.get_gtk_manager ();
 
   gtk_mgr.register_toolkit ("osmesa");
 
-  octave::graphics_toolkit tk (new osmesa_graphics_toolkit (interp));
+  graphics_toolkit tk (new osmesa_graphics_toolkit (interp));
   gtk_mgr.load_toolkit (tk);
-
-  return octave_value_list ();
 }
 
 OCTAVE_END_NAMESPACE (octave)
+
+// 给 `main.cc` 用的 C 链接入口（避免在 main.cc 里写命名空间）
+extern "C" void
+p5_install_osmesa_graphics_toolkit (octave::interpreter& interp)
+{
+  octave::p5_install_osmesa_graphics_toolkit (interp);
+}
