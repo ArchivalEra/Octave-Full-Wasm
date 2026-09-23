@@ -660,11 +660,12 @@ makeinfo 生成 doc-cache）。
 | `build/fftw_threads_stub.c` | FFTW 线程桩（必须） |
 | `build/normalize_arpack.py` | ARPACK F77 源净化器 |
 | `build/second_stub.f` | ARPACK `second()` 计时桩 |
-| `build/plotbridge/*.m` | plot 翻译桥垫片（plot/hold/legend/xlim/… 20 个） |
+| `build/plotbridge/*.m` | plot 翻译桥垫片（plot/hold/legend/xlim/… 20 个）+ 桥自身的状态机 |
+| `build/plotbridge/__pb_fields__.m` | **单个面板的字段表**（名字/默认值/新轴是否重置）——那三处的单一真源 |
+| `build/plotbridge/__pb_palette__.m` | 唯一的 7 色调色板（取色 `k` 从 1 起循环） |
+| `build/plotbridge/__pb_publish__.m` | **无 GL 设备的显示回落**：把当前状态渲成 SVG 交给页面（见 §5.22） |
 | `bridge/assets-loader.js` | **资产懒加载器**（manifest → fetch → 写 FS → addpath；支持 `aliases` 符号链接） |
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
-| `bridge/octplot.html` | plot 桥 PoC 页（含运行时注入胶水 + 4 个 demo 按钮） |
-| `bridge/plotbridge.js` | spec→gnuplot 脚本 + marker 表（marker 表已按肉眼锁定） |
 | `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
 | `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
@@ -720,6 +721,10 @@ makeinfo 生成 doc-cache）。
 - **（新，2026-09-23）桥的参数宽容度**：桥比核心宽容的写法（如 `plot(x,x,'+','')`）以前收下，
   现在默认有真渲染器 ⇒ 会走到核心实现 ⇒ **按核心（=桌面）的严格性报错**。这是向桌面看齐，
   但"凡桥比核心松的写法都要重新核"（§8 待办 8）。
+- **（新，2026-09-23）没有 WebGL2 的设备也能看见图**（此前是**静默空白**）：浏览器拿不到
+  GL 上下文时（旧设备、GPU 被 blocklist、`--disable-webgl`），toolkit 落一个信号
+  `/tmp/p5_nogl.txt` ⇒ 桥把自己渲的 **SVG** 交给页面显示（`accept-p5-fallback` 15 项钉住）。
+  代价如实记：那条路**没有抗锯齿/硬件加速**，且页面每 250 ms 采样一次（见 §5.22）。
 - **（新，2026-09-23）`xlim()`/`ylim()`/`axis()`/`clf()`/`legend()`/`title()` 等接受输出参数**：
   以前桥这些 shim 声明 0 个输出、被当有返回值调就报 `too many outputs`；为让"核心调用期间的
   转发"进得来，它们现在声明的输出个数与核心对齐，**桥自己的路径返回空**（不是"假的限值"）。
@@ -1746,6 +1751,68 @@ OpenGL ES Translator"，被 Chromium 拦）。toolkit 已改成属性**逐级退
 `test/browser/{accept-p5-graphics,accept-t2-graphics,accept-print,accept-dldfcn,accept-forge2,accept-net,probe-gfx-bench}.mjs`、
 `dist/DEPLOY.md` + 五份文档。
 删除（历史在 git）：`build/113/` 的 7 个 OSMesa 件。
+
+---
+
+### 5.22 胶水层架构审计：候选 3/4/1 落地（2026-09-23）
+
+缘起：用户要"审一次我们自己的胶水"（Octave 本体不动）。三个并行探查 + 逐条复跑，
+产出 6 个候选（报告在 `/tmp/architecture-review-20260923-100919.html`）。按依赖顺序做，
+**一件一提交、每件在 8768 上验**。第一个落地的不是候选、而是**文档自更新机制**（见 §0 与
+`.githooks/`）：HANDOFF 文末 `AUTO:STATE` 由脚本从产物重算，活状态断言与产物矛盾会被
+pre-commit 拦下 —— 它当场就抓出 6 处真实腐烂（头部还写着"31 套 784"、`github.com` 被拦
+的过期说法、§6 的 7.2 时代套件清单…）。
+
+**候选 3 · 把早就写好、却从没人跑的 `%!test` 接进验收**
+`webfile` 10 个 + `pkgfix` 4 个文件里本来就有断言，而全仓 `test/browser/*.mjs` **一次都没
+调过 Octave 的 `test`**。新增 `build/glue-selftest.m`（**目标名单单一真源**，脚本式所以能
+被浏览器 `eval_string`）+ `build/glue-selftest.sh`（宿主，秒级）+ `accept-selftest.mjs`（进
+sweep）。**当场抓到一条真 bug**：`__wf_basename__("/")` 返回 `""` 而实现里另有一段想返回
+`"/"` 的**死分支**（文档与代码自相矛盾）；孪生 `__pkgfix_basename__` 同一毛病（断言没覆盖
+`/` 所以一直没露）。按"我们的 bug 就改代码"修掉两份。实测：宿主 **36/36**、
+8768 `accept-selftest` **24/24**。**只 webfile/pkgfix 带 %!test** —— 其余胶水目录一个都没有。
+
+**候选 4 · 面板字段表与调色板各收成一处声明**
+字段集合原来写在四处（初始化/摘出/放回/新轴重置，emit 是第五处），加字段漏一处就是静默
+状态泄漏 ⇒ 新增 `__pb_fields__.m`（一张表：名字/默认值/新轴是否重置），四处全部改成派生；
+顺带在表里写清**刻意不在表里**的字段（`n` 必须跨面板单调，混进去会让 `/tmp/pbN.dat`
+互相覆盖）。调色板三处各抄一份 ⇒ 新增 `__pb_palette__.m`，并**删掉 `__pb_cycle_color__.m`**
+（1 个调用者的浅 module）。**又抓到一条真 bug**：`/tmp/pb_spec.json` **不是合法 JSON**
+（`__pb_emit__` 从来没写过开头的 `{`），而它唯一的读者 `octplot.html:127` 直接
+`JSON.parse` ⇒ **那个 PoC 页每次打开都在抛异常**，没人发现，因为没有任何套件碰这条 seam。
+
+**候选 1 · 无 GL 设备的显示回落（并把那条死掉的第二渲染路径删掉）**
+实测（可复现）：`--disable-webgl` 的 Chromium 里 `plot(...); drawnow` **不报错、MEMFS 里
+没有 PNG、页面空白**。修法不是"让 toolkit 硬撑"，而是承认它出不了像素：
+① toolkit 落 `/tmp/p5_nogl.txt` 信号（`build/113/webgl_toolkit.cc`）；
+② `__pb_real_renderer__` 据此判定"没有真渲染器"（**选中了 toolkit ≠ 它出得了像素**）；
+③ 桥用**已有的** `__svg_render__`（`print -dsvg` 那个，仓库里最被测过的渲染器）渲 SVG，
+   页面采样后贴成 `<img>`（`show()` 按扩展名定 MIME —— 以前写死 `image/png`，贴不了 SVG）。
+删除：spec JSON 出口（`__pb_emit__.m`）、`bridge/plotbridge.js`、`bridge/octplot.html`
+—— 那条路的读者只有 PoC 页，而"无 GL 也要看得见图"现在由 SVG 回落承担，**一个渲染器
+替代了两个**；字段表的 `spec_key` 列随之消失。顺带把 `__pb_real_renderer__` 里那条
+"真渲染器在线时跳过数据管线"的**错误注释**改写清楚（照它做会把 `print -dsvg` 和回落一起
+废掉 —— 审计把这条列为"注释带偏维护者"的实例）。
+
+**代价（实测，宿主 Octave）**：渲一张 SVG = 直线 **31.7 ms** / `surf(peaks(40))`
+**437.5 ms** / `contour(peaks(20))` **384.5 ms**。所以**没有**跟着每个绘图命令推一次，
+而是"桥写便宜修订号 `/tmp/pb_rev.txt` + 页面 250 ms 采样"—— 代价与命令数无关，
+渲染次数由采样率决定。
+
+**验收**：宿主 36/36；8768 `accept-p5-fallback` **15/15**（含"前提：本机真的没有 WebGL"、
+信号、判定、SVG 图元与文字、页面 blob、第二次绘图更新、`print -dsvg` 不受牵连）、
+`accept-p5-graphics` **65/65**（新增"GL 在线时不再产 SVG 回落"）、`accept-selftest` 24/24、
+`accept-plotv2` 54 / `accept-plot3d` 34 / `accept-print` 43 / `accept-t2-graphics` 26 全绿。
+
+**踩坑记（两处，都值得记）**：
+ · **`{函数调用}` 在 Octave 里不是合法 cell** —— `{struct ("a", 1)}` 会掉进命令语法
+   （`{sin (1)}` 实测把 sin 的帮助打出来）。`__svg_panel_boxes__.m:24` 早就记过这条，
+   我又踩了一遍；现在 `__pb_publish__.m` 的注释直接互指那条。
+ · **`%!error <pat> code` 不能写在 `%!test` 块里** —— 框架当普通语句执行，失败只印
+   `<K` 这种没头没尾的信息；错误用例要单独起 `%!error` 块。
+ · 还有一条**真竞态**：浏览器里页面轮询器也会写回落文件，所以"publish 在有 GL 时是
+   no-op"这条性质不能在 `%!test` 里断言（会随机红）—— 改到"没有别的写者"的
+   `accept-p5-graphics` 里断言。
 
 ---
 

@@ -60,8 +60,6 @@
 !build/forge-fetch.py
 !build/forge-build.sh
 !test/browser/*.mjs
-!bridge/octplot.html
-!bridge/plotbridge.js
 !bridge/webaudio.js
 !bridge/webaudiorec.js
 !bridge/webfilepick.js

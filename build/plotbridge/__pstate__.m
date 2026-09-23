@@ -34,7 +34,18 @@ function s = __pstate__ (varargin)
     if (! isfield (s2, "fig_n")), s2.fig_n = 1; endif
     if (! isfield (s2, "n")), s2.n = 0; endif
     __pb__ = s2;
-    __pb_emit__ ();
+    ## 让页面知道"图变了"。**这里刻意不渲染** —— 无 GL 设备上渲一张 SVG 实测要
+    ## 30 ms（直线）到 440 ms（surf(peaks(40))），每个绘图命令都渲一次纯属浪费；
+    ## 页面按 250 ms 采样，发现修订号变了再请 `__pb_publish__` 渲**最新那一张**。
+    ## 这是仓库里其它宿主桥同一条路子（采样，而不是逐次推送）。
+    ## 有真渲染器时连这个文件都不写（toolkit 自己会出 PNG）。
+    if (! __pb_real_renderer__ ())
+      fid = fopen ("/tmp/pb_rev.txt", "w");
+      if (fid >= 0)
+        fprintf (fid, "%.3f", time ());   # 时间戳当修订号：无状态、每次都变
+        fclose (fid);
+      endif
+    endif
   endif
   s = __pb__;
 

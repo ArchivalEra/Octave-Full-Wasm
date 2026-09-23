@@ -9,7 +9,7 @@
 ##
 ## The bars are stored as (x, ylo, yhi) triples in a separate file so the
 ## renderer can draw caps without re-deriving them: we emit one series per
-## bar direction and let __pb_emit__ carry a "segments" hint.
+## bar direction, and record the direction on the series itself.
 
 function h = errorbar (varargin)
 

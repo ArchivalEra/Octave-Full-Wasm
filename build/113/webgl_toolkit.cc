@@ -65,6 +65,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <fstream>   // P5_NOGL_PATH 那个信号文件（候选 1 的显示回落）
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -127,6 +128,16 @@ p5_trace_write (const std::string& line)
 
 // 渲染结果落点：页面侧 `bridge/p5canvas.js` 从这个路径读图显示
 static const char *P5_PNG_PATH = "/tmp/p5_fig.png";
+
+// ★ 2026-09-23（胶水层审计候选 1）：**"本机建不出 WebGL2 上下文"的信号**，
+//   写成一个 MEMFS 文件，让两边都能读到：
+//     · `.m` 侧（`build/plotbridge/__pb_real_renderer__.m`）据此判断"toolkit 虽然选中了
+//       `webgl`，但它其实出不了像素"，于是**桥自己出 SVG 交给页面显示**（显示回落）；
+//     · 页面侧（`bridge/p5canvas.js`）轮询它，出现时立刻请 Octave 渲一张 SVG
+//       （否则"第一条命令画的图"会没人管 —— 上下文是在第一次 redraw 时才建的）。
+//   为什么需要这个信号（实测）：`--disable-webgl` 的浏览器里，`drawnow` **不报错、
+//   MEMFS 里也没有 PNG**，页面静默什么都不显示 —— 这就是要修的那个坑。
+static const char *P5_NOGL_PATH = "/tmp/p5_nogl.txt";
 
 // 隐藏 canvas：元素 id + CSS 选择器（本 toolkit 自己建，不依赖页面里预先写好 —— 见文件头）
 static const char *P5_CANVAS_ID = "octave-gl-canvas";
@@ -429,6 +440,13 @@ private:
           {
             warning_with_id ("Octave:p5-no-context",
                              "webgl toolkit: cannot create a WebGL2 context");
+            // 落一个信号文件给 .m 侧与页面侧（见 P5_NOGL_PATH 的注释）：
+            // 内容是一句人能看懂的说明，顺便当"这台设备没有 GL"的凭据。
+            std::ofstream f (P5_NOGL_PATH);
+            if (f)
+              f << "webgl toolkit: cannot create a WebGL2 context at "
+                << w << "x" << h << "\n";
+            f.close ();
             warned = true;
           }
         return false;

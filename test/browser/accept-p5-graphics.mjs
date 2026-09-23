@@ -235,6 +235,14 @@ for (const [cmd, name] of [
 }
 await ev(`close(${60}:${fi - 1}); disp("closed")`, '收尾关掉本轮所有图', 'closed');
 
+// ── 六之二：**稳态**下，有 GL 时桥不该做 SVG 回落 ────────────────────────────
+// 为什么是"稳态"而不是"从头到尾不存在"：套件前面 §一 故意切过 `web` toolkit（验老语义），
+// 而那正是"没有真渲染器"的一种 ⇒ 桥在那时会（正确地）渲一张 SVG 回落。
+// 所以这里只断言"GL 在线之后不再产 SVG"——先删掉残留，再画一张，它必须不回来。
+// （也解释了为什么这条不放在 __pb_publish__.m 的 %!test 里：浏览器里页面轮询器也会写它。）
+await ev('if (exist("/tmp/p5_fallback.svg","file")==2), unlink("/tmp/p5_fallback.svg"), endif; clf; plot(1:5); drawnow; disp(exist("/tmp/p5_fallback.svg","file"))',
+  '★ GL 在线时桥不再产 SVG 回落（先删残留，画完仍不存在）', '0');
+
 console.log('--- 七、与既有能力共存（不回归）---');
 await ev('plot(1:10); print -dsvg /tmp/p5.svg; d = dir("/tmp/p5.svg"); disp(d.bytes > 500)',
   '★ plot 桥 + print -dsvg 未受影响', '1');

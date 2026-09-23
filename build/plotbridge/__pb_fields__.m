@@ -8,17 +8,17 @@
 ##   `__pb_panel_fields__`   把面板字段摘出来（15 个字段）
 ##   `__pb_apply_panel__`    把面板字段放回去（15 个字段，顺序必须一一对应）
 ##   `__pb_clear_series__`   "新轴"要重置的那 12 个字段
-##   外加 `__pb_emit__.m`    JSON 里逐字段手写（第 5 处，但每个字段的格式化不同，见下）
 ##
-## 加一个字段要改五处，**漏一处是静默的状态泄漏**（例如只在 clear 里漏了它，上一张图的
-## 设置就串到下一张）。现在：加字段 = 改下表的**一行**；emit 那处仍手写（每个字段的
-## 序列化形式不同：布尔/字符串/向量/列表各有各的写法），但由 `__pb_emit__.m` 的
-## `%!test` 断言"表里每个 spec_key 都真的出现在 JSON 里"来兜住。
+## 加一个字段要改四处，**漏一处是静默的状态泄漏**（例如只在 clear 里漏了它，上一张图的
+## 设置就串到下一张）。现在：加字段 = 改下表的**一行**。
+##
+## （2026-09-23 审计候选 1 把第五处 —— spec JSON 发射器 `__pb_emit__.m` —— 整个删掉了：
+##  那条出口的读者只有 PoC 页 `octplot.html`，而"无 GL 设备要能看到图"这件事改由
+##  `print -dsvg`/`__svg_render__` 承担，于是表里原来那一列 `spec_key` 也随之消失。）
 ##
 ## ── 表的结构 ────────────────────────────────────────────────────────────────
 ##   names     — 字段名（cell of char）
 ##   defaults  — 该字段"新轴/新面板"时的值（cell，与 names 等长）
-##   spec_key  — 进 spec JSON 时的键名；`""` = 不进 JSON
 ##   cleared   — `__pb_clear_series__`（新轴）是否重置它
 ##
 ## ── ⚠️ 不在表里的字段（图/全局级，**别加进来**）──────────────────────────────
@@ -37,8 +37,6 @@ function f = __pb_fields__ ()
              "logx", "logy", "axis", "legend", "series", "panel_pos", "panel_tag"};
   f.defaults = {false, "", "", "", [], [], false, "", ...
                 false, false, "", {}, {}, [], ""};
-  f.spec_key = {"hold", "title", "xlabel", "ylabel", "xlim", "ylim", "grid", "legloc", ...
-                "logx", "logy", "axis", "legend", "series", "pos", ""};
   f.cleared = [false, true, true, true, true, true, true, true, ...
                true, true, true, true, true, false, false];
   f.cleared = logical (f.cleared);
@@ -47,12 +45,11 @@ endfunction
 
 
 %!test
-## 表自身必须自洽（长度一致、名字唯一）—— 这张表是其它四处的单一真源，它错了全错
+## 表自身必须自洽（长度一致、名字唯一）—— 这张表是其余三处的单一真源，它错了全错
 %! f = __pb_fields__ ();
 %! n = numel (f.names);
 %! assert (n, 15);
 %! assert (numel (f.defaults), n);
-%! assert (numel (f.spec_key), n);
 %! assert (numel (f.cleared), n);
 %! assert (numel (unique (f.names)), n);
 ## 每个 default 的类型/形状要跟字段语义对得上（防"复制粘贴时串行"）

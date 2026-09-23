@@ -1,12 +1,14 @@
 ## plot 桥：**"当前有没有真渲染器在线"** 的唯一判定点（own code, repo license）。
 ## SPDX-License-Identifier: AGPL-3.0-or-later
 ##
-## 这个判断有两个用途，都从这里取（**只此一处**，别再各写一份）：
+## 目前只有一个用途（**只此一处**，别再各写一份）：
 ##
-##   ① `__pb_mirror__` 用它决定"要不要把这次调用同时镜像成真图形对象"；
-##   ② 桥自己的**数据管线**（`__pb_add__` 建 series + 写 `/tmp/pbN.dat`、
-##      `__pb_surface__` 的逐单元循环、`__pb_emit__` 的 JSON 序列化）用它决定
-##      "要不要跳过"。
+##   `__pb_mirror__` 用它决定"要不要把这次调用同时镜像成真图形对象"。
+##
+## ⚠️ 以前这里还写着第二个用途："真渲染器在线时**跳过桥自己的数据管线**"。**那条不要做** ——
+##   数据管线（`__pb_add__` 建 series + 写 `/tmp/pbN.dat`）是 `print -dsvg` **和**
+##   无 GL 设备的显示回落（`__pb_publish__`）共同的输入；跳过它等于把这两条路一起废掉。
+##   （审计把这条列为"注释会把下一个维护者带偏"的实例，2026-09-23 改写。）
 ##
 ## ── 为什么② 也要跳过（这是 2026-09-23 实测出来的）──────────────────────────
 ## 桥的数据管线是给**它自己的两个渲染器**吃的：页面上那颗 gnuplot-wasm
@@ -47,6 +49,22 @@ function tf = __pb_real_renderer__ ()
   ## 加了新渲染器就往这里加名字。
   ## （`osmesa` 2026-09-23 已退役，从名单里去掉：后端没了，留着只会让"哪些站点会镜像"
   ##   这件事读起来含糊。历史后端见 git 的 graphics-osmesa 分支。）
-  tf = any (strcmpi (tk, {"webgl"}));
+  if (! any (strcmpi (tk, {"webgl"})))
+    return;
+  endif
+
+  ## ★ **选中了 toolkit ≠ 它真出得了像素**。上下文建不出来时（旧浏览器、GPU 被 blocklist、
+  ##   `--disable-webgl`…）toolkit 会落一个信号文件（build/113/webgl_toolkit.cc 的
+  ##   P5_NOGL_PATH）。那种设备上必须**当作没有真渲染器**：
+  ##     · 不镜像 ⇒ 桥保留自己的数据管线；
+  ##     · 于是 `__pb_publish__` 会把图渲成 SVG 交给页面显示（否则页面一片空白）。
+  ##   实测（2026-09-23）：不加这一问时，`--disable-webgl` 的 Chromium 里
+  ##   `plot(...); drawnow` 不报错、也没有任何显示。
+  f = fopen ("/tmp/p5_nogl.txt", "r");
+  if (f >= 0)
+    fclose (f);
+    return;
+  endif
+  tf = true;
 
 endfunction
