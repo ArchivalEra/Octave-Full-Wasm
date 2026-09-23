@@ -5,15 +5,8 @@ function __player_stop__ (handle)
 
   id = __pba_id__ (handle);
   if (id < 1), return; endif
-  __pba_put__ (id, "Running", "off");
-  __pba_put__ (id, "CurrentSample", 0);
-  __pba_put__ (id, "PausedAt", []);
-  ## Clear the scheduled range too: a later resume() would otherwise try to
-  ## continue a range that no longer exists, and isplaying would compare the
-  ## clock against a stale StartTime.
-  __pba_put__ (id, "PlayingFrom", []);
-  __pba_put__ (id, "PlayingTo", []);
-  __pba_put__ (id, "StartTime", []);
+  ## 六个字段的清理由唯一的拥有者做（含"连排定区间一起清"那条不变量）
+  __pba_transition__ (id, "stop");
   __pba_enqueue__ (id, "stop");
 
 endfunction

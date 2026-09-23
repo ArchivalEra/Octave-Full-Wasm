@@ -11,34 +11,10 @@ function tf = __player_isplaying__ (handle)
   id = __pba_id__ (handle);
   if (id < 1), tf = false; return; endif
 
-  if (! strcmp (__pba_get__ (id, "Running"), "on"))
-    tf = false;
-    return;
-  endif
-
-  ## has the scheduled range run out?
-  fs = __pba_get__ (id, "SampleRate");
-  s = __pba_get__ (id, "PlayingFrom");
-  e = __pba_get__ (id, "PlayingTo");
-  t0 = __pba_get__ (id, "StartTime");
-  paused_at = __pba_get__ (id, "PausedAt");
-
-  if (! isempty (fs) && fs > 0 && ! isempty (s) && ! isempty (e) && ! isempty (t0))
-    if (! isempty (paused_at))
-      elapsed = paused_at - t0;          # frozen while paused
-    else
-      elapsed = __pba_now__ () - t0;
-    endif
-    dur = (e - s + 1) / fs;
-    if (elapsed >= dur)
-      __pba_put__ (id, "Running", "off");
-      __pba_put__ (id, "CurrentSample", e);
-      tf = false;
-      return;
-    endif
-    __pba_put__ (id, "CurrentSample", s - 1 + round (elapsed * fs));
-  endif
-
-  tf = true;
+  ## ⚠️ 这个**谓词会推进状态**（tick）—— 因为本构建没有定时器，"播完了"只能被查出来
+  ##    （Octave 侧 `pause()` 期间页面事件循环完全停摆，见 HANDOFF §5.10）。
+  ##    以前这里是谓词自己算时长、自己写 Running/CurrentSample；那套逻辑现在只属于
+  ##    __pba_transition__.m，这里只问结果。
+  tf = __pba_transition__ (id, "tick");
 
 endfunction

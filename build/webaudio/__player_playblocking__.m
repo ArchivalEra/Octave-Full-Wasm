@@ -18,14 +18,12 @@ function __player_playblocking__ (handle, varargin)
   id = __pba_id__ (handle);
   if (id < 1), return; endif
 
-  fs = __pba_get__ (id, "SampleRate");
-  s = __pba_get__ (id, "PlayingFrom");
-  e = __pba_get__ (id, "PlayingTo");
-  if (isempty (fs) || fs <= 0 || isempty (s) || isempty (e))
+  ## 时长与"播完了"都问状态机（以前这里自己再算一遍、再写一遍 Running/CurrentSample）
+  [~, dur] = __pba_transition__ (id, "duration");
+  if (isempty (dur) || dur <= 0)
     return;
   endif
 
-  dur = (e - s + 1) / fs;
   t0 = __pba_now__ ();
 
   ## Sleep in small slices so the estimated state stays current and an
@@ -34,7 +32,6 @@ function __player_playblocking__ (handle, varargin)
     pause (0.05);
   endwhile
 
-  __pba_put__ (id, "Running", "off");
-  __pba_put__ (id, "CurrentSample", e);
+  __pba_transition__ (id, "finish");
 
 endfunction

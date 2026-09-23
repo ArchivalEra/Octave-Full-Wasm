@@ -37,11 +37,8 @@ function __player_play__ (handle, varargin)
   endif
   if (e < s), e = s; endif
 
-  __pba_put__ (id, "Running", "on");
-  __pba_put__ (id, "CurrentSample", s - 1);
-  __pba_put__ (id, "PlayingFrom", s);
-  __pba_put__ (id, "PlayingTo", e);
-  __pba_put__ (id, "StartTime", __pba_now__ ());
+  ## 状态迁移交给唯一的拥有者（它负责把 Running/区间/StartTime/PausedAt 摆成互相一致的样子）
+  __pba_transition__ (id, "play", s, e);
 
   ## The page needs the sample range, the rate AND the channel count to
   ## de-interleave /tmp/pba_<id>.f64 — it reads the raw file and has no other

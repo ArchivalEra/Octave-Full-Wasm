@@ -11,13 +11,11 @@ function __player_pause__ (handle)
   id = __pba_id__ (handle);
   if (id < 1), return; endif
 
-  if (! strcmp (__pba_get__ (id, "Running"), "on"))
-    return;                        # pausing a stopped player is a no-op
+  ## 状态迁移交给唯一的拥有者（"没在跑就不动"这条也在它里面，见 __pba_transition__.m）
+  __pba_transition__ (id, "pause");
+  if (! strcmp (__pba_get__ (id, "Running"), "paused"))
+    return;                        # no-op：本来就没在跑
   endif
-
-  ## freeze the clock so isplaying/CurrentSample stop advancing
-  __pba_put__ (id, "PausedAt", __pba_now__ ());
-  __pba_put__ (id, "Running", "paused");
   __pba_enqueue__ (id, "pause");
 
 endfunction

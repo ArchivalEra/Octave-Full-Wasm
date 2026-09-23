@@ -17,6 +17,7 @@ OUT=/tmp/glue-selftest.out
 addpath ('$REPO/build/webfile');
 addpath ('$REPO/build/pkgfix');
 addpath ('$REPO/build/plotbridge');   # 候选 4 起：字段表/调色板的 %!test 也在这里跑
+addpath ('$REPO/build/webaudio');     # 候选 5 起：播放状态机的 %!test
 source ('$REPO/build/glue-selftest.m');
 " 2>&1 | grep -v "shadows a core library function\|^warning: called from\|^ *[a-z_]* at line\|^$" > "$OUT" || true
 
