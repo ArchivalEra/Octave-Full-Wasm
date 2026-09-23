@@ -11,3 +11,4 @@ HOOK_DIR="$(dirname "$0")"
 python3 "$HOOK_DIR/update-readme.py" --check
 python3 "$HOOK_DIR/update-handoff.py" --check
 python3 "$HOOK_DIR/check-handoff.py"
+python3 "$HOOK_DIR/check-consistency.py"

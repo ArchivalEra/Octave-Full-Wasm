@@ -6,7 +6,8 @@
 # 两个子命令：
 #   bundle-pkg <名称> <包目录> <挂载前缀> <输出.js>
 #       把一个 Forge 包打成 JS 资产包：取 inst/ 下全部 .m + 元数据 + PKG_ADD，
-#       addpath 指向 <挂载前缀>/inst（有 PKG_ADD 则记到 run 里，由 loader 执行）。
+#       addpath 指向 <挂载前缀>/inst（PKG_ADD 打进包，由 Octave 在 addpath 时自己执行 ——
+#       **不是** loader 手动跑，见下面那条警告）。
 #
 #   bundle-m <名称> <源目录> <挂载前缀> <输出.js>
 #       把源目录下所有 .m（递归）打成一个 JS 资产包。几百个小文件走一条请求，
@@ -32,6 +33,13 @@ import sys
 OCTAVE_M = "/usr/src/octave/m"
 
 
+# ⚠️ 2026-09-23 起**不再往包里写 `run` 字段**（胶水层审计候选 6）。
+#    那个字段曾经声明"加载时请手动执行这个 PKG_ADD"，而**加载器从来不看它**
+#    （线上清单 47 条里 0 条有它）—— 真正让 PKG_ADD 生效的是 `addpath`：Octave 自己会
+#    执行被加入路径的目录里的 PKG_ADD（bridge/assets-loader.js 里有一段注释专门警告
+#    "别手动再跑一遍"，手动跑会让幂等性差的注册（如 imformats("add")）重复执行）。
+#    ⇒ 留着它就是个陷阱：下一个维护者"顺手补全加载器"就会把那套重复注册的 bug 复现出来。
+
 def bundle_m(name, srcdir, mount_prefix, out_js):
     files = {}
     n = 0
@@ -51,20 +59,17 @@ def bundle_m(name, srcdir, mount_prefix, out_js):
             n += 1
     if not n:
         print(f"警告：{srcdir} 里没有 .m 文件", file=sys.stderr)
-    # PKG_ADD（若源目录里有）：加载时由 loader 执行，用于 imformats 注册这类一次性初始化
+    # PKG_ADD（若源目录里有）：**打进包里就够了** —— Octave 在 addpath 该目录时会自己执行它
+    # （loader 不手动跑，见本文件顶部那条警告）。
     pkgadd_src = os.path.join(srcdir, "PKG_ADD")
-    run = []
     if os.path.isfile(pkgadd_src):
         with open(pkgadd_src, encoding="utf-8", errors="replace") as fh:
             files[mount_prefix.rstrip("/") + "/PKG_ADD"] = fh.read()
-        run = [mount_prefix.rstrip("/") + "/PKG_ADD"]
     with open(out_js, "w", encoding="utf-8") as fh:
         fh.write("// 生成物，勿手改：由 build/assets.py bundle-m 产出\n")
         fh.write("window.__OCT_ASSETS__ = window.__OCT_ASSETS__ || {};\n")
         fh.write(f"window.__OCT_ASSETS__[{json.dumps(name)}] = ")
         fh.write("{\n  addpath: [" + json.dumps(mount_prefix.rstrip("/")) + "],\n")
-        if run:
-            fh.write("  run: " + json.dumps(run) + ",\n")
         fh.write("  files: ")
         fh.write(json.dumps(files, ensure_ascii=False))
         fh.write("\n};\n")
@@ -118,18 +123,14 @@ def bundle_pkg(name, pkgdir, mount_prefix, out_js):
             with open(cand, encoding="utf-8", errors="replace") as fh:
                 pkgadd_lines.append(fh.read())
             break
-    run = []
     if pkgadd_lines:
         body = "\n".join(pkgadd_lines) + "\n"
         files[f"{mount_prefix.rstrip('/')}/PKG_ADD"] = body
-        run = [f"{mount_prefix.rstrip('/')}/PKG_ADD"]
     with open(out_js, "w", encoding="utf-8") as fh:
         fh.write("// 生成物，勿手改：由 build/assets.py bundle-pkg 产出\n")
         fh.write("window.__OCT_ASSETS__ = window.__OCT_ASSETS__ || {};\n")
         fh.write(f"window.__OCT_ASSETS__[{json.dumps(name)}] = {{\n")
         fh.write("  addpath: " + json.dumps([mount_prefix.rstrip("/")]) + ",\n")
-        if run:
-            fh.write("  run: " + json.dumps(run) + ",\n")
         fh.write("  files: " + json.dumps(files, ensure_ascii=False) + "\n};\n")
     print(f"bundle-pkg: {name} → {out_js}（{n} 个 .m，{os.path.getsize(out_js)} 字节）")
     return n

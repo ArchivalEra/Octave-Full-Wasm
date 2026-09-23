@@ -1,4 +1,11 @@
 # Copyright 2018-2022 Richard Lincoln. All rights reserved.
+#
+# ⚠️ 2026-09-23（胶水层审计候选 6）：**这是 7.2 车道的上游配方**（rwl/octave-wasm）。
+#    `OCTAVE_VER = 7.2.0` 与下面的 `target/share/octave/7.2.0/...` 路径对这份配方而言
+#    是**正确**的，不要『顺手改成 11.3.0』：
+#      · 11.3.0 的容器里**根本没有这个文件**（`/src/websrc/Makefile` 不存在）；
+#      · 11.3.0 的重链走 `build/113/link-web.sh`（预载路径由它那 4 行 --preload-file 决定）。
+#    也就是说：这里的 7.2 是历史车道的记录，不是『忘了改』。
 
 #MKOCTFILE = mkoctfile
 #OCTAVE_VER = 4.4.1
