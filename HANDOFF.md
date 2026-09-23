@@ -1637,27 +1637,3 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 
 
 
-
-### 5.17 ⚠️ 本轮的网络异常：`github.com` 被拦，推送改走 GitHub API（2026-09-23 04:4x）
-
-**现象**：`git push` 一律 `Recv failure: 连接被对方重置`（直连、HTTP 代理 2080、
-SOCKS5、`http.version=HTTP/1.1` 全试过）；同时 **`gh api` 正常**（`api.github.com` 通）。
-⇒ `github.com` 这个域被网络层拦了，`api.github.com` 没被拦。
-
-**处置（已做）**：
-- 用 **GitHub API**（`gh api` 的 Git Data 接口：blobs → tree（`base_tree` + 改动路径，
-  模式取 `git ls-tree` 的真实值，**不能写死 100644**）→ commit → PATCH ref）把工作推上去；
-  **每个提交都校验 `tree` SHA 与本地一致**才更新 ref。
-- 结果：远端 `refs/heads/main = 51a276a`，其 **tree 与本地 `13288a6^{tree}` 逐位相同**
-  （`ab9b297`）✔；但因为它落在中断之后，**远端是两个本地提交合成的一个提交**
-  （消息取的是后一条 = HANDOFF §5.16 那条）。
-- 本地仍保留**两条提交的详细历史**（`8720eba`、`13288a6`），
-  并已推到一个**持久盘裸镜像** `/mnt/hdd/octave-wasm-build/mirror-Octave-Full-Wasm.git`
-  （remote 名 `mirror`）—— 网络恢复前它就是"已落盘"的凭据。
-
-**下一次要先做的对齐**（否则 `git push` 会因 non-fast-forward 被拒）：
-```bash
-git fetch origin && git reset --hard origin/main   # 工作区当时是干净的；内容与本地逐位相同
-```
-（想保两提交的形状，可先用 `git push mirror main` 确认镜像里有，再对齐。**不要 force-push**。）
-
