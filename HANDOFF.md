@@ -1,16 +1,28 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-23（图形线 P5 轮）**：
-> · **非图形已清零**：SLICOT 修好并上线（见 §5.15）⇒ 全量 **31 套 784 项全绿**。
-> · **图形线推进到"主 wasm 带 GL + toolkit 编进主模块"**（见 §5.16）：`osmesa` toolkit 能装载、
->   figure/clf/line 都通；**渲染卡在 OSMesa 上下文那一步的 GL 调用**（有精确坐标）。
-> 8761 当前 = Octave 11.3.0（wasm sha `bac48adb…`，**未被本轮触碰**），
-> 图形线在 **8763**（`siteP5`，wasm 45.58MB）上做。
-> **接续先读 §8（一句话接续 + 仍待办）与 §5.13–§5.17（近三轮实况）；§9 是当时的计划、§10 是第四轮实况。**
-> ⚠️ 两条必须在动手前知道的：
-> ① **构建主树现在是 opengl-ON**（为 B 档重配过，见 §5.16 末尾"怎么切回去"）；
-> ② 本轮 `github.com` 被网络层拦，推送改走 GitHub API（见 §5.17，含下次对齐命令）。
+> 最后更新：**2026-09-23（图形线收口：桥句柄缓存 → `webgl` 变默认 → 砍 OSMesa）**：
+> · **非图形已清零**：SLICOT 修好并上线（见 §5.15）⇒ 8761 全量 31 套 784 项全绿。
+> · **图形线只剩一条后端**：**`webgl`（gl4es → GLES2 → WebGL2/GPU）**。2026-09-23 用户拍板的
+>   "A" 一次做完：**默认 toolkit = webgl**（开箱 `plot(...); drawnow` 就出真图）、加 `FULL_ES3`、
+>   **OSMesa 后端退役**（7 个仓内文件删除、脚本分支删掉、脚本与配方留在 git 历史）。
+>   见 **§5.21**。
+> · **plot 桥的镜像层改成"一次性句柄缓存 + 深度转发"**（§5.21）：**一次镜像 146 → 1.5 ms（~97×）**，
+>   一张图的**温开销 395 → 94 ms（4.2×）**。顺带**更正**了 §5.20 那条归因（"剩下的 480 ms 是
+>   两次 `path` 手术"是**错的**：真凶是**冷启动**，见 NOTES-webgl.md §4.5.13）。
+> · 验收：`accept-p5-graphics` **54 → 64 项**（新增 10 条，含 pie/contour/legend 嵌套与 DEPTH 复位
+>   的护栏）；**8761 与 8768 全量各 32 套 / 848 项全绿**（838 → +10）。
+> 8761 当前 = Octave 11.3.0（wasm sha `bac48adb…`，**本批开始时未动**；本批要把带 GL 的那份推上去，
+> 见 §5.21 的"上线"小节）；图形线在 **8768** 上做。
+> **接续先读 §8（一句话接续 + 仍待办）与 §5.13–§5.21（近几轮实况）；§9 是当时的计划、§10 是第四轮实况。**
+> ⚠️ 四条必须在动手前知道的：
+> ① **构建主树现在是 opengl-ON + gl2ps-ON，且 GL 头已换成 gl4es+GLU 的**（见 §5.16 末尾"怎么切回去"
+>    与 §5.21 / `build/113/gl-headers-webgl.sh`）；
+> ② `github.com` 被网络层拦，推送改走 GitHub API（见 §5.17，含下次对齐命令）；
+> ③ **容器里的构建脚本是另一份拷贝** —— 改完仓库的 `configure-113-full.sh`/`link-web.sh`
+>    必须 `docker cp` 进容器，否则跑的是旧的（§5.20 末为此白跑两个大重建）；
+> ④ `print` 的矢量输出依赖 **gl2ps + shell 管道 + (gs|svgconvert)**，本构建**没有 shell 是
+>    有意的** ⇒ **plot 桥自己那份 SVG 是唯一能出矢量的实现**，别把它当冗余砍掉（§5.20）。
 
 ---
 
@@ -690,6 +702,17 @@ makeinfo 生成 doc-cache）。
     `xlabel` 实测全报错）→ 这就是 `voronoi` 单输出版本失败的真因。
   - `getframe()` 报 `failed to capture frame data, potentially due to insufficient
     graphics capabilities`（toolkit 的 `get_pixels` 返回空）。
+  ⚠️ **2026-09-23 起这几条的适用条件变了**：站点的**默认 toolkit 已是 `webgl`（真渲染器）**
+  ⇒ **镜像层默认开着**：`plot(1:5)` 会**同时**建出真 line 对象（`get(gca,'children')` 不再是 0、
+  `h = plot(...)` 拿到真句柄）、`getframe()` 返回真像素。上面那三条只在**显式切到 `web`**
+  （`graphics_toolkit("web")`）时成立 —— `accept-t2-graphics` 就是显式切过去验老语义的。
+  `plot(hax, ...)` 那条是**桥自身**的限制，两种 toolkit 下都还在。
+- **（新，2026-09-23）桥的参数宽容度**：桥比核心宽容的写法（如 `plot(x,x,'+','')`）以前收下，
+  现在默认有真渲染器 ⇒ 会走到核心实现 ⇒ **按核心（=桌面）的严格性报错**。这是向桌面看齐，
+  但"凡桥比核心松的写法都要重新核"（§8 待办 8）。
+- **（新，2026-09-23）`xlim()`/`ylim()`/`axis()`/`clf()`/`legend()`/`title()` 等接受输出参数**：
+  以前桥这些 shim 声明 0 个输出、被当有返回值调就报 `too many outputs`；为让"核心调用期间的
+  转发"进得来，它们现在声明的输出个数与核心对齐，**桥自己的路径返回空**（不是"假的限值"）。
 - **FreeType 未构建**（`--without-freetype`）：效果是**每次会话一条**警告
   `opengl_renderer::render_text: support for rendering text (FreeType) was unavailable
   or disabled when Octave was built`（`text-renderer.cc:53` 的 `static bool warned`，
@@ -752,10 +775,46 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > **30 套 / 757 PASS / 0 FAIL**（原推算值 756，实测 757；用 `/mnt/hdd/octave-wasm-build/sweep.sh`
 > 跑的，脚本落在持久盘上，日志在 `sweep-logs/`）。见 **§5.14**。
 >
-> **▶ 非图形已全部清零**（SLICOT 2026-09-23 修好并上线，31 套 784 项全绿，见 §5.15）。
-> **接手第一件事：图形线（P5）** —— 在 **8763**（`siteP5`）上做，8761 不动。
-> **现状：已走到「主 wasm 带 GL + toolkit 编进主模块」，能建 figure；渲染卡在 GL 调用处
-> （`table index is out of bounds`）。见 §5.16 与 NOTES 第七节。**
+> **▶ 非图形已全部清零**（SLICOT 2026-09-23 修好并上线，见 §5.15）。
+> **▶ 图形线只剩一条后端：`webgl`**（gl4es → GLES2 → WebGL2/GPU；OSMesa 已退役，见 §5.21）。
+> `plot(...); drawnow` 真渲出像素且**默认就是它**；`accept-p5-graphics.mjs` **64 PASS / 0 FAIL**；
+> **8761（= 本包内容）与 8768 全量各 32 套 848 项全绿**（838 + 桥新增的 10 条）。
+> **▶ plot 桥两刀**：按行发 series（§5.20，3.5×）+ 镜像层句柄缓存（§5.21，每次镜像 ~97×、
+> 每图温开销 4.2×）。
+>
+> **仍待办（按建议顺序）**：
+> 1. ~~桥剩下的 ~480 ms~~ → ✅ **已完成（§5.21）**：换成一次性句柄缓存 + 深度转发，
+>    镜像一次 **146 → 1.5 ms**；并更正了旧归因（那 480 ms 的真凶是**冷启动**）。
+> 2. ~~A：`webgl` 变默认 + `FULL_ES3` + 砍 OSMesa 残留~~ → ✅ **已完成（§5.21）**。
+> 3. **上线** → ✅ **已推上 8761**（`build/promote-webgl.sh`；8768 全绿后执行）。
+>    **体积账（实测，raw / `gzip -9`）**：
+>
+>    | 文件 | raw 前 | raw 后 | Δraw | gz 前 | gz 后 | Δgz |
+>    |---|---|---|---|---|---|---|
+>    | `octave.wasm` | 35,970,251 | 36,858,059 | +887,808 | 8,159,315 | 8,430,732 | +271,417 |
+>    | `octave.js` | 683,614 | 744,750 | +61,136 | 151,341 | 160,981 | +9,640 |
+>    | `octave.data` | 6,804,767 | 6,804,767 | 0 | 1,314,025 | 1,314,025 | 0 |
+>    | `assets/m/plotbridge.js`（启动清单内） | 88,855 | 139,189 | +50,334 | 25,058 | 34,313 | +9,255 |
+>
+>    **三大件 gzip 合计 9,624,681 → 9,905,738（+281,057 B / +2.9%）**；
+>    wasm raw 34.30 → **35.15 MiB**（对照：退役的 OSMesa 版 45,580,621 = 43.47 MiB）。
+>    **8761 全量回归 32 套 848 项全绿**（清洁重跑：`sweep-logs/20260923-8761-webgl-clean/`）。
+>    ⚠️ `dist/` 已按此重打（`sh build/make-dist.sh`），包内 `octave.wasm` 的 sha 与部署件一致。
+> 4. **手机真机速度**：模拟器验不了 WebGL（§5.19）⇒ 要真设备；桌面 + 降频 + 分辨率标定的
+>    结论见 NOTES-webgl.md §4.5。
+> 5. 已知缺口：**文字渲染**（`--without-freetype`，刻度/title 空白但不崩，且**会话第一条
+>    axes 会打一条带 6 行调用栈的 warning**）；**`print` 的核心矢量路径**（缺 shell 管道 + gs，
+>    见 §5.20；gl2ps 已补上）。
+> 6. **（新）首帧冷启动 ~0.6 s**：真渲染器第一次出图要建上下文 + `initialize_gl4es()` + 编 shader。
+>    想省掉它得在页面启动时**预热一次**（代价：开页多花这点时间 + 可能闪一下空图）。
+>    §5.21 已把"冷/温"分开量清楚，做不做是产品取舍。
+> 7. **（新）测试自身的"截断后匹配"写法还有多处**：`accept-*.mjs` 里有多个套件把输出
+>    `slice(0,N)` 之后再 `includes(want)`。默认换成真渲染器后，会话第一条 axes 的
+>    FreeType warning（带调用栈）就挤掉过两条断言（`accept-dldfcn`/`accept-forge2`，已修）。
+>    **下次再遇到"某条断言只在会话第一次绘图时红"，先看这里。**（`grep -n "slice(0, 200)" test/browser/`）
+> 8. **（新）"桥宽容 vs 核心严格"要对一遍**：默认真渲染器后，桥的宽容调用会走到核心实现
+>    ⇒ 核心的严格报错会浮出来（实测：`plot(x,x,'+','')` 桌面本来就报错）。这是**向桌面看齐**，
+>    但意味着**凡桥比核心松的写法都要重新核**（全量 sweep 是主要防线，§5.21）。
 
 （非图形：一条待办 + 一条长尾 —— 图形线开工前建议先清掉）
 1. **G1 `MAIN_MODULE=2`** —— **2026-09-22 已实测到"差一件事"**（见
@@ -1025,8 +1084,8 @@ GL_RENDERER = softpipe                     ← 软件光栅化，没 LLVM
     ⇒ 一个 GL 头都不会被包含、编不过。要查这几个头探测为什么失败（疑似吃不到我们传的
     `CPPFLAGS`，或按 macOS `OpenGL/gl.h` 风格试的）。
   · **③ 还没开始**（截至 §9.3 当时）：`plot/surf/mesh/contour` 逐个出图并与 7.2 桥产物对照。
-    **2026-09-23 实况见 §5.16**：已走到"主 wasm 带 GL + toolkit 编进主模块"，渲染卡在
-    OSMesa 上下文那一步的 GL 调用。
+    **2026-09-23 已完成，见 §5.16**：步骤①②③ 全部打通，8763 上 54 PASS / 0 FAIL，
+    逐图类型真渲出非空白画面（根因是 toolkit 缺 `#include "config.h"`）。
   · **回退不变**：plot 桥 + `print -dsvg` 保持可用，两者不冲突。
 
 > ~~🚨 主树现在是"混态"~~（**2026-09-22 已清除；2026-09-23 又因 B 档重新切成 opengl-ON** ——
@@ -1338,32 +1397,46 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
 
 ---
 
-### 5.16 图形线（P5 步骤②）：A 档试到底 → **改走 B 档（主 wasm 带 GL）**，卡在 GL 调用处
+### 5.16 图形线（P5）：A 档试到底 → B 档（主 wasm 带 GL）→ **步骤②③ 打通并验收**
 
-一手记录在 **`build/113/NOTES-p5-osmesa.md` 第七节**（七小节，含全部实测与复现命令）。
+一手记录在 **`build/113/NOTES-p5-osmesa.md`**（第七节 = 过程与推翻的推断；**第八节 = 根因与修法，接手先看它**）。
 这里只给接续必须知道的：
 
 **实验通道是 8763（`/mnt/hdd/octave-wasm-build/siteP5`）**；8761 **全程未动**
-（wasm 仍是 `bac48adb…`）。图形版的 `octave.wasm` 是 **45.58MB**（比基线 +11.3MB raw，因为
-OSMesa 进了主模块）——**这是 B 档的代价，也是它不能直接上 8761 的原因**。
+（wasm 仍是 `bac48adb…`）。图形版的 `octave.wasm` 是 **45,580,621 字节**（比基线 +11.3MB raw，
+因为 OSMesa 进了主模块）——**这是 B 档的代价，也是它不能直接上 8761 的原因**。
 
-**已达成（实测）**：主树 `WITH_OPENGL=1` 重配重编 + 主链 `-lGL -lGLU`（glshim 把 OSMesa
-冒充成 GL）+ **toolkit 编进主模块** ⇒ 在 8763 上 `graphics_toolkit('osmesa')` = `osmesa` ✔、
-`figure(7)` 真对象 ✔、`clf`/`line()` ✔。
+**已达成（实测，8763）**：主树 `WITH_OPENGL=1` 重配重编 + 主链 `-lGL -lGLU`（glshim 把 OSMesa
+冒充成 GL）+ **toolkit 编进主模块** ⇒ `graphics_toolkit('osmesa')` = `osmesa` ✔、
+`figure(7)` 真对象 ✔、**`plot(...); drawnow` 真渲出像素** ✔、`getframe` 返回真 cdata ✔、
+页面 `<img>` 贴上 PNG ✔。`test/browser/accept-p5-graphics.mjs`（当时叫 accept-p5-osmesa）= **54 PASS / 0 FAIL**，
+逐图类型（plot/plot3/semilogy/loglog/stairs/stem/area/bar/pie/contour/errorbar/scatter/
+scatter3/mesh/surf）全部解码 PNG 后**非空白**。
 
-**当前卡点**：`drawnow` → `RuntimeError: table index is out of bounds`，位置在
-`ensure_context()` 一带（`OSMesaCreateContextExt`/`OSMesaMakeCurrent`）—— 把**直接调 GL 入口**
-的探针（`P5_GLPROBE=1`）插在 `set_viewport` 之前，**探针一个字没打出来** ⇒ trap 更早。
-**已排除**：签名不一致（新工具 `build/113/check-dylink-signatures.py` 比对
-72 个导入 vs 42,267 个导出 ⇒ 0 处）、JS 库函数缺失、跨模块虚表（改成编进主模块后现象相同）。
+**根因（一句话）**：`build/113/osmesa_toolkit.cc` 没 `#include "config.h"` ⇒ 该 TU 里
+`HAVE_OPENGL` 未定义 ⇒ `octave::opengl_functions` 被编成**空类**（虚表只有 2 槽），
+而 `gl-render.o`（`HAVE_OPENGL=1`）的 `set_viewport` 要取**第 77 槽** ⇒ 越界 trap。
+修法就是补上那句（Octave 自己的 `gl-render.cc:26-28` 就这么写）。产物只 +5KB。
+**原先记的"trap 在 `ensure_context()`"是误判** —— 当时那版**根本没编进探针**
+（`grep -c 'P5TK GL_VERSION='` = 0），而且 `octave_stdout` 带缓冲、trap 后会丢。
+
+**步骤③ 的关键发现**：修好渲染后仍是白图，因为 **plot 桥（`build/plotbridge/`）的 .m
+一个真图形对象都不建**（v1 时代设定：没有 toolkit、渲染在 JS 侧）。
+新增 `build/plotbridge/__pb_mirror__.m`：桥的每个绘图/状态函数结尾多调一句，
+**把桥目录临时从 path 摘掉再 `feval` 同名核心函数** ⇒ 真对象就有了。
+⚠️ 必须"整段调用期间都摘掉"：只把顶层换成句柄会让 `pie`/`contour` 炸在
+`__pie__` 内部的 `axis(h, [...])`（首参是句柄，桥的 `axis.m` 不认）。
+代价：每张图多约 0.26s（两次 `path()` 重扫，各 0.13s）。
+**门禁**：只在真渲染器（`osmesa`）在线时镜像；`web` 下**完全不走**，
+所以 **8761 行为逐字节不变**（验收里有一条专门守这个）。
 
 **A 档（Mesa 全打进 `.oct`）的三道墙**（都有实测，别再走）：① Chrome 禁主线程同步编译
 >8MB（已用页面侧异步预加载解）② `.oct` 需要的 JS 库函数不在主模块胶水里（已用 wasm-SjLj
 重编 Mesa/GLU 解）③ 10.8MB/表 12543 的 side module 装载期读到错位字符串（未解，故转 B 档）。
 
-**下一个动作（按代价）**：① 用 `DIAG_NAMES=1` 抓 trap 的函数名 ② 查 Mesa glapi 在
-MAIN_MODULE 下的表/dispatch 机制 ③ 退到窄目标"只让 `print -dpng`/`getframe` 走 OSMesa"
-④ 再退一步：A 档 + 把 `.oct` 压到 8MB 以下。
+**下一步（若要继续这条线）**：① 把 B 档的体积账谈清（45.58MB 能不能上 8761，或按需加载）；
+② 文字渲染仍缺（`--without-freetype` ⇒ 刻度/title 空白但不崩，如实记录）；
+③ 只读渲染管线之外的 `print -dpdf/-dps` 走 gl2ps 那条路还没实测过。
 
 **回退**：`siteP5` 是独立目录，删掉/重拷即可；8761 与 `site/` 未被触碰。
 
@@ -1372,17 +1445,31 @@ MAIN_MODULE 下的表/dispatch 机制 ③ 退到窄目标"只让 `print -dpng`/`
 
 为 B 档，主树被**重新 configure 成 opengl-ON** 并**全量重编**过（`make clean` + `emmake make -k -j24`）：
 
-| | 现在 | 切回"与 8761 部署一致"（opengl-OFF） |
+| | 现在（2026-09-23 收口后） | 切回"不带 GL" |
 |---|---|---|
-| `config.h` | 带 `#define HAVE_OPENGL 1` + `HAVE_GL_GL_H/_GLU_H/_GLEXT_H` | `cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`（**不带** `WITH_OPENGL`）|
-| `.o`/`.a`（libinterp/liboctave） | 与之一致（opengl 版，`gl-render.o` 有 11 个 `U gl*`）| 配置切回后**必须重编**（否则混编；automake 不会因 config.h 变而全量重编，`make clean` 最稳）|
-| 备份 | —— | `/src/libwork/config.h.pre-opengl-p5`（本轮 opengl 化之前那份）、`/src/libwork/config.h.pre-opengl`（更早一份）、opengl-on 那份在 `/src/libwork/config.h.opengl-on` |
+| `config.h` | `HAVE_OPENGL 1` + `HAVE_GL_GL_H/_GLU_H/_GLEXT_H` + `HAVE_GL2PS_H 1` | `cd /src/bin && PATH=/src/bin:$PATH SKIP= bash configure-113-full.sh`（**不带** `WITH_OPENGL`/`WITH_GL2PS`）|
+| **GL 头** | `/src/deps/glshim/include` 是**软链** → `/src/deps/glheaders-webgl/include`（**gl4es + GLU 的头**，由 `build/113/gl-headers-webgl.sh` 组装；命令行逐字没变，见 §5.21） | `bash /src/bin/gl-headers-webgl.sh --revert`（把 Mesa 那份从 `include.mesa-bak` 换回来）|
+| `.o`/`.a`（libinterp/liboctave） | 与之一致（opengl 版；`gl-render.o` 现在引用 `gl4es_gl*`，**没有裸 `gl*`**）| 配置切回后**必须重编**（否则混编；automake 不会因 config.h 变而全量重编，`make clean` 最稳）|
+| 备份 | —— | `/src/libwork/config.h.pre-opengl-p5`（opengl 化之前）、`/src/libwork/config.h.pre-opengl`（更早）、opengl-on 那份在 `/src/libwork/config.h.opengl-on`、**gl2ps 化之前那份在 `/src/libwork/config.h.pre-gl2ps`** |
 
-**部署产物未受影响**：`site/`（8761）的三大件仍是 `bac48adb…`；图形版只落在 `siteP5/`（8763）
-与容器 `/src/websrc/out-p5f/`。
+**2026-09-23 晚又加了一个开关**：`WITH_GL2PS=1`（`configure-113-full.sh`，默认关）。
+它把 wasm 版 gl2ps 摆进搜索路径（`/src/deps/gl2ps`，配方 `build/113/build-gl2ps.sh`），
+于是 `config.h` 变成 `HAVE_OPENGL 1` **+ `HAVE_GL2PS_H 1`**；`link-web.sh` 会自动链
+`libgl2ps.a`（库在就加）。**切回去**：重配时去掉 `WITH_GL2PS=1` 即可（`config.h` 变 ⇒ 又要大重建）。
+**注意它不是"print 就好了"**：`print` 还卡 shell 管道，见 §5.20。
+
+**部署产物（2026-09-23 收口后）**：`site/`（8761）的三大件现在就是**带 GL 的那份**
+（`octave.wasm` sha256 `6c75a4942df286826f8f02c1…`，36,858,059 字节）；容器里
+`/src/websrc/out/` = 带 GL 的、`out-webgl`/`out-webgl3` 是同内容、
+**不带 GL 的那份留档在 `/src/websrc/out-nongl-bak/`**；站点回退点
+`/mnt/hdd/octave-wasm-build/site-prewebgl-bak/`。8763（`siteP5`）是退役的 OSMesa 站点，别再用。
 
 ⚠️ 另记一条本轮的构建坑：**全量 `make` 必须 `-k`** —— `libinterp/dldfcn/__fltk_uigetfile__.oct`
-这个目标在 `--without-fltk` 下必然失败（`/usr/bin/install: omitting directory 'libinterp/dldfcn/.libs/'`）。
+这个目标在 `--without-fltk` 下必然失败（`/usr/bin/install: omitting directory 'libinterp/dldfcn/.libs/'`），
+另外 in-tree 的 `src/octave-cli` 与那几个 `.oct` 目标会因 `cgejsv_`/`zgejsv_`（良性未定义）而失败
+（**我们不发它们**，web 产物走 `link-web.sh` 自己的链接行）。
+**只改了 GL 头内容时**（§5.21 的 2b）：`emmake make -k -j24` 是**增量**的，实测只重编
+`gl-render`/`gl2ps-print`/`__init_fltk__` 三个 TU（automake 的 `.Plo` 认路径、内容变了才重编）。
 
 ---
 
@@ -1408,6 +1495,232 @@ SOCKS5、`http.version=HTTP/1.1` 全试过）；同时 **`gh api` 正常**（`ap
 git fetch origin && git reset --hard origin/main   # 工作区当时是干净的；内容与本地逐位相同
 ```
 （想保两提交的形状，可先用 `git push mirror main` 确认镜像里有，再对齐。**不要 force-push**。）
+
+---
+
+### 5.18 图形线 WebGL：**换成 gl4es → WebGL2（GPU），步骤①②③ 全部打通**（2026-09-23 晚）
+
+**起因**：OSMesa 是**纯软件光栅化**（CPU 逐像素），手机上速度/体积都吃力。
+⚠️ **口径要准**：OSMesa **不是**"手机上不能跑"（它不碰 GPU/API，任何 wasm 浏览器都能跑），
+问题是**量** —— 速度与体积。这条动因成立，但"手机端速度"**至今没量过**（本仓无手机环境）。
+
+**结论：打通了，而且体积大赚。**
+
+| | 值 |
+|---|---|
+| 8768（`siteWebGL`）全量回归 | **32 套 / 838 PASS / 0 FAIL（全绿）** |
+| 8768 图形验收 | `accept-p5-graphics.mjs` **54 PASS / 0 FAIL**（与 OSMesa 站点同一套件） |
+| 逐图类型 | **15/15 非空白**（plot…surf，解码 PNG 数颜色 9–740 色） |
+| `octave.wasm` | OSMesa **45,580,621** → WebGL **36,725,241**（**省 ~8.9MB**；比基线只 +2.4MB） |
+
+**做法一句话**：把"GL 垫片"从 OSMesa 换成 **gl4es**（`ptitSeb/gl4es`，OpenGL 1.5/2.1 → GLES2，
+**官方带 Emscripten 目标**）。它自己实现立即模式 —— 而 emscripten 自带的
+`LEGACY_GL_EMULATION` 在这件事上是**实测失败**的（Edge-Tools 死在 `numVertices must be an integer`
+at `glEnd`）。实测：`gl4es-smoke` 在真 Chromium 里 **16 PASS / 0 FAIL**（立即模式绿三角逐像素）。
+覆盖度也量过：Octave 要的 **76 个 GL 符号，gl4es 76/76 全覆盖**。
+
+**一手记录**：`build/113/NOTES-webgl.md`（**接手先读它**，含四个坑与复现命令）。
+`build/113/GRAPHICS-BRANCH.md` 顶部有指针。
+
+**四个坑（都在 NOTES §4.3，别再踩）**：
+1. `config.h` 不只"要 include"，**位置**也必须在所有 include 最前（放后面撞
+   `oct-conf-post-public.h` 重复定义）。
+2. GLU 要带 **wasm-SjLj** 重编（libtess 用 longjmp；否则 `R_WASM_TABLE_INDEX_SLEB` 报
+   `emscripten_longjmp` 不能当目标 —— 与 OSMesa 线同坑同修法）。
+3. `gl-render.cc` 直接引用的 GL 符号是**裸名**（量出来：`glGetIntegerv`×1 + `glu*`×10），
+   要加 `gl4es-unmangled-shim.c` 转回 gl4es。
+4. gl4es 的 getter 会把 **WebGL 不认的枚举**原样转发（`GL_SAMPLE_BUFFERS`/`GL_SAMPLES`、
+   `GL_LINE_SMOOTH`）⇒ `patch-gl4es.sh` 让它们从 gl4es 自己的状态回答。
+
+**两条后端并存可切**：`osmesa_toolkit.cc` 与 OSMesa 那条链的旗标**一字未改**；
+`link-web.sh` 用 `GL_BACKEND=webgl` 选后端。验收套件按站点**自动选**后端
+（`webgl` → `osmesa`），两个都没有就明确 SKIP（8761 基线因此保持全绿）。
+
+**分支拓扑**：`main`(9b211ae) → `graphics-osmesa-p5`(c9ad754) → **`graphics-webgl`**（本线）。
+`main` **未动**。
+
+**★ 速度实测（2026-09-23，桌面 + CDP 降频 + 真 GPU，见 `NOTES-webgl.md` §4.5）**：
+- **渲染器确实快了**：`getframe`（必然重渲）2D 17→**5 ms**、3D 62→**7 ms**（真 GPU，CPU×1）；
+  CPU 降频 4× 后 72→18 / 253→26 ms ⇒ 纯渲染 **快 3.4×（2D）/ 8.9×（3D）**。
+- ⚠️ **必须先确认 WebGL 跑在哪**：headless 默认是 **SwiftShader（软件）**，
+  要加 `--use-gl=angle --use-angle=gl` 才是真 GPU（本机 RTX 4060）。
+- ★★ **但端到端几乎没差别**：`figure; clf; surf(peaks(40)); drawnow` 是 **OSMesa 2137 ms
+  vs WebGL 2111 ms**。拆开看：`drawnow` 只 **+7 ms**、`getframe` **12 ms**，
+  而 **`surf(peaks(40))` 自己就 ~1.9 s**（核心 `surface()` 同数据只要 **45 ms**）。
+  ⇒ **瓶颈在 plot 桥的 3D 路径，不在渲染器**（差两个数量级，换平台也成立）。
+  **下一步最值得做的是把桥那 1.9 s 拿掉**，不是继续抠渲染器。
+
+**还没做**：① **真机**速度（桌面 GPU 降不了频，4060 远强于手机 GPU ⇒ 上面的数字对手机是乐观的）；
+② **把 plot 桥 3D 路径的 ~1.9 s 拿掉**（§4.5.3，现在优先级最高）；
+③ 与 OSMesa 的逐图**结构性对照**；
+④ 上线体积账（WebGL 只 +2.4MB，比 OSMesa 好谈得多，但仍未上 8761）；
+⑤ 文字渲染仍缺（`--without-freetype`，刻度/title 空白但不崩）。
+
+---
+
+### 5.19 `android-emulator` 插件：**在这台 Linux 上真能跑**（2026-09-23）
+
+**问题**：想知道"图形后端在手机上到底行不行"。
+**结论**：插件**能用**，但**它验不了 WebGL**（下面有原因）——所以"手机端速度"仍只有
+桌面 + CPU 降频 + 分辨率标定那条间接证据（见 `NOTES-webgl.md` §4.5）。
+
+**先更正我自己的两个错说法**（当时只看名字没核对）：
+- ❌ "技能没注册、调不到" ⇒ 错。用插件限定名 `android-emulator:android-dev` 能加载。
+- ❌ "没有 `mcp__android_emulator__*` 工具" ⇒ 错。工具在，名字是
+  `mcp__plugin_android-emulator_android-emulator__<tool>`。
+
+**`android_preflight` 的 Host OS 那行永远是红的，但它不拦事** —— 源码 `preflight.js:24`
+就是个 `ok:` 布尔，**没有任何 gate**。所以装好工具链就能用。
+
+**装在哪（全在 /mnt/hdd，约 2.8 GB）**：
+
+| | 位置/做法 |
+|---|---|
+| JDK 17 | `/mnt/hdd/android-dev/jdk17`（Azul Zulu 17.0.13；Adoptium 会跳到被封的 github，用 Azul CDN）|
+| Android SDK | `/mnt/hdd/android-sdk`（cmdline-tools + platform-tools + emulator + `system-images;android-35;default;x86_64`）|
+| AVD `medium_phone` | 盘像也在 hdd：`~/.android/avd` → `/mnt/hdd/android-avd` |
+| **免重启**让插件找到 SDK | `~/Android/Sdk` → 软链到 `/mnt/hdd/android-sdk`（插件 `sdkRoots()` 认这条路径；不用改配置、不用重启 ZCode）|
+| **免重启**让插件找到 Java | SDK 的 `cmdline-tools/latest/bin/java` 放个 3 行 shim（插件在非 Windows 上 `javaHome()` 只认 macOS 路径、永远返回 undefined；而 `androidEnv().PATH` 必含这个目录）|
+
+**实测**：模拟器 `emulator-5554`（Android 15 / API 35）起来了，截图 / adb / logcat 全通；
+站点在里面**正常启动**（Octave 资产全加载）。探针走 `index.html?bench=1&tk=…`，
+输出经 `console.log` → `adb logcat`（**Android WebView 没有 DevTools，这是唯一自动化取数通道**）。
+
+| 后端 | 2D line | 3D surface | 端到端 surf+drawnow |
+|---|---|---|---|
+| OSMesa | 28.0 ms | 94.0 ms | 1831 / 1914 / 2038 ms |
+| WebGL | **建不出上下文** | — | 1755 / 1960 / 1836 ms |
+
+两个结论：① **端到端 ~1.9 s 在 Android 上原样复现**（桌面 2111/2137）⇒ 瓶颈在桥、换平台一样；
+② **模拟器验不了 WebGL**：`eglCreateContext: EGL_BAD_CONFIG (0x3005)` +
+`ContextResult::kFatalFailure: WebGL1 blocklisted`（模拟器的 GL 是 "Android Emulator
+OpenGL ES Translator"，被 Chromium 拦）。toolkit 已改成属性**逐级退让**（ideal → 关抗锯齿 →
+不保绘制缓冲 → emscripten 默认），真机上 config 受限的机型需要它。
+
+### 5.20 ★ plot 桥的 1.7 s：已归因、已提速 3.5×；"跳过管线"那条路**走不通**（2026-09-23）
+
+**为什么重要**：实测 `drawnow` 只花 **7 ms**、`getframe` **12 ms**（渲染），而用户写的
+`figure; clf; surf(peaks(40)); drawnow` 要 **2111 ms**（WebGL）/ **2137 ms**（OSMesa）——
+**瓶颈一直在 plot 桥，不在渲染器**。换 WebGL 后端省的是那十几毫秒。
+
+**归因（`test/browser/probe-bridge-cost*.mjs`，全部实测）**：`surf(peaks(40))` 共 **1686 ms**
+= `__pb_surface__` 建 **1521 条 series**（39×39 单元各一条）1386 ms（其中 `save -ascii` 写
+1521 个小文件 306 ms；写 1 个含 1521 行的文件只要 1 ms ⇒ **成本在条数不在数据量**）
++ `__pstate__` 两次 emit ~390 ms。**与镜像无关**（切成 `web` 后仍 1705 ms）。
+
+**走过的两条路**：
+
+1. **"真渲染器在线时跳过桥的数据管线"** —— 实测 **1686 → 439 ms（3.8×）**，
+   **但走不通**：`print -dsvg` 会红，因为它**唯一**依赖桥自己那份 SVG。
+   顺藤摸到两层墙（都是实测）：
+   - `HAVE_GL2PS_H` 是 undef ⇒ **已补**：`build/113/build-gl2ps.sh`（源码走 Debian pool，
+     上游 geuz.org 连不上、github 被拦）+ `configure-113-full.sh` 的 `WITH_GL2PS=1`
+     （默认关）+ `link-web.sh` 自动链 `libgl2ps.a`。**重建后 gl2ps 确实进树了**
+     （`checking for gl2ps.h... yes`、`gl2ps-print.o` 引用 14 个 gl2ps 符号、0 个未定义）。
+   - **但还有第二层**：`print -dsvg` 的错变成
+     `print: failed to open pipe "| cat > \"…\""` at `__opengl_print__.m:204`
+     —— Octave 把 gl2ps 的输出**穿过 shell 管道**落盘，而本构建**故意没有 shell**
+     （`system`/`unix`/`popen` 是有意报错，也是"纯客户端计算"铁律的一部分）。
+     `-dpdf/-dps/-deps` 另需 gs。⇒ **核心 print 出矢量不是补一个库能解决的**；
+     "跳过管线"在当前架构下**不可达**（除非做只认 `cat > f` 的假 popen —— 与铁律冲突，不做）。
+     gl2ps 仍留在树里：把"gl2ps 缺失"这层永久去掉，将来只剩 popen。
+
+2. **★ 改在桥内部：让 series 变少**（`__pb_surface__.m`，**这条落地了**）
+   | | 原来 | 现在 |
+   |---|---|---|
+   | `surf` | 每单元一条闭合多边形 = 1521 条 | **每条行带一条** = 39 条 |
+   | `mesh` | 每单元一条四点轮廓 = 1521 条 | **行折线 + 列折线** = 80 条 |
+
+   遮挡不变：`depth` 对行号单调 ⇒ 按行排序 ≡ 按单元排序。
+   **实测 1686 → 480 ms（3.5×）**（剩下的 480 ms 基本是镜像的两次 `path` 手术）；
+   在 `web` toolkit 的站点上（桥是显示路径、无镜像）省的是**全部 ~1.7 s → ~50 ms**。
+   **渲染改动人工看过图**（`probe-bridge-svg-out.mjs` 把桥自己的 SVG 抠出来渲成 PNG）：
+   surf 带状形状/遮挡正确（如实记：非仿射投影下逐行直边与逐单元边在边缘有极细错位）；
+   mesh 是经典线框、横竖都在，观感更干净。
+
+**连带的测试改动**：`accept-plot3d.mjs` 原来断言"mesh 11×11 ≥100 条折线 / surf 9×9 ≥64 个面片"
+——那是**旧实现**的元素数。已改成按 **m+n（网格线框）/ m−1（行带）** 推出来的期望，
+并在文件里写清为什么。改前 29 PASS / 5 FAIL，改后 **34 PASS / 0 FAIL**。
+
+**还没做**：① 桥剩下那 480 ms（镜像的 `path` 手术；要回到句柄缓存方案，但得处理
+`pie`/`contour` 会嵌套调 `axis` 的情况）；② 手机端真机速度（模拟器验不了 WebGL，见 §5.19）；
+③ 上线体积账；④ 文字渲染仍缺（`--without-freetype`）。
+
+---
+
+### 5.21 ★ 图形线收口：桥句柄缓存 → `webgl` 变默认 → 砍 OSMesa（2026-09-23）
+
+一手记录在 **`build/113/NOTES-webgl.md` 的 §4.5.13 与 §4.6**（含复现命令与探针）。这里只给接续
+必须知道的。
+
+**（1）plot 桥的镜像层：两次 `path` 手术 → 一次性句柄缓存 + 深度转发。**
+`build/plotbridge/__pb_core__.m`（新）+ `__pb_in_core__.m`（新）+ 31 个 shim 的**前导**
+（由 `build/plotbridge/insert-core-forward.py` 幂等插入）+ 重写的 `__pb_mirror__.m`。
+- 机制：**一次** path 手术把 31 个核心函数 `str2func` 缓存起来，之后永不再动 path；核心调用
+  期间 `DEPTH>0`，被桥挡住的名字**逐个转发回核心**（等价于旧"整条摘 path"，但不必枚举
+  核心内部调了谁）。**危险点**：DEPTH 必须在错误路径复位（`unwind_protect_cleanup`），
+  否则此后所有桥函数静默转给核心、桥的状态再不更新 —— 验收里有专门一条钉它。
+- **实测（8768/桌面，A/B 同站点）**：镜像一次 **146.2 → 1.5 ms（~97×）**；温
+  `figure; clf; surf(peaks(40)); drawnow` 从 405/391/396 → **101/93/88 ms（4.2×）**。
+- ★ **更正 §5.20 的归因**："剩下的 480 ms 基本是两次 `path` 手术"是**错的** —— 端到端那个数
+  被**冷启动**盖住了（首次 clf/surf/drawnow 合计 ~0.6 s：建上下文 + `initialize_gl4es()` +
+  编 shader + 首帧 `glReadPixels`/PNG）。量的时候**冷/温必须分开**。
+- ★ **两个必须知道的 Octave 行为**（实测）：① **输出个数检查发生在函数体之前** ⇒ shim 声明的
+  输出个数必须 ≥ 核心实现的，否则转发那段**根本进不来**（为此加宽了 10 个 shim）；
+  ② 加宽之后桥自己的路径上 `xlim()`/`axis()` 之类**从报错变成返回空**（放宽，不是回归）。
+- 验收：`accept-p5-graphics` **64 PASS / 0 FAIL**（54 → 64，新增 10 条）。
+
+**（2）`webgl` 变默认 toolkit + `FULL_ES3` + OSMesa 退役。**
+- `build/webgraphics/PKG_ADD`：有 `webgl` 就选它（**开箱即真渲染**），否则退回 `web`。
+- `link-web.sh`：`GL_ES_FLAGS = -sFULL_ES2=1 -sFULL_ES3=1`（**ES2 是 gl4es 的要求；ES3 是加试项** ——
+  上下文本来就是 WebGL2，ES3 管的是 emscripten 那层 GLES3 模拟；实测 +9,291 字节、全绿，故保留）。
+- OSMesa 退役：删 `build/113/` 的 7 个文件（toolkit/stubs/两个 smoke/patch 脚本）+ 容器里的同名件；
+  `link-web.sh` 只剩 webgl 一条（给别的 `GL_BACKEND` **明确失败**并指路 `graphics-osmesa` 分支）；
+  `main.cc` 去掉 `P5_OSMESA_TOOLKIT`；`__pb_real_renderer__` 白名单 → `{"webgl"}`；
+  `p5canvas.js` 的 `BACKENDS=['webgl']`（删 `useOsmesa`）；`accept-p5-graphics` 后端清单 → `['webgl']`。
+- ★ **连带发现（不是 bug）**：镜像层一开，桥里**比核心宽容**的调用会真的走到核心 ⇒ 核心的严格性
+  浮出来。实测 `plot(x,x,'+','')`（末尾空串）**桌面 Octave 本来就报**
+  `plot: properties must appear followed by a value`；`accept-print` 里那条用例已改成合法写法。
+- ★ **另一条测试自身的坑**：默认换成真渲染器后，会话**第一次建 axes** 会打一条 FreeType warning
+  **带 6 行调用栈**（既有偏差）。两个套件的 `ev()` 把输出**截断到 200 字符再匹配**，于是
+  `plot/print 仍可用`（want=`'2'`）在 `accept-dldfcn`/`accept-forge2` 各**假红**一次。
+  已改成"**匹配用完整输出、只有显示才截断**"。**同类写法在别的套件里还有**（见 §8 待办 8）。
+
+**（3）编译期 GL 头：Mesa → gl4es+GLU**（OSMesa 退役后最后一处隐藏依赖）。
+新脚本 `build/113/gl-headers-webgl.sh`：组装 `/src/deps/glheaders-webgl/include/GL`
+（gl4es 的 gl.h/glext/glx + **GLU 自己那份不改名的 glu.h**），再把 `/src/deps/glshim/include`
+变成**指向它的软链** ⇒ 编译命令行**逐字不变**（ccache 不整片失效、automake 只重编真正依赖 GL 头的
+**3 个 TU**：`gl-render`/`gl2ps-print`/`__init_fltk__`）。实测重编后 `gl-render.o` 里裸 `glGetIntegerv`
+变成 **`gl4es_glGetIntegerv`**、**一个裸 `gl*` 都不剩**（`glEnd`/`glVertex3f`/… 全没了），`glu*` 10 个
+仍是裸名（由 libGLU.a + `gl4es-unmangled-shim.c` 提供）。链接结果中性、wasm 36,858,059。
+**还原一行**：`bash /src/bin/gl-headers-webgl.sh --revert`。
+
+**（4）顺手补的链接自检**：`link-web.sh` 末尾查**产物**（必须含 `gl4es_gl*`、必须**不含**
+`OSMesaMakeCurrent`、toolkit .o 里必须有 `gl4es_gl*`）—— 因为 `ERROR_ON_UNDEFINED_SYMBOLS=0`
+会把未定义符号静默放过（历史踩过：链接"成功"、运行期第一次 GL 调用才炸）。
+
+**（5）上线（8761）**：新增 **`build/promote-webgl.sh`** 把"部署带 GL 的那份"固化下来
+（备份 → 容器内 `out/`→`out-nongl-bak/`、带 GL 的产物→`out/` → 三大件 + 桥文件 + 资产重打 +
+清单刷新 + **自检**：两侧 wasm sha 一致 / 桥资产含 `__pb_core__` / webgraphics 是新 PKG_ADD /
+`p5canvas.js` 在 / wasm 含 `gl4es_gl`）。`build/recover.sh` 也补了两处：拷贝清单**补上
+`p5canvas.js`**（此前漏了 ⇒ 新 `index.html` 会 404）、大件来源加 `SRC_OUT` 变量。
+实测：wasm sha `6c75a4942df286826f8f02c1…` 两侧一致；**8761 全量 32 套 848 项全绿**；
+体积账见 §8 待办 3 的表。**回退点**：`site-prewebgl-bak/` + 容器 `out-nongl-bak/`。
+★ **顺带修掉一个潜在坑**：promote 之前容器里的 `/src/websrc/out/` 其实是一份**过期**构建
+（`octave.js` 785,187 / `octave.data` 13,829,164 = **`@ftp` 预载修复之前**那份），而
+`recover.sh` 正是从那儿取三大件 ⇒ **断电恢复会把 8761 悄悄退回旧构建**。
+现在 `out/` 与部署件**逐字节一致**（`octave.wasm`/`octave.data` 的 sha256 两侧相同）。
+
+**（6）本批改动清单（供审阅）**
+新增：`build/plotbridge/{__pb_core__.m,__pb_in_core__.m,insert-core-forward.py}`、
+`build/113/gl-headers-webgl.sh`、`build/promote-webgl.sh`、
+`test/browser/probe-bridge-mirror-cost.mjs`。
+修改：`build/plotbridge/` 的 32 个 `.m`（31 个 shim 加前导 + mirror 重写）、
+`build/webgraphics/PKG_ADD`、`build/113/{link-web.sh,configure-113-full.sh}`、`build/main.cc`、
+`bridge/{p5canvas.js,index.html}`、`build/recover.sh`、
+`test/browser/{accept-p5-graphics,accept-t2-graphics,accept-print,accept-dldfcn,accept-forge2,accept-net,probe-gfx-bench}.mjs`、
+`dist/DEPLOY.md` + 五份文档。
+删除（历史在 git）：`build/113/` 的 7 个 OSMesa 件。
 
 ---
 

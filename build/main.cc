@@ -351,9 +351,11 @@ int EMSCRIPTEN_KEEPALIVE eval_string(std::string eval_str) {
 ////  return status;
 //}
 
-#if defined (P5_OSMESA_TOOLKIT)
-// P5：由 build/113/osmesa_toolkit.cc 提供（编进主模块，见该文件头）
-extern "C" void p5_install_osmesa_graphics_toolkit (octave::interpreter& interp);
+#if defined (P5_WEBGL_TOOLKIT)
+// 图形线 WebGL：由 build/113/webgl_toolkit.cc 提供（编进主模块，见该文件头）。
+// 2026-09-23 起这是**唯一的**真渲染器 —— OSMesa 后端已退役（脚本与配方留在 git 历史的
+// graphics-osmesa / graphics-osmesa-p5 分支，记录见 build/113/NOTES-p5-osmesa.md）。
+extern "C" void p5_install_webgl_graphics_toolkit (octave::interpreter& interp);
 #endif
 
 int EMSCRIPTEN_KEEPALIVE execute_interp() {
@@ -434,19 +436,18 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
   // on demand — see the note at the top of this file for why the old
   // hand-registration was removed.
 
-#if defined (P5_OSMESA_TOOLKIT)
-  // P5 图形线：登记 + 装载 `osmesa` 图形 toolkit（Octave 自己的 opengl_renderer
-  // 跑在 OSMesa 上）。**必须编进主模块**（不是 `.oct`）：`opengl_functions` 的虚表
-  // 一旦跨模块，`opengl_renderer::set_viewport` 这类回调就会打到表的空槽上
-  // （实测 `RuntimeError: table index is out of bounds`）。详见
-  // build/113/osmesa_toolkit.cc 的文件头与 link-web.sh 的 P5_TOOLKIT=1。
+#if defined (P5_WEBGL_TOOLKIT)
+  // 图形线 WebGL：登记 + 装载 `webgl` 图形 toolkit（同一条 opengl_renderer，
+  // 但渲染目标是**真 WebGL2 上下文**，GL 1.x 调用由 gl4es 翻译 ⇒ 走 GPU）。
+  // 同样必须编进主模块；而且**本 TU 是唯一实例化 `opengl_functions` 的地方**，
+  // 所以它必须用 gl4es 的 include 编译（见 webgl_toolkit.cc 的文件头）。
   try {
-    p5_install_osmesa_graphics_toolkit (*interpreter);
+    p5_install_webgl_graphics_toolkit (*interpreter);
   } catch (const octave::exit_exception& ex) {
     return ex.exit_status();
   } catch (const octave::execution_exception& ex) {
     interpreter->handle_exception(ex);
-    std::cerr << "warning: osmesa graphics toolkit not installed: "
+    std::cerr << "warning: webgl graphics toolkit not installed: "
               << interpreter->get_error_system().last_error_message() << std::endl;
   }
 #endif

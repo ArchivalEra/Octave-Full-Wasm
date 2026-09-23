@@ -144,7 +144,12 @@ await ev("clf; x=1:5; plot(x,x,'s'); hold on; plot(x,x+2,'d'); plot(x,x+4,'^'); 
 await ev('print("/tmp/mk.svg","-dsvg")', 'print');
 // s → rect，d/^ → polygon
 await svgCheck('/tmp/mk.svg', '★ marker 各自成图元（s=rect, d/^=polygon）', { minRect: 5, minPolygon: 8 });
-await ev("clf; x=1:5; plot(x,x,'o'); plot(x,x,'+',''); ", 'o / + ');
+// ⚠️ 这一句原本是 `plot(x,x,'+','')`。末尾那个空串**在桌面 Octave 上就是错**（实测同版 11.3.0：
+//    `plot: properties must appear followed by a value`）。桥以前宽容地收下它，只是因为
+//    **镜像层没开**（默认 toolkit 是 `web`，不建真对象、不调核心 plot）；2026-09-23 默认改成
+//    `webgl` 之后这句会真的走到核心实现 ⇒ 核心的严格性浮出来。
+//    **这不是回归，是行为向桌面看齐**（同一个错、同一句话），所以这里改成合法写法。
+await ev("clf; x=1:5; plot(x,x,'o'); plot(x,x,'+'); ", 'o / + ');
 await ev("clf; x=1:6; plot(x,x,'x'); hold on; plot(x,x+1,'+'); plot(x,x+2,'*'); hold off", 'x / + / *');
 await ev('print("/tmp/mk2.svg","-dsvg")', 'print');
 await svgCheck('/tmp/mk2.svg', 'x/+/* 三种线型 marker', { minLine: 12 });

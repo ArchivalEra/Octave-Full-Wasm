@@ -28,6 +28,11 @@ SITE=/mnt/hdd/octave-wasm-build/site
 SRC_SITE=/mnt/hdd/octave-wasm-build/site113
 HARNESS=/mnt/hdd/octave-wasm-build/harness
 REPO=/mnt/hdd/zcode-projects/Octave-Full-Wasm
+# 容器里"本次部署"的链接产物目录。
+# 2026-09-23 起主线是**带 GL 的**那份（gl4es → WebGL2）：promote 时把
+# /src/websrc/out-webgl 的内容拷进 /src/websrc/out（原样留档在 out-nongl-bak/），
+# 于是这里不用改；要临时验证别的产物就 `SRC_OUT=/src/websrc/xxx sh build/recover.sh`。
+SRC_OUT=${SRC_OUT:-/src/websrc/out}
 
 echo "== 1) 起容器 =="
 for c in obuild odld obench o113; do
@@ -44,8 +49,8 @@ if sudo docker exec o113 /usr/bin/cmake --version >/dev/null 2>&1; then
 else
   echo "  ⚠ o113 的 cmake 不可用（Ubuntu 自带包，重装：apt-get install -y cmake）"
 fi
-if sudo docker exec o113 test -s /src/websrc/out/octave.wasm; then
-  echo "  主 wasm: $(sudo docker exec o113 stat -c%s /src/websrc/out/octave.wasm) 字节"
+if sudo docker exec o113 test -s "$SRC_OUT/octave.wasm"; then
+  echo "  主 wasm: $(sudo docker exec o113 stat -c%s "$SRC_OUT/octave.wasm") 字节（$SRC_OUT）"
 else
   echo "  ⚠ 主 wasm 缺失 —— 从检查点另起并重链："
   echo "     docker run -d --name o113b octave-build:113-assets-full sleep infinity"
@@ -65,11 +70,14 @@ else
   # 资产/桥/fixture 全从 site113 搬（它含 minioct/dldprobe/vendor/lanetest 等）
   cp -a "$SRC_SITE"/. "$SITE"/
   # 三大件以**容器里的当前链接**为准（site113 里的可能滞后）
-  sudo docker cp o113:/src/websrc/out/octave.js   "$SITE/"
-  sudo docker cp o113:/src/websrc/out/octave.wasm "$SITE/"
-  sudo docker cp o113:/src/websrc/out/octave.data "$SITE/"
+  sudo docker cp "o113:$SRC_OUT/octave.js"   "$SITE/"
+  sudo docker cp "o113:$SRC_OUT/octave.wasm" "$SITE/"
+  sudo docker cp "o113:$SRC_OUT/octave.data" "$SITE/"
   # 桥从仓库取当前版本（仓库是这些文件的唯一真相源）
+  # ⚠️ p5canvas.js 必须在列：index.html 会 `<script src="p5canvas.js">`，
+  #    少了它就是 404（2026-09-23 补上 —— 此前这份拷贝清单里没有它）。
   cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" \
+     "$REPO/bridge/p5canvas.js" \
      "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
      "$REPO/bridge/webfilepick.js" \
      "$REPO/bridge/webnet.js" "$SITE/"

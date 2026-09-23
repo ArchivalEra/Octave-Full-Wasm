@@ -94,6 +94,18 @@ SFLAGS=( -s WASM=1 -s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1
          -s ERROR_ON_UNDEFINED_SYMBOLS=0
          -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 )
 
+# GL_LIBS=1 时给**最终链接**补 GLES 仿真旗标：
+#   · `-sFULL_ES2=1` 是 gl4es 的 COMPILE.md **要求** —— 真 GLES2 入口（以及 gl4es 用来取
+#     它们的 `emscripten_GetProcAddress`）由它带进来。
+#   · `-sFULL_ES3=1` 是 2026-09-23 加的**加试项**（用户点名要）。要分清两件事：**上下文本来
+#     就是 WebGL2**（`webgl_toolkit.cc` 里 `attrs.majorVersion = 2`），而 FULL_ES3 管的是
+#     emscripten 那一层 **GLES3 API 模拟**。实测加它之后图形验收 61/61、全量回归全绿
+#     （见 NOTES-webgl.md §4.6）；若哪天它引起回归，去掉这一项只留 ES2 即可（gl4es 只要求 ES2）。
+GL_ES_FLAGS=()
+if [ "${GL_LIBS:-0}" = "1" ]; then
+  GL_ES_FLAGS=( -sFULL_ES2=1 -sFULL_ES3=1 )
+fi
+
 # EXPORTED_FUNCS：逗号分隔的导出符号名（默认只有 `_main`）。
 # ⚠️ 为什么要有这个口子：`MAIN_MODULE=2`（DCE 版）下，**JS 库符号也要列进导出**
 #    才会进 JS 胶水的符号表（`tools/emscripten.py:868-884` 只把
@@ -143,22 +155,58 @@ fi
 # ⚠️ **别用 EXPORTED_FUNCTIONS 传这些名字**：实测 `undefined exported symbol`
 #   硬错误（带下划线 `_emscripten_longjmp` 与不带下划线都一样），因为那一路会被
 #   直接喂给 lld 当 `--export=`。
-# GL_LIBS=1：主链带上 OpenGL —— `glshim`（/src/deps/glshim）把 **OSMesa 冒充成
-# `-lGL`/`-lGLU`**。用途：P5 图形线走"**主 wasm 带 GL**"那条路
-# （A 档"把 Mesa 全打进 .oct"试到底后放弃，三道墙的实测见
-#  build/113/osmesa_toolkit.cc 的文件头注释）。
+# GL_LIBS=1：主链带上 OpenGL。用途：P5 图形线走"**主 wasm 带 GL**"那条路
+# （A 档"把 Mesa 全打进 .oct"试到底后放弃；三道墙的实测在 git 历史里
+#  build/113/osmesa_toolkit.cc 的文件头注释里，见 NOTES-p5-osmesa.md）。
 # 为什么需要这个开关：树一旦用 `WITH_OPENGL=1` 重配，Octave 的
 # `LIBOCTINTERP_LINK_DEPS` 里就有 `-lGL -lGLU`，而本脚本的 web 主链是**自己写的链接行**，
 # 得自己把它们补上（补在归档**之后**：静态库按左到右解析）。
+#
+# GL 垫片：**2026-09-23 起只有 gl4es 一条**（OSMesa/glshim 已退役）。
+# gl4es = **OpenGL 1.5/2.1 → GLES2 → WebGL2（GPU）** 的翻译库，官方带 Emscripten 目标；
+# 立即模式（`glBegin/glEnd`）是它自带实现 —— 而 emscripten 自带的 `LEGACY_GL_EMULATION`
+# 在这件事上是实测失败的（Edge-Tools 死在 `glEnd: numVertices must be an integer`）。
+# `GL_BACKEND` 这个名字保留下来只为"给错值就明确失败"，不再有第二条分支。
+
+# GL_LIBS=1：主链带 GL 垫片。**2026-09-23 起只剩 gl4es 一条**（OSMesa 已退役，
+# 见下），但保留 `GL_BACKEND` 这个名字：给错值就**明确失败**，免得静默链成别的东西。
+#   ① 归档 = gl4es 的 `libGL.a`（4.74MB，"OpenGL 1.5/2.1 → GLES2" 的翻译库）+
+#      "gl 走 gl4es、glu 保持原名"的 GLU（`build/113/build-glu-webgl.sh` 产出的那份）；
+#   ② 最终链接加 `-sFULL_ES2=1`（见上面 GL_ES_FLAGS）。
+#   ⚠️ 必须**绝对路径**，不能用 `-lGL` —— 实测 emcc 会把 `-lGL` 改写进它**自带**的
+#      GL 仿真库（`sysroot/lib/wasm2-emscripten/libGL-emu-*.a`），我们那份根本不被搜索，
+#      报一堆 `undefined symbol: gl4es_glBegin`。见 NOTES-webgl.md §3.6 坑 2。
+#      （与 `-lGLU` 那个坑是同一族 ⇒ 自己建的归档一律绝对路径。）
 GL_FLAGS=()
+GL_INC_FLAGS=()
 if [ "${GL_LIBS:-0}" = "1" ]; then
-  # 用**绝对路径**而不是 `-lGL -lGLU`：实测 `-lGL` 能解析 `gl*`，但 `-lGLU` 没能解析
-  # `gluNewTess`/`gluTessCallback` 等 9 个（lld 报 undefined symbol 但链接"成功"——
-  # `ERROR_ON_UNDEFINED_SYMBOLS=0` 把未定义符号静默放过，运行期才会炸）。绝对路径消除搜索歧义。
-  GL_FLAGS=( /src/deps/glshim/lib/libGL.a /src/deps/glshim/lib/libGLU.a /src/websrc/osmesa-stubs.c )
-  # `osmesa-stubs.c` 补 emscripten 缺的 `sched_getcpu`/`pthread_setname_np`
-  # （Mesa 的 `u_thread.c` 用；纯装饰性）。
-  echo "== GL_LIBS=1：主链带 -lGL -lGLU（glshim → OSMesa + wasm 版 GLU）"
+  GL_BACKEND="${GL_BACKEND:-webgl}"
+  if [ "$GL_BACKEND" != "webgl" ]; then
+    echo "FATAL: GL_BACKEND='$GL_BACKEND' —— OSMesa 后端已于 2026-09-23 退役，这里只有 webgl。" >&2
+    echo "       若确实要重建 OSMesa 那条链：脚本与配方在 git 历史里的 graphics-osmesa 分支" >&2
+    echo "       （build/113/osmesa_toolkit.cc + patch-mesa-osmesa-static.sh），并参考 NOTES-p5-osmesa.md。" >&2
+    exit 3
+  fi
+  GL_FLAGS=( /src/libwork/gl4es-src/lib/libGL.a /src/libwork/glu-webgl/lib/libGLU.a
+             "$SRC/gl4es-unmangled-shim.c" )
+  # include 顺序**很重要**：gl4es 的 `GL/gl.h` 会把 `glBegin` 之类 mangle 成
+  # `gl4es_glBegin`；而 GLU 自己那份 `GL/glu.h` 必须保持原名（`gl-render.o` 引用的是
+  # 裸 `gluNewTess`）。所以：gl4es 先（拿 mangled 的 gl.h），GLU 的 include 只提供 glu.h。
+  GL_INC_FLAGS=( -I/src/libwork/gl4es-src/include )
+  echo "== GL_LIBS=1：gl4es（→WebGL2/GPU） + glu-webgl —— 绝对路径 + FULL_ES2/ES3"
+fi
+
+# gl2ps：Octave 的 `print` 矢量输出（`__opengl_print__.m` 全程围绕 gl2ps 写，
+# **不会**调用 toolkit 的 `print_figure`）。树一旦用 `WITH_GL2PS=1` 重配过
+# （`config.h` 里 `HAVE_GL2PS_H` = 1，配方见 build/113/build-gl2ps.sh），
+# liboctinterp 就会引用 gl2ps 的符号 —— 这里必须补上，否则因为
+# `ERROR_ON_UNDEFINED_SYMBOLS=0` 会被**静默放过**，运行期才炸。
+# 存在就自动加（两条图形线都受益），不存在就是 no-op。
+GL2PS_FLAGS=()
+if [ -f /src/deps/gl2ps/lib/libgl2ps.a ]; then
+  # 绝对路径（老规矩：`-l` 会被 emcc 的库解析规则吃掉，见 NOTES-webgl.md §3.6 坑 2）
+  GL2PS_FLAGS=( /src/deps/gl2ps/lib/libgl2ps.a )
+  echo "== gl2ps：链 $(basename /src/deps/gl2ps/lib/libgl2ps.a)（print 的矢量输出）"
 fi
 
 LIB_FUNCS="${LIB_FUNCS:-}"
@@ -219,31 +267,40 @@ LIBS=(
 #  CXXFLAGS 的口径一致。
 EXC_FLAGS=( -O2 -fPIC -std=c++17 -fwasm-exceptions )
 
-# P5_TOOLKIT=1：把 **osmesa graphics toolkit 编进主模块**（不是 `.oct`）。
+# P5_TOOLKIT=1：把 **webgl graphics toolkit 编进主模块**（不是 `.oct`）。
 # 为什么必须进主模块：`opengl_functions`（GL 函数表）的**虚表跨模块会失效** ——
 # `opengl_renderer`（opengl-on 后编在主模块里）通过 `m_glfcns.xxx()` 回调，
 # 对象若由 side module 创建，主模块那边的间接调用会打到不属于它的表槽上
 # （实测 `RuntimeError: table index is out of bounds`，栈顶正是
 #  `octave::opengl_renderer::set_viewport(int, int)`）。
 # Edge-Tools 的参考实现也是这个形态（toolkit 编进主模块）。
-# 依赖：`GL_LIBS=1`（主链带 OSMesa/GLU）+ 主树 `WITH_OPENGL=1` 重配重编。
+# 依赖：`GL_LIBS=1`（主链带 gl4es/GLU）+ 主树 `WITH_OPENGL=1` 重配重编。
+# 把 gl4es 的 include 放在**所有 GL 头之前** —— 这是这条线能成的关键，见 NOTES-webgl.md §3.2。
+# （2026-09-23 之前这里还有一条 OSMesa 分支，已随该后端退役删掉；`GL_BACKEND` 给别的值
+#   会在上面 GL_FLAGS 那段明确失败。）
 P5_OBJS=()
 if [ "${P5_TOOLKIT:-0}" = "1" ]; then
-  echo "== P5_TOOLKIT=1：编 osmesa graphics toolkit 进主模块"
+  echo "== P5_TOOLKIT=1：编 webgl graphics toolkit 进主模块"
+  P5_SRC="$SRC/webgl_toolkit.cc"
+  P5_DEF=-DP5_WEBGL_TOOLKIT
+  P5_TK_INCS=( -I/src/libwork/gl4es-src/include )
+  P5_TK_OBJ="$SRC/webgl_toolkit.o"
+
   em++ -I"$OCT" -I"$OCT/liboctave" -I"$OCT/liboctave/array" -I"$OCT/liboctave/util" \
        -I"$OCT/libinterp" -I"$OCT/libinterp/corefcn" -I"$OCT/libinterp/octave-value" \
        -I"$OCT/libinterp/parse-tree" -I"$INST/include/octave-$MV" \
-       -I"$INST/include/octave-$MV/octave" -I/src/deps/glshim/include \
-       -I/src/libwork/mesa-24.0.9/include -I/src/vendor/stb \
-       -DHAVE_CONFIG_H -DP5_OSMESA_TOOLKIT ${P5_GLPROBE:+ -DP5TK_GLPROBE} -std=c++17 \
-       "${EXC_FLAGS[@]}" -c "$SRC/osmesa_toolkit.cc" -o "$SRC/osmesa_toolkit.o"
-  echo "   osmesa_toolkit.o = $(stat -c%s "$SRC/osmesa_toolkit.o") 字节"
-  P5_OBJS=( "$SRC/osmesa_toolkit.o" )
+       -I"$INST/include/octave-$MV/octave" \
+       ${P5_TK_INCS[@]+"${P5_TK_INCS[@]}"} \
+       -I/src/vendor/stb \
+       -DHAVE_CONFIG_H ${P5_DEF} ${P5_GLPROBE:+ -DP5TK_GLPROBE} ${P5_TRACE:+ -DP5TK_TRACE} -std=c++17 \
+       "${EXC_FLAGS[@]}" -c "$P5_SRC" -o "$P5_TK_OBJ"
+  echo "   $(basename "$P5_TK_OBJ") = $(stat -c%s "$P5_TK_OBJ") 字节"
+  P5_OBJS=( "$P5_TK_OBJ" )
 fi
 
 echo "== 编 main.cc"
 em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
-     ${P5_OBJS:+ -DP5_OSMESA_TOOLKIT} \
+     ${P5_OBJS:+ $P5_DEF} \
      "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
@@ -274,7 +331,9 @@ set -x
 em++ --bind \
   "${DIAG[@]}" \
   "${SFLAGS[@]}" \
+  ${GL_ES_FLAGS[@]+"${GL_ES_FLAGS[@]}"} \
   ${EXTRA_LDFLAGS:-} \
+  ${GL_INC_FLAGS[@]+"${GL_INC_FLAGS[@]}"} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
   ${LF_FLAGS[@]+"${LF_FLAGS[@]}"} \
@@ -284,6 +343,7 @@ em++ --bind \
   --post-js "$SRC/post.js" \
   "${EXC_FLAGS[@]}" -Wl,--allow-multiple-definition \
   "${LIBS[@]}" \
+  ${GL2PS_FLAGS[@]+"${GL2PS_FLAGS[@]}"} \
   ${GL_FLAGS[@]+"${GL_FLAGS[@]}"} \
   -o "$OUT/octave.js" "$SRC/main.o" ${P5_OBJS[@]+"${P5_OBJS[@]}"}
 set +x
@@ -297,6 +357,28 @@ if grep -q 'filename:"/ftp@' "$OUT/octave.js"; then
   echo "       说明 m/ 下某个源目录名里含 '@' 且没走 PRELOAD_AT 暂存那条路" >&2
   echo "       （octave.data 会比正常大一倍，且该目录的文件不在正确路径上）" >&2
   exit 3
+fi
+
+# ---- 自检：GL 后端到底进没进产物 ---------------------------------------------
+# 为什么要查**产物**而不是只查输入：`ERROR_ON_UNDEFINED_SYMBOLS=0` 会把未定义符号
+# **静默放过**（历史上真踩过：gl4es 的入口没被解析，链接"成功"，运行期第一次 GL 调用
+# 才炸）。所以这里直接看二进制：
+#   · 必须含 `gl4es_gl*`（gl4es 那些 mangled 入口名进了符号表 ⇒ 后端真的是 gl4es）
+#   · 必须**不含** `OSMesaMakeCurrent`（OSMesa 已退役；出现就说明链错了后端）
+if [ "${GL_LIBS:-0}" = "1" ]; then
+  if ! grep -qa 'gl4es_gl' "$OUT/octave.wasm"; then
+    echo "FATAL: octave.wasm 里找不到 gl4es_gl* —— GL 后端没进产物" >&2
+    exit 3
+  fi
+  if grep -qa 'OSMesaMakeCurrent' "$OUT/octave.wasm"; then
+    echo "FATAL: octave.wasm 里出现 OSMesaMakeCurrent —— 链到了已退役的 OSMesa 后端" >&2
+    exit 3
+  fi
+  if [ -n "${P5_OBJS[*]:-}" ] && ! grep -qa 'gl4es_gl' "${P5_OBJS[0]}"; then
+    echo "FATAL: toolkit 目标文件里没有 gl4es_gl*（编译时 gl4es 的 include 没生效？）" >&2
+    exit 3
+  fi
+  echo "== GL 自检: gl4es_gl* 出现 $(grep -oa 'gl4es_gl' "$OUT/octave.wasm" | wc -l) 次，OSMesa 残留 0 处，octave.wasm $(stat -c%s "$OUT/octave.wasm") 字节"
 fi
 
 echo "== 产物:"

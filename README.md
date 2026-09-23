@@ -77,11 +77,14 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 | R10 编译级别 | ✅ 11.3.0 车道走 `-O2`；R10 计时护栏（1e6 循环 <1.5s）通过 |
 | plot 桥 | ✅ v2：2D（含 subplot/figure(n)/axis）+ 3D（plot3/mesh/surf/contour）+ 中文标签 |
 | **图形句柄（T2）** | ✅ `web` toolkit：`figure/gcf/gca/get/set/title/close` 全可用（资产车道） |
+| **真渲染（2026-09-23）** | ✅ **默认 toolkit = `webgl`**（gl4es → WebGL2/GPU）：开箱 `plot(...); drawnow` 出真图、`getframe` 真像素；`accept-p5-graphics` **64/64** |
 | 官方 `.oct` 装载 | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
 | 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
 | `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
-| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260922`，首包 gzip ≈11.6MB |
-| 验收 | ✅ **29 套 738 项全绿**（含需求级 `accept-requirements`） |
+| SLICOT（control 编译件） | ✅ 可用（根因：CHARACTER 隐藏长度 ABI + 主模块不导出 LAPACK/BLAS；`accept-slicot` 25/25） |
+| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260923`（**含真渲染**），首包 gzip ≈9.9MB |
+| 验收 | ✅ **32 套 848 项全绿**（8761，含需求级 `accept-requirements` 与图形线 `accept-p5-graphics` **64 项**） |
+
 
 ### 已知偏差（如实）
 - ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
@@ -95,6 +98,12 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
   `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全可用且数值正确
   （`step` 与解析解 `1-e^-t` 误差 1.1e-16）。
 - `voronoi` 单输出形式（要画图）不可用；两输出形式正常。
+- **`print` 的矢量输出只有 plot 桥那一条路**（`-dsvg` 由桥自己的 `__svg_render__.m` 出）。
+  Octave **核心**的 `print` 管线（`__opengl_print__.m`）要 **gl2ps + shell 管道 + (gs|svgconvert)**：
+  gl2ps **2026-09-23 已补上**（`build/113/build-gl2ps.sh` + `configure-113-full.sh` 的
+  `WITH_GL2PS=1`），但**"没有 shell"是本构建的有意设计**（`system`/`unix`/`popen` 清晰报错）
+  ⇒ `print -dsvg` 仍报 `failed to open pipe "| cat > …"`，`-dpdf/-dps/-deps` 另需 gs。
+  **所以别把桥的数据管线当冗余砍掉**（详见 `HANDOFF.md` §5.20、`build/113/NOTES-webgl.md` §4.5.9–4.5.11）。
 
 ## 下一步（第三轮：浏览器环境语义）
 
@@ -120,9 +129,29 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 （外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
 以及 A1 的核心建议——**不复活 gnuplot 后端，改写薄 toolkit 复用现有桥**）。
 
-> **图形线（P5 OSMesa）**在 `graphics-osmesa` 分支上做：已完成的步骤① 证明
-> OSMesa + softpipe 在 wasm 里能渲出正确三角形（**含立即模式**，即
-> `opengl_renderer` 需要的那条路）。
+> **图形线 —— 2026-09-23 收口：只剩 `webgl` 一条后端，且已是 8761 的默认**：
+> Octave **自己的 `opengl_renderer`**（一字不改）真渲出像素（`getframe` 真 cdata、
+> 页面 `<img>` 贴真 PNG、15 种图解码后全部非空白）。
+>
+> | 后端 | 做法 | `octave.wasm` | 状态 |
+> |---|---|---|---|
+> | `webgl` | **gl4es** 把 GL 1.x 翻译到 GLES2 ⇒ **WebGL2（GPU）** | 36.86MB raw / 8.43MB gz | ✅ **默认**（`accept-p5-graphics` 64 PASS / 0 FAIL） |
+> | `osmesa` | Mesa **软件光栅化**（CPU，渲进内存） | 45,580,621（+11.3MB） | ⛔ **已退役**（脚本/配方在 git 历史的 `graphics-osmesa*` 分支） |
+>
+> 卡了两轮的根因只有一行：toolkit 的编译单元**缺 `#include "config.h"`** ⇒
+> `octave::opengl_functions` 被编成空类（虚表 2 槽），而 `gl-render.o` 要取第 77 槽 ⇒ 越界 trap。
+> plot 桥的镜像层让桥**同时**建出真图形对象（默认 toolkit 是 `webgl` ⇒ 这条链默认就开着）。
+>
+> **plot 桥两刀提速**：① `surf` 从"每单元格一条 series"改成"**每条行带一条**"
+> （`peaks(40)`：1521 → 39 条）⇒ 桥的 `surf(peaks(40))` **1686 → 480 ms**；
+> ② 镜像层从"每次摘 path"改成**一次性句柄缓存 + 深度转发** ⇒ 一次镜像
+> **146 → 1.5 ms（~97×）**、一张图的温开销 **395 → 94 ms（4.2×）**。
+> （顺带更正：之前把"端到端 2.1s"归因成 path 手术是**错的**，真凶是**首帧冷启动 ~0.6s**。）
+>
+> **已上线 8761**（换装脚本 `build/promote-webgl.sh`）：首包 gzip 9.62MB → 9.91MB。
+> **文字渲染仍缺**（`--without-freetype` ⇒ 刻度/title 空白但不崩）。
+> 一手记录：**`build/113/NOTES-webgl.md`**（§4.5.12 / §4.5.13 / §4.6）、
+> `build/113/GRAPHICS-BRANCH.md`、`HANDOFF.md` §5.20 / §5.21。
 
 ## 第四轮：已换基线到 **Octave 11.3.0**（2026-09-22 落地）
 
@@ -141,8 +170,10 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
   9 个长尾库（glpk/qhull/fftw3+3f/sndfile/qrupdate/hdf5/arpack/SuiteSparse）全部重开。
 - **换基线时补的三处内容缺口**：`dldprobe.oct` 的源码入仓、`lanetest` 资产、
   `m/forge` 的 20 个预装 `.m`（否则 `normpdf` 从"开箱即有"退化成"要先加载包"）。
-- **图形**：plot 桥 + `print -dsvg` 是当前可用路径；**OSMesa 软件光栅化线**
-  已完成步骤①（wasm 内渲出正确三角形，含立即模式），**后续在 `graphics-osmesa` 分支做**。
+- **图形**：plot 桥 + `print -dsvg` 是**默认（`web` toolkit）**的可用路径；
+  **OSMesa 软件光栅化线已在 8763 上打通步骤①②③**（真渲出像素、15 种图非空白，
+  `accept-p5-graphics.mjs` 54 PASS / 0 FAIL），但**没上 8761**（体积 +11.3MB raw 待谈）。
+  见上一条引用框与 `build/113/GRAPHICS-BRANCH.md`。
 
 > **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
 > `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
@@ -157,11 +188,11 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/update-readme.py` (2270 bytes)
 - `.gitignore` (1702 bytes)
 - `AGENTS.md` (1355 bytes)
-- `HANDOFF.md` (133480 bytes)
+- `HANDOFF.md` (159532 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)
-- `bridge/index.html` (11603 bytes)
+- `bridge/index.html` (17897 bytes)
 - `bridge/octplot.html` (6162 bytes)
 - `bridge/plotbridge.js` (6457 bytes)
 - `bridge/webaudio.js` (6864 bytes)
@@ -169,29 +200,32 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `bridge/webfilepick.js` (6076 bytes)
 - `bridge/webnet.js` (4066 bytes)
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
-- `build/113/GRAPHICS-BRANCH.md` (3663 bytes)
+- `build/113/GRAPHICS-BRANCH.md` (6799 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
 - `build/113/NOTES-lsode.md` (12160 bytes)
 - `build/113/NOTES-main-module-2.md` (6400 bytes)
-- `build/113/NOTES-p5-osmesa.md` (24082 bytes)
+- `build/113/NOTES-p5-osmesa.md` (33080 bytes)
 - `build/113/NOTES-slicot.md` (19273 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
+- `build/113/NOTES-webgl.md` (52757 bytes)
 - `build/113/PROMOTION.md` (6444 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
 - `build/113/STATUS.md` (8407 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
 - `build/113/build-deps.sh` (9359 bytes)
+- `build/113/build-gl2ps.sh` (4092 bytes)
+- `build/113/build-glu-webgl.sh` (5242 bytes)
 - `build/113/build-libs.sh` (22343 bytes)
 - `build/113/build-oct.sh` (5647 bytes)
 - `build/113/build-ode15.sh` (4855 bytes)
 - `build/113/build-pkg-oct.sh` (9351 bytes)
 - `build/113/build-sundials.sh` (6516 bytes)
 - `build/113/check-dylink-signatures.py` (7526 bytes)
-- `build/113/configure-113-full.sh` (8890 bytes)
+- `build/113/configure-113-full.sh` (10453 bytes)
 - `build/113/configure-113.sh` (12415 bytes)
 - `build/113/dldprobe.cc` (1773 bytes)
 - `build/113/emf77` (4503 bytes)
@@ -199,26 +233,25 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/f2c-io-shim.c` (2398 bytes)
 - `build/113/fix-rapidjson.py` (1906 bytes)
 - `build/113/fix-slicot-abi.py` (13091 bytes)
-- `build/113/link-web.sh` (18444 bytes)
+- `build/113/gl-headers-webgl.sh` (5528 bytes)
+- `build/113/gl4es-smoke.c` (8634 bytes)
+- `build/113/gl4es-smoke.sh` (3808 bytes)
+- `build/113/gl4es-unmangled-shim.c` (3188 bytes)
+- `build/113/link-web.sh` (23599 bytes)
 - `build/113/minioct.cc` (2409 bytes)
-- `build/113/osmesa-glu-smoke.c` (6903 bytes)
-- `build/113/osmesa-glu-smoke.sh` (2612 bytes)
-- `build/113/osmesa-smoke.c` (4410 bytes)
-- `build/113/osmesa-smoke.sh` (2340 bytes)
-- `build/113/osmesa-stubs.c` (1375 bytes)
-- `build/113/osmesa_toolkit.cc` (18815 bytes)
 - `build/113/patch-ax-pthread.sh` (5298 bytes)
-- `build/113/patch-mesa-osmesa-static.sh` (6273 bytes)
+- `build/113/patch-gl4es.sh` (7469 bytes)
 - `build/113/patch-odepack-callback-arity.sh` (5006 bytes)
 - `build/113/probe-side-module.sh` (3339 bytes)
 - `build/113/rebuild-pic-blas.sh` (6713 bytes)
 - `build/113/ss-long64.h` (1265 bytes)
 - `build/113/web_graphics_toolkit.cc` (8546 bytes)
+- `build/113/webgl_toolkit.cc` (22658 bytes)
 - `build/BASELINE-10.3.md` (8216 bytes)
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
-- `build/CLIBS.md` (70399 bytes)
-- `build/GAPS-2.md` (28350 bytes)
+- `build/CLIBS.md` (75932 bytes)
+- `build/GAPS-2.md` (28532 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
 - `build/Makefile` (9242 bytes)
@@ -252,7 +285,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/forge-preload/tinv.m` (5467 bytes)
 - `build/forge-preload/tpdf.m` (4730 bytes)
 - `build/forge-preload/ttest.m` (3147 bytes)
-- `build/main.cc` (17315 bytes)
+- `build/main.cc` (17474 bytes)
 - `build/make-dist.sh` (3226 bytes)
 - `build/normalize_arpack.py` (1861 bytes)
 - `build/pkgfix/__pkgfix_basename__.m` (1140 bytes)
@@ -264,53 +297,58 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/plotbridge/__pb_add__.m` (2731 bytes)
 - `build/plotbridge/__pb_apply_panel__.m` (598 bytes)
 - `build/plotbridge/__pb_clear_series__.m` (710 bytes)
+- `build/plotbridge/__pb_core__.m` (7729 bytes)
 - `build/plotbridge/__pb_cycle_color__.m` (457 bytes)
 - `build/plotbridge/__pb_emit__.m` (4169 bytes)
 - `build/plotbridge/__pb_errbars__.m` (635 bytes)
+- `build/plotbridge/__pb_in_core__.m` (845 bytes)
 - `build/plotbridge/__pb_load_fig__.m` (749 bytes)
+- `build/plotbridge/__pb_mirror__.m` (4852 bytes)
 - `build/plotbridge/__pb_mirror_text__.m` (795 bytes)
 - `build/plotbridge/__pb_new_panel__.m` (508 bytes)
 - `build/plotbridge/__pb_panel_fields__.m` (881 bytes)
 - `build/plotbridge/__pb_parse_series__.m` (1554 bytes)
 - `build/plotbridge/__pb_project3__.m` (1298 bytes)
+- `build/plotbridge/__pb_real_renderer__.m` (2692 bytes)
 - `build/plotbridge/__pb_save_fig__.m` (1041 bytes)
 - `build/plotbridge/__pb_stash_panel__.m` (893 bytes)
 - `build/plotbridge/__pb_surf_args__.m` (1344 bytes)
-- `build/plotbridge/__pb_surface__.m` (2029 bytes)
+- `build/plotbridge/__pb_surface__.m` (3504 bytes)
 - `build/plotbridge/__pstate__.m` (1819 bytes)
 - `build/plotbridge/__svg_panel_boxes__.m` (1569 bytes)
 - `build/plotbridge/__svg_render__.m` (24352 bytes)
-- `build/plotbridge/area.m` (1446 bytes)
-- `build/plotbridge/axis.m` (1969 bytes)
-- `build/plotbridge/bar.m` (486 bytes)
-- `build/plotbridge/barh.m` (1172 bytes)
-- `build/plotbridge/clf.m` (437 bytes)
-- `build/plotbridge/contour.m` (3498 bytes)
-- `build/plotbridge/errorbar.m` (1858 bytes)
-- `build/plotbridge/figure.m` (3696 bytes)
-- `build/plotbridge/grid.m` (357 bytes)
-- `build/plotbridge/hold.m` (357 bytes)
-- `build/plotbridge/legend.m` (496 bytes)
-- `build/plotbridge/loglog.m` (488 bytes)
-- `build/plotbridge/mesh.m` (546 bytes)
-- `build/plotbridge/pie.m` (1409 bytes)
-- `build/plotbridge/plot.m` (621 bytes)
-- `build/plotbridge/plot3.m` (2759 bytes)
-- `build/plotbridge/print.m` (3510 bytes)
-- `build/plotbridge/saveas.m` (878 bytes)
-- `build/plotbridge/scatter.m` (464 bytes)
-- `build/plotbridge/scatter3.m` (1002 bytes)
-- `build/plotbridge/semilogx.m` (493 bytes)
-- `build/plotbridge/semilogy.m` (493 bytes)
-- `build/plotbridge/stairs.m` (1236 bytes)
-- `build/plotbridge/stem.m` (603 bytes)
-- `build/plotbridge/subplot.m` (2101 bytes)
-- `build/plotbridge/surf.m` (529 bytes)
-- `build/plotbridge/title.m` (216 bytes)
-- `build/plotbridge/xlabel.m` (223 bytes)
-- `build/plotbridge/xlim.m` (271 bytes)
-- `build/plotbridge/ylabel.m` (210 bytes)
-- `build/plotbridge/ylim.m` (271 bytes)
+- `build/plotbridge/area.m` (2467 bytes)
+- `build/plotbridge/axis.m` (3217 bytes)
+- `build/plotbridge/bar.m` (1504 bytes)
+- `build/plotbridge/barh.m` (2193 bytes)
+- `build/plotbridge/clf.m` (1467 bytes)
+- `build/plotbridge/contour.m` (4560 bytes)
+- `build/plotbridge/errorbar.m` (3001 bytes)
+- `build/plotbridge/figure.m` (4678 bytes)
+- `build/plotbridge/grid.m` (1041 bytes)
+- `build/plotbridge/hold.m` (1041 bytes)
+- `build/plotbridge/insert-core-forward.py` (10237 bytes)
+- `build/plotbridge/legend.m` (1653 bytes)
+- `build/plotbridge/loglog.m` (1515 bytes)
+- `build/plotbridge/mesh.m` (1567 bytes)
+- `build/plotbridge/pie.m` (2427 bytes)
+- `build/plotbridge/plot.m` (1642 bytes)
+- `build/plotbridge/plot3.m` (3783 bytes)
+- `build/plotbridge/print.m` (4509 bytes)
+- `build/plotbridge/saveas.m` (1530 bytes)
+- `build/plotbridge/scatter.m` (1494 bytes)
+- `build/plotbridge/scatter3.m` (2035 bytes)
+- `build/plotbridge/semilogx.m` (1526 bytes)
+- `build/plotbridge/semilogy.m` (1526 bytes)
+- `build/plotbridge/stairs.m` (2295 bytes)
+- `build/plotbridge/stem.m` (1624 bytes)
+- `build/plotbridge/subplot.m` (3170 bytes)
+- `build/plotbridge/surf.m` (1550 bytes)
+- `build/plotbridge/title.m` (1218 bytes)
+- `build/plotbridge/xlabel.m` (1201 bytes)
+- `build/plotbridge/xlim.m` (1310 bytes)
+- `build/plotbridge/ylabel.m` (1188 bytes)
+- `build/plotbridge/ylim.m` (1310 bytes)
 - `build/prerender-m-docstrings.py` (16068 bytes)
 - `build/rebuild-pic-libs.sh` (3672 bytes)
 - `build/reconf-batch1.sh` (2160 bytes)
@@ -318,7 +356,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/reconf-bench.sh` (3857 bytes)
 - `build/reconf-pic.sh` (2810 bytes)
 - `build/reconf.sh` (3004 bytes)
-- `build/recover.sh` (7163 bytes)
+- `build/recover.sh` (7740 bytes)
 - `build/render-docstrings.py` (8474 bytes)
 - `build/render_docstring_batch.m` (2443 bytes)
 - `build/second_stub.f` (358 bytes)
@@ -387,7 +425,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webfile/ls.m` (5013 bytes)
 - `build/webfile/movefile.m` (5640 bytes)
 - `build/webfilepick.cc` (9043 bytes)
-- `build/webgraphics/PKG_ADD` (1490 bytes)
+- `build/webgraphics/PKG_ADD` (2022 bytes)
 - `build/webimage.cc` (7177 bytes)
 - `build/webio.cc` (18583 bytes)
 - `build/webnet.cc` (7341 bytes)
@@ -400,7 +438,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webnet/urlwrite.m` (2168 bytes)
 - `build/webnet/webread.m` (1573 bytes)
 - `build/webnet/websave.m` (1366 bytes)
-- `dist/DEPLOY.md` (9848 bytes)
+- `dist/DEPLOY.md` (12173 bytes)
 - `dist/serve.py` (2668 bytes)
 - `test/browser/accept-113-assets.mjs` (5474 bytes)
 - `test/browser/accept-113-boot.mjs` (4837 bytes)
@@ -410,26 +448,26 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/accept-113-pkgoct.mjs` (8854 bytes)
 - `test/browser/accept-archive.mjs` (5665 bytes)
 - `test/browser/accept-audio.mjs` (12365 bytes)
-- `test/browser/accept-dldfcn.mjs` (11012 bytes)
+- `test/browser/accept-dldfcn.mjs` (11565 bytes)
 - `test/browser/accept-fileops.mjs` (7453 bytes)
 - `test/browser/accept-forge-oct.mjs` (4473 bytes)
 - `test/browser/accept-forge.mjs` (6161 bytes)
-- `test/browser/accept-forge2.mjs` (8286 bytes)
+- `test/browser/accept-forge2.mjs` (8839 bytes)
 - `test/browser/accept-full.mjs` (5734 bytes)
 - `test/browser/accept-hdf5.mjs` (4146 bytes)
 - `test/browser/accept-help.mjs` (3589 bytes)
 - `test/browser/accept-image.mjs` (4098 bytes)
 - `test/browser/accept-input.mjs` (5874 bytes)
-- `test/browser/accept-net.mjs` (7994 bytes)
+- `test/browser/accept-net.mjs` (9064 bytes)
 - `test/browser/accept-ode15.mjs` (5449 bytes)
-- `test/browser/accept-p5-osmesa.mjs` (7728 bytes)
+- `test/browser/accept-p5-graphics.mjs` (16303 bytes)
 - `test/browser/accept-pkg.mjs` (5619 bytes)
-- `test/browser/accept-plot3d.mjs` (7525 bytes)
+- `test/browser/accept-plot3d.mjs` (8638 bytes)
 - `test/browser/accept-plotv2.mjs` (10560 bytes)
-- `test/browser/accept-print.mjs` (11210 bytes)
+- `test/browser/accept-print.mjs` (11770 bytes)
 - `test/browser/accept-requirements.mjs` (5544 bytes)
 - `test/browser/accept-slicot.mjs` (7414 bytes)
-- `test/browser/accept-t2-graphics.mjs` (8603 bytes)
+- `test/browser/accept-t2-graphics.mjs` (9506 bytes)
 - `test/browser/accept-t6-audio-doc.mjs` (7930 bytes)
 - `test/browser/accept-t7-recorder.mjs` (12071 bytes)
 - `test/browser/accept-t8-uigetfile.mjs` (9586 bytes)
@@ -437,9 +475,20 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/bench-core.mjs` (5350 bytes)
 - `test/browser/fixtures/p5-graphics-probe.m` (3048 bytes)
 - `test/browser/fixtures/t2-graphics-probe.m` (2587 bytes)
+- `test/browser/probe-bridge-cost.mjs` (2853 bytes)
+- `test/browser/probe-bridge-cost2.mjs` (1789 bytes)
+- `test/browser/probe-bridge-mirror-cost.mjs` (5323 bytes)
+- `test/browser/probe-bridge-svg-out.mjs` (2214 bytes)
+- `test/browser/probe-gfx-bench.mjs` (4496 bytes)
+- `test/browser/probe-gfx-e2e-breakdown.mjs` (2714 bytes)
+- `test/browser/probe-gfx-resolution.mjs` (2443 bytes)
+- `test/browser/probe-gfx-surf-cost.mjs` (2358 bytes)
+- `test/browser/probe-gl4es-smoke.mjs` (3936 bytes)
+- `test/browser/probe-gpu-backend.mjs` (2037 bytes)
 - `test/browser/probe-p5-run.mjs` (2255 bytes)
 - `test/browser/probe-t2-graphics.mjs` (4979 bytes)
 - `test/browser/probe-t2-run.mjs` (2246 bytes)
+- `test/browser/probe-toolkit-print.mjs` (2474 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)
 - `vendor/extra/asciiplot.m` (940 bytes)
 - `vendor/extra/fft.m` (1736 bytes)

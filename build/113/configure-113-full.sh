@@ -130,16 +130,41 @@ bash /src/bin/patch-ax-pthread.sh "$SRCDIR"
 
 # P5 步骤②：要不要开 OpenGL？
 #   默认仍然 `--without-opengl`（与之前逐字节一致）。
-#   `WITH_OPENGL=1` 时**不开** --without-opengl，并把 /src/deps/glshim 摆到搜索路径上
-#   —— 那个前缀里 libGL.a 就是 **libOSMesa.a**、libGLU.a 是给 wasm 编的 libGLU，
-#   头文件用 Mesa 的（legacy API 声明齐全）。也就是"把 OSMesa 冒充成 GL"，
-#   好让 Octave 的 gl-render.cc 编出来、并链到软件光栅化那条路。
+#   `WITH_OPENGL=1` 时**不开** --without-opengl，并把 GL 头/库摆到搜索路径上，
+#   好让 Octave 的 `gl-render.cc` 编出来、并链到真正的 GL 实现上。
+#
+#   ⚠️ 2026-09-23 起：**OSMesa 后端已退役**（图形线只剩 gl4es → GLES2 → WebGL2）。
+#   这里加的 `-I/src/deps/glshim/include` 现在是**指向 gl4es+GLU 头目录的软链**
+#   （`build/113/gl-headers-webgl.sh` 组装的 `/src/deps/glheaders-webgl/include`）。
+#   保留这个**路径字符串**是故意的：`-I` 进 ccache 哈希、也进 automake 的 .d，
+#   换路径 = 整片缓存失效 = 一次 -O2 全树重建；只换目录内容就只重编那几个 GL TU。
+#   `-L/src/deps/glshim/lib` 同理（那里的 libGL.a 是 OSMesa 冒充品，现在没人链它了，
+#   留着只为不动命令行）。
 OPENGL_FLAG="${OPENGL_FLAG:---without-opengl}"
 if [ "${WITH_OPENGL:-0}" = "1" ]; then
   OPENGL_FLAG=""
   CPPFLAGS="${CPPFLAGS:-} -I/src/deps/glshim/include"
   LDFLAGS="${LDFLAGS:-} -L/src/deps/glshim/lib"
-  echo "=== WITH_OPENGL=1：开 OpenGL，GL 由 OSMesa 冒充（glshim）==="
+  echo "=== WITH_OPENGL=1：开 OpenGL（头/库走 /src/deps/glshim，内容已是 gl4es+GLU）==="
+fi
+
+# gl2ps：要不要让 Octave 的 print 支持矢量输出？
+#   默认不开（与之前逐字节一致）。
+#   `WITH_GL2PS=1` 时把 /src/deps/gl2ps 摆到搜索路径上 —— 那里有给 wasm 编的
+#   libgl2ps.a 与 gl2ps.h（配方见 build/113/build-gl2ps.sh）。
+#
+#   为什么需要（2026-09-23 实测）：Octave 的 `print` 管线
+#   （`m/plot/util/private/__opengl_print__.m`）是**围绕 gl2ps 写的**，全程
+#   `gl2ps_device`，**从不调用 toolkit 的 `print_figure`**。没有 gl2ps 时
+#   `print -dsvg/-dpdf/-dps/-dpng` 全部失败（前两个报 gl2ps，后几个报缺 gs）——
+#   也就是说 plot 桥自己那份 SVG 是**唯一**能出矢量的路。
+#   开了 gl2ps 之后 toolkit 才能自己扛 print，桥那条 1.7 s 的数据管线才真正冗余。
+WITH_GL2PS_FLAG=""
+if [ "${WITH_GL2PS:-0}" = "1" ]; then
+  CPPFLAGS="${CPPFLAGS:-} -I/src/deps/gl2ps/include"
+  LDFLAGS="${LDFLAGS:-} -L/src/deps/gl2ps/lib"
+  WITH_GL2PS_FLAG="-lgl2ps"
+  echo "=== WITH_GL2PS=1：把 wasm 版 gl2ps 摆进搜索路径（print 的矢量输出）==="
 fi
 
 echo "=== configure（全开）"

@@ -5,6 +5,14 @@
 > **2026-09-22：基线已从 7.2.0 换到 11.3.0。** 8761 上现在服务的就是这一版；
 > 7.2 的站点快照留在 `/mnt/hdd/octave-wasm-build/site-72bak/`（回退：
 > `cp -a site-72bak/. site/`）。换基线的判定与清单见 `build/113/PROMOTION.md`。
+>
+> **2026-09-23：图形线收口 —— 本站点现在带真渲染器。** `octave.wasm` 由**带 GL** 的那份链接
+> 产出（gl4es → GLES2 → **WebGL2/GPU**），**默认 toolkit 就是 `webgl`** ⇒ 开箱
+> `figure; plot(1:10); drawnow` 就出真图。OSMesa（Mesa 软件光栅化）后端**已退役**。
+> 换装流程固化在 **`build/promote-webgl.sh`**；细节见 `HANDOFF.md` §5.21 与
+> `build/113/NOTES-webgl.md` §4.5.13 / §4.6。
+> **回退点**：`/mnt/hdd/octave-wasm-build/site-prewebgl-bak/`（改之前那份站点）
+> 与容器里的 `/src/websrc/out-nongl-bak`（不带 GL 的链接产物）。
 
 ## 包内容
 
@@ -99,10 +107,16 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 - **dldfcn**：`convhulln` `delaunayn` `voronoi` `glpk` `fftw` `gzip`/`bzip2` `audioread` 系列
 - **图形**：plot 桥 v1/v2（2D + 3D：`plot3`/`mesh`/`surf`/`contour`/`subplot`）、
   `print -dsvg`（纯 `.m` SVG 生成器，不依赖 gnuplot）
-- **图形对象句柄**（T2/A1）：`web` graphics toolkit → `figure`/`gcf`/`gca`/`get`/`set`/
-  `title`/`allchild`/`findall`/`close` 全部可用（此前**建不出图形对象**，一律 invalid handle）。
-  ⚠️ 半真化边界：真对象与属性可用，但 **plot 的序列数据仍在 plot 桥的状态里**，
-  所以 `get(gca,'children')` 不列 plot 的线、`xlim` 不自动跟随数据
+- **图形对象句柄**：`figure`/`gcf`/`gca`/`get`/`set`/`title`/`allchild`/`findall`/`close` 全部可用
+  （此前**建不出图形对象**，一律 invalid handle）。
+- **★ 真渲染（2026-09-23 起默认）**：`webgl` graphics toolkit —— GL 1.x 调用经 **gl4es**
+  翻译到 GLES2 → **WebGL2（GPU）**，Octave 自己的 `opengl_renderer` 一字不改。
+  **默认 toolkit 就是它**：`figure; plot(1:10); drawnow` 开箱就出真图、`getframe()` 返回真像素、
+  页面贴出 toolkit 渲的 PNG。`plot 桥`同时把这些调用**镜像**成真图形对象
+  （于是 `get(gca,'children')` 能列出线、`h = plot(...)` 拿到真句柄）。
+  显式切回"只出句柄、渲染归桥"的老模式：`graphics_toolkit("web")`。
+  ⚠️ 文字渲染仍缺（`--without-freetype`）：刻度/title 空白但不崩，且**每次会话**在第一条
+  axes 上打一条带调用栈的 warning。
 - **图像**：`imread`/`imwrite`/`imfinfo`（stb_image）
 - **压缩归档**：`gzip`/`bzip2` + 进程内 `zip`/`unzip`/`tar`/`untar`/`gunzip`/`bunzip2`（无 shell）
 - **音频**：`audioread` 系列 + `audioplayer`（WebAudio 桥）
@@ -111,8 +125,9 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**29 套 738 项全绿**，
-在 `http://127.0.0.1:8761/`（**即本包内容**）与 `8762` 上各跑一遍。
+本包内容 = 最近一次在浏览器实测通过的构建。**32 套 848 项全绿**，
+在 `http://127.0.0.1:8761/`（**即本包内容**）上跑（用
+`/mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`；逐套日志在 `sweep-logs/`）。
 
 **需求级** `accept-requirements` **14/14**（R1–R10 各一条最小实测 + 架构护栏）。
 其中 R1 `ode15s`/`ode15i` 由内嵌 SUNDIALS 6.1.1 的真 `.oct` 提供（此前是"桩"）。
@@ -120,6 +135,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | 套件 | 项数 | 覆盖 |
 |---|---|---|
 | accept-requirements | 14 | **需求级**：R1–R10 + 架构护栏 |
+| accept-p5-graphics | **64** | **真渲染（webgl → WebGL2/GPU）**：PNG/`getframe`/15 种图非空白 + 镜像层与 DEPTH 复位护栏 |
 | accept-t2-graphics | 26 | **图形对象句柄**（`web` toolkit：figure/gcf/gca/get/set/title/close） |
 | accept-113-boot | 10 | 11.3.0 能起、能 eval |
 | accept-113-oct | 8 | 真 `.oct` side module 能被装载并调用 |
@@ -131,7 +147,8 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-hdf5 | 16 | `save/load -hdf5` |
 | accept-forge | 22 | Forge 纯 .m 包（含 forge 预装集） |
 | accept-forge-oct | 15 | Forge 编译件 |
-| accept-forge2 | 42 | signal + control |
+| accept-forge2 | 44 | signal + control（含 SLICOT 编译件的真数值） |
+| accept-slicot | 25 | `ss`/`step`/`tf2ss`/`lyap`/`care`/… 数值 |
 | accept-dldfcn | 68 | dldfcn 官方装载语义与真数值 |
 | accept-ode15 | 14 | SUNDIALS `ode15s`/`ode15i`；`lsode` 那条已从「只查 exist」换成真调用 |
 | accept-archive | 20 | 压缩/归档无 shell 化 |
@@ -142,9 +159,13 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-audio | 47 | WebAudio 播放 |
 | accept-net | 30 | 同步网络 |
 | accept-help | 12 | `help`/`lookfor`/`get_first_help_sentence` |
+| accept-t9-helpm | 18 | `.m` docstring 的 `help`（构建期预渲染） |
 | accept-fileops | 20 | 文件操作语义 |
 | accept-pkg | 16 | `pkg` 数据库/list/load/describe |
 | accept-input | 9 | `input()` 与 EOF |
+| accept-t6-audio-doc | 33 | `audiodevinfo` + `doc` + 输出落点 |
+| accept-t7-recorder | 40 | `audiorecorder`（MediaRecorder 桥） |
+| accept-t8-uigetfile | 20 | `uigetfile`（两步式 + 权限/取消三态） |
 
 `lsode` **曾整页 trap，2026-09-22 已修好**（根因：ODEPACK 的用户回调给 4 个实参，
 而 Octave 的 `lsode_f` 有 5 个形参，wasm 的 `call_indirect` 做精确类型检查 → 不符即
@@ -160,12 +181,17 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 - `system`/`unix`/`popen` 清晰报错（有意保持，wasm 无 shell）。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
 - `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。
-- **control 包的 SLICOT 编译件不发布**：它们要 Fortran 的 `slicotlibrary.a`（本仓不建）。
-  故 `sl_*` 系列不可用；`tf`/`tfdata`/`dcgain`/`pole`/`bode`/`feedback` 等纯 `.m` 面正常，
-  `is_*`/`lti_input_idx`/`__control_helper_functions__` 等 8 个编译件正常。
-  ⚠️ **这一条只对 2026-09-22 那一版交付包有效**：SLICOT 已于 2026-09-23 修好并上线
-  （HANDOFF §5.15），**重新打包后应删掉本条**。
-- `voronoi` 的**单输出形式**（要画图）不可用；两输出形式正常。
+- **文字渲染仍缺**（`--without-freetype`）：刻度/title 空白但不崩；且**每次会话**在第一条
+  axes 上打一条 warning（`opengl_renderer::render_text: support for rendering text (FreeType)
+  was unavailable…`，带调用栈）。数值与绘图本身不受影响。
+- **首帧 ~0.6 s**（真渲染）：会话里第一次出图要建 WebGL 上下文 + `initialize_gl4es()` +
+  编 shader + 首帧 `glReadPixels`/PNG 编码。**之后每张图 ~90 ms**（实测，桌面）。
+- **桥的参数宽容度与桌面一致**：桥以前比核心宽容的写法（如 `plot(x,x,'+','')`）现在会走到
+  核心实现、按核心（=桌面）的严格性报错 —— 这是**向桌面看齐**，不是缺陷。
+- **`plot(hax, …)` 这类"首参是句柄"的调用形态桥不支持**（两种 toolkit 下都一样）
+  ⇒ `voronoi` 的**单输出形式**（要画图）因此不可用；两输出形式正常。
+- `xlim()`/`ylim()`/`axis()`/`clf()`/`legend()`/`title()` 等**接受输出参数但返回空**
+  （桥记录的是"请求"、不是核心算出来的值）。
 - **`help` 走构建期预渲染**，不再有运行时 `makeinfo` 子进程 —— 内建（T1）与
   `.m` 文件的 docstring（P1，`accept-t9-helpm` 18/18）都覆盖了；
   7.2 那条"help 必失败"的偏差**在 11.3.0 上已彻底消除**。

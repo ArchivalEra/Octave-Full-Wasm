@@ -26,6 +26,20 @@ while (Date.now() - t < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
   if (ok) break; await new Promise(r => setTimeout(r, 800));
 }
+// ⚠️ 还要等**启动资产装完**（`window.__octaveReady`）：原来只等"解释器可用"（ready ≈ 0.8 s），
+//    而页面侧的资产加载器是**另一条异步链**，它会在随后几秒里
+//    `console.log("[assets] 清单就绪：47 个资产" …)` —— 那些行的**时序是随机的**，
+//    会落进前几次 eval 的捕获窗口，把要匹配的文本挤出 200 字符之外 ⇒
+//    `后端不在`（want='0'）**偶发假红**（2026-09-23 实测：同一条时红时绿，重跑就绿）。
+//    绝大多数套件都等这个标志，这里补上。
+{
+  const t2 = Date.now();
+  while (Date.now() - t2 < 300000) {
+    const ok = await page.evaluate(() => window.__octaveReady === true).catch(() => false);
+    if (ok) break; await new Promise(r => setTimeout(r, 300));
+  }
+  await new Promise(r => setTimeout(r, 500));
+}
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
 // 页面侧异步桥：从仓库源码注入（站点 index.html 也会加载它，但测试不该依赖那点）。
@@ -40,10 +54,12 @@ async function ev(expr, label, want) {
     r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 130)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 600));
-  const out = [...logs].join(' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-  const ok = r.rc === 0 && (!want || out.includes(want));
+  // ⚠️ **匹配用完整输出，只有显示才截断**（同 accept-dldfcn/forge2/net 那三条的坑：
+  //    slice 之后再 includes，会让"要匹配的东西落在截断之外"变成假红）。
+  const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
+  const ok = r.rc === 0 && (!want || full.includes(want));
   ok ? pass++ : fail++;
-  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 150))}`);
+  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${(full || ('rc=' + r.rc + ' ' + r.err)).slice(0, 200)}`);
 }
 
 console.log('--- 懒加载前 ---');

@@ -23,6 +23,9 @@
 //   所以 `get(gca,'children')` 不会列出 plot 画的那条线，`xlim` 也不会自动跟随数据。
 //   这是计划里"只救活句柄语义、不碰绘图重构"的直接后果。
 //
+// ⚠️ 2026-09-23：站点默认 toolkit 改成 `webgl`（真渲染器）之后，本套件在开头**显式切回
+//    `web`** —— 它验的就是这一套 `web` 的句柄语义，与默认是谁无关。
+//
 // 用法：harness/run.sh test/browser/accept-t2-graphics.mjs [URL]
 import { chromium } from 'playwright-core';
 
@@ -65,6 +68,14 @@ for (let i = 0; i < 300; i++) {
 }
 await sleep(800);
 console.log(`ready`);
+
+// ⚠️ 本套件测的是 **`web` toolkit 的句柄语义**（"序列数据仍在桥里、不建真对象"那套老语义），
+//    而 **2026-09-23 起站点的默认 toolkit 是 `webgl`**（真渲染器，会开镜像层 ⇒
+//    `findall(gcf,"type","line")` 不再是 0）。所以这里必须**显式切回 `web`**，
+//    否则下面一半断言会因为"默认换了"而假红（踩过：默认换成 webgl 后 `def=web` 那条直接红）。
+//    `web` 永远注册得到（本套件依赖的 webgraphics 资产在启动清单里），所以这里不做兜底判断。
+await run('graphics_toolkit("web")');
+console.log(`已显式切到 web（站点默认是 webgl）`);
 
 console.log('\n--- 一、toolkit 已注册并被设为默认 ---');
 await ev('printf("avail={%s}\\n", strjoin(available_graphics_toolkits(),","))', 'available_graphics_toolkits 含 web', 'web');

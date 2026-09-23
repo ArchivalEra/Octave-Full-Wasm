@@ -1156,3 +1156,103 @@ Playwright 报 `Non-multiple file input can only accept single file`）。两种
 - 覆盖率探针：桌面 927 个名字 → 浏览器 **926**，唯一不在的是 Debian 打包产物
   `debian_missing_handler`（不属 Octave）
 - 8761 全量：**711 PASS / 0 FAIL + pkgoct 27 = 29 套 738 项全绿**
+
+---
+
+# 批次 P5（2026-09-23）：图形线打通 —— 一条**通用**的 C++ 坑
+
+这一批不是 C 库配方，但它踩的坑对"往这个工程里加任何 C++ 文件"都成立，所以记在这里。
+
+## 坑 1 ★ 碰 Octave 头文件的编译单元**必须**先 `#include "config.h"`
+
+**现象**：加了个 `.oct`/toolkit 源文件，能编能链，**运行时**却在别人的代码里炸：
+
+```
+RuntimeError: table index is out of bounds
+  at octave::opengl_renderer::set_viewport(int, int)
+```
+
+**根因**：`oct-opengl.h` 里 `class opengl_functions` 的**整份虚函数表**
+（几百个 `virtual void glXxx(...) { ::glXxx(...); }`）被
+`#if defined (HAVE_OPENGL)` 包着。而 `HAVE_OPENGL`（以及
+`HAVE_GLBLENDFUNCSEPARATE`、`HAVE_GL_GL_H` 等）**只来自 autoconf 的 `config.h`** ——
+`octave-config.h` 和 `oct-conf-post-public.h` 里**都没有**（两个文件都 grep 过）。
+
+那个新 TU 里 `-DHAVE_CONFIG_H` 只是个门闩，**没人 `#include` 就没用**，
+于是 `HAVE_OPENGL` 未定义 ⇒ `opengl_functions` 退化成**只有虚析构的空类**、虚表**只有 2 槽**；
+而 `gl-render.o`（按 `HAVE_OPENGL=1` 编的）照旧去取**第 77 槽** ⇒ 读到虚表以外的字节 ⇒ 越界。
+
+**怎么快速确认**（对象级证据，比读代码快）：
+
+```bash
+llvm-nm your_file.o | grep 'opengl_functions'    # 只有 D0Ev/D2Ev/ZTI/ZTS/ZTV ⇒ 空类
+llvm-nm your_file.o | grep -c 'opengl_functions' # 修好后应有几十个（实测 83）
+```
+
+**修法**：按 Octave 自己的惯例写（`gl-render.cc:26-28` 就是），放在**任何** include 之前：
+
+```cpp
+#if defined (HAVE_CONFIG_H)
+#  include "config.h"
+#endif
+```
+
+**通用教训**：只要你的 TU 里出现了 Octave 的类，就必须和主树**同一套 `config.h` 口径**。
+凡是"布局/虚表被 `#if` 包着"的类型，宏不一致 ⇒ 不是编译错，而是**运行期越界**，
+报错还会指向无辜的函数（这次指向 `set_viewport`）。
+
+## 坑 2 ★ 诊断通道要能**穿过 trap**
+
+"加个探针看看走到哪"在这个工程里有两个隐形失效模式，这次两个都踩到了：
+
+1. **`octave_stdout` 是带缓冲的流** —— wasm 一旦 trap，缓冲区里那几行**整个丢掉**，
+   看起来像"探针没执行"。改用 `emscripten_run_script("console.error(...)")`
+   **或**直接 `fopen`/`fwrite` 到 **MEMFS 文件**（页面侧用 `Module.FS.readFile` 读）。
+2. **探针可能根本没编进去** —— 这次卡了两轮的"探针一个字没打出来"，真相是那一版
+   **没有**把探针宏编进去（`grep -c 'P5TK GL_VERSION=' octave.wasm` = 0）。
+   **动手前先确认探针在产物里**，别把"没有探针"读成"没走到"。
+
+配套：`link-web.sh` 的 `DIAG_NAMES=1`（`--profiling-funcs`）能让浏览器栈里出**函数名**；
+再用十几行 Python 解析 wasm 二进制定位**具体指令**（`call_indirect` 前一条 `i32.load`
+的 offset ÷ 4 = 虚表槽号），两下就能把"越界"钉死在某个槽上。
+
+---
+
+# 批次 gl2ps（2026-09-23）：Octave `print` 的矢量后端
+
+**为什么补它**：Octave 的核心 `print` 管线 `m/plot/util/private/__opengl_print__.m`
+是**围绕 gl2ps 写的**（全程 `gl2ps_device`），**从不调用 toolkit 的 `print_figure`**。
+本构建 `config.h` 里 `HAVE_GL2PS_H` 一直是 undef（configure 原文
+`checking for gl2ps.h... no → Printing of OpenGL graphics will be disabled`）
+⇒ `print -dsvg/-dpdf/-dps` 全部失败；**plot 桥自己那份 SVG 是唯一能出矢量的实现**。
+
+## 配方
+
+```bash
+# ① 源码：上游 geuz.org 已连不上、github.com 被拦；**Debian pool 可达**
+curl -sSL -o gl2ps-1.4.2.orig.tar.xz \
+  "https://deb.debian.org/debian/pool/main/g/gl2ps/gl2ps_1.4.2+dfsg1.orig.tar.xz"
+# 解到 /mnt/hdd/octave-wasm-build/third_party/gl2ps-1.4.2（容器里只读可见于 /src/vendor）
+# ② 编（脚本：build/113/build-gl2ps.sh）
+emcc -O2 -DNDEBUG -fPIC -I"$SRC" -c "$SRC/gl2ps.c" -o gl2ps.o
+emar rcs /src/deps/gl2ps/lib/libgl2ps.a gl2ps.o
+# ③ 重配（build/113/configure-113-full.sh 的 WITH_GL2PS=1，默认关）
+PATH=/src/bin:$PATH SKIP= WITH_OPENGL=1 WITH_GL2PS=1 bash configure-113-full.sh
+# ④ 大重建 + 重链（link-web.sh 会自动链 libgl2ps.a —— 存在就加）
+```
+
+## 坑
+
+1. ★ **`-fPIC` 必须加**。主链是 PIC/动态链接（`--experimental-pic`），非 PIC 归档会报
+   `relocation R_WASM_TABLE_INDEX_SLEB … recompile with -fPIC`。
+   本项目在 GLU 上已经踩过一次（见「批次 P5」坑 2 与 NOTES-p5-osmesa §7.2）。
+2. ★ **gl2ps **没有** `gl2psPrintSVG` 这种按格式命名的入口** —— SVG 是
+   `gl2psBeginPage(..., GL2PS_SVG, ...)` 的一个**格式参数**。
+   第一版自检写了这个名字，于是误报"库里没有"。（同理别去找 `gl2psPrintPDF`。）
+3. `config.h` 一变，`libinterp`/`liboctave` 要**全量大重建**；`make -k` 照旧
+   （`.oct` 安装目标与原生 `octave-cli` 链接在这个环境里必然失败，与本批无关）。
+4. ⚠️ **补上 gl2ps ≠ `print` 能用**。实测 `print -dsvg` 的错只是从
+   "gl2ps unavailable" 变成 `failed to open pipe "| cat > …"`（`__opengl_print__.m:204`）——
+   Octave 把 gl2ps 输出**穿过 shell 管道**落盘，而本构建**故意没有 shell**。
+   `-dpdf/-dps/-deps` 另需 gs。⇒ 这一批只把"gl2ps 缺失"这层去掉，
+   离"核心 print 能出矢量"还差 popen/gs 那两层（详见 HANDOFF §5.20、NOTES-webgl §4.5.11）。

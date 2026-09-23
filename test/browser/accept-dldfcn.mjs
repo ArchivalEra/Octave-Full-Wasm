@@ -42,10 +42,15 @@ async function ev(expr, label, want) {
     r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 130)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 650));
-  const out = [...logs].join(' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-  const ok = r.rc === 0 && (!want || out.includes(want));
+  // ⚠️ **匹配用完整输出，只有显示才截断**。原来两边都用 `slice(0, 200)`，于是"要匹配的东西
+  //    落在前 200 字符之外"就会假红。2026-09-23 就这么红过一次：默认 toolkit 换成 `webgl`
+  //    之后，会话里**第一次建 axes** 会打一条 FreeType warning **带 6 行调用栈**
+  //    （`opengl_renderer::render_text`，既有偏差、不是本次引入），它一条就把 200 字符占满，
+  //    于是 `plot/print 仍可用`（want='2'）在这里与 accept-forge2 里各假红一次。
+  const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
+  const ok = r.rc === 0 && (!want || full.includes(want));
   ok ? pass++ : fail++;
-  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 150))}`);
+  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${(full || ('rc=' + r.rc + ' ' + r.err)).slice(0, 200)}`);
 }
 
 console.log('--- 自动装载（页面加载即装，保持开箱可用）---');

@@ -1,10 +1,26 @@
-# NOTES · P5 图形线重构（OSMesa）—— **步骤① 已完成；步骤② 的"卡点"已更正为误判**
+# NOTES · P5 图形线重构（OSMesa）—— **已退役（2026-09-23 晚）**，本文保留作历史记录
+
+> ⛔ **2026-09-23：OSMesa 后端已退役**，图形线只剩 `webgl`（gl4es → GLES2 → WebGL2/GPU）。
+> 原因不是"跑不起来"（**这条线是通的**，下面全部结论都成立），而是**量**：CPU 逐像素、
+> `octave.wasm` 45.58MB（比 gl4es 版多 ~8.3MB）。
+> **退役动作**：仓内 7 个文件删除（`osmesa_toolkit.cc`/`osmesa-stubs.c`/两个 smoke/patch 脚本）、
+> 容器里的同名件删除、`link-web.sh` 的 osmesa 分支删掉（给 `GL_BACKEND=osmesa` 会**明确失败**
+> 并指路到 git 历史的 `graphics-osmesa` / `graphics-osmesa-p5` 分支）、`main.cc` 去掉
+> `P5_OSMESA_TOOLKIT`、`__pb_real_renderer__` 白名单收成 `{"webgl"}`。
+> 详见 `HANDOFF.md` §5.21 与 `NOTES-webgl.md` §4.6。
+> **本文件仍然值得读**：那条线上的教训（`config.h` 必须最先 include、镜像层的由来、
+> A 档三道墙、`shared-glapi`/meson 的坑）**大部分对 WebGL 线同样成立**。
 
 > 计划里 P5 分三步，并**明确允许"只完成第 1 步并如实记录"**（HANDOFF §9.3）。
-> 本文件记录：步骤① 已通过（硬断言）、步骤② 做到的库层面工作、
-> **以及一次源码级核查推翻的误判**（原先记的"四个 GL 头门禁卡住"是错的）。
+> 现状：**三步都做完了** —— 步骤① OSMesa 在 wasm 里渲出图形（硬断言）；
+> 步骤②③ `plot(...); drawnow` 走 Octave 自己的 `opengl_renderer` + OSMesa
+> **真渲出像素**，8763 上 `accept-p5-osmesa.mjs` **54 PASS / 0 FAIL**（该文件后来**改名** `accept-p5-graphics.mjs`，按站点自动选后端 —— 见 NOTES-webgl）。
 >
-> **接手先看本文件末尾两节**：「~~卡在哪~~ → 更正」与「图形分支上的下一步」。
+> **接手先看第八节**（2026-09-23 收尾）：那里的根因（**缺 `#include "config.h"`**）、
+> 镜像层（`build/plotbridge/__pb_mirror__.m`）、以及本轮踩到的 5 个新坑，
+> 是这一整条线最值钱的部分。第七节的"卡点"推断**已被推翻**，保留只为记录过程。
+>
+> 另有一次更早的源码级核查推翻了"四个 GL 头门禁卡住"的误判（见「~~卡在哪~~ → 更正」）。
 
 ## 一、结论先说
 
@@ -315,29 +331,29 @@ drawnow                     → RuntimeError: table index is out of bounds   ✘
 - **JS 库函数缺失** ✔ 排除（`MISSING-OCT-SYMBOL` 诊断补丁无输出）。
 - **跨模块虚表** ✔ 排除（把 toolkit 编进主模块后现象相同，说明不是这条）。
 
-### 7.5 ★ 当前卡点（下一次从这里开始）
+### 7.5 ~~当前卡点~~ → **已解（2026-09-23 定位到根因并修好）**
+
+> 下面 7.5 原文保留（含一处**被推翻的推断**），根因与修法见 **第八节**。
+> 一句话：卡点是 `RuntimeError: table index is out of bounds`，栈顶
+> `octave::opengl_renderer::set_viewport(int, int)`，**真因是 toolkit 那个编译单元
+> 没 `#include "config.h"`** ⇒ `octave::opengl_functions` 被编成一个**空类**。
+> **不是** `ensure_context()`、**不是** Mesa glapi、**不是**表槽没填。
+
+原文（推断部分已作废，保留以示过程）：
 
 `drawnow` → `redraw_figure` → **`ensure_context(w,h)` 一带**就 trap：
-`RuntimeError: table index is out of bounds`。位置是**推断 + 实测**得到的：
+`RuntimeError: table index is out of bounds`。位置是**推断**得到的：
 在 `render()` 里 `set_viewport` 之前插了一段**直接调 GL 入口**的探针
-（`P5TK_GLPROBE`：`::glGetString(GL_VERSION)` / `::glClearColor` / `::glClear`），
-**探针一个字都没打出来** ⇒ trap 发生在更早的 `ensure_context()`
-（`OSMesaCreateContextExt` / `OSMesaMakeCurrent`）那一步。
-（`P5_GLPROBE=1` 是 `link-web.sh` 的口子，默认关、零开销。）
+（`P5TK_GLPROBE`），**探针一个字都没打出来** ⇒ 推断 trap 发生在更早的 `ensure_context()`。
 
-**下一次的候选（按代价排序）**：
-1. 给这一版重新编一份带 `DIAG_NAMES=1` 的，把 trap 的函数名抓出来（本轮的命名版
-   抓到过 `octave::opengl_renderer::set_viewport(int, int)`，但那是 A 档的形态）。
-2. 查 **Mesa 的 glapi 在 MAIN_MODULE=1 下的表/dispatch 机制**：
-   `-Dshared-glapi=disabled` 下入口点是直接函数，但 `_glapi_tls_Context` 是 TLS；
-   主模块的 `__tls_base`/`__tls_size` 与它在同一次链接里，理论上没问题——
-   但"表槽越界"更像 **glapi 的 dispatch 表**（`_glapi_Dispatch`）或
-   `__indirect_function_table` 里的槽位没被填。可以用 `wasm-dis` 看
-   `set_viewport` 附近那条 `call_indirect` 的类型与表索引来源。
-3. 退一步的窄目标：**只让 `print -dpng` / `getframe` 走 OSMesa**（不做屏幕 toolkit），
-   减少一条调用链（`redraw_figure` 的 toolkit 契约不参与）。
-4. 再退一步：A 档 + 把 `.oct` 压到 8MB 以下（`-Oz`、剔 Mesa 的 GLSL/NIR 部分）——
-   但这要重编 Mesa 且收益不确定。
+⚠️ **这条推断是错的，错在两处**（第八节有完整复盘）：
+1. 当时那一版**根本没把探针编进去** —— `P5_GLPROBE` 只是 `link-web.sh` 的口子，
+   部署产物里 `grep -c 'P5TK GL_VERSION='` = **0**。"探针没输出"是"没有探针"。
+2. `octave_stdout` 是**带缓冲**的流：就算探针在，trap 之后那几行也会整个丢掉。
+   ⇒ 诊断必须走 `console.error` / MEMFS 文件这类**不进 C 缓冲**的通道。
+
+原候选清单（**全部作废**，仅供"别再走一遍"记录）：`DIAG_NAMES` 抓名、
+查 Mesa glapi 的 dispatch 表、退到窄目标只做 `print -dpng`、A 档压到 8MB 以下。
 
 ### 7.6 本轮新增/修改的工具与文件
 
@@ -346,10 +362,156 @@ drawnow                     → RuntimeError: table index is out of bounds   ✘
 - `build/113/vendor-edge-tools/`（**新**；上游参考实现与文档，GPL-3.0-or-later）
 - `bridge/p5canvas.js`（**新**；`OctaveP5.show/useOsmesa/useWeb/demo/status`）
 - `build/p5osmesa/PKG_ADD`（**新**；`.oct` 车道时的登记层；B 档下已不需要）
-- `test/browser/accept-p5-osmesa.mjs`（**新**；真渲染的验收，含 PNG 魔数/getframe/逐图类型）
-- `build/113/link-web.sh`：新增 `GL_LIBS` / `LIB_FUNCS` / `P5_TOOLKIT` / `P5_GLPROBE` 四个口子
+- `test/browser/accept-p5-osmesa.mjs`（**新**，后改名 `accept-p5-graphics.mjs`；真渲染的验收，含 PNG 魔数/getframe/逐图类型）
+- `build/113/link-web.sh`：新增 `GL_LIBS` / `LIB_FUNCS` / `P5_TOOLKIT` / `P5_GLPROBE` / `P5_TRACE` 五个口子
 - `build/post.js`：暴露 `Module.loadDynamicLibrary`（>8MB `.oct` 的异步预加载）
 - `bridge/assets-loader.js`：`SYNC_COMPILE_LIMIT` + `preloadIfHuge()`
 - `build/main.cc`：`P5_OSMESA_TOOLKIT` 下安装 osmesa toolkit
 - **Mesa/GLU 用 wasm-SjLj 重编**：`/src/libwork/mesa-build-sjlj`、`/src/libwork/glu-build-sjlj`
   （交叉文件 `emscripten-cross-sjlj.ini`：加 `-fwasm-exceptions -mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh`）
+
+---
+
+## 八、2026-09-23（当天收尾）：卡点根因 = 缺 `config.h`；步骤②③ 打通并验收
+
+**结果**：8763 上 `accept-p5-osmesa.mjs` **54 PASS / 0 FAIL**，逐图类型真出图。
+`plot/plot3/semilogy/loglog/stairs/stem/area/bar/pie/contour/errorbar/scatter/scatter3/mesh/surf`
+全部渲出非空白画面（解码 PNG 数颜色：plot 375 色、surf 5465 色、contour 2943 色…）。
+
+### 8.1 根因：toolkit 的编译单元没包含 `config.h`
+
+`oct-opengl.h` 里 **`class opengl_functions` 的整份虚函数表被 `#if defined (HAVE_OPENGL)` 包着**
+（内层还有一处 `HAVE_GLBLENDFUNCSEPARATE`）：
+
+```cpp
+class opengl_functions {
+  virtual ~opengl_functions () = default;      // 无条件，永远在
+#if defined (HAVE_OPENGL)
+  virtual void glAlphaFunc (...) { ::glAlphaFunc (...); }   // ← 几百个
+  ...
+#if defined (HAVE_GLBLENDFUNCSEPARATE)
+  virtual void glBlendFuncSeparate (...) { ... }
+#endif
+#endif
+};
+```
+
+`HAVE_OPENGL` / `HAVE_GLBLENDFUNCSEPARATE` **只来自 autoconf 的 `config.h`** ——
+`octave-config.h` 与 `oct-conf-post-public.h` 里**都没有**（两个文件都 grep 过，零命中）。
+而 `osmesa_toolkit.cc` 的 include 列表里**根本没有 `config.h`**（`-DHAVE_CONFIG_H` 只是
+个门闩，没人 `#include` 就没用）。
+
+后果：
+- **toolkit 的 TU** 里 `HAVE_OPENGL` 未定义 ⇒ `opengl_functions` = **只有虚析构的空类**，
+  虚表**只有 2 槽**；
+- **`gl-render.o`** 按 `HAVE_OPENGL=1` 编的，`opengl_renderer::set_viewport` 会去取
+  **第 77 槽**（反汇编原文：`i32.load offset=0` 取 vptr → `i32.load offset=0x134` 取槽
+  → `call_indirect type=7`，type7 = `(i32×5)->void`，正是 `glViewport` 的 `this+4` 参）
+  ⇒ 读到虚表以外的字节 ⇒ `table index is out of bounds`。
+
+**对象级证据**（比推断硬）：
+```
+$ llvm-nm /tmp/tk_old.o | grep 'opengl_functions'     # 旧版
+   W _ZN6octave16opengl_functionsD0Ev      ← 删除析构
+   W _ZN6octave16opengl_functionsD2Ev      ← 析构
+   W _ZTIN…  _ZTSN…  _ZTVN…                ← typeinfo + 虚表
+   （**一个 glXxx 都没有**）
+$ llvm-nm /tmp/tk_fixed.o | grep -c opengl_functions  # 修好后
+   83
+   W _ZN6octave16opengl_functions10glViewportEiiii
+   W _ZN6octave16opengl_functions7glBeginEj
+```
+**修法**：在 `osmesa_toolkit.cc` 顶部按 Octave 自己的惯例加上
+
+```cpp
+#if defined (HAVE_CONFIG_H)
+#  include "config.h"
+#endif
+```
+
+（`gl-render.cc:26-28` 就是这么写的。所有碰 `opengl_functions` 的 TU 必须口径一致。）
+产物只大了 **+5KB**（45,575,425 → 45,580,621 字节），代价可忽略。
+
+### 8.2 为什么之前会在 `ensure_context()` 上误判
+
+因为诊断通道选错了（见 7.5 的两条更正）。这次换了三条**能穿过 trap** 的手段：
+
+1. `DIAG_NAMES=1`（`--profiling-funcs`）→ 浏览器栈里出**函数名**，一次就把
+   `set_viewport(int,int)` 点名；
+2. 解析 wasm 二进制定位**具体指令**：trap 偏移处的字节是 `11 07 00`
+   （`call_indirect type=7 table=0`），前面 `28 02 b4 02` 是 `i32.load offset=0x134`
+   ⇒ 槽号 77，实锤"虚表槽越界"而不是"GL 入口不可用"。
+   （`function` 段索引 = 报告索引 − 导入函数数；本模块导入 392 个。）
+3. `P5_TRACE=1`（新增，`link-web.sh` 口子）：把 `render()` 的每一步**同时**写到
+   `console.error` 和 **MEMFS 的 `/tmp/p5trace.txt`** —— 后者不怕 trap、不怕
+   console 被轮询清空。
+
+### 8.3 步骤③：plot 桥要**同时**建真图形对象（`build/plotbridge/__pb_mirror__.m`）
+
+修好渲染之后，`plot(...); drawnow` 仍然是**白图** —— 这次是另一个原因，**实测**：
+
+```
+plot(1:10,(1:10).^2)  → findall(gcf,"type","axes") = 0, "line" = 0
+surf(peaks(13))       → findall(gcf,"type","axes") = 0, "surface" = 0
+line([0 1],[0 1])     → 真对象正常（不走桥）
+title("t")            → 1 个真 axes（title 走 gca，gca 会建 axes）
+```
+
+**plot 桥（`build/plotbridge/`）的 .m 只把数据记进自己的状态**（`__pstate__` 的
+series/panels），**一个真图形对象都不建** —— 那是 v1 时代（没有 toolkit、渲染在 JS 侧）
+的设定。渲染器没毛病，是**没有东西可画**。
+
+**做法**：新增 `build/plotbridge/__pb_mirror__.m`，桥的每个绘图/状态函数在结尾多调一句：
+
+```matlab
+h = __pb_mirror__ ("plot", varargin{:});   ## 有返回值的绘图函数
+__pb_mirror__ ("hold", varargin{:});       ## 纯状态函数（hold/clf/grid/xlim/ylim/legend/axis/subplot）
+```
+
+它把桥目录**临时从 path 上摘掉**，`feval` 同名**核心**函数，再**原样**恢复 path。
+
+为什么不从零抄：`__plt__` 是 `plot/draw/private/` 的**私有**函数，桥在别的目录调不到；
+手抄 newplot/box/颜色循环/hold 语义必然走样。
+
+**⚠️ 关键实测：整段核心调用期间都必须摘掉桥**（不能只把顶层函数换成句柄）。
+试过"一次性 `str2func` 取核心句柄、之后不再动 path"（快 6.6×：0.058s vs 0.386s/图），
+**但 `pie`/`contour` 必炸**：
+
+```
+error: axis: limits must be a 2- or 4-element vector
+called from axis … __pie__ at line 158
+```
+因为核心 `__pie__` 里写的是 `axis (h, [-1.5 1.5 -1.5 1.5], "square", "off")` ——
+**首参是句柄**，而桥的 `axis.m` 只认"当前 axes"的两种形式。整段摘 path 之后那句
+`axis` 解析到核心，问题消失。
+
+**代价（如实）**：一次 `path(…)` 会重扫整条路径，实测 **0.13 s**；一次镜像要两次
+⇒ **每张图多约 0.26 s**。接受，并记在这里。
+
+**门禁**：只在**真渲染器在线**时才镜像（白名单目前只有 `osmesa`）。
+默认的 `web` toolkit 不渲染，镜像只会凭空多出真对象、改掉 `findall`/`get` 语义 ——
+T2 验收正按老语义写的。**8761 部署用的 `web` ⇒ 行为逐字节不变**（验收里有一条专门守这个）。
+
+### 8.4 这一轮踩到的新坑（都写进代码注释了）
+
+| 坑 | 现象 | 修法 |
+|---|---|---|
+| `mfilename("fullpath")` 在**子函数**里不给全路径 | `fileparts` 得空串 ⇒ 桥没被摘掉 ⇒ `feval` 调回桥自己 ⇒ **无限递归** | 改用 `which("__pb_mirror__")`，并加"path 没变就明确报错"的兜底 |
+| `h = feval("hold","on")` | `error: hold: function called with too many outputs`（hold 没有返回值） | 按 `nargout` 分两条路：有输出才赋值 |
+| `path()` 重扫会重报 `Octave:shadowed-function` | 站点本来就有 `m/forge/fft.m` 影子内建 `fft`，刷屏到看不见别的输出 | 只针对这一个 id `warning("off",…)` + 退出时按原状态恢复 |
+| `m_last_pixels(i) != 255` | 编译期歧义（`octave_uint8` 有一堆隐式转换） | 拿 `octave_uint8 (255)` 比 |
+| "探针没输出"≠"没走到那里" | 见 7.5 | 诊断通道选 `console.error`/MEMFS 文件 |
+
+### 8.5 复现命令（容器内）
+
+```bash
+# 修好的主 wasm（工具链一切照旧，只多了一句 config.h）
+cd /src/bin && PATH=/src/bin:$PATH M_SRC=/src/work/m-prerendered/m \
+  GL_LIBS=1 P5_TOOLKIT=1 bash link-web.sh /src/websrc/p5fix
+# 诊断版（带函数名 + 逐步 trace）
+cd /src/bin && PATH=/src/bin:$PATH M_SRC=/src/work/m-prerendered/m \
+  GL_LIBS=1 P5_TOOLKIT=1 P5_TRACE=1 DIAG_NAMES=1 bash link-web.sh /src/websrc/p5tr
+# 桥资产（改了 .m 之后必须重打；manifest 的 sha256 也要同步）
+python3 build/assets.py bundle-m plotbridge build/plotbridge /usr/src/octave/m/plotbridge <site>/assets/m/plotbridge.js
+```
+

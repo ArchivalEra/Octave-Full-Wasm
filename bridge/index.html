@@ -8,6 +8,14 @@
 </head>
 <body>
 <script type="text/javascript" src="assets-loader.js"></script>
+<!-- 真渲染后端（P5）：把 toolkit 渲好的 PNG（MEMFS 里）贴到页面。
+     后端是 `webgl`（gl4es → GLES2 → **WebGL2/GPU**）；OSMesa（Mesa 软件光栅化）已于
+     2026-09-23 退役（脚本与配方留在 git 历史的 graphics-osmesa 分支）。
+     ⚠️ 这一段此前**只存在于部署站点、没进仓库**（仓库/部署漂移，2026-09-23 补回）。
+     注意 `__init_*__` 那类 `.oct` 资产**不进启动清单**：toolkit 是编在主 wasm 里的，
+     默认 toolkit 由 `build/webgraphics/PKG_ADD` 选中（有 webgl 就用它 ⇒ 开箱 `plot` 就出真图），
+     也可以显式切换：`OctaveP5.useWebGL()` / `useWeb()` / `demo()`。 -->
+<script type="text/javascript" src="p5canvas.js"></script>
 <!-- WebAudio 播放桥：Octave 侧把播放意图写进队列，这一侧真开 AudioContext。
      浏览器要求用户手势才能出声，所以页面上任何一次点击都会尝试解锁。 -->
 <script type="text/javascript" src="webaudio.js"></script>
@@ -210,6 +218,126 @@
 <script type="text/javascript" src="octave.js"></script>
 <script type="text/javascript">
   OCTAVE(Module);
+</script>
+<!--
+  速度探针（**默认关**，只在带 `?bench=1` 时跑）：量"真渲染后端"的墙钟。
+  为什么放在页面里而不是外面驱动：手机/Android WebView 那种环境**没有 DevTools 可连**，
+  但 `console.log` 会进 `adb logcat`（`chromium: [INFO:CONSOLE]`）⇒ 这是唯一能自动化取数的通道。
+  桌面侧也一样能用（playwright 抓 console）。
+
+  用法：  index.html?bench=1&tk=webgl            → 量当前默认
+          index.html?bench=1&tk=web&n=5          → 切到 web（只出句柄、渲染归 plot 桥），重复 5 次
+  输出：一行一条 `BENCH <label> = <ms> ms`，最后 `BENCH DONE tk=…`。
+-->
+<script type="text/javascript">
+(function () {
+  var q = new URLSearchParams(location.search);
+  if (q.get('bench') !== '1') return;
+
+  var TK = q.get('tk') || '';
+  var N  = parseInt(q.get('n') || '5', 10);
+
+  function log(s) { console.log('BENCH ' + s); }
+
+  function ready() {
+    if (!window.__octaveReady || !window.Module || !window.Module.eval_string) return false;
+    try { return window.Module.eval_string('1+1;') === 0; } catch (e) { return false; }
+  }
+
+  var waited = 0;
+  var poll = setInterval(function () {
+    waited += 500;
+    if (!ready()) {
+      if (waited > 600000) { clearInterval(poll); log('TIMEOUT 等 __octaveReady 超时'); }
+      return;
+    }
+    clearInterval(poll);
+    setTimeout(run, 500);
+  }, 500);
+
+  function ev(expr) {
+    try { return window.Module.eval_string(expr); }
+    catch (e) { log('ERR ' + String(e).slice(0, 160)); return -1; }
+  }
+
+  // 一次计时 = 整段 Octave 表达式的墙钟（渲染是同步的，所以这一格就是"这张图要多久"）
+  function time1(label, expr) {
+    var t = performance.now();
+    var rc = ev(expr);
+    var ms = performance.now() - t;
+    var extra = '';
+    if (rc !== 0) {
+      // rc≠0 时那一格**是无效数据**（没干活所以快）——把 Octave 的报错原文带出来，
+      // 否则会误读成"这个后端很快"（本项目为此付过代价）。
+      var msg = '';
+      try { msg = String(window.Module.last_error_message() || '').replace(/\s+/g, ' ').slice(0, 180); } catch (e) {}
+      extra = ' (rc=' + rc + ' INVALID! err=' + msg + ')';
+    }
+    log(label + ' = ' + ms.toFixed(1) + ' ms' + extra);
+    return ms;
+  }
+
+  function run() {
+    log('START tk=' + (TK || '(default)') + ' n=' + N + ' ua=' + navigator.userAgent.slice(0, 60));
+
+    // 先把"这台环境有没有 WebGL"记下来 —— 否则 webgl 后端取不到上下文时，
+    // 只能看见一句 "failed to capture frame data"，看不出根因在环境还是在我们代码。
+    try {
+      var c = document.createElement('canvas');
+      var g2 = c.getContext('webgl2'), g1 = c.getContext('webgl');
+      log('caps webgl2=' + (!!g2) + ' webgl1=' + (!!g1));
+      var gl = g2 || g1;
+      if (gl) {
+        var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+        log('caps renderer=' + (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)));
+      }
+    } catch (e) { log('caps ERR ' + String(e).slice(0, 120)); }
+
+    time1('boot_ready_wall', '1+1;');                  // 探针自身的基线开销
+
+    if (TK) {
+      var t = performance.now();
+      var rc = ev("graphics_toolkit('" + TK + "');");
+      log('switch_to_' + TK + ' = ' + (performance.now() - t).toFixed(1) + ' ms (rc=' + rc + ')');
+      if (rc !== 0) { log('DONE 后端不可用'); return; }
+    }
+
+    // ── 纯渲染：getframe 必然走 toolkit 的 render()，不像 drawnow 可能被"没脏"跳过 ──
+    ev('figure(1); clf; line(1:200, sin((1:200)/10)); drawnow(); "w"');
+    ev('figure(2); clf; surface(peaks(40)); drawnow(); "w"');
+
+    var acc2 = 0, acc3 = 0;
+    for (var i = 0; i < N; i++) acc2 += time1('render_2d_line', 'p=getframe(1);');
+    for (var j = 0; j < N; j++) acc3 += time1('render_3d_surface', 'p=getframe(2);');
+    log('AVG render_2d_line = ' + (acc2 / N).toFixed(1) + ' ms');
+    log('AVG render_3d_surface = ' + (acc3 / N).toFixed(1) + ' ms');
+
+    // ── 端到端（含 plot 桥的 mirror 开销；两个后端一样，作对照）──
+    for (var k = 0; k < 3; k++) time1('e2e_surf_drawnow', 'figure(9); clf; surf(peaks(40)); drawnow();');
+
+    // ── 上下文诊断：放在**渲染尝试之后**跑，因为 toolkit 的 #octave-gl-canvas
+    //    只有在第一次 redraw 时才会被建出来。目的：区分"整个环境的 WebGL 不可用"
+    //    与"只有我们/emscripten 的建法不可用"。──
+    try {
+      function probe(label, sel) {
+        var el = sel ? document.querySelector(sel) : document.createElement('canvas');
+        if (!el) { log('diag ' + label + ' = 元素不存在'); return; }
+        if (!sel) { el.width = 64; el.height = 64; }
+        var s = '';
+        [['webgl2', {}], ['webgl2', { failIfMajorPerformanceCaveat: true }], ['webgl', {}]].forEach(function (pair) {
+          var g = null, err = '';
+          try { g = el.getContext(pair[0], pair[1]); } catch (e) { err = String(e).slice(0, 60); }
+          s += pair[0] + (pair[1].failIfMajorPerformanceCaveat ? '(caveat)' : '') + '=' + (g ? 'OK' : 'null') + (err ? '!' + err : '') + ' ';
+        });
+        log('diag ' + label + ' (' + (el.width + 'x' + el.height) + ') ' + s);
+      }
+      probe('fresh-canvas');
+      probe('toolkit-canvas', '#octave-gl-canvas');
+    } catch (e) { log('diag ERR ' + String(e).slice(0, 140)); }
+
+    log('DONE tk=' + (TK || '(default)'));
+  }
+})();
 </script>
 </body>
 </html>

@@ -89,19 +89,30 @@ await svg('/tmp/pd_s3.svg', '★ scatter3 → 50 个投影点', { circ: 50 });
 await ev(`${reset} scatter3(1:10, 1:10, (1:10).^2, 20, 'filled'); print('/tmp/pd_s3b.svg','-dsvg')`, 'scatter3 带尺寸/颜色参数');
 await svg('/tmp/pd_s3b.svg', 'scatter3 5 参数形式', { circ: 10 });
 
+// ── mesh / surf 的**元素条数**在 2026-09-23 变过，断言跟着改了（说明写在下面）──────
+// 原来桥是"**每个网格单元一条 series**"：m×n 的网格 ⇒ (m-1)*(n-1) 条，11×11 就是 100 条。
+// 但那样**很贵**：surf(peaks(40)) 要建 1521 条 series、每条还写一个 /tmp/pbN.dat，
+// 实测 1686 ms（核心 surface() 只要 52 ms）—— 详见 build/113/NOTES-webgl.md §4.5.6/4.5.12。
+// 现在改成**按行发**：
+//   mesh → 行折线 + 列折线 = **m + n** 条（经典网格线框图）
+//   surf → 每条行带一条闭合带状多边形 = **m - 1** 条
+// 遮挡关系不变（depth 对行号单调 ⇒ 按行排序 ≡ 按单元排序）；
+// **两张图都人工看过**（surf 带状、mesh 横竖线框都对，产物在
+// /mnt/hdd/octave-wasm-build/out-{surf,mesh}-ribbon.png）⇒ 这是"表示变了、画面对"，
+// 不是丢功能。下面的期望值就是按 m+n / m-1 **推出来的**，不是随手调低的阈值。
 console.log('--- mesh ---');
 await ev(`${reset} [X,Y]=meshgrid(-2:0.4:2); Z=X.*exp(-X.^2-Y.^2); mesh(X,Y,Z); print('/tmp/pd_m.svg','-dsvg')`, 'mesh 11x11 网格');
-await svg('/tmp/pd_m.svg', '★ mesh → 100 格线框', { poly: 100 });
+await svg('/tmp/pd_m.svg', '★ mesh → 11 行 + 11 列线框（22 条折线）', { poly: 22 });
 await ev(`${reset} [X,Y]=meshgrid(-1:0.5:1); mesh(X,Y,X.*Y); print('/tmp/pd_m2.svg','-dsvg')`, 'mesh 5x5');
-await svg('/tmp/pd_m2.svg', 'mesh 5x5 → 16 格', { poly: 16 });
+await svg('/tmp/pd_m2.svg', 'mesh 5x5 → 5 行 + 5 列（10 条）', { poly: 10 });
 await ev(`${reset} mesh(peaks(15)); print('/tmp/pd_mp.svg','-dsvg')`, 'mesh(peaks)');
-await svg('/tmp/pd_mp.svg', 'mesh(peaks(15)) 单参数', { poly: 100 });
+await svg('/tmp/pd_mp.svg', 'mesh(peaks(15)) 单参数 → 15 行 + 15 列（30 条）', { poly: 30 });
 
 console.log('--- surf ---');
 await ev(`${reset} [X,Y]=meshgrid(-2:0.5:2); Z=X.*exp(-X.^2-Y.^2); surf(X,Y,Z); print('/tmp/pd_s.svg','-dsvg')`, 'surf 9x9');
-await svg('/tmp/pd_s.svg', '★ surf → 64 个填充面片', { polyg: 64 });
+await svg('/tmp/pd_s.svg', '★ surf → 每行一条带状面片（9-1 = 8 条）', { polyg: 8 });
 await ev(`${reset} surf(peaks(20)); print('/tmp/pd_sp.svg','-dsvg')`, 'surf(peaks)');
-await svg('/tmp/pd_sp.svg', 'surf(peaks(20)) → 361 面片', { polyg: 300 });
+await svg('/tmp/pd_sp.svg', 'surf(peaks(20)) → 19 条行带', { polyg: 19 });
 
 console.log('--- contour ---');
 await ev(`${reset} [X,Y]=meshgrid(-2:0.2:2); Z=X.*exp(-X.^2-Y.^2); contour(X,Y,Z); print('/tmp/pd_c.svg','-dsvg')`, 'contour 默认 8 层');

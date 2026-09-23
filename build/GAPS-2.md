@@ -20,7 +20,7 @@
 > | **G3** pkg 语义 | ✅ **已完成**（T4） | `accept-pkg` 16/16 |
 > | **H1** `voronoi` 单输出 | ⬜ **仍不可用，且根因变了** | T2 之后已能走到绘图，终点是 plot 桥不支持 `plot(hax,…)` 这类"首参是句柄"的调用形态 |
 > | **H2** `uigetfile` | ✅ **已完成（T8）** | 走官方缝 `__fltk_uigetfile__`（必须是 `.oct` —— 中间层门禁 `exist==3`）；**两步**语义（异步/同步硬冲突），`accept-t8-uigetfile` 19/19 |
-> | **H3** `getframe`/`movie` | ⬜ 仍暂缓（图形线在做） | 仍报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）。图形线已推进到"主 wasm 带 GL + toolkit 编进主模块"，见 HANDOFF §5.16 |
+> | **H3** `getframe`/`movie` | ✅ **`getframe` 已修（2026-09-23，图形线 P5）** | 原先报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）。P5 把 `opengl_renderer` 接上 OSMesa 后，`getframe` 返回**真像素**（420×560×3，`accept-p5-graphics.mjs` 里有硬断言）。**仅在真渲染器（`osmesa`/`webgl`）下生效**；8761（`web`）仍无渲染。见 HANDOFF §5.16 |
 > | **H4** `inputname`/`nargin` 反射 | ⬜ 仍暂缓 | 优先级低，未测 |
 >
 > ### 剩余（非图形）—— **只剩 G1 一件**（下表是 2026-09-22 的原文，已逐条收口）
