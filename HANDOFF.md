@@ -1496,6 +1496,24 @@ git fetch origin && git reset --hard origin/main   # 工作区当时是干净的
 ```
 （想保两提交的形状，可先用 `git push mirror main` 确认镜像里有，再对齐。**不要 force-push**。）
 
+> **✅ 2026-09-23 晚：网络恢复，已对齐并推送**（本条替代上面那段"下次要先做"）：
+> `github.com` 又能连了（`git ls-remote origin` 正常、`git push` 直连成功）。
+> 当时的实况与处置：
+> 1. 远端 `main` 是 `db01c41`，它的 **tree 里没有图形线那批**（只有 `accept-p5-osmesa.mjs`，
+>    没有改名后的 `accept-p5-graphics.mjs`）—— 因为图形线的活一直只在 `graphics-webgl` 分支上，
+>    main 从未合过它。
+> 2. 我的新提交**以 `origin/main` 为父**（`git commit-tree <我的 tree> -p origin/main`），
+>    于是推送是 **fast-forward**：`db01c41..69968ad`，把**图形线全部 + 本批**一起带进 main。
+>    核对过没有丢东西：远端有、我没有的文件**只有** `accept-p5-osmesa.mjs`（那是**改名**掉的
+>    `accept-p5-graphics.mjs` 的前身）。
+> 3. 本地 `main` 已 `git branch -f main 69968ad` 与远端对齐（旧形状的提交仍在
+>    `graphics-webgl` 与持久盘镜像里，**没有删任何对象**）；`graphics-webgl` 也推到了 `69968ad`。
+> 4. **持久盘镜像 `mirror` 的 `main` 仍是旧形状（`9b211ae`）**，动不了它（把它提到新形状会被判
+>    non-fast-forward，而**不许 force-push**）。**内容不缺**：新的那棵树在镜像里的
+>    `refs/heads/graphics-webgl`（= `d03331e`，tree `183b65ca…`）上。
+> 5. **下次接续**：正常 `git push origin main` 即可（网络好着）；若 `github.com` 又被拦，
+>    照上面第一段走 GitHub API，**别 force-push**。
+
 ---
 
 ### 5.18 图形线 WebGL：**换成 gl4es → WebGL2（GPU），步骤①②③ 全部打通**（2026-09-23 晚）
