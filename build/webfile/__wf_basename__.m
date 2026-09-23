@@ -11,7 +11,13 @@
 ## a shell's `basename` would.  The file operations here need shell basename
 ## semantics because they are replacing shell commands.
 ##
-## Returns "" when @var{p} has no components (e.g. "/" or "").
+## Returns the separator itself when @var{p} is nothing but separators
+## (POSIX: `basename /` is `/`), and `""` only for an empty input.
+##
+## ⚠️ 2026-09-23：这两个边界以前是**自相矛盾**的 —— 文档说 `"/"` 返回 `""`，
+##    而下面又有一段想返回 `"/"` 的分支，那段永远走不到（末尾分隔符在它之前就被
+##    正则剥掉了）。是本文件的 `%!test` 一接进验收（`.githooks` 那套"文件自带断言"
+##    终于有人跑）把它抓出来的。
 
 function b = __wf_basename__ (p)
 
@@ -19,26 +25,27 @@ function b = __wf_basename__ (p)
     error ("__wf_basename__: P must be a string");
   endif
 
-  ## Strip trailing separators, but keep a leading "/" from becoming empty.
-  p = regexprep (p, '[\\/]+$', '');
   if (isempty (p))
     b = "";
+    return;
+  endif
+
+  ## Strip trailing separators: "a/b/" → "a/b"，"///" → ""
+  q = regexprep (p, '[\\/]+$', '');
+  if (isempty (q))
+    ## 只有分隔符 ⇒ 根：回那个分隔符本身（POSIX `basename /` = `/`）
+    b = p(end);
     return;
   endif
 
   ## Everything after the last separator.  NOTE: the Windows separator has to
   ## be written as "\\" -- a bare "\" is an unterminated string literal, and
   ## Octave reports that as a syntax error on this line.
-  idx = find (p == "/" | p == "\\");
+  idx = find (q == "/" | q == "\\");
   if (isempty (idx))
-    b = p;
+    b = q;
   else
-    b = p(idx(end) + 1:end);
-    ## A path that is nothing but a leading "/" leaves an empty tail; report
-    ## the root as "/" rather than "" so callers can detect it.
-    if (isempty (b) && numel (p) == 1)
-      b = p;
-    endif
+    b = q(idx(end) + 1:end);
   endif
 
 endfunction

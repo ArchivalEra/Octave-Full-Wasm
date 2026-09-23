@@ -58,8 +58,9 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 ## 状态（2026-09-23 实测）
 
 **基线 = Octave 11.3.0（带真渲染器）**。`http://127.0.0.1:8761/` 服务的就是**最近一次通过
-浏览器实测**的构建（wasm sha256 `6c75a4942df286826f8f02c1…`，**默认 toolkit = `webgl`**；
-全量回归 **32 套 848 项全绿**）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
+浏览器实测**的构建（wasm sha256 `6c75a4942df286826f8f02c1…`，**默认 toolkit = `webgl`**）。
+**全量回归的套件数与项数以 `HANDOFF.md` 文末的 `AUTO:STATE` 区块为准** —— 那几件数字由
+`.githooks/update-handoff.py` 从部署件与最近一次全绿回归重算，本文不再抄一份（抄一份必烂）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
 （见 `build/GAPS.md` 的需求书与 `HANDOFF.md` §5 / §10 的结论表）。
 
 | 项 | 结果 |
@@ -192,7 +193,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/pre-push` (714 bytes)
 - `.githooks/update-handoff.py` (4836 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (1837 bytes)
+- `.gitignore` (1884 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (2593 bytes)
 - `HANDOFF.md` (162995 bytes)
@@ -292,10 +293,12 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/forge-preload/tinv.m` (5467 bytes)
 - `build/forge-preload/tpdf.m` (4730 bytes)
 - `build/forge-preload/ttest.m` (3147 bytes)
+- `build/glue-selftest.m` (3063 bytes)
+- `build/glue-selftest.sh` (1771 bytes)
 - `build/main.cc` (17474 bytes)
 - `build/make-dist.sh` (3226 bytes)
 - `build/normalize_arpack.py` (1861 bytes)
-- `build/pkgfix/__pkgfix_basename__.m` (1140 bytes)
+- `build/pkgfix/__pkgfix_basename__.m` (1962 bytes)
 - `build/pkgfix/__pkgfix_forge_root__.m` (893 bytes)
 - `build/pkgfix/__pkgfix_local_list__.m` (1388 bytes)
 - `build/pkgfix/__pkgfix_make_packinfo__.m` (3272 bytes)
@@ -421,7 +424,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webaudiorec/__recorder_set_userdata__.m` (185 bytes)
 - `build/webaudiorec/__recorder_stop__.m` (285 bytes)
 - `build/webdoc/doc.m` (2618 bytes)
-- `build/webfile/__wf_basename__.m` (1758 bytes)
+- `build/webfile/__wf_basename__.m` (2138 bytes)
 - `build/webfile/__wf_copy_dir__.m` (2672 bytes)
 - `build/webfile/__wf_copy_file__.m` (2282 bytes)
 - `build/webfile/__wf_fail__.m` (854 bytes)
@@ -473,6 +476,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/accept-plotv2.mjs` (10560 bytes)
 - `test/browser/accept-print.mjs` (11770 bytes)
 - `test/browser/accept-requirements.mjs` (5544 bytes)
+- `test/browser/accept-selftest.mjs` (5269 bytes)
 - `test/browser/accept-slicot.mjs` (7414 bytes)
 - `test/browser/accept-t2-graphics.mjs` (9506 bytes)
 - `test/browser/accept-t6-audio-doc.mjs` (7930 bytes)

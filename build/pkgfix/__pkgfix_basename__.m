@@ -10,6 +10,12 @@
 ## empty component, so it does not give shell `basename` semantics.  The pkg
 ## helpers compare against directory names that may or may not carry a trailing
 ## slash depending on who supplied them.
+##
+## ⚠️ 这份与 `build/webfile/__wf_basename__.m` 是**同型的两份**（不是共享实现：
+##    `webfile` 与 `pkgfix` 是两个独立资产包，互相依赖会把装载顺序耦合起来）。
+##    2026-09-23 两份在 `"/"` 这个边界上都自相矛盾（文档说返回 "" ，下面又有一段
+##    想返回 "/" 的死分支），是 `__wf_basename__` 的 `%!test` 被真正跑起来后暴露的；
+##    这里同步修正并补上那条断言，免得这对孪生再各走各的。
 
 function b = __pkgfix_basename__ (p)
 
@@ -17,20 +23,24 @@ function b = __pkgfix_basename__ (p)
     error ("__pkgfix_basename__: P must be a string");
   endif
 
-  p = regexprep (p, '[\\/]+$', '');
   if (isempty (p))
     b = "";
     return;
   endif
 
-  idx = find (p == "/" | p == "\\");
+  ## Strip trailing separators: "a/b/" → "a/b"，"///" → ""
+  q = regexprep (p, '[\\/]+$', '');
+  if (isempty (q))
+    ## 只有分隔符 ⇒ 根：回那个分隔符本身（POSIX `basename /` = `/`）
+    b = p(end);
+    return;
+  endif
+
+  idx = find (q == "/" | q == "\\");
   if (isempty (idx))
-    b = p;
+    b = q;
   else
-    b = p(idx(end) + 1:end);
-    if (isempty (b) && numel (p) == 1)
-      b = p;
-    endif
+    b = q(idx(end) + 1:end);
   endif
 
 endfunction
@@ -40,3 +50,7 @@ endfunction
 %! assert (__pkgfix_basename__ ("/usr/src/octave/m/forge/statistics"), "statistics");
 %! assert (__pkgfix_basename__ ("/a/b/"), "b");
 %! assert (__pkgfix_basename__ ("plain"), "plain");
+%! ## 与 __wf_basename__ 保持同一边界语义（POSIX `basename /` = `/`）
+%! assert (__pkgfix_basename__ ("/"), "/");
+%! assert (__pkgfix_basename__ (""), "");
+

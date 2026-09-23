@@ -46,6 +46,8 @@
 !build/render_docstring_batch.m
 !build/prerender-m-docstrings.py
 !build/check_m.py
+!build/glue-selftest.m
+!build/glue-selftest.sh
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*
