@@ -109,6 +109,26 @@ for _f in "${_ef[@]}"; do EF_JSON="$EF_JSON\"$_f\","; done
 EF_JSON="${EF_JSON%,}]"
 echo "== EXPORTED_FUNCTIONS = $EF_JSON"
 
+# EXPORT_IF_DEFINED：逗号分隔的符号名，**只导出确实有定义的**（未定义的静默忽略）。
+# 为什么需要它（2026-09-23，SLICOT 那一批查出来的）：side module 解析导入时
+# **只能看主模块的导出表**，而主模块并没有把所有 LAPACK/BLAS 符号导出去
+# （实测：50533 个函数里只导出 44738 个，`dgemm_`/`dgetrf_`/`dggev_` 都不在其中）。
+# 那时 `.oct` 调用就落到 emscripten 的 stub 上，报 `TypeError: resolved is not a function`。
+# ⚠️ 别用 EXPORTED_FUNCTIONS 干这事：它对**未定义**的符号是硬错误
+# （实测踩过：`__assert_fail`/`emscripten_run_script` 不是 wasm 导出 → 链接直接失败），
+# 而这里要传的是一大串「可能有、可能没有」的候选名。
+# ⚠️ 也别用 emscripten 的 `-s EXPORT_IF_DEFINED=`：那是**内部设置**，命令行为拒绝
+# （实测：`em++: error: EXPORT_IF_DEFINED is an internal setting and cannot be set
+#  from command line`）。直接用 lld 的 `-Wl,--export-if-defined=`（emscripten 自己的
+# 链接行里就是这么传 `__start_em_asm` 那一串的）。
+EXPORT_IF_DEFINED="${EXPORT_IF_DEFINED:-}"
+EID_FLAGS=()
+if [ -n "$EXPORT_IF_DEFINED" ]; then
+  IFS=',' read -r -a _eid <<< "$EXPORT_IF_DEFINED"
+  for _f in "${_eid[@]}"; do EID_FLAGS+=( "-Wl,--export-if-defined=$_f" ); done
+  echo "== EXPORT_IF_DEFINED = ${#_eid[@]} 个候选符号（未定义的静默忽略）"
+fi
+
 LIBS=(
   # Octave 自身的三个归档
   "$OCT/libinterp/.libs/liboctinterp.a"
@@ -190,6 +210,7 @@ em++ --bind \
   "${SFLAGS[@]}" \
   ${EXTRA_LDFLAGS:-} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
+  ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
   -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS"]' \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
   "${PRELOAD[@]}" \

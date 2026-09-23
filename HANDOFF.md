@@ -1,11 +1,11 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-22（非图形收尾轮）**：T1–T8 全完成、T10 实验有结论、
-> `help <mfile>` 已可用（P1）、`@ftp` 预载 bug 已修（体积 −1.8MB）。
+> 最后更新：**2026-09-23（SLICOT 实修轮）**：全量回归**实测补齐 30 套 757 项全绿**；
+> SLICOT 的签名分歧已修、`step` 已出真值，**卡在装载期**（见 §5.15，非图形最后一件）。
 > 8761 当前 = Octave 11.3.0（P1 构建，wasm sha `bac48adb…`），**30 套**。
-> **接续先读 §8（一句话接续，含"仍待办"与"**下一步第一件事：补跑 8761 全量**"）
-> 与 §5.13/§5.14（本轮实况）**；§9 是当时的计划、§10 是第四轮实况。
+> **接续先读 §8（一句话接续，含"仍待办"与"**下一步第一件事：SLICOT**"）
+> 与 §5.13/§5.14/§5.15（近两轮实况）**；§9 是当时的计划、§10 是第四轮实况。
 > 图形线（P5）在 **`graphics-osmesa` 分支**。
 
 ---
@@ -616,7 +616,9 @@ makeinfo 生成 doc-cache）。
 | `build/113/configure-113-full.sh` | **11.3.0 全开 configure**：依赖写成**一张表 + `SKIP` 变量**（按库集合二分只需改一行；`SKIP=umfpack` 即精确关单个库，且会**显式加 `--without-umfpack`**——仅不传 `--with-*` 不够） |
 | `build/113/build-libs.sh` | **② 的 11 个库**逐库独立构建（每库独立 prefix `/src/deps/<lib>` + 符号自检）。踩过的坑全在注释里（hdf5 交叉编译、zlib 非 autoconf、CHOLMOD 的 NPARTITION、rapidjson、bzip2 的 CC=gcc…） |
 | `build/113/build-oct.sh` | 编 `.oct` side module。两种模式：dldfcn（`build-oct.sh convhulln …`）与**我们自己的 `.cc`**（`OUT=… CC_SRCS="webio:/路径/webio.cc" build-oct.sh --cc`） |
-| `build/113/link-web.sh` | 11.3.0 的 **web 主链**（含 `--whole-archive` 的教训与定点 `-Wl,-u` 的 zlib 符号拉取） |
+| `build/113/link-web.sh` | 11.3.0 的 **web 主链**（含 `--whole-archive` 的教训与定点 `-Wl,-u` 的 zlib 符号拉取；`M_SRC` / `EXPORTED_FUNCS` / **`EXPORT_IF_DEFINED`** 三个口子 + 末尾预载路径自检） |
+| `build/113/fix-slicot-abi.py` | **SLICOT ABI 对齐**（2026-09-23）：把控制包手写 `F77_FUNC` 声明缺的 CHARACTER 隐藏长度参数补上（尾部默认实参 `= 1`）。硬自检 + 幂等；见 `NOTES-slicot.md` §5 |
+| `build/113/rebuild-pic-blas.sh` | **重编 Fortran 三库带 `-fPIC`**（libf2c/refblas/lapack）→ 独立 prefix `/src/deps/lapack-pic/`，**不动 `/usr/local`**（主链还在用那份）。side module 必须 PIC；实测约 65 秒 |
 | `build/113/patch-ax-pthread.sh` | **闸门③**：emscripten 下跳过 `AX_PTHREAD`，但**保留 `pthread.h` 检测** |
 | `build/113/probe-side-module.sh` | **闸门②**：不碰 Octave，30 秒验证 MAIN_MODULE+SIDE_MODULE 机制 |
 | `build/113/apply-platform-patches.sh` `emf77` `build-deps.sh` `fix-rapidjson.py` | 平台补丁 / f2c 包装 / 早期四库 / rapidjson 补丁。**`ss-long64.h` 已被证伪，勿用** |
@@ -703,6 +705,9 @@ makeinfo 生成 doc-cache）。
   写验收时**等待要在 JS 侧做**（`setTimeout`），不能用 Octave 的 `pause`。
 - **control 包的 SLICOT 编译件未发布**（§4.12）：`ss`/`step`/`tf2ss` 不可用；
   `tf`/`tfdata`/`dcgain`/`pole`/`zero`/`feedback`/`bode` 等纯 `.m` 面正常。
+  **2026-09-23 进展（见 §5.15）**：签名分歧已修、`slicotlibrary` + PIC LAPACK 已能链进去，
+  **`ss`/`pole`/`step` 在 staging 上已出真值**（`step` 与 `1-e^-t` 逐位吻合）；
+  **仍未发布** —— 卡在再链 PIC `libf2c` 后的**装载期**失败。8761 上**现状未变**（如实）。
 - `voronoi` 的**单输出形式**（要画图）：T2 之后**已能走到绘图**，但终点是 plot 桥的
   `plot(hax, x, y)` 调用形态不支持（见上面的边界条目）→ 报 `X and Y sizes do not match`。
   两输出形式正常。**根因在 plot 桥，不在句柄系统。**
@@ -720,8 +725,9 @@ makeinfo 生成 doc-cache）。
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
 **`-O2`** 编译（11.3.0 车道的口径；`-O1` 是 7.2 时代的 R10 结论，见 `build/BENCH.md`），
-**dldfcn 走官方 dlopen 装载**。全量 **30 套 756 项全绿**
-（11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8 四套，在 8761/8762 上各跑一遍都全绿），
+**dldfcn 走官方 dlopen 装载**。全量 **30 套 757 项全绿**
+（11.3.0 的 6 套 + 7.2 时代的 19 套 + T2/T6/T7/T8/T9 五套；**2026-09-23 在 8761 上实测补齐**：
+`30 套 / 757 PASS / 0 FAIL`，见 §5.14 —— 原推算值 756 差 1，实测为准），
 含需求级 `accept-requirements`。交付包：**`dist/octave-full-wasm-site-20260922`**
 （197 文件；wasm raw 34.30MB / gz 7.78MB；**包内 wasm sha 与部署件同**
 `bac48adb960c9c79…`）；重打命令 `sh build/make-dist.sh`。
@@ -737,8 +743,13 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 
 ### ⬜ 仍待办
 
-> **接手第一件事：补跑 8761 的全量回归**（本轮最后一次被人工中断在 `accept-help`，
-> 已跑部分全绿；`30 套 756 项` 是推算值，要先跑一遍确认）。见 **§5.14**。
+> **✅ 接手第一件事（已完成，2026-09-23）**：8761 全量回归已补齐 ——
+> **30 套 / 757 PASS / 0 FAIL**（原推算值 756，实测 757；用 `/mnt/hdd/octave-wasm-build/sweep.sh`
+> 跑的，脚本落在持久盘上，日志在 `sweep-logs/`）。见 **§5.14**。
+>
+> **▶ 现在接手第一件事：SLICOT（见 §5.15）** ——
+> 签名分歧已修、`step` 已出真值；**卡在"再链 PIC libf2c 后装载期失败"**，
+> 三条候选路线写在 §5.15 / NOTES 5.6。**这是非图形最后一件**。
 
 （非图形：一条待办 + 一条长尾 —— 图形线开工前建议先清掉）
 1. **G1 `MAIN_MODULE=2`** —— **2026-09-22 已实测到"差一件事"**（见
@@ -762,8 +773,8 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
    （`build/prerender-m-docstrings.py` + 官方 `__makeinfo__` 驱动 + `link-web.sh` 的
    `M_SRC`），1043/1043 渲染成功、离线对照 **25/25 与桌面逐字一致**、
    `accept-t9-helpm` 18/18。**`doc-cache` 注入仍然别再试**（那是另一条路，已实测无效）。
-3. **长尾**：control 的 SLICOT 编译件（`ss`/`step`/`tf2ss`）—— 调查更正：**不是签名问题，
-   是 `slicotlibrary.a` 从未编过**（611 个 SLICOT Fortran 源一次都没 f2c 过）。
+3. **长尾（进行中）**：control 的 SLICOT 编译件（`ss`/`step`/`tf2ss`）—— **见 §5.15**：
+   签名分歧已修、`step` 已出真值，卡在装载期；三条候选路线在 NOTES 5.6。
 
 **覆盖率已经收口**（见 §5.12）：桌面 11.3.0 的可调用名字 **926/926** 都可用，
 唯一不在的是 Debian 打包产物 `debian_missing_handler`（不属 Octave）。
@@ -1269,6 +1280,53 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
 
 ---
 
+### 5.15 SLICOT 实修进行中（2026-09-23）—— **卡点从"签名"推进到"装载"**，`step` 已出真值
+
+一手记录在 **`build/113/NOTES-slicot.md` 第五节**（新增 7 小节，含全部复现命令与判据陷阱）。
+这里只给**接续必须知道的**：
+
+**已修掉（有实测）**：
+1. **`CHARACTER` 隐藏长度分歧** —— 工具 **`build/113/fix-slicot-abi.py`**（幂等，带硬自检）：
+   51 处声明里 37 处需补、**0 处**违反"Δ == CHARACTER 个数"；只补**声明**、尾部参数给
+   **默认值 1**（调用点一字不改）；重复声明只允许第一处带默认值（C++ 的两条规则都踩过）。
+   `ab13ad` 的返回类型 `int`→`double`（AB13AD 是 `DOUBLE PRECISION FUNCTION`，返回值被丢弃）。
+   ⇒ **`build-oct.sh --cc` 链接零警告**，产物 2.98MB。
+2. **LAPACK/BLAS 没被主模块导出**（`.oct` 调用落到 emscripten stub，报
+   `TypeError: resolved is not a function`）—— 走用户拍板的**自包含**路线：
+   新脚本 **`build/113/rebuild-pic-blas.sh`** 重编 Fortran 三库带 `-fPIC` 到
+   **独立 prefix `/src/deps/lapack-pic/`**（**不动 `/usr/local`**，主链还在用那份）。
+   librefblas/liblapack/libf2c 全过，**实测约 65 秒**。
+3. **控制包 `common.cc` 没被编进调度模块**（`max/min/error_msg/warning_msg` 缺定义）
+   → 单编 `common.oct.o` 一起链。
+
+**★ 好消息**：`oct-b` 形态（8.10MB）在 8762 实测 —— `ss(-1,1,1,0)` 出真对象、
+`pole(tf(1,[1 1]))` = `-1`、**`step(ss(-1,1,1,0),0:0.5:2)` = `0 0.3935 0.6321 0.7769 0.8647`
+（解析解 `1-e^-t`，逐位吻合）**。（修之前 `ss`/`step` 是**整页崩**。）
+
+**当前卡点（下次从这继续）**：再链进 PIC `libf2c` 后**装载期**失败：
+`TypeError: Cannot read properties of undefined (reading 'value')`，且**连累同页后续 dlopen**。
+线索：`dylink.0` 的 MEM_INFO 变了 —— a/b 是 `tableSize=0 tableAlign=0`，
+**c 是 `tableSize=13 tableAlign=0`**（libf2c 带进了模块自己的表条目）。
+三条候选路线（见 NOTES 5.6）：① 只链 libf2c 里真正要用的那 40 来个目标文件；
+② 改走"主链导出"（`link-web.sh` 的口子**已加好**：`EXPORT_IF_DEFINED="…"`
+→ `-Wl,--export-if-defined=<sym>`；**注意 `-s EXPORT_IF_DEFINED=` 是内部设置、命令行会被拒**）；
+③ 弄清 side module 为什么会有 `tableSize>0`。
+
+**可复用的诊断手段**：给 staging 的 `octave.js` 打一句补丁让 stub 打出**缺失符号名**
+（`MISSING-OCT-SYMBOL: pow_di` 就是这么拿到的；`site113/octave.js.orig` 是原样备份）。
+
+**产物与站点状态**：`/mnt/hdd/octave-wasm-build/slicot-fix/` 存了三个版本的 `.oct` + `README.txt`；
+**8762（`site113/`）当前是实验态**（装了 oct-c，且 manifest 已加该文件与 49 个 `__sl_*__` 别名），
+回基线命令写在 `README.txt` 末尾。容器检查点 **`octave-build:113-slicot-abi`**。
+
+> ⚠️ **两条判据陷阱（新踩，别再踩）**：
+> ① 主 wasm **根本没有 name 段**（只有 `dylink.0`）⇒ `emnm` 读到的名字**就是导出段**，
+> 不是"所有符号"；未导出的函数连名字都不存在。**判"某符号在不在主模块里"不能只看名字**。
+> ② 用 `comm` 比对符号表前必须 `LC_ALL=C sort` —— Python 的码点序与 shell 的 locale 序不同，
+> 会凭空多出一堆"缺口"（第一批分析里 331 个缺口大多是这么来的）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
@@ -1282,7 +1340,7 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
 | 内容 | **Octave 11.3.0**（wasm sha `11f6175a…`） | 同左 |
 | 站点目录 | `/mnt/hdd/octave-wasm-build/site` | `.../site113` |
 | 容器 | `o113`（`emsdk 5.0.7`，Ubuntu 24.04）；`obuild`/`odld`/`obench` 保留作回退 | 同左 |
-| 验收 | **30 套 756 项全绿** | 同左（两份各跑一遍） |
+| 验收 | **30 套 757 项全绿**（2026-09-23 实测；8762 未复跑本轮） | 同左 |
 
 **7.2 的回退快照**：`/mnt/hdd/octave-wasm-build/site-72bak/`（90M，160 个文件）。
 `cp -a site-72bak/. site/` 即可回退内容。
@@ -1328,7 +1386,7 @@ P1 的完整证据来自 **8762**：那轮 **728 PASS / 1 FAIL**，唯一失败�
   （7.2 的主链把 `vendor/` 预装进了 `octave.data`，11.3.0 的 `link-web.sh` 漏了它 →
   `normpdf` 从"开箱即有"变成"要加载 statistics 资产"，**是行为回退**；文件集已入仓
   `build/forge-preload/` 并由 `link-web.sh` 预加载）。
-  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7/T8/P1 后为 **30 套 756 项**）。
+  换完之后这些套件在 8761 上复跑全绿（补上 T2/T6/T7/T8/P1 后，**2026-09-23 实测 30 套 757 项**）。
   清单与决策记录见 `build/113/PROMOTION.md`。
 - **新查出 1 个两代基线共有的缺陷**：`lsode` 调用即整页 trap（见 10.6 第 6 项与
   `build/113/NOTES-lsode.md`）。**7.2 上同样存在，不是换基线引入的。**
