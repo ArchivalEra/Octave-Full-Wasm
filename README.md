@@ -173,7 +173,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/NOTES-lsode.md` (12160 bytes)
 - `build/113/NOTES-main-module-2.md` (6400 bytes)
 - `build/113/NOTES-p5-osmesa.md` (14821 bytes)
-- `build/113/NOTES-slicot.md` (15342 bytes)
+- `build/113/NOTES-slicot.md` (19273 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)

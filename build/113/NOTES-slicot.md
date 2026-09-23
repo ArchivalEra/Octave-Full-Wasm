@@ -266,3 +266,69 @@ stubs[prop]=(...args)=>{resolved||=resolveSymbol(prop);
 `/mnt/hdd/octave-wasm-build/slicot-fix/`：`oct-a-abi-only.oct`(2.98MB)、
 `oct-b-lapack.oct`(8.10MB)、`oct-c-lapack-f2c.oct`(8.16MB) + `README.txt`（复现命令）。
 容器检查点：`octave-build:113-slicot-abi`。
+
+### 5.8 两个卡点的解法（2026-09-23 当天收尾，SLICOT **已上线**）
+
+**卡点 A：`tableSize` 13 → 1 —— I/O 子系统成员是元凶**
+
+用**精简归档**替换整库：`libf2c-subset.a` = 156 个成员里剔掉 I/O 与交互那批
+（`open close inquire endfile backspac rewind ftell_ fmt fmtlib dfe due dolio ilnw
+lread lwrite iio uio rsfe rsli rsne wsfe wsle wsne xwsne sfe sue rdfmt wref wrtfmt
+s_paus system_ dtime_ etime_ getarg_ iargc_ getenv_`），留 120 个。
+实测 `dylink.0` 的 MEM_INFO：`tableSize` **13 → 1**（剩下那个不影响装载）。
+建法：`emar rcs libf2c-subset.a <保留的 .pic.o>`（脚本见 §5.8 末尾）。
+
+**卡点 B：`TypeError: Cannot read properties of undefined (reading 'value')` 的真身**
+
+`tableSize` 只是**引子**。真正的崩点在 emscripten 加载器的
+`reportUndefinedSymbols()`：
+
+```js
+var reportUndefinedSymbols=()=>{for(var[symName,entry]of Object.entries(GOT)){
+  if(entry.value==-1){var value=resolveGlobalSymbol(symName,true).sym;
+    if(!value&&!entry.required){entry.value=0;continue}
+    if(typeof value=="function"){...}
+    else if(typeof value=="number"){...}
+    else if(typeof value.value=="number"){entry.value=value}   // ← value 为 undefined 时在这炸
+    else{throw new Error(`bad export type for '${symName}': ...`)}}}};
+```
+
+它**本该**报"缺符号"，却先读了 `undefined.value` —— 于是整条信息丢失，
+只剩一句和符号毫无关系的 TypeError。这是本项目卡最久的一处"报错骗人"。
+
+**拿到真名的办法**（可复用的诊断配方）：给 **staging 的** `octave.js` 加一句日志
+（`site113/octave.js.orig` 留了原样备份）：
+
+```js
+if(entry.value==-1){var value=resolveGlobalSymbol(symName,true).sym;
+  if(!value)console.error("P5DBG-undef: sym="+symName+" required="+entry.required);   // ← 加这一句
+```
+
+实测输出 `P5DBG-undef: sym=f__w_mode required=true` —— 是 **libf2c 的数据符号**
+（`err.c:211` 的 `extern char *f__r_mode[], *f__w_mode[];`，定义原本在 `endfile.c`）。
+**数据符号的引用走 GOT.mem ⇒ 在 side module 里成为"必需"导入**，而它已被我们剔掉。
+
+修法：**`build/113/f2c-io-shim.c`** 给这两个符号一个最小定义（两张空表；
+`err.c` 只在 I/O 错误路径上解引用，本构建没有 I/O）。
+
+**最终配方（复现顺序）**：
+1. `python3 build/113/fix-slicot-abi.py --apply <control-src> /src/libwork/f2c-probe`
+2. `bash build/113/rebuild-pic-blas.sh`（PIC 版 libf2c/refblas/lapack → `/src/deps/lapack-pic/`）
+3. 建精简 libf2c：
+   `cd /src/work/libf2c2-pic && emar rcs /src/deps/lapack-pic/lib/libf2c-subset.a $(ls *.pic.o | grep -vE "^(open|close|…|getenv_)\.pic\.o$")`
+4. 编调度模块（`build-oct.sh --cc`，`OCT_LIBS` 按顺序）：
+   `common.oct.o` → `slicotlibrary-nodup.a`（去掉与 liblapack 重复的
+   `dgegs/dlatzm/zlatzm`）→ `liblapack.a` → `librefblas.a` → `libf2c-subset.a`
+   → `f2c-io-shim.c`
+
+**上线实测（8761）**：`norm(tf(1,[1 1]))` = 0.7071；`step(ss(-1,1,1,0),0:0.25:2)`
+与 `1-e^-t` 最大误差 **1.1102e-16**；`lyap(-1,1)` = 0.5；`dlyap(0.5,0.75)` = 1；
+`care(0,1,1,1)` = 1；`tf2ss([1 3],[1 3 2])` 在 s=2 处反算 = 5/12。
+新套件 `test/browser/accept-slicot.mjs` **25/25**；全量 **31 套 784 项全绿**。
+
+**顺带发现的另一件事（未修，已记）**：**资产包里的 `.m` 没有走 P1 的 docstring 预渲染**
+⇒ 任何触发 `print_usage()`/建议的路径都会去调 makeinfo 而失败，报出
+`system: unable to start subprocess for 'makeinfo …'`，**把真正的错误盖掉**
+（本轮写测试时被它骗过一次：`tf2ss` 因为 signal 包没加载而"未定义"，
+看到的却是 makeinfo 错）。要做的话是把 `prerender-m-docstrings.py` 也指向
+`/src/libwork/forge/<pkg>/inst` 再重打资产包 —— 属于独立一件，不混在本项里。
