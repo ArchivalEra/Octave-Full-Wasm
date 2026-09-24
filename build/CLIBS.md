@@ -1385,3 +1385,88 @@ bash link-web.sh /src/websrc/m2-out
 | `octave.wasm` | 36,858,344 | **28,707,654（−22%）** |
 | `octave.js` | 744,750 | 451,719 |
 | 主模块导出名 | 44,987 | **703** |
+
+---
+
+# 批次 R3 · fontconfig（+ expat）—— 让 `fontname` 真的生效
+
+**起因**：批次 D 把 FreeType 编进来后文字能画，但没有 fontconfig 的两条代价是硬的：
+`fontname` **存得住、渲染时被忽略**（`ft-text-renderer.cc` 只在 `HAVE_FONTCONFIG` 时用
+`FcFontMatch()` 挑字体文件）、`listfonts()` 报 `structure has no member 'family'`。
+两条**同一个根因** ⇒ 修法只有一个：把 fontconfig 接上（外部审核明确反对写 fake `listfonts`：
+那会让 ① 变成假绿）。完整记录见 HANDOFF §5.31。
+
+## 配方
+
+```sh
+# 源包（宿主下载 → docker cp 进 /src/libwork）：expat-2.6.4.tar.gz、fontconfig-2.14.2.tar.gz
+# ① 建库（静态 + -fPIC + -fwasm-exceptions；会自动带上 /src/deps/freetype 那份 PIC freetype）
+sh build/113/build-fontconfig.sh                    # → /src/deps/{expat,fontconfig}
+# ② 先跑机制闸门（30 秒，不碰 Octave）——"编得过"与"用得了"是两件事
+sh /src/probe-fontconfig.sh
+# ③ 重配 + 全量重编（config.h 变 ⇒ 必须 make clean）
+cd /src/work/octave-11.3.0
+PATH=/src/bin:$PATH WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 bash /src/bin/configure-113-full.sh
+emmake make -k -j24
+# ④ 重链：在批次 D 那条命令上加 WITH_FONTCONFIG=1
+#    link-web.sh 会生成 fonts.conf → 预载到 /fonts/fonts.conf，并做两条产物自检
+```
+
+## 坑
+
+1. ★ **编译期默认配置路径是双斜杠 `//fonts/fonts.conf`**。`--sysconfdir=/` + fontconfig 的
+   `@CONFIGDIR@/fonts.conf` 模板 ⇒ 得到 `//fonts/fonts.conf`，**Emscripten 的 FS 解析不到**。
+   不显式给 `FONTCONFIG_FILE` 时的现象是 **`FcFontList` = 0 个 face 且一声不响**（很像"字体没装"）。
+   ⇒ 站点侧必须 `setenv("FONTCONFIG_FILE", "/fonts/fonts.conf", 1)`（我们在 `main.cc`
+   的 `execute_interp()` 开头做）。
+2. ★ **宿主环境变量进不了 wasm**。node/浏览器里设 `FONTCONFIG_FILE=…` 再跑**没用**
+   （探针里打印恒为 `(unset)`）；生成的 glue 里也没有 `Module.ENV` ⇒ 只能在**进程内** `setenv`。
+3. ★ **`fonts.conf` 的 `<dir>` 必须是"预载进 wasm FS 的路径"**，不是宿主机上的源路径。
+   写错同样是"0 个 face 且不报错"。我们的 `<dir>` 就是 `link-web.sh` 从 Makefile 读到的
+   `octfontsdir`（4 个 FreeSans 本来就预载在那儿 ⇒ 不重复打包，省 1.87MB）。
+4. ★ **手写 `.pc` 要把传递依赖写进 `Libs:`（不是 `Libs.private:`）**。Octave 的探测是
+   `AC_LINK_IFELSE`，链接行取 `pkg-config --libs-only-l fontconfig`（**不带 `--static`**）；
+   只写 `-lfontconfig` 时探测因 `XML_ParserCreate`/`FT_*` 未定义判 no，而 configure
+   **只打一句 WARNING 就把树编完**（`config.h` 里 `HAVE_FONTCONFIG` 是 `#undef`）——
+   本批第一版就是这么白跑了一次全量重编。
+5. ★ **`octave_cv_lib_fontconfig=yes` 要预置**：容器里那个探测**结构性失真** ——
+   `AC_LANG_CALL([], [FcInit])` 生成的是 C++ 形式（`namespace conftest { … }`），却按
+   `conftest.c` 用 C 编译器编 ⇒ `error: unknown type name 'namespace'`。真能力由机制闸门
+   （坑 1–3 的那套）独立证明，链接后还有产物自检兜底。
+6. ★ **expat 的 `config.sub` 不认识 emscripten** ⇒ `--host=wasm32-unknown-emscripten` 直接报
+   `Invalid configuration … system 'emscripten' not recognized`。不给 `--host` 也能编对
+   （`emconfigure` 已经换了 CC/CXX，与 zlib/fftw 的配方同理）⇒ 脚本按 `config.sub` 能力自动决定。
+7. ★ **fontconfig 的 configure 有 emscripten 分支**，会把 `FREETYPE_CFLAGS/LIBS` 写成
+   **`-sUSE_FREETYPE`**（= 让 emcc 去建**非 PIC** 的官方端口）⇒ 工具（`fc-cache` 等）链接期炸
+   `undefined symbol: FT_Load_Sfnt_Table`。处置：configure 期给 CFLAGS 指向我们那份 freetype，
+   **make 期覆盖 `FREETYPE_CFLAGS/FREETYPE_LIBS`**（configure 的 emscripten 分支会盖掉环境变量）。
+   这些工具我们**不用**，编出来只是为了过链接。
+8. ★ **`WITH_OPENGL=1` 不能漏**（本批最大的坑，且完全静默）：它掌管"把 configure 翻掉的
+   `GL_GLEXT_PROTOTYPES`/`HAVE_GLBLENDFUNCSEPARATE` 恢复成 1"。漏掉时**编得过、链接过、
+   三条自检全绿**，但运行时**默认 toolkit 掉回 `web`**（图走 SVG 回落），很容易误判成
+   "fontconfig 把 GL 弄坏了"。已把那段改成"恢复不了就 FATAL"。
+9. `make` 的 in-tree 链接（`octave-cli`、各 `.oct`）会因 `cgejsv_`/`zgejsv_` 未定义报错 ——
+   **既存状态**（HANDOFF §4.7 记过），需要的是三个 `.a`（liboctinterp/liboctave/libcorefcn），
+   它们正常产出。别被 `make -k` 的 Error 计数吓到。
+
+## 验收（判别性）
+
+- `test/browser/probe-fontname.mjs`（13 项）：`listfonts()` → `FreeSans`；
+  `__get_system_fonts__()` 四字段 n=4；**像素级判别**：同图同文字，只改 `fontweight`/`fontangle`
+  ⇒ `getframe` 像素和**必须不同**，同属性画两次**必须相同**。实测
+  `normal 178220056 / bold 178126621 / italic 178224151`。
+- ⚠️ **别用 `fontname="FreeSans Bold"` 当判据**：那是**风格名不是家族名**，fontconfig 查不到
+  就落回 Regular（像素当然一样）。真映射是 `fontname→FC_FAMILY`、`fontweight→FC_WEIGHT`、
+  `fontangle→FC_SLANT`（`ft-text-renderer.cc:330-360`）。同理 `get_system_fonts` 这个名字
+  在 11.3.0 里**不存在**，内建真名是 `__get_system_fonts__`。
+
+## 体积与代价（实测）
+
+| | 批次 D（无 fontconfig） | R3（有 fontconfig） |
+|---|---|---|
+| `octave.wasm` | 29,280,186 | 29,463,242（gz 6,942,595 → 7,016,523）|
+| `octave.js` | 454,096 | 454,042（gz 87,294 → 87,229）|
+| `octave.data` | 8,674,455 | 8,674,824（gz 2,513,886 → 2,515,502）|
+| **三大件 gzip 合计** | 9,543,775 | **9,619,254（+75,479）** |
+
+⇒ fontconfig + expat 只值 **约 74 KB gzip**；1.2MB 那笔是字体（批次 D 就付过）。

@@ -64,6 +64,13 @@ async function ev (name, code, expect) {
   console.log(`${ok ? 'PASS' : 'fail'} | ${name.padEnd(30)} :: ${(r.out || r.err || '(空)').slice(0, 92)}`);
 }
 
+
+console.log(`URL=${URL}`);
+await page.goto(URL, { waitUntil: 'load', timeout: 300000 });
+
+// ⚠️ 顺序更正（2026-09-24）：这段**必须在 `page.goto` 之后**。
+//    原来它写在 goto 前面 ⇒ 页面还是 about:blank，`window.__octaveReady` 永远不是 true，
+//    于是每个套件白等满 180 s（6 个 accept-113-* 套件 × 3 分钟/次 sweep，实测）。
 // ⚠️ **还要等启动资产装完**（`window.__octaveReady` 在 index.html 里是"整条启动链跑完"
 //    —— 含 help 数据与 webgraphics —— 才置真的）。只等解释器可用就往下跑时，页面侧的
 //    资产加载器会继续打 `[assets] …就绪` 日志，那些行落进前几次 eval 的捕获窗口，
@@ -74,8 +81,6 @@ for (let _w = 0; _w < 600; _w++) {
   await new Promise(r => setTimeout(r, 300));
 }
 await new Promise(r => setTimeout(r, 400));
-console.log(`URL=${URL}`);
-await page.goto(URL, { waitUntil: 'load', timeout: 300000 });
 const t0 = Date.now();
 while (Date.now() - t0 < 300000) {
   try { const r = await run('1+1', 4000); if (r.seen && r.rc === 0) break; } catch {}

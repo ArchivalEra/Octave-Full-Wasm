@@ -155,10 +155,16 @@ fi
 #   全靠 pkg-config（没有 `--with-freetype=` 那种带路径的写法）。
 #   库由 `build/113/build-freetype.sh` 建到 `/src/deps/freetype`（**-fPIC 是硬要求**：
 #   主链可重定位，混进非 PIC 归档会在 dylink 那层出问题）。
-#   ⚠️ **fontconfig 仍然关着**（有意）：无 fontconfig 时 `ft-text-renderer.cc` 的回落是
-#   `oct_fonts_dir()` 下的 `FreeSans[Bold][Oblique].otf`，而 Octave 自带那几个字体
-#   （`etc/fonts/`，装到 `<datadir>/octave/<ver>/fonts`）→ 预载它们即可，见 link-web.sh。
-#   代价（如实）：`fontname` 属性被忽略（任何字体名都落到 FreeSans）、`listfonts` 为空。
+#   `WITH_FONTCONFIG=1`（2026-09-24，R3）时**同时**开 fontconfig：它是"`fontname` 真的生效 +
+#   `listfonts()` 能用"的唯一正路 —— `ft-text-renderer.cc` 只有在 `HAVE_FONTCONFIG` 时才用
+#   `FcFontMatch()` 去挑字体文件；没有它就走 `oct_fonts_dir()` 下的 `FreeSans*.otf` 回落
+#   （属性存得住、渲染被忽略；`listfonts` 还会报 `structure has no member 'family'`）。
+#   库由 `build/113/build-fontconfig.sh` 建（`/src/deps/fontconfig` + `/src/deps/expat`）。
+#   ⚠️ **运行期还要两件事**（都在 link-web.sh 与 main.cc 里，缺一不可，实测）：
+#     ① `fonts.conf` 预载到 `/fonts/fonts.conf`，`<dir>` 指向**已预载字体的 octfontsdir**；
+#     ② `setenv("FONTCONFIG_FILE", "/fonts/fonts.conf", 1)` —— `--sysconfdir=/` 编出来的默认
+#        路径是 **`//fonts/fonts.conf`**（双斜杠），Emscripten 的 FS 解析不到它，于是
+#        `FcFontList` 恒为 **0 个 face** 且**一声不响**（机制闸门 probe-fontconfig.sh 实测）。
 FREETYPE_FLAG="${FREETYPE_FLAG:---without-freetype}"
 if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   FREETYPE_FLAG=""
@@ -177,6 +183,39 @@ if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   pkg-config --modversion freetype2 >/dev/null 2>&1 || {
     echo "FATAL: pkg-config 找不到 freetype2（先跑 build/113/build-freetype.sh）" >&2; exit 2; }
   echo "=== WITH_FREETYPE=1：开 FreeType（/src/deps/freetype，$(pkg-config --libs freetype2)）==="
+fi
+
+# ── fontconfig（R3，2026-09-24）：`WITH_FONTCONFIG=1` 时开 ─────────────────────────
+# Octave 的探测是 `OCTAVE_CHECK_LIB(fontconfig, fontconfig, [fontconfig], …, [FcInit])`，
+# 走 pkg-config（没有 `--with-fontconfig=DIR` 那种带路径的写法）⇒ 手写的 fontconfig.pc
+# 必须在搜索路径上（且 EM_PKG_CONFIG_PATH 也要给，理由同上面的 freetype）。
+FONTCONFIG_FLAG="${FONTCONFIG_FLAG:---without-fontconfig}"
+if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
+  FONTCONFIG_FLAG=""
+  for d in /src/deps/fontconfig/lib/pkgconfig /src/deps/expat/lib/pkgconfig /src/deps/freetype/lib/pkgconfig; do
+    PKG_CONFIG_PATH="$d:${PKG_CONFIG_PATH:-}"
+    EM_PKG_CONFIG_PATH="$d:${EM_PKG_CONFIG_PATH:-}"
+  done
+  export PKG_CONFIG_PATH EM_PKG_CONFIG_PATH
+  CPPFLAGS="${CPPFLAGS:-} -I/src/deps/fontconfig/include -I/src/deps/expat/include"
+  LDFLAGS="${LDFLAGS:-} -L/src/deps/fontconfig/lib -L/src/deps/expat/lib"
+  pkg-config --modversion fontconfig >/dev/null 2>&1 || {
+    echo "FATAL: pkg-config 找不到 fontconfig（先跑 build/113/build-fontconfig.sh）" >&2; exit 2; }
+  pkg-config --modversion expat >/dev/null 2>&1 || {
+    echo "FATAL: pkg-config 找不到 expat" >&2; exit 2; }
+  # ⚠️ **预置探测缓存变量**（本项目的老对策，见 HANDOFF §4.7：容器里"需要在 configure 期
+  #    真跑一次链接"的探测会假失败）。这一次的具体错误（config.log 实测原文）是：
+  #      checking for FcInit in -lfontconfig -lfreetype -lexpat -lz … failed
+  #      conftest.c:617:1: error: unknown type name 'namespace'
+  #    —— `OCTAVE_CHECK_LIB` 的 `AC_LINK_IFELSE(AC_LANG_CALL([], [FcInit]))` 生成了 **C++**
+  #    形式的程序（`namespace conftest { … }`），而文件名/编译器却是 `conftest.c`/`emcc`（C）
+  #    ⇒ 与库本身无关，纯粹是这个组合下的 autoconf 失真。
+  #    真正的能力已由机制闸门 `build/113/probe-fontconfig.sh` 独立证明（静态链接 + FcInit +
+  #    FcFontList + FcFontMatch 在 wasm/MEMFS 里全通，含反证）；链接期还有 link-web.sh 的
+  #    产物自检兜底 ⇒ 这里预置 yes 是**有据的**，不是把红的说成绿的。
+  export octave_cv_lib_fontconfig=yes
+  echo "=== WITH_FONTCONFIG=1：开 fontconfig（/src/deps/fontconfig，$(pkg-config --libs fontconfig)）==="
+  echo "    （octave_cv_lib_fontconfig=yes 预置；理由见本脚本注释与 probe-fontconfig.sh）"
 fi
 
 # gl2ps：要不要让 Octave 的 print 支持矢量输出？
@@ -209,7 +248,7 @@ emconfigure ./configure \
   --disable-readline --disable-docs --disable-java \
   --disable-threads \
   --without-qt --without-fltk ${OPENGL_FLAG} \
-  ${FREETYPE_FLAG} --without-fontconfig \
+  ${FREETYPE_FLAG} ${FONTCONFIG_FLAG} \
   --without-curl --without-magick --without-portaudio \
   --without-spqr \
   --without-sundials_core --without-sundials_ida \
@@ -230,12 +269,19 @@ echo "=== configure 成功"
 # 相关符号，部署的 wasm 里也确实有 `gl4es_glBlendFuncSeparate` 的引用。
 # 要改这条，先跑一遍图形套件（accept-p5-graphics / accept-print / accept-plotv2 / -3d）
 # 证明行为不变，再改。
+# ⚠️ **这段是"沉默的图形退化"的唯一防线**（2026-09-24 又踩了一次，教训值得写下来）：
+#    漏给 `WITH_OPENGL=1` 时这段被跳过 ⇒ 两个宏是 undef ⇒ **编得过、链接过、自检全绿**，
+#    但运行时默认 toolkit 掉回 `web`（`probe-text-render` 直接 SKIP："默认 toolkit 不是 webgl"），
+#    现象是"图变成 SVG 回落"——很容易误判成"fontconfig 把 GL 弄坏了"。
+#    ⇒ 所以这里改成**必须恢复成 1，否则 FATAL**，不再"能改就改、不能改就算了"。
 if [ "${WITH_OPENGL:-0}" = "1" ]; then
   for h in GL_GLEXT_PROTOTYPES HAVE_GLBLENDFUNCSEPARATE; do
     if grep -qE "^/\* #undef $h \*/" config.h; then
       sed -i "s|^/\* #undef $h \*/|#define $h 1|" config.h
       echo "   ★ 恢复 $h = 1（gl4es 头不声明、但部署版就是 1；见脚本内注释）"
     fi
+    grep -qE "^#define $h 1" config.h || {
+      echo "FATAL: $h 没能恢复成 1 —— 默认 toolkit 会掉回 web（图形退化但不会报错）" >&2; exit 3; }
   done
 fi
 # 汇报实际开起来了什么（这是 ③ 的可读证据）

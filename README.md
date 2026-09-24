@@ -57,7 +57,7 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 
 ## 状态（2026-09-24 实测）
 
-**基线 = Octave 11.3.0（带真渲染器 + FreeType 文字 + `MAIN_MODULE=2`）**。`http://127.0.0.1:8761/`
+**基线 = Octave 11.3.0（带真渲染器 + FreeType 文字 + fontconfig 字体匹配 + `MAIN_MODULE=2`）**。`http://127.0.0.1:8761/`
 服务的就是**最近一次通过浏览器实测**的构建（**wasm sha256 见 `HANDOFF.md` 文末 `AUTO:STATE`**，
 别在这里抄 —— 默认 toolkit = `webgl`）。
 **全量回归的套件数与项数以 `HANDOFF.md` 文末的 `AUTO:STATE` 区块为准** —— 那几件数字由
@@ -130,7 +130,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 
 **非图形待办已清零**（2026-09-23/24）：`help` 覆盖 `.m` docstring 已完成（构建期预渲染，见
 `HANDOFF.md` §5.13）；**T9/G1 `MAIN_MODULE=2` + 保活清单也做成了** —— `octave.wasm` 从
-36.86MB 降到 29.28MB（含 FreeType），主模块导出名 44,987 → **703**，`.oct` 仍走资产车道懒加载。
+36.86MB 降到 **29.46MB**（含 FreeType + fontconfig），主模块导出名 44,987 → **703**，`.oct` 仍走资产车道懒加载。
 配方与 7 个坑见 `build/CLIBS.md`「批次 C · `MAIN_MODULE=2`」。
 
 依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
@@ -160,9 +160,11 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 > **没有 WebGL2 的设备也能看见图**（2026-09-23 起）：浏览器拿不到 GL 上下文时（旧设备、
 > GPU 被 blocklist、`--disable-webgl`）桥把自己渲的 **SVG** 交给页面显示
 > —— 此前是『命令成功、页面静默空白』。见 `HANDOFF.md` §5.22 / `NOTES-webgl.md` §4.7。
-> **文字渲染已有**（2026-09-24，批次 D）：构建开 FreeType + 预载 Octave **自带**的 4 个
-> FreeSans 字体 ⇒ 刻度/标题/图例都出字，**不需要 fontconfig**（无 fontconfig 时它的回落字体
-> 就是那几个文件）。代价如实记：`fontname` 属性被忽略、`listfonts` 为空。
+> **文字渲染 + 字体匹配都有**（2026-09-24）：构建开 FreeType（批次 D）+ **fontconfig（R3）**，
+> 预载 Octave **自带**的 4 个 FreeSans 面 ⇒ 刻度/标题/图例都出字，且
+> `fontname`/`fontweight`/`fontangle` **真的改像素**、`listfonts()` 返回 `FreeSans`。
+> **仍如实记**：只有这 4 个面，填别的家族名（如 `Courier`）会落回 FreeSans；
+> 证据 `test/browser/probe-fontname.mjs`（13 项，含像素级判别）。
 > 证据：`test/browser/probe-text-render.mjs`（加 `title/xlabel` 后 `getframe` 非白像素 +2130，
 > 无 FreeType 时是 +0）。一手记录：`build/CLIBS.md`「批次 D」、`NOTES-webgl.md` §4.8。
 > 一手记录：**`build/113/NOTES-webgl.md`**（§4.5.12 / §4.5.13 / §4.6）、
@@ -208,10 +210,10 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/pre-push` (755 bytes)
 - `.githooks/update-handoff.py` (4836 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (2013 bytes)
+- `.gitignore` (2037 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (2593 bytes)
-- `HANDOFF.md` (209151 bytes)
+- `HANDOFF.md` (222691 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)
@@ -226,6 +228,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
+- `build/113/NOTES-jspi.md` (5682 bytes)
 - `build/113/NOTES-lsode.md` (12160 bytes)
 - `build/113/NOTES-main-module-2.md` (6400 bytes)
 - `build/113/NOTES-p5-osmesa.md` (33080 bytes)
@@ -239,6 +242,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/STATUS.md` (8407 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
 - `build/113/build-deps.sh` (9359 bytes)
+- `build/113/build-fontconfig.sh` (11867 bytes)
 - `build/113/build-freetype.sh` (8169 bytes)
 - `build/113/build-gl2ps.sh` (4092 bytes)
 - `build/113/build-glu-webgl.sh` (5242 bytes)
@@ -249,7 +253,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/build-sundials.sh` (6516 bytes)
 - `build/113/check-dylink-signatures.py` (7526 bytes)
 - `build/113/check-oct-imports.py` (10902 bytes)
-- `build/113/configure-113-full.sh` (14009 bytes)
+- `build/113/configure-113-full.sh` (17881 bytes)
 - `build/113/configure-113.sh` (12415 bytes)
 - `build/113/dldprobe.cc` (1773 bytes)
 - `build/113/emf77` (4503 bytes)
@@ -262,11 +266,18 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/gl4es-smoke.c` (8634 bytes)
 - `build/113/gl4es-smoke.sh` (3808 bytes)
 - `build/113/gl4es-unmangled-shim.c` (3188 bytes)
-- `build/113/link-web.sh` (31242 bytes)
+- `build/113/link-web.sh` (35398 bytes)
 - `build/113/minioct.cc` (2409 bytes)
 - `build/113/patch-ax-pthread.sh` (5298 bytes)
 - `build/113/patch-gl4es.sh` (7469 bytes)
 - `build/113/patch-odepack-callback-arity.sh` (5006 bytes)
+- `build/113/probe-fontconfig.c` (4476 bytes)
+- `build/113/probe-fontconfig.sh` (2848 bytes)
+- `build/113/probe-jspi.sh` (4698 bytes)
+- `build/113/probe-jspi/jslib.js` (1069 bytes)
+- `build/113/probe-jspi/main.c` (4201 bytes)
+- `build/113/probe-jspi/run.html` (497 bytes)
+- `build/113/probe-jspi/side.c` (700 bytes)
 - `build/113/probe-side-module.sh` (3339 bytes)
 - `build/113/rebuild-pic-blas.sh` (6713 bytes)
 - `build/113/ss-long64.h` (1265 bytes)
@@ -275,7 +286,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/BASELINE-10.3.md` (8216 bytes)
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
-- `build/CLIBS.md` (84468 bytes)
+- `build/CLIBS.md` (90555 bytes)
 - `build/GAPS-2.md` (28532 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
@@ -312,7 +323,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/forge-preload/ttest.m` (3147 bytes)
 - `build/glue-selftest.m` (4230 bytes)
 - `build/glue-selftest.sh` (1953 bytes)
-- `build/main.cc` (17474 bytes)
+- `build/main.cc` (18976 bytes)
 - `build/make-dist.sh` (3226 bytes)
 - `build/normalize_arpack.py` (1861 bytes)
 - `build/pkgfix/__pkgfix_basename__.m` (1962 bytes)
@@ -482,14 +493,14 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webshell/zip.m` (314 bytes)
 - `build/webshims/popen.m` (1608 bytes)
 - `build/webshims/system.m` (2024 bytes)
-- `dist/DEPLOY.md` (16687 bytes)
+- `dist/DEPLOY.md` (17835 bytes)
 - `dist/serve.py` (2668 bytes)
-- `test/browser/accept-113-assets.mjs` (7153 bytes)
-- `test/browser/accept-113-boot.mjs` (6516 bytes)
-- `test/browser/accept-113-libs.mjs` (7378 bytes)
-- `test/browser/accept-113-oct.mjs` (6855 bytes)
-- `test/browser/accept-113-ode15.mjs` (16496 bytes)
-- `test/browser/accept-113-pkgoct.mjs` (9624 bytes)
+- `test/browser/accept-113-assets.mjs` (7452 bytes)
+- `test/browser/accept-113-boot.mjs` (6814 bytes)
+- `test/browser/accept-113-libs.mjs` (7677 bytes)
+- `test/browser/accept-113-oct.mjs` (7154 bytes)
+- `test/browser/accept-113-ode15.mjs` (16795 bytes)
+- `test/browser/accept-113-pkgoct.mjs` (9923 bytes)
 - `test/browser/accept-archive.mjs` (7447 bytes)
 - `test/browser/accept-audio.mjs` (15071 bytes)
 - `test/browser/accept-dldfcn.mjs` (13850 bytes)
@@ -529,12 +540,14 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/probe-bridge-svg-out.mjs` (2214 bytes)
 - `test/browser/probe-cold-start.mjs` (4572 bytes)
 - `test/browser/probe-core-names.mjs` (8623 bytes)
+- `test/browser/probe-fontname.mjs` (8399 bytes)
 - `test/browser/probe-gfx-bench.mjs` (4496 bytes)
 - `test/browser/probe-gfx-e2e-breakdown.mjs` (2714 bytes)
 - `test/browser/probe-gfx-resolution.mjs` (2443 bytes)
 - `test/browser/probe-gfx-surf-cost.mjs` (2358 bytes)
 - `test/browser/probe-gl4es-smoke.mjs` (3936 bytes)
 - `test/browser/probe-gpu-backend.mjs` (2037 bytes)
+- `test/browser/probe-jspi.mjs` (7933 bytes)
 - `test/browser/probe-m2-lazyload.mjs` (4379 bytes)
 - `test/browser/probe-nogl-flag.mjs` (2385 bytes)
 - `test/browser/probe-p5-run.mjs` (2255 bytes)

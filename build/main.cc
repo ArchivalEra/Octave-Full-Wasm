@@ -2,6 +2,8 @@
 
 #include <string>
 #include <iostream>
+#include <cstdlib>      // setenv（fontconfig 的运行期配置，见 execute_interp）
+#include <sys/stat.h>   // mkdir（fontconfig 的缓存目录）
 
 #include <oct.h>
 #include <octave.h>
@@ -359,6 +361,21 @@ extern "C" void p5_install_webgl_graphics_toolkit (octave::interpreter& interp);
 #endif
 
 int EMSCRIPTEN_KEEPALIVE execute_interp() {
+  // ── fontconfig 的**运行期配置**（R3，2026-09-24）────────────────────────────
+  // 为什么必须在**这里**（进程内）设，而不是页面或外层 shell：
+  //   ① `--sysconfdir=/` 编出来的默认配置文件名是 **`//fonts/fonts.conf`（双斜杠）**，
+  //      Emscripten 的 FS 解析不到它 ⇒ 不显式给变量时 `FcFontList()` 恒为 **0 个 face**
+  //      **且一声不响**（现象像"字体没装"，其实是"配置没读到"）。
+  //   ② 页面侧没有任何口子改 wasm 的 ENV：生成的 glue 里没有 `Module.ENV`，而宿主
+  //      （node/浏览器）的环境变量**不会**进 wasm 的 ENV —— 两条都在机制闸门
+  //      `build/113/probe-fontconfig.sh` 里实测过（`FONTCONFIG_FILE=(unset)` 恒成立）。
+  // 配置内容（`<dir>` 指向预载字体的 octfontsdir、`<cachedir>` 指向 /tmp 下的目录）
+  // 由 `build/113/link-web.sh` 生成并预载到 `/fonts/fonts.conf`。
+  setenv ("FONTCONFIG_FILE", "/fonts/fonts.conf", 1);
+  // 缓存目录：建不出来只是"不写缓存"（fontconfig 对不可写的 cachedir 是静默跳过），
+  // 不影响 `FcFontList`/`FcFontMatch` 的结果 ⇒ 这里是**尽力而为**，不看返回值。
+  mkdir ("/tmp/fontconfig-cache", 0700);
+
   std::cout << "Starting GNU Octave interpreter..." << std::endl;
 
   interpreter.reset(new octave::interpreter());

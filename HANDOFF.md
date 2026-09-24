@@ -1,7 +1,7 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-24（第五批：外部审核的 R1/R4 已落地并上线 —— 见 §5.30；R3 fontconfig / R5 JSPI 探针待做）**：
+> 最后更新：**2026-09-24（第七批：R1/R4 + R3 fontconfig 已上线；R5 的 JSPI 组合探针也通过了 —— 见 §5.30/§5.31/§5.32）**：
 > · **R1/R0 无 shell 的清晰报错（§5.30，已上线）**：新资产 `build/webshims/{popen,system}.m` —— **同名 `.m` 覆写**
 >   （load path 里的 `.m` **实测遮得住内建**），把 `popen` 的 `-1`、`st = system(cmd)` 的 `-1`、
 >   `system(cmd)`（无输出参数）的**静默通过**全部变成清晰报错；两输出形态的既有文本**一字不改**。
@@ -10,15 +10,30 @@
 >   （以前报一句看不出根因的 `X and Y sizes do not match`）。顺手补齐 `hold/grid/axis` 的句柄形态，
 >   并把 `__pb_axes_arg__` 的判据**逐条对齐核心**（`__plt_get_axis_arg__.m`）—— 因此 `plot(0)`
 >   （合法：画一个点）不再被当句柄、`xlim(0)` 报的也是核心那句文本。`accept-plotv2` 72 → **82 项**。
+> · **R3 fontconfig（§5.31，已上线）**：静态 `libfontconfig` + `libexpat` ⇒ **`fontname` 真的生效**
+>   （像素级判别：同图只改 `fontweight`/`fontangle`，`getframe` 像素和 `normal 178220056 / bold 178126621 /
+>   italic 178224151` 三者互不相同），**`listfonts()` 能用**（R2 消失）、`__get_system_fonts__()` 四字段 n=4。
+>   运行期两件事缺一不可：`fonts.conf` 预载到 `/fonts/fonts.conf` + `main.cc` 里 `setenv("FONTCONFIG_FILE",…)`
+>   （`--sysconfdir=/` 编出来的默认路径是**双斜杠** `//fonts/fonts.conf`，Emscripten FS 解析不到，
+>   不显式给变量时 `FcFontList` = **0 个 face 且不报错**）。代价 **+74 KB gzip**。
+> · **R5 JSPI 探针（§5.32，已通过）**：`-fwasm-exceptions` + `-sJSPI` + `MAIN_MODULE=2` +
+>   `SIDE_MODULE`/dlopen **四件一起成立**（`build/113/NOTES-jspi.md`）：dlopen 的 side module
+>   回调主模块 helper、再挂到 JS 的 Promise 上，实测 202 ms / tick +1 / 返回 43。
+>   **只证明机制**；把 `pause`/`kbhit`/`recordblocking` 接上去（P4）是独立的一批，**没做**。
+> · 顺带修掉一个**一直存在的测试腐坏**（§5.31.1）：6 个 `accept-113-*` 套件在 `page.goto`
+>   **之前**等 `__octaveReady` ⇒ 每次 sweep 白等 18 分钟；挪到 goto 之后，183 s → **3–5 s**。
 > · 全量：**见文末 `AUTO:STATE`**（本轮 **36 套 / 952 项**，比上批多一套 `accept-shellerr`）。
 > 上一批（第四批）的实况在 §5.23–§5.29：A 断言可证伪化 / B 桥参数契约 / C `MAIN_MODULE=2` /
 > D FreeType 文字渲染 / E 首帧冷启动（结案：不做预热）/ 缺口语义审计 + 交外部审核的需求书 R0–R5。
 > **部署件 sha、体积、最近一次全绿回归的套件数与项数一律见文末 `AUTO:STATE` 区块**（脚本从产物重算，
 > 别在这里手写）。**接续先读 §8（仍待办 + 恢复命令）与 §5.30/§5.29（本轮实况与需求书）。**
 > ⚠️ 七条必须在动手前知道的：
-> ① **构建主树现在是 opengl-ON + gl2ps-ON + FreeType-ON，GL 头是 gl4es+GLU 的**（见 §5.16 末尾
->    "怎么切回去"、§5.21、§5.26）；**切回不带 FreeType 的那份**：重配时不给 `WITH_FREETYPE=1`
->    + `make clean` + 重编（`config.h` 变了就必须 clean，§10.3 坑 2）。
+> ① **构建主树现在是 opengl-ON + gl2ps-ON + FreeType-ON + fontconfig-ON，GL 头是 gl4es+GLU 的**
+>    （见 §5.16 末尾"怎么切回去"、§5.21、§5.26、§5.31）。重配的口径是
+>    **`WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`** —— ⚠️ **`WITH_OPENGL=1` 不能省**：
+>    它掌管"把被 configure 翻掉的 `GL_GLEXT_PROTOTYPES`/`HAVE_GLBLENDFUNCSEPARATE` 恢复成 1"，
+>    省掉它**编得过、链接过、自检全绿**，但运行时默认 toolkit 掉回 `web`（图走 SVG 回落）。
+>    切回不带某件东西的那份：不给那个 `WITH_*` + `make clean` + 重编（`config.h` 变了就必须 clean，§10.3 坑 2）。
 > ② **推送仍阻塞在人**：`gh` token 2026-09-24 失效（`gh auth setup-git` 救不回来）⇒ 要**人**跑一次
 >    `gh auth login` 才能 `git push origin main`；内容一直有落到持久盘镜像 `refs/heads/main-20260924`
 >    （§5.17.1）。若 `github.com` 又被拦，照 §5.17 走 API。
@@ -711,6 +726,9 @@ makeinfo 生成 doc-cache）。
 | `.githooks/check-consistency.py` | 挂载根/启动清单/车道路径的一致性检查（pre-commit + pre-push） |
 | `.githooks/handoff-context.py` | ZCode `SessionStart` hook 的输出（把"先读 §8 + 当前状态"注入会话；`.zcode/config.json`） |
 | `build/glue-selftest.m` `build/glue-selftest.sh` | **胶水层自带测试的统一驱动**（目标名单单一真源；宿主秒级 / 浏览器 `accept-selftest`） |
+| `build/113/build-fontconfig.sh` | **R3**：静态 `libfontconfig` + `libexpat`（`-fPIC` + `-fwasm-exceptions`）→ `/src/deps/{fontconfig,expat}`；四个坑写在注释里，带符号自检 |
+| `build/113/probe-fontconfig.{c,sh}` | **R3 的机制闸门**（30 秒、不碰 Octave）：静态 fontconfig + MEMFS 配置/字体能不能用；量出两条静默陷阱（宿主 env 进不来 / 默认配置路径是双斜杠 `//fonts/fonts.conf`）|
+| `test/browser/probe-fontname.mjs` | **R3 的验收探针**（13 项）：`listfonts`/`__get_system_fonts__` + **像素级判别**（只改 `fontweight`/`fontangle` ⇒ `getframe` 像素和必须不同）|
 | `bridge/queue.js` | MEMFS 队列的**协议无关部分**（取 fs / 读走清空 / 切分），四个宿主桥共用 |
 | `bridge/assets-loader.js` | **资产懒加载器**（manifest → fetch → 写 FS → addpath；支持 `aliases` 符号链接） |
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
@@ -800,9 +818,12 @@ makeinfo 生成 doc-cache）。
   `opengl_renderer::render_text: support for rendering text (FreeType) was unavailable
   or disabled when Octave was built`（`text-renderer.cc:53` 的 `static bool warned`，
   只在首次建 axes 时打一次），之后文本能力静默缺失；数值与 plot 桥不受影响。
-  **上线后的两条代价（如实，见 §5.26）**：无 fontconfig ⇒ `fontname` 属性**存得住但渲染时被忽略**
-  （实测 `set/get` 能回 "Courier"）；`listfonts()` **不是返回空、而是报 `structure has no member 'family'`**
-  （空结果喂给 `listfonts.m` 的字段假设 —— 与 `popen`/`system` 那几条同属"待修成清晰报错"，见 §5.29 R1/R2）。
+  ~~**上线后的两条代价**：无 fontconfig ⇒ `fontname` 存得住但渲染时被忽略、`listfonts()` 报
+  `structure has no member 'family'`。~~ → **2026-09-24 两条都已修（R3，见 §5.31）**：fontconfig 上线后
+  `fontname`/`fontweight`/`fontangle` **真的改像素**（探针 `probe-fontname.mjs` 13 项钉住），
+  `listfonts()` 返回 `FreeSans`、`__get_system_fonts__()` 有 family/angle/weight/suitable（n=4）。
+  **仍如实记的边界**：本构建**只有 4 个 FreeSans 面**，所以 `fontname` 填别的家族名（如 `"Courier"`）
+  会**落回** FreeSans——这是"没有系统字体目录"的必然，不是 bug（探针里有一条交底断言钉住）。
 - **（新，2026-09-23）`urlread` 的 POST 形态只能"如实回报"**：本地预览服务器是
   `python3 -m http.server`，**不支持 POST**（返回 501）⇒ `urlread(url,"post",…)` 返回 `ok=0`。
   交付的静态托管同样如此。`accept-net` 那条断言已按实测改写（原来 `want='1'` 是靠错误消息里
@@ -880,7 +901,7 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > （M1+新桥那份）、`siteWebGL-m1bak-20260923/`（更早）。
 > **部署件 sha、体积、最近一次全绿回归见文末 `AUTO:STATE` 区块**（别在这里手写）。
 > **本轮（第五批，2026-09-24）**：外部审核的方案 R1（popen/system 覆写）+ R4（`plot(hax,…)`）
-> 已落地并全量验绿（§5.30）；**R3（fontconfig）与 R5（JSPI 探针）还没做** —— 见下面第 1 条。
+> 已落地并全量验绿（§5.30）；**R3（fontconfig）也已上线并验绿（§5.31）**；⇒ **只剩 R5（JSPI 探针）**。
 >
 > **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
 > · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **69 项**：
@@ -891,15 +912,18 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
 > `accept-shellerr.mjs`（14 项，R1）、`probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
-1. **（进行中）按外部审核的方案继续 R3 / R5**（方案全文见 §5.29 的条目 + §5.30 的记录）：
-   · **R3 fontconfig**（价值最大）：静态 `libfontconfig` + **显式 MEMFS 配置**（`/fonts.conf` +
-     `<dir>` 指向已预载的 `octfontsdir` + `<cachedir>` 到可写目录），**不要** fake `listfonts`
-     —— 它会让"fontname 看起来能用、实际不影响渲染"变成假绿。做完 **R2（`listfonts` 报结构无成员）
-     自动消失**。先例：OpenSCAD-WASM 的静态 fontconfig 配方（GPT 给的依据）。
-   · **R5 JSPI**：`-sJSPI` 与 `-fwasm-exceptions`、与 `MAIN_MODULE=2`/`SIDE_MODULE`/`dlopen`
-     **没有公开的大型先例** ⇒ 先做**最小组合探针**（side module → 主模块导出 → JSPI suspending
-     import → `setTimeout` Promise → resume），**探针没过之前不许宣称 R5 可用**，更不许据此改
-     `pause`/`kbhit`/`recordblocking`。
+1. **（R1/R4/R3 做完；R5 只剩"接到产品上"那一步）**：
+   · ✅ **R5 的机制探针已通过**（§5.32）：`-fwasm-exceptions` + `-sJSPI` + `MAIN_MODULE=2` +
+     `SIDE_MODULE`/dlopen 四件一起成立（`build/113/NOTES-jspi.md` 有配方与三条实现要求）。
+     **下一步（独立一批，未做）**：把真的 `.oct` 与 `pause`/`kbhit`/`keyboard`/`recordblocking`
+     接上去 —— 要动 Octave 本体 + 页面调用形态（入口必须 `WebAssembly.promising`）+ 全量回归。
+   · ✅ **R3 fontconfig**（§5.31）：静态 `libfontconfig`+`libexpat` + 显式 MEMFS 配置（`/fonts.conf` +
+     `<dir>` 指向已预载的 `octfontsdir` + `<cachedir>` 到可写目录）；`fontname` 现在真改像素、
+     `listfonts`/`__get_system_fonts__` 可用（R2 消失）。**没有**做 fake `listfonts`。
+   · 外部审核给 R5 的**警告仍然有效**（照抄在这里，免得下一轮忘）：
+     *"JSPI 已经在生产浏览器里了" ≠ "JSPI + `MAIN_MODULE=2` + `SIDE_MODULE`/dlopen 这个组合被验证过"*
+     —— 所以机制探针必须先过（已过，见上），**而"接到 `pause` 上"仍要自己重新验一遍**，
+     不许拿"探针通过"当"产品功能已完成"。
 2. **（阻塞在人）`gh auth login` 之后 `git push origin main`**：token 失效
    （`gh auth setup-git` 救不回来），本地领先 `origin/main` 若干笔；内容**没丢** ——
    已落持久盘镜像 `mirror` 的 `refs/heads/main-20260924`（§5.17.1）。
@@ -2259,6 +2283,129 @@ CPU 一抢毫秒数就没意义）：冷/温**分开**量，并把"预热两条�
 
 ---
 
+### 5.31 第六批：R3 **fontconfig** 上线（2026-09-24）—— `fontname` 真的生效、`listfonts` 能用
+
+**这一批解决的是"批次 D 的两条代价"**（§5.26 就如实记着）：没有 fontconfig 时
+`ft-text-renderer.cc` 走 FreeSans 回落 ⇒ ① `fontname` **存得住、渲染时被忽略**；
+② `listfonts()` 报 `structure has no member 'family'`（R2）。**同一个根因**，所以只有一条正路：
+把 fontconfig 接上。外部审核明确反对"写个 fake `listfonts`" —— 那会把 ① 变成假绿。
+
+**① 机制闸门先行（`build/113/probe-fontconfig.{c,sh}`，30 秒，不碰 Octave）**
+`probe-side-module.sh` 的同型做法：先证明"静态 fontconfig + MEMFS 配置/字体"在 wasm 里真能用，
+再付全量重编的代价。它当场量出**两条会静默变坏**的事实，直接决定了后面怎么接：
+- **宿主环境变量进不来**：node 的 `FONTCONFIG_FILE` 不会进 wasm 的 ENV（打印恒为 `(unset)`），
+  所以"外层设环境变量再跑"这条路是无效的 ⇒ 必须在**进程内** `setenv`；
+- **编译期默认配置路径是 `//fonts/fonts.conf`（双斜杠）**：`--sysconfdir=/` 的产物，
+  Emscripten 的 FS 解析不到它 ⇒ 不显式给变量时 `FcFontList` = **0 个 face 且不报错**
+  （现象像"字体没装"，其实是"配置没读到"）。
+- 另一条同类：`fonts.conf` 的 `<dir>` 必须是**预载进 wasm FS 的路径**（第一版写成容器里的源路径
+  ⇒ 同样是 0 个 face 且不报错）。
+- 通过时的实测：`FcInit OK`、`FcFontList` **4 个 face**（Regular/Bold/Oblique/BoldOblique 全列出）、
+  `FcFontMatch("FreeSans","Bold") → FreeSansBold.otf`、不存在的家族**落回** FreeSans.otf；
+  反证（把 `FONTCONFIG_FILE` 指到不存在的路径）⇒ 0 个 face + `Cannot load default config file`。
+
+**② 库（新脚本 `build/113/build-fontconfig.sh`）**：expat 2.6.4 + fontconfig 2.14.2，
+都是静态 + `-fPIC` + `-fwasm-exceptions`（与全树口径一致），装到 `/src/deps/{expat,fontconfig}`。
+配方照外部审核给的 OpenSCAD-WASM 先例：`--disable-shared --enable-static --disable-docs --disable-nls
+--disable-cache-build --sysconfdir=/ --localstatedir=/ --with-default-fonts=/fonts --disable-libxml2
+--with-expat=…`。踩到/绕开的四个坑：
+- **`--host=wasm32-unknown-emscripten` 对 expat 用不了**：它自带的 `config.sub` 不认识 emscripten
+  （`Invalid configuration … system 'emscripten' not recognized`）⇒ 脚本按 `config.sub` 能力**自动决定**
+  给不给 `--host`（不给也能编对，交叉由 `emconfigure` 换 CC 完成，与 zlib/fftw 配方同理）。
+- **fontconfig 的 configure 有 emscripten 分支**，会把 `FREETYPE_CFLAGS/LIBS` 写成 **`-sUSE_FREETYPE`**
+  （= 让 emcc 去建**非 PIC** 的官方端口）⇒ 工具（fc-cache 等）链接期炸 `undefined symbol: FT_Load_Sfnt_Table`。
+  处置：把 freetype 指向**我们自己的 PIC 那份**（configure 期给 CFLAGS，**make 期覆盖 `FREETYPE_*`**，
+  因为 configure 的 emscripten 分支会盖掉环境变量）。
+- **手写的 `fontconfig.pc` 必须把传递依赖写进 `Libs:`（不是 `Libs.private:`）**：Octave 的探测是
+  `AC_LINK_IFELSE`，链接行取 `pkg-config --libs-only-l fontconfig`（**不带 `--static`**）；
+  只写 `-lfontconfig` 时探测因 `XML_ParserCreate`/`FT_*` 未定义而判 no，而 configure **只打一句
+  WARNING 就照常把树编完**（`config.h` 里 `HAVE_FONTCONFIG` 是 `#undef`）—— 这一版正是这么白跑了一次全量重编。
+- **`octave_cv_lib_fontconfig=yes` 预置**（本项目的老对策，§4.7）：容器里那个探测**结构性失真** ——
+  `AC_LANG_CALL([], [FcInit])` 生成的是 **C++** 形式的程序（`namespace conftest { … }`），
+  却按 `conftest.c` 用 C 编译器编 ⇒ `error: unknown type name 'namespace'`。
+  真能力由 ① 的机制闸门独立证明，链接后还有 `link-web.sh` 的产物自检兜底 ⇒ 预置是**有据的**。
+
+**③ configure / 重编 / 重链**：`WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`。
+⚠️ **`WITH_OPENGL=1` 一个字都不能少**（本轮最大的坑）：它同时掌管"把 GL 头探测翻掉的
+`GL_GLEXT_PROTOTYPES`/`HAVE_GLBLENDFUNCSEPARATE` 恢复成 1"那段。漏给时：**编得过、链接过、三条自检全绿**，
+但运行时**默认 toolkit 掉回 `web`**（`probe-text-render` 直接 SKIP、图走 SVG 回落），
+现象极易误判成"fontconfig 把 GL 弄坏了"。已把那段改成 **恢复不了就 FATAL**（原来只是"能改就改"）。
+链接命令与批次 D 相同，只多 `WITH_FONTCONFIG=1`（产物写到 `/src/websrc/m2fc-out`，旧产物原样留档）。
+`make` 的 in-tree 链接（`octave-cli`、各 `.oct`）仍会因 `cgejsv_`/`zgejsv_` 未定义而报错 ——
+**这是既存状态**（§4.7 记过"两个良性未定义"），需要的三个 `.a`（liboctinterp/liboctave/libcorefcn）都正常产出。
+
+**④ 运行期两件事（都在产物里，缺一不可）**：
+- `link-web.sh` 生成 `fonts.conf`（`<dir>` = **从 Makefile 读到的 octfontsdir**、`<cachedir>` = `/tmp/fontconfig-cache`）
+  并预载到 **`/fonts/fonts.conf`**（不重复打包字体，省 1.87MB）；加两条产物自检：
+  `octave.js` 里要有 `fonts.conf` 预载记录、`octave.wasm` 里要有 `FONTCONFIG_FILE` 字符串
+  （后者就是查"main.cc 那两行真的进了这次链接"）。
+- `main.cc` 的 `execute_interp()` 开头 `setenv("FONTCONFIG_FILE", "/fonts/fonts.conf", 1)` + 尽力建缓存目录。
+
+**⑤ 验收（判别性，外部审核点名要防的那个假绿）**：新探针 `test/browser/probe-fontname.mjs`（**13 项，8768 全绿**）。
+关键一条**不看属性、只看像素**：同图同文字，只改 `fontweight`/`fontangle` ⇒ `getframe` 的像素和
+**必须不同**；同属性画两次**必须相同**。实测：
+`normal 178220056 / bold 178126621 / italic 178224151`（三者互不相同，重复一致）。
+`listfonts()` → `FreeSans`；`__get_system_fonts__()` → `family,angle,weight,suitable` 四字段、**n=4**（R2 消失）。
+同名探针的**一个写错过的判据也值得记**：`fontname="FreeSans Bold"` 不是"换面"——**家族名不存在**，
+fontconfig 会落回 FreeSans Regular（像素当然一样）；真正的映射是
+`fontname→FC_FAMILY`、**`fontweight→FC_WEIGHT`、`fontangle→FC_SLANT`**（`ft-text-renderer.cc:330-360` 原文）。
+另外 `get_system_fonts` 这个名字在 11.3.0 里**不存在**（`exist`=0），内建真名是 `__get_system_fonts__`（=5）。
+
+**体积账（实测）**：wasm 29,280,186 → **29,463,242**（gz 6,942,595 → 7,016,523）；
+js 454,096 → 454,042（gz 87,294 → 87,229）；data 8,674,455 → 8,674,824（gz 2,513,886 → 2,515,502，
+多的 369 B 就是 `fonts.conf`）⇒ **三大件 gzip 合计 9,543,775 → 9,619,254（+75,479）**。
+⇒ fontconfig + expat 的代价只有 **约 74 KB gzip**（字体那 1.2MB 是批次 D 就付过的）。
+
+#### 5.31.1 顺带修掉：6 个 `accept-113-*` 套件"在 `page.goto` **之前**等 `__octaveReady`"
+
+**症状**：那 6 个套件每个恰好 **183 s**（= 180 s 的等待循环 + 3 s 实活）。原因是那段
+"等启动资产装完"的循环被放在了 `await page.goto(...)` **前面** —— 页面还是 `about:blank`，
+`window.__octaveReady` 永远不是 `true` ⇒ 循环走满 600×300 ms，然后才去开页；
+而开页之后其实 1.5 s 就绪。**每次 sweep 白等 18 分钟**（6×180 s），已存在好几轮没人注意，
+因为"它每次都过、只是慢"。
+
+**修法**：把那一段**移到 `page.goto` 之后**（意图不变，位置对了）。
+**当场验证**（同一次 sweep 里就能看见）：`accept-113-ode15` **183 s → 5 s**、
+`accept-113-pkgoct` **183 s → 5 s**，都仍然全绿；另外 4 个（assets/boot/libs/oct）在改动前
+已跑过一遍绿，改动后再各跑一次确认（见本节的实测句子）。
+**教训**：套件"慢"也是一种腐坏 —— 它不会被任何闸门抓到（全绿），只会悄悄吃掉每次回归的时间。
+
+---
+
+### 5.32 第七批：R5 的 **JSPI 组合探针** —— 通过了（2026-09-24）
+
+**这一批只做"能力闸门"，不碰产品**。外部审核对 R5 的判定是：JSPI 本身成熟（Chrome 137+ /
+Firefox 153+ / Safari 27+），JSPI 与 wasm EH 在规范层面兼容，**但"JSPI + `MAIN_MODULE=2` +
+`SIDE_MODULE`/dlopen"没有公开的大型项目先例** ⇒ 必须自证，且**探针没过之前不许宣称可用**。
+
+**探针形状**（逐字复刻我们的真实链路，几十行 C/JS，详见 `build/113/NOTES-jspi.md`）：
+`JS await Module._run_side(200)` → 主模块 `run_side` → **dlopen/dlsym** side module →
+side module 回调主模块 helper → JS 的 **suspending import**（返回 Promise）→ resume。
+判据两条：① 墙上时间 ≥ 请求毫秒；② **等待期间 JS tick 增加**（busy-loop 会是 0，只看 ① 会被骗）。
+
+**实测（Chromium 152）**：
+| 用例 | 墙上 | tick 增量 | 返回 |
+|---|---|---|---|
+| ① 主模块 helper 挂起（`main_wait(200)`） | **201 ms** | 1 | 42 |
+| ② dlopen→side→主模块→JS 完整链（`run_side(200)`） | **202 ms** | 1 | **43** |
+⇒ **9 PASS / 0 FAIL**（`test/browser/probe-jspi.mjs`）。
+
+**三条实现要求**（都是撞出来的，将来接 `pause()` 要照做）：
+1. ★ **每个"可能间接挂起"的 JS 入口都要在 `-sJSPI_EXPORTS` 里**：只列 `main_wait` 时从
+   `run_side` 进来的链抛 `SuspendError: trying to suspend without WebAssembly.promising`
+   —— V8 要求**挂起点所在的整条入口**都是 promising。
+2. ★ **JSPI 边界不能直接传 JS 字符串**（要 `ccall`/`cwrap`）：传了会得到 `NULL` ⇒
+   `dlopen(NULL)` 返回**主模块句柄** ⇒ dlsym 报
+   `Tried to lookup unknown symbol "side_wait" in dynamic lib: __main__`（症状极像"没导出符号"）。
+3. ★ **side module 要显式导出符号**：不写就是 `-O2` DCE 后 **64 字节**的空壳。
+
+**还没做（如实）**：P3/P4 —— 把真的 `.oct` 接上、把 `pause`/`kbhit`/`keyboard`/`recordblocking`
+改成经 JSPI 等浏览器。那要动 Octave 本体 + 页面调用形态（入口要 promising）+ 重跑全量回归，
+**是独立的一批**；本文件只把"机制能不能用"钉死。**也不要回退 Asyncify**（与 `-fwasm-exceptions`
+互斥，§5.11 早证过）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
@@ -2541,12 +2688,12 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 
 | 项 | 值 |
 |---|---|
-| `octave.wasm` | 29,280,186 B raw / 6,942,595 B gz | sha256 `225130ab9f638683…` |
-| `octave.js` | 454,096 B raw / 87,294 B gz | sha256 `2e5ddcc77bbcbf7b…` |
-| `octave.data` | 8,674,455 B raw / 2,513,886 B gz | sha256 `c87be3d980dd1c60…` |
-| 三大件 gzip 合计 | **9,543,775 B** | |
+| `octave.wasm` | 29,463,242 B raw / 7,016,523 B gz | sha256 `4faaa96d583ed978…` |
+| `octave.js` | 454,042 B raw / 87,229 B gz | sha256 `35401e7acff28505…` |
+| `octave.data` | 8,674,824 B raw / 2,515,502 B gz | sha256 `c2be24347381cb13…` |
+| 三大件 gzip 合计 | **9,619,254 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-031634` · **36 套 / 952 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,761,030 B · `b84bee2099ac225d…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-054732` · **36 套 / 952 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,905,182 B · `d73c58dd08f27565…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

@@ -54,6 +54,7 @@
 !build/post.js
 !build/webshell/*
 !build/webshims/*
+!build/113/probe-jspi/*
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*

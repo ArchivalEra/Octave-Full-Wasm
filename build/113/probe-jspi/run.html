@@ -1,0 +1,13 @@
+<!doctype html>
+<!-- JSPI 探针的宿主页：只做一件事 —— 把 Module 挂到 window，好让自动化脚本调它 -->
+<meta charset="utf-8">
+<title>JSPI probe</title>
+<pre id="out">loading…</pre>
+<script>
+  window.__probeLog = [];
+  var Module = {
+    print: function (t) { window.__probeLog.push(String(t)); document.getElementById('out').textContent += t + "\n"; },
+    printErr: function (t) { window.__probeLog.push('[err] ' + t); }
+  };
+</script>
+<script src="main.js"></script>

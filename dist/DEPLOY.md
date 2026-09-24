@@ -118,9 +118,10 @@ await OctaveAssets.load('__ode15__');    // 单个模块
   页面贴出 toolkit 渲的 PNG。`plot 桥`同时把这些调用**镜像**成真图形对象
   （于是 `get(gca,'children')` 能列出线、`h = plot(...)` 拿到真句柄）。
   显式切回"只出句柄、渲染归桥"的老模式：`graphics_toolkit("web")`。
-  **文字渲染已有**（2026-09-24）：构建开 FreeType + 预载 Octave 自带的 4 个 FreeSans 字体
-  ⇒ 刻度/标题/图例都出字（**不需要 fontconfig**）。代价如实记：`fontname` 属性被忽略、
-  `listfonts` 为空。
+  **文字渲染 + 字体匹配都有**（2026-09-24）：构建开 FreeType（批次 D）+ fontconfig（R3），
+  预载 Octave 自带的 4 个 FreeSans 面 ⇒ 刻度/标题/图例都出字，且
+  `fontname`/`fontweight`/`fontangle` **真的生效**、`listfonts()` 可用。
+  **仍如实记**：只有这 4 个面，其它家族名会落回 FreeSans。
 - **图像**：`imread`/`imwrite`/`imfinfo`（stb_image）
 - **压缩归档**：`gzip`/`bzip2` + 进程内 `zip`/`unzip`/`tar`/`untar`/`gunzip`/`bunzip2`（无 shell）
 - **音频**：`audioread` 系列 + `audioplayer`（WebAudio 桥）
@@ -164,7 +165,7 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
 | accept-print | 43 | `print -dsvg` |
 | accept-plotv2 | **82** | plot 桥 v2（2D）+ **参数契约**（句柄优先形态、宽度/颜色矩阵/句柄图例明确报错）+ **R4 的 `plot/hold/grid/axis` 句柄形态与 `plot(0)` 仍是数据** |
 | accept-plot3d | 34 | plot 桥 v2（3D） |
-| accept-audio | 47 | WebAudio 播放 |
+| accept-audio | 48 | WebAudio 播放 |
 | accept-net | 30 | 同步网络 |
 | accept-help | 12 | `help`/`lookfor`/`get_first_help_sentence` |
 | accept-t9-helpm | 18 | `.m` docstring 的 `help`（构建期预渲染） |
@@ -187,6 +188,8 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
 | 探针 | 项数 | 覆盖 |
 |---|---|---|
 | `probe-text-render.mjs` | 6 | **文字真的画出来了**：无 FreeType warning + 加 `title/xlabel/ylabel` 后 `getframe` 非白像素 **+2130**、刻度换长文字 **+2754**（无 FreeType 时是 +0） |
+| `probe-jspi.mjs` | **9** | **R5 的机制闸门**（不在站点上跑，自起静态服务）：`-fwasm-exceptions` + `-sJSPI` + `MAIN_MODULE=2` + **`SIDE_MODULE`/dlopen** 四件一起成立 —— dlopen 的 side module 回调主模块 helper 再挂到 JS 的 Promise，实测 202 ms / tick +1 / 返回 43（配方与三条实现要求见 `build/113/NOTES-jspi.md`）|
+| `probe-fontname.mjs` | **13** | **`fontname` 真的生效**（R3）：`listfonts()`/`__get_system_fonts__()` + **像素级判别** —— 只改 `fontweight`/`fontangle`，`getframe` 像素和必须不同（`normal 178220056 / bold 178126621 / italic 178224151`），同属性重复必须相同 |
 | `probe-m2-lazyload.mjs` | 7 | **`MAIN_MODULE=2` 没破坏懒加载**：加载期的 `.oct` 请求只有启动清单那 8 个、全在 `assets/` 下；按需装载 signal 后 `butter` 才可用 |
 | `probe-cold-start.mjs` | —（只测不判） | 首帧冷启动拆解：`clf` 375 / `plot` 73 / `drawnow` 177 ms，温出图 24–58 ms（结论：**不做预热**，见 HANDOFF §5.28） |
 
@@ -207,11 +210,15 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
 - **`audioplayer`/`audiorecorder` 每个对象占一个 slot + 一个 MEMFS 文件**，生命周期与对象
   一致 —— 本构建没有可靠的『对象已销毁』信号（`@audioplayer` 没有 `delete.m`，且 `stop`
   之后还能重播），所以不做清理。一次会话内增长有界。
-- ~~**文字渲染仍缺**~~ → **2026-09-24 已补上**：构建开 FreeType（`build/113/build-freetype.sh`）
-  + 预载 Octave 自带的 4 个 FreeSans 字体；**不需要 fontconfig**（无 fontconfig 时的回落字体
-  就是那几个文件）。**代价如实记**：`fontname` 属性被忽略（任何字体名都落到 FreeSans）、
-  `listfonts` 返回空。证据：`test/browser/probe-text-render.mjs`（6 项：无那条 warning +
-  加 `title/xlabel` 后 `getframe` 非白像素 +2130、刻度换长文字 +2754）。
+- ~~**文字渲染仍缺**~~ → **2026-09-24 已补上，并进一步补了字体匹配**：构建开 FreeType
+  （`build/113/build-freetype.sh`）+ **fontconfig**（`build/113/build-fontconfig.sh`），
+  预载 Octave 自带的 4 个 FreeSans 面；`fonts.conf` 预载在 `/fonts/fonts.conf`、
+  `main.cc` 启动时 `setenv("FONTCONFIG_FILE", …)`。
+  **因此"`fontname` 被忽略 / `listfonts` 报错"这两条代价已消除**（那是没有 fontconfig 时的行为）。
+  **仍如实记**：只有这 4 个面，别的家族名会落回 FreeSans（探针里有一条交底断言）。
+  证据：`test/browser/probe-fontname.mjs`（**13 项**：`listfonts`/`__get_system_fonts__` +
+  像素级判别"只改 weight/angle，`getframe` 像素和必须不同"）、`probe-text-render.mjs`
+  （6 项：无那条 warning + 加 `title/xlabel` 后非白像素 +2130、刻度换长文字 +2754）。
 - **首帧 ~0.6 s**（真渲染）：会话里第一次出图要建 WebGL 上下文 + `initialize_gl4es()` +
   编 shader + 首帧 `glReadPixels`/PNG 编码。**之后每张图 ~90 ms**（实测，桌面）。
 - **桥的参数宽容度与桌面一致**：桥以前比核心宽容的写法（如 `plot(x,x,'+','')`）现在会走到

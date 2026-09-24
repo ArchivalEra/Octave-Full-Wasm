@@ -120,6 +120,38 @@ if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   echo "== preload FreeType 字体 4 个 → $fontsdir（$(du -sb "$stage_fonts" | cut -f1) 字节）"
 fi
 
+# ---- fontconfig 的**运行期配置**（WITH_FONTCONFIG=1 时）--------------------------
+# 三件事，都是实测出来的（机制闸门 `build/113/probe-fontconfig.sh`）：
+#   ① 配置文件要挂在 **`/fonts/fonts.conf`**：`--sysconfdir=/` 让 fontconfig 的配置目录是
+#      `/fonts`。但**编译期默认文件名是 `//fonts/fonts.conf`（双斜杠）**，Emscripten 的 FS
+#      解析不到 ⇒ 不显式设变量就是"0 个 face 且一声不响"⇒ ② 还要 `setenv`。
+#   ② `setenv("FONTCONFIG_FILE", "/fonts/fonts.conf", 1)` 在 **main.cc** 里（启动早期，
+#      见那里的注释）—— 页面上没有任何口子改 wasm 的 ENV（`Module.ENV` 不存在，
+#      而 node/浏览器的环境变量**不会**进 wasm，实测）。
+#   ③ `<dir>` 指向**已预载字体的 `$fontsdir`**：不重复打包字体（省 1.87MB raw）；
+#      `<cachedir>` 指到 `/tmp/fontconfig-cache`（MEMFS 可写；目录不存在时 fontconfig
+#      只是不写缓存，实测无警告、`FcFontList`/`FcFontMatch` 照常）。
+if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
+  [ "${WITH_FREETYPE:-0}" = "1" ] || {
+    echo "FATAL: WITH_FONTCONFIG=1 需要同时 WITH_FREETYPE=1（fontconfig 靠 FreeType 读字体）" >&2; exit 2; }
+  [ -n "$fontsdir" ] || { echo "FATAL: fontsdir 未取到（上面那段没跑？）" >&2; exit 2; }
+  stage_conf="$PRELOAD_AT/fontconfig"
+  rm -rf "$stage_conf"; mkdir -p "$stage_conf"
+  cat > "$stage_conf/fonts.conf" <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <!-- 只有 Octave 自带的 4 个 FreeSans（预载在 $fontsdir）——本构建没有系统字体目录 -->
+  <dir>$fontsdir</dir>
+  <cachedir>/tmp/fontconfig-cache</cachedir>
+</fontconfig>
+EOF
+  PRELOAD+=("--preload-file" "$stage_conf/fonts.conf@/fonts/fonts.conf")
+  FONTCONFIG_PRELOAD_TAG="fonts.conf"
+  echo "== preload fontconfig 配置 → /fonts/fonts.conf（<dir>=$fontsdir）"
+  cat "$stage_conf/fonts.conf"
+fi
+
 # ---- 主链 ---------------------------------------------------------------
 #  MAIN_MODULE_LEVEL（1|2）：主模块的链接模型层级（`-s MAIN_MODULE=`）。
 #    1（默认）= 不做 DCE、导出全部符号：`.oct` 随便解析，首包大（wasm 35.97MB）。
@@ -334,6 +366,19 @@ if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   echo "== FreeType：链 /src/deps/freetype/lib/libfreetype.a"
 fi
 
+# ---- fontconfig（WITH_FONTCONFIG=1，R3 2026-09-24）：字体**匹配** ----------------
+# `ft-text-renderer.o` 在 `HAVE_FONTCONFIG` 下会引用 `Fc*`（列字体表 + `FcFontMatch`
+# 把 family/style/codepoint 变成**具体字体文件**）⇒ 必须链进来。定序照静态库的规矩：
+#   -lfontconfig → -lfreetype（fcfreetype.o 用 FT_*）→ -lexpat（fontconfig 的 XML 后端）
+#   → -lz（freetype 用）。freetype 已经在上面那一行，这里只需补前后两段。
+if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
+  for a in /src/deps/fontconfig/lib/libfontconfig.a /src/deps/expat/lib/libexpat.a; do
+    [ -f "$a" ] || { echo "FATAL: 缺 $a（先跑 build/113/build-fontconfig.sh）" >&2; exit 2; }
+  done
+  LIBS+=( -L/src/deps/fontconfig/lib -lfontconfig -L/src/deps/expat/lib -lexpat )
+  echo "== fontconfig：链 libfontconfig.a + libexpat.a（字体匹配；运行期配置见下面的预载）"
+fi
+
 #  ---- 异常模式：必须与整棵树一致 -------------------------------------------
 #  实测坑：给 main.o 用 `-fwasm-exceptions`（原生 wasm 异常）而树用 `-fexceptions`
 #  （emscripten 的 JS 式异常，链接行里带 -mllvm -enable-emscripten-cxx-exceptions
@@ -490,6 +535,24 @@ if [ -n "$FONTS_PRELOAD_TAG" ]; then
   grep -q "FreeSans.otf" "$OUT/octave.js" || {
     echo "FATAL: octave.js 里没有 FreeSans.otf 的预载记录 ⇒ 文字会空白" >&2; exit 3; }
   echo "== FreeType 自检: 产物里含 $(grep -o 'FreeSans[A-Za-z]*\.otf' "$OUT/octave.js" | sort -u | tr '\n' ' ')"
+fi
+
+# ---- 自检：fontconfig 的配置到底进没进产物 --------------------------------------
+# 缺配置的**症状**与"没编 fontconfig"几乎一样（`listfonts()` 报错、`fontname` 不生效），
+# 只有 `FONTCONFIG_FILE` 指向的那份文件在不在能区分：所以这里两头都查 ——
+#   ① 产物里要有预载记录（`/fonts/fonts.conf`）；
+#   ② 主模块的字符串里要有 `setenv` 写进去的那个路径（main.cc 改动了才会有）。
+# 查 ② 就是查"main.cc 那两行真的进了这次链接"（忘 `docker cp`/忘重编时最容易漏）。
+if [ -n "$FONTCONFIG_PRELOAD_TAG" ]; then
+  grep -q "fonts.conf" "$OUT/octave.js" || {
+    echo "FATAL: octave.js 里没有 fonts.conf 的预载记录 ⇒ fontconfig 读不到配置（0 个 face 且不报错）" >&2; exit 3; }
+  echo "== fontconfig 自检: octave.js 里有 fonts.conf 预载记录"
+  if grep -qa "FONTCONFIG_FILE" "$OUT/octave.wasm"; then
+    echo "== fontconfig 自检: 主模块里有 FONTCONFIG_FILE 字符串（main.cc 的 setenv 生效）"
+  else
+    echo "FATAL: 主模块里找不到 FONTCONFIG_FILE ⇒ main.cc 的 setenv 没进产物（重编了 main.cc 吗？）" >&2
+    exit 3
+  fi
 fi
 
 echo "== 产物:"
