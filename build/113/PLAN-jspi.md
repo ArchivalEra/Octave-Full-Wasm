@@ -59,9 +59,16 @@
    "同函数 sync+async 双绑定"都不是。⇒ 范围收窄到**我们那条链独有的结构**，按序试：
    **① dlopen / SIDE_MODULE 的参与**（最强嫌疑：embind 的 async invoker 是 table 里的间接函数，
    而启动时的 `dlopen` 会让表增长 ⇒ JSPI 包装的引用可能失效成 `null function`）——
-   在 v9 上加一个真 side module + `dlopen`（复用 `build/113/probe-jspi/` 的 side.c）；
-   ② `KEEP_LIST`/`EXPORT_IF_DEFINED`/`BASELINE_WASM` 那套保活与差分机制；
-   ③ `EXPORTED_FUNCTIONS`/`EXPORTED_RUNTIME_METHODS` 的口径；④ preload/post-js（理论无关，列着）。
+   **⚠️ ② ③ 也已经排除了**（v11/v12：异步+dlopen 正常、收窄的 `EXPORTED_*` 也正常），
+   而 **v13 复现了"页面起不来"那一类**：**静态初始化里用同步路径 dlopen** ⇒
+   `SuspendError: trying to suspend without WebAssembly.promising` ⇒ ready 永远不来。
+   ⇒ 三条实锤机制：① 链里有 dlopen ⇒ 上游整条入口变"可能挂起"，不能被同步调；
+   ② **顺序即机制**（先走一次 promising 入口，之后同步 dlopen 就正常）；
+   ③ 启动路径上碰 dlopen 会直接要命。**修法候选（下一步，按便宜排序）**：
+   **(a)** 用 `--emit-symbol-map` 找出**真正被同步调用的 wasm 导出名**（`_main`/`_eval_string`/
+   `_execute_interp`…）列进 `-sJSPI_EXPORTS`（而不是 embind 的 JS 名 `eval_async`），重链试三例；
+   **(b)** 把启动期的 `.oct` 装载挪到"首次 promising 入口之后"（先 `await eval_async("1")` 预热）；
+   **(c)** 都不行 ⇒ 回到 §0.5 那个要人拍板的分叉。
 3. **按复现结论更新 `build/113/NOTES-jspi.md`**：那三条要求是从**原始导出**的探针推的，
    embind 这条路要不要列 invoker 还是未知数 —— 查清后**把结论写回 NOTES**（别只留在脑子里）。
 4. **⚠️ 需要人拍板的分叉**：若结论是"JSPI + embind + `MAIN_MODULE=2` 这条路走不通"，

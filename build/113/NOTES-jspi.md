@@ -171,3 +171,36 @@ cd /mnt/hdd/octave-wasm-build/harness && node _jspi_run.mjs /mnt/hdd/octave-wasm
 
 **另一个可用的对照**：`MAIN_MODULE_LEVEL=1` 产物没有 side module/DCE 那套，若它在 M1 下
 `eval_async` 正常，就进一步把范围钉死在"动态链接 × JSPI"上。
+
+### v11 / v12 / v13：**"顺序即机制"**，以及一个能复现"页面起不来"的最小例子（2026-09-24 深夜）
+
+| 变体 | 内容 | 结果 |
+|---|---|---|
+| v11a | **异步绑定 + 内部 dlopen**（`async_callSide`） | ✅ **Promise → 2**；而且**先调它之后**，同一产物里的**同步** `callSide` 也不再抛 SuspendError（v10 里会） |
+| v11b | v11a + `-sJSPI_EXPORTS=sync_f,async_f,callSide,async_callSide` | ✅ 同上（列不存在的/多余的名字都无害） |
+| v12 | v11a + **收窄的** `-sEXPORTED_FUNCTIONS=_main -sEXPORTED_RUNTIME_METHODS=FS,MEMFS`（照抄 link-web.sh 口径） | ✅ 同上 ⇒ **旗标层面全部排除** |
+| **v13** | **启动期（静态初始化器）就用同步路径 dlopen**，之后再调 async —— **照抄我们真产物的时序** | ❌ **页面起不来**（`ready=false`），pageerror 正是 **`SuspendError: trying to suspend without WebAssembly.promising`** |
+
+**由此得到的关键机制（三条，都是实测）**：
+1. **带 JSPI 的产物里，凡"可能间接挂起"的入口都不能被同步调用** —— 而**只要链里有 dlopen/dlsym，
+   它上游的整条入口就变成"可能挂起"**（v10：同步 `callSide` ⇒ SuspendError）。
+2. **顺序决定成败**：**先**走一次被 promising 包装的入口（v11a 的 `async_callSide`），
+   同一个产物里**之后**的同步 dlopen 调用就正常了（v10 会抛、v11a 不抛，唯一差别是这个顺序）
+   ⇒ dylink 的首次初始化是"会挂"的那一段，之后不再挂。
+3. **启动路径上碰 dlopen 会直接要命**（v13）：静态初始化里 dlopen ⇒ 模块初始化期间抛
+   SuspendError ⇒ **页面永远到不了 ready**。
+
+**对我们真产物的解释**（与两个实测现象的对应）：
+- `main.cc` 的启动序列会用**同步**入口（`eval_string`）装载那些 `.oct`（= dlopen）——
+  这正是 v13 的形状（在"任何 promising 入口"之前碰 dlsym）⇒ 与"页面卡死"这一类现象同源；
+- 而 `eval_async` 的 `RuntimeError: null function` 说明**它的 invoker 那条路也没接好**
+  （我们给的 `-sJSPI_EXPORTS=eval_async` 是 **embind 的 JS 名字、不是 wasm 导出名**，
+  真正需要包装的是别的名字 —— 见下面的下一步）。
+
+**下一步（按便宜程度排序，写死免得重想）**：
+1. **给真产物找"真正会挂起的那些导出名"**：`--emit-symbol-map` + 查 `wasm` 导出表，
+   把 `_main`/`_eval_string`/`_execute_interp`/… 这类**真正被同步调用的入口**列进
+   `-sJSPI_EXPORTS`（而不是 embind 的 JS 名字 `eval_async`），再重链试 `eval_async` 三例。
+2. **把启动期的 `.oct` 装载挪到"首次 promising 入口之后"**（v11a 的顺序）——例如启动序列先
+   调一次 `await eval_async("1")` 预热，再走同步装载；这条即使第 1 条不成也能单独试。
+3. 若两条都不行 ⇒ 回到工作令 §0.5 那个**要人拍板的分叉**（JS 队列 / 单开 M1 车道）。
