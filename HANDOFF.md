@@ -719,6 +719,7 @@ makeinfo 生成 doc-cache）。
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
 | `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
+| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，19 项 —— §7 那几条「能用/不能用」的断言靠它防腐）**、`probe-want-matcher`（断言匹配器的红-绿对照）|
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
 | `build/BENCH.md` | **R10 结论**：O0/O1/O2 矩阵与采纳依据（取 O1） |
 | `build/build_oct.sh` | 编 dldfcn `*.cc` → `.oct`（官方装载车道，不挂终链） |
