@@ -484,7 +484,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
 | `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
-| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，23 项 —— §7 那几条「能用/不能用」的断言靠它防腐；R1/R4 上线时它当场把 3 条「已知缺口」翻成绿）**、`probe-want-matcher`（断言匹配器的红-绿对照）|
+| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，23 项 —— §7 那几条「能用/不能用」的断言靠它防腐；R1/R4 上线时它当场把 3 条「已知缺口」翻成绿）**、`probe-want-matcher`（断言匹配器的红-绿对照）、**`probe-internal-props`（内部属性表与宿主真 Octave 的逐格差分：67 名字 × 2 阶段，参考表现算现比；11 项）** |
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
 | `build/BENCH.md` | **R10 结论**：O0/O1/O2 矩阵与采纳依据（取 O1） |
 | `build/build_oct.sh` | 编 dldfcn `*.cc` → `.oct`（官方装载车道，不挂终链） |
@@ -621,10 +621,18 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
   `waitbar` 报**误导性**的 `get: invalid handle (= 2)`；`edit` 是清晰报错（无 shell）；
   `legend`/`plotyy`/`movie`（2 帧）/`diary`/`more` 实测可用。
   ⇒ 修法与顺序见 `build/113/PLAN-next.md`（G3/G4/G5；"不许挂死"那一档先做）。
-- **（新，2026-09-24 实测）我们的 toolkit 缺核心内部属性**：`isprop(gca(),'__legend_handle__')`
-  与 `__plotyy_axes__`/`__original_looseinset__`/`__axes_limits__` 全部为 **0** ⇒ 核心 `.m`
-  里那些 `get` 一律报错（多数被 `try/catch` 吞掉，偶发漏进 `last_error_message()`，
-  **会污染测试判定**：本会话被这种"粘连错误"骗过数次）。修法见计划第 3 节第 1 条。
+- ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
+  `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
+  用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
+  不存在；而读它们的核心代码**全部**包了 `try/catch`（`__plt__.m:48`、`axes.m:147`、
+  `hdl2struct.m:96`、`__errplot__.m:263`）⇒ "读不到"是**预期路径**。证据是差分：宿主**真**
+  Octave 11.3.0 的 qt / fltk / gnuplot **三个** toolkit 的属性表与我们的 wasm **逐格相同**
+  （67 个候选名 × 2 个生命周期阶段，**0 处差异**）。钉子：`test/browser/probe-internal-props.mjs`
+  **现算现比**（每次从宿主现取参考表，不落盘）。
+- **（新，2026-09-24 实测）`Module.last_error_message()` 会**粘连****：被 `try/catch` **吞掉**的错误
+  也留在里面，且后面的成功语句**不清除**它。这不是我们的缺陷 —— 上游 `error_system::last_error_message()`
+  的语义就是"最后一次错误"，而且宿主 Octave 上**根本没有这个函数**（它是 `build/main.cc:496` 的绑定）。
+  ⇒ **别拿它当"这次调用成功了没"的判据**；探针 `probe-internal-props.mjs` 的契约③把这条钉住了。
 - **（新，2026-09-24）JSPI 的现实边界（外部复审的判定，照抄结论）**：
   `-sJSPI` / `JSPI_EXPORTS` / Embind `async()` / COI+pthreads 是**有上游先例**的；
   但"**wasm EH/SjLj + `MAIN_MODULE=2` + dlopen + JSPI 挂起 + 大型 C++ 解释器 + 嵌套 REPL**"
@@ -694,8 +702,9 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > `accept-shellerr.mjs`（14 项，R1）、`probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
 1. **（进行中）按 `build/113/PLAN-next.md` 执行下一阶段**（2026-09-24 制定，GPT 复审后的路线）：
-   · **先做"三块小口子"**（不碰 wasm、风险最低，且第 1 条会消掉污染测试判定的"粘连错误"）：
-     补齐 toolkit 内部属性（`__legend_handle__` 等 22 个名字）/ `plot(…,'parent',…)` 桥状态错记 /
+   · **先做"小口子"**（不碰 wasm、风险最低）：
+     ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
+     见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。余下：`plot(…,'parent',…)` 桥状态错记 /
      `waitbar`+`uisetfont` 误导报错 / `ginput`+`keyboard` **不许挂死** / 可用包可见性 /
      `print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/ `check-wants` 规则 B 复核。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`

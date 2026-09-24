@@ -1676,6 +1676,46 @@ side module 回调主模块 helper → JS 的 **suspending import**（返回 Pro
 
 ---
 
+### 5.33 第八批：内部属性"缺口"**翻案 —— 不是缺口，未做任何改动**（2026-09-24）
+
+工作令 `build/113/PLAN-next.md` §3.1 原本这么写：我们的 toolkit **缺**核心内部属性
+（`isprop(gca,'__legend_handle__')` = 0，`__plotyy_axes__`/`__original_looseinset__`/
+`__axes_limits__` 同），核心 `.m` 里那些 `get` 一律报错、偶发漏进 `last_error_message()`
+**污染测试判定** ⇒ 要"补齐 22 个名字"、逐条 `isprop` 为真。**一量就翻案，两条都是实测**：
+
+1. **上游也是如此，不是我们的缺陷**。宿主**真** Octave 11.3.0 上切到 `graphics_toolkit('qt')`，
+   `get(gca,'__legend_handle__')` **同样报错**（`get: unknown axes property __legend_handle__`），
+   `isprop` 同样为 **0**。原因是核心的**惰性 `addproperty`**：这些名字由核心在**用到它们的那一刻**
+   现加（`legend.m:286`、`plotyy.m:98`、`colorbar.m:228`、`__gnuplot_legend__.m:629`），
+   而**所有**读它们的核心代码都包了 `try/catch`（`__plt__.m:48`、`axes.m:147`、
+   `hdl2struct.m:96`、`__errplot__.m:263`）⇒ **"读不到"是预期路径**。
+2. **差分 0 差异**：把 67 个候选名（`grep` 出 `scripts/{plot,gui,image}` 里所有 `'__x__'` 字面量）
+   × 2 个生命周期阶段（新建图后 / 建过 `legend`+`plotyy`+`colorbar` 之后）的 `isprop` 表，
+   在**宿主三个 toolkit（qt / fltk / gnuplot）**与**我们的 wasm** 上各跑一遍 ⇒
+   **134 格逐格相同、0 处差异**；顺带证明宿主上这张表**与 toolkit 无关**（qt == gnuplot）。
+
+**"粘连错误"的真身**：`Module.last_error_message()` 是 `build/main.cc:496` 的**绑定**，不是 Octave
+函数 —— 宿主上实测 `error: 'last_error_message' undefined`。它读的是上游
+`error_system::last_error_message()` 的语义："**最后一次错误**"：被 `try/catch` **吞掉**的错误
+也留在里面，且后续成功语句**不清除**（实测 `try,error('boom');catch,end` 之后 `y=3+3`，它仍是
+`boom`）。⇒ 那是**测试用法**的问题（拿它当"这次成功了没"的判据），不是产品问题。
+
+**产出（无产品改动 ⇒ 本批不 promote、不跑全量 sweep）**：
+- 新探针 `test/browser/probe-internal-props.mjs` + 两边共用的脚本
+  `test/browser/fixtures/internal-props-probe.m`：**宿主与浏览器跑同一份 `.m`**，参考表
+  **现算现比、不落盘**（随宿主版本自更新；脚本先核对两边 `version()` 必须相同才差分），
+  另加三条契约 —— ① 惰性 `addproperty` 的生命周期（建对象前 0 / 建后 1）；
+  ② 核心"读不到"是预期路径（读失败后 `plot` 照常出图、`hdl2struct` 照常）；
+  ③ `last_error_message()` 粘连（**别拿它当判据**）。
+- 实测：8768 上 **11 PASS / 0 FAIL**（`diffs=0`；wasm 与宿主同为 `11.3.0`）。
+- 文档：HANDOFF §7 那条"缺属性"改成**翻案**并新增"LEM 粘连"一条；§6 探针行、§8 小口子
+  第 1 条同步。
+
+**教训**：工作令里"待办"的**症状描述不能当结论**用 —— 这次差一步就去"补"22 个上游本来就不存在的
+属性（**补了反而制造与桌面的新分歧**）。所以本批第一步是先把宿主当真值参照系量一次。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

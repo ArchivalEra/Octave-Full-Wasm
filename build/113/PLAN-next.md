@@ -23,9 +23,11 @@
 - **当前缺口（同日实测）**：`pause(0.5)` 期间页面定时器 **0 次**（页面被完全堵死）；
   `ginput`/`keyboard` **挂死**（8 s 无响应）；`waitbar` 报误导性 `get: invalid handle (2)`；
   `edit` 清晰报错（无 shell）；`legend`/`plotyy`/`movie`(2 帧)/`diary` 可用。
-  另：`isprop(gca,'__legend_handle__')=0`（`__plotyy_axes__`/`__original_looseinset__`/
+  另：~~`isprop(gca,'__legend_handle__')=0`（`__plotyy_axes__`/`__original_looseinset__`/
   `__axes_limits__` 同），核心 `.m` 里那些 `get` 一律报错（多数被 try/catch 吞掉，
-  偶发漏进 `last_error_message()` —— 会污染测试的判定）。
+  偶发漏进 `last_error_message()` —— 会污染测试的判定）~~ → **2026-09-24 实测翻案：与宿主
+  真 Octave 逐格相同，不是缺口**（见 §3 第 1 条与 HISTORY §5.33）；而"粘连"是
+  `last_error_message()` 本身的语义（它是 `main.cc` 的绑定），**测试别拿它当判据**即可。
 
 ## 1. GPT 判定表里**直接采纳**的红线
 
@@ -110,6 +112,10 @@
 1. **补齐 toolkit 内部属性**：`__legend_handle__` / `__plotyy_axes__` / `__original_looseinset__` /
    `__axes_handle__` / `__colorbar_handle__` / `__mouse_mode__` / `__uiwait_state__` 等（已从
    `scripts/plot|gui|image` grep 出 22 个名字）。验收：`isprop` 逐条为真、`get` 不报错；新探针。
+   **✅ 2026-09-24 收口：实测翻案，不是缺口、未做改动。** 宿主**真** Octave 11.3.0 上
+   `isprop`/`get` 与我们的 wasm **一样**（这些名字由核心惰性 `addproperty` 现加、读法全在
+   `try/catch` 里）；qt/fltk/gnuplot 三个 toolkit × 67 名字 × 2 阶段 **逐格 0 差异**。
+   钉子：`test/browser/probe-internal-props.mjs`（11 项）。证据与教训见 HISTORY §5.33。
 2. **`plot(…,'parent',hax)` 在桥状态里错记**（实测 `numel(__pstate__().series)` 1 → 2）。
 3. **`waitbar`/`uisetfont` 的误导报错** → 清晰报错；`ginput`/`keyboard` **不许挂死**（先报错，G3/G5 再实现）。
 4. **可用包可见性**：`OctaveAssets.list()` → `__webassets_available__()`，让 `pkg list` 能说清
