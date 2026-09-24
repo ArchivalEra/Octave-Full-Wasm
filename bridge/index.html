@@ -140,6 +140,52 @@
       }
       window.__octaveSyncSoon = syncSoon;
 
+      // ── JSPI 能力门（G0，2026-09-24）─────────────────────────────────────────
+      // **两个独立 gate**（GPT 复审的要求：只看 `typeof WebAssembly.Suspending` 不够 ——
+      // Pyodide 至今仍有 JSPI 稳定性 issue、还提供"禁用 JSPI"的 workaround）：
+      //   ① API 门：`WebAssembly.Suspending` / `promising` 都是函数；
+      //   ② **Octave 级冒烟**：真的跑一次 suspending 入口（等一小段 + 确认页面定时器在跑）。
+      // 做法是**单产物 + 运行时能力门**（Gate 0 已实测：删掉这两个 API 后 `-sJSPI` 产物照样加载，
+      // 只是被包过的导出不存在）⇒ 不抬浏览器下限、不维护两条车道。
+      //
+      // ⚠️ **现在没有任何功能依赖它**（"等用户动作"一族都是清晰报错）⇒ **这里不弹任何提示**。
+      //    只有 `__octaveJspiRequire()` 被调用时才把话说清楚（G3/G5 接上以后才会被调）。
+      var JSPI_SUPPORT = 'Chrome/Chromium ≥137、Firefox ≥153、Safari ≥27';
+      window.__octaveJspi = {
+        api: (typeof WebAssembly.Suspending === 'function'
+              && typeof WebAssembly.promising === 'function'),
+        smoke: 'pending',       // pending | pass | fail | no-entry | api-missing
+        entry: null, note: ''
+      };
+      (function () {
+        var J = window.__octaveJspi;
+        if (!J.api) { J.smoke = 'api-missing'; J.note = '页面里没有 WebAssembly.Suspending/promising'; return; }
+        // G1 之后这里会是 `Module.eval_async`（Embind async 的绑定）；没有它 = 本产物还不支持挂起
+        var fn = (typeof Module.eval_async === 'function') ? Module.eval_async : null;
+        if (!fn) { J.smoke = 'no-entry'; J.note = '本产物没有 suspending 入口（G1 会加 eval_async）'; return; }
+        J.entry = 'eval_async';
+        var ticks = 0;
+        var timer = setInterval(function () { ticks++; }, 20);
+        Promise.resolve(fn('pause(0.2); 43')).then(function (v) {
+          clearInterval(timer);
+          // 两条都要：**等到了**（值对）且**等待期间页面没被堵死**（timer 在跑）
+          J.smoke = (String(v).indexOf('43') >= 0 && ticks > 0) ? 'pass' : 'fail';
+          J.note = 'ticks=' + ticks + ' value=' + v;
+        }).catch(function (e) {
+          clearInterval(timer); J.smoke = 'fail'; J.note = String(e).slice(0, 140);
+        });
+      })();
+      // 依赖 JSPI 的入口在调用前问它：可用 ⇒ 返回 null；不可用 ⇒ 返回**一句能读懂的话**
+      // （而不是让用户撞上 `TypeError: WebAssembly.Suspending is not a constructor`）。
+      window.__octaveJspiRequire = function (feature) {
+        var J = window.__octaveJspi;
+        if (J.api && J.smoke !== 'fail' && J.smoke !== 'no-entry') return null;
+        return feature + ': 本构建的"等用户动作"需要 JSPI，而当前页面没通过能力门（'
+               + (J.api ? ('smoke=' + J.smoke) : 'api-missing') + '）。'
+               + '支持 JSPI 的浏览器：' + JSPI_SUPPORT + '。';
+      };
+
+
       function chk(rv) {
         if (rv.err) console.error(rv.err);
         if (rv.out) console.log(rv.out);

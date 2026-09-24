@@ -34,6 +34,12 @@
   ② `addInitScript` 删掉 `Suspending/promising` 后，页面**仍能起 Octave**、`eval_string("2+2")`
   正常、依赖 JSPI 的入口报**明确**错（不是 `TypeError`）。
 - **风险**：低（页面+测试）。回退：单独一个 commit。
+- **✅ 2026-09-24 收口**：`bridge/index.html` 加了 `window.__octaveJspi`（`api` + `smoke`
+  = `pending|pass|fail|no-entry|api-missing` + `note`）与 `window.__octaveJspiRequire(feature)`；
+  冒烟**跟着产物走**（有 suspending 入口就必须 `pass`，现在还没入口 ⇒ 如实写 `no-entry`，
+  G1 之后那条断言**自动变成硬要求，探针不用改**）。**现在不弹任何提示**（没有任何功能依赖它）。
+  实测 8768：`probe-jspi-gate` **11 项全绿**，含"删掉 API 后产物照样起（`2+2` 正常）"与
+  "依赖项得到含浏览器版本的一句话、全程没有裸 `TypeError`"。
 
 ### G1 · 顶层入口：Embind `async()`（**重链**）
 - **决策**：**新增** `eval_async`，**不**把 `eval_string` 改成 async（它被 39 个套件与页面命令

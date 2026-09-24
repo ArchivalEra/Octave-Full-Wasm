@@ -2078,6 +2078,38 @@ G3 `ginput` → G4 Ctrl-C → G5 `keyboard` → G6 dlopen×挂起压力**，外�
 
 ---
 
+### 5.42 G0：JSPI 能力门 —— **两个独立 gate**，且现在"不说话"（2026-09-24 晚）
+
+新工作令 `PLAN-jspi.md` 的 JSPI 主线的第一站（**不碰 wasm**，只改页面与测试）。
+
+**为什么是两个 gate**（GPT 复审的红线，照抄）：`typeof WebAssembly.Suspending` **只说明 API 在**，
+不说明它在**这个产物 + 这个解释器**上真能用 —— Pyodide 至今仍有 JSPI 稳定性 issue，还提供"禁用
+JSPI"的 workaround。所以门有两道：① API 存在性；② **Octave 级冒烟**（真跑一次 suspending 入口：
+等一小段 **且** 等待期间页面定时器**还在跑** —— busy-loop 会让 ticks=0，只看"值对"会被骗）。
+
+**做法**（`bridge/index.html`）：`window.__octaveJspi = {api, smoke, entry, note}`，其中
+`smoke ∈ pending|pass|fail|no-entry|api-missing`；配一个 `window.__octaveJspiRequire(feature)`：
+可用 ⇒ `null`，不可用 ⇒ **一句人话**（点明"需要 JSPI"+ 支持的浏览器版本：Chrome ≥137 /
+Firefox ≥153 / Safari ≥27），而不是让用户撞上 `TypeError: WebAssembly.Suspending is not a constructor`。
+
+**两个刻意的克制**：
+1. **现在不弹任何提示**。本构建里"等用户动作"一族全是**清晰报错**（`webshims/`），**没有任何功能
+   依赖 JSPI** ⇒ 现在弹"你的浏览器不支持"是**假警报**。提示只在 `__octaveJspiRequire()` 被调用时
+   才出现 —— 那是 G3/G5 接上以后的事。
+2. **冒烟跟着产物走，不跟着愿望走**：产物里还没有 suspending 入口（G1 才加 `eval_async`），
+   于是如实记 `smoke=no-entry`；探针里那条断言写成"**有入口就必须 pass**" ⇒
+   **G1 落地后它自动变成硬要求，探针不用改**。
+
+**实测**（8768，新探针 `probe-jspi-gate.mjs` **11 项全绿**）：
+- 正常 Chromium：`api=true`（`Suspending`/`promising` 都是 function）、`smoke=no-entry`（如实）；
+- `addInitScript` 删掉两个 API 之后：`api=false`、`smoke=api-missing`、**产物照样起得来**
+  （`eval_string("2+2")` 正常）—— 这就是"单产物 + 运行时能力门"的关键证据；
+- 依赖项拿到的是**含浏览器版本的一句话**，全程**没有**裸 `TypeError`。
+
+**8768 全量 39 套 / 1025 项全绿** → promote（只动了 `index.html`）→ 8761 全量全绿。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
