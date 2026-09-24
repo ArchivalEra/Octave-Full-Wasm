@@ -71,7 +71,7 @@ say "3) 资产：**源在仓库**的那几个 .m 包重新打包 + 刷新清单�
 # ⚠️ 挂载点**从 `build/assets-meta.json` 的 `mount` 读**，默认才是 `/usr/src/octave/m/<名字>`。
 #    不许猜：`pkgfix` 就**不是**默认的（它必须挂 `m/pkg`，否则解析不到 private `get_description`
 #    ⇒ `pkg list` 整个坏掉）。2026-09-23 我正是猜错这个，被全量回归当场抓住。
-M_ASSETS="plotbridge:build/plotbridge webgraphics:build/webgraphics webfile:build/webfile pkgfix:build/pkgfix webaudio:build/webaudio"
+M_ASSETS="plotbridge:build/plotbridge webgraphics:build/webgraphics webfile:build/webfile pkgfix:build/pkgfix webaudio:build/webaudio webshims:build/webshims"
 NAMES=""
 for pair in $M_ASSETS; do
   name="${pair%%:*}"; dir="${pair#*:}"

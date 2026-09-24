@@ -11,12 +11,16 @@ function hold (varargin)
     return;
   endif
 
+  ## 首参可能是**目标 axes 句柄**（核心的 `hold(hax, …)` 在真实脚本里是常规写法）：桥只
+  ## 接受"当前 axes"那一个，别的明确报错。见 `__pb_strip_axes__.m`。
+  args = __pb_strip_axes__ ("hold", varargin);
+
   s = __pstate__ ();
-  if (nargin == 0)
+  if (numel (args) == 0)
     s.hold = ! s.hold;
-  elseif (strcmpi (varargin{1}, "on"))
+  elseif (strcmpi (args{1}, "on"))
     s.hold = true;
-  elseif (strcmpi (varargin{1}, "off"))
+  elseif (strcmpi (args{1}, "off"))
     s.hold = false;
   else
     error ("hold: expected 'on' or 'off'.");

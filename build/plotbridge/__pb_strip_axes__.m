@@ -56,16 +56,30 @@ endfunction
 %! close (h);
 
 %!test
-## 是句柄但**不是**当前 axes：明确报错（这是"静默做错"改"清晰报错"的那一条）
+## 是 axes 但**不是**当前 axes：明确报错（这是"静默做错"改"清晰报错"的那一条）
+%! ## ⚠️ 必须用**真 axes 句柄**：2026-09-24 收紧 `__pb_axes_arg__`（对齐核心的
+%! ##    `__plt_get_axis_arg__`）之后，**figure 句柄不再算"首参句柄"** —— 以前这条测试
+%! ##    拿 h2（一个 figure）冒充"别的 axes"，是**因为判据太松才过**的。
 %! h1 = figure ("visible", "off");
+%! a1 = gca ();
 %! h2 = figure ("visible", "off");
-%! figure (h1);                              ## h1 是当前
+%! a2 = gca ();
+%! figure (h1);                              ## a1 是当前
 %! caught = false;
 %! try
-%!   __pb_strip_axes__ ("xlim", {h2, [0 1]});
+%!   __pb_strip_axes__ ("xlim", {a2, [0 1]});
 %! catch err
 %!   caught = ! isempty (strfind (err.message, "only tracks the current axes"));
 %! end_try_catch
 %! assert (caught, true);
 %! close (h1);
 %! close (h2);
+
+%!test
+## figure 句柄与 0（root 对象）都**不是**"目标 axes" ⇒ 按核心一样落到"数据/选项"那条路
+%! h = figure ("visible", "off");
+%! r = __pb_strip_axes__ ("plot", {h, 1, 2});
+%! assert (numel (r), 3);
+%! r = __pb_strip_axes__ ("plot", {0, 1, 2});
+%! assert (numel (r), 3);
+%! close (h);

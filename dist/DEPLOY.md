@@ -47,10 +47,13 @@ vendor/             forge 预装集留档（**已打进 octave.data 的 m/forge*
 
 | 文件 | raw | gzip -9 |
 |---|---|---|
-| octave.wasm | 46.7 MB | ~9.5 MB |
-| octave.js | 21.5 MB | ~1.9 MB |
-| octave.data | 6.2 MB | ~1.2 MB |
-| **合计** | **74.4 MB** | **≈12.6 MB** |
+| octave.wasm | 29,280,186 B（≈27.9 MiB） | 6,942,595 B（≈6.6 MiB） |
+| octave.js | 454,096 B | 87,294 B |
+| octave.data | 8,674,455 B | 2,513,886 B |
+| **合计** | **38,408,737 B（≈36.6 MiB）** | **9,543,775 B（≈9.1 MiB）** |
+
+（2026-09-24 实测；这套数字与 `HANDOFF.md` 的 `AUTO:STATE` 区块同源 —— 那里是脚本从部署件重算的，
+这里抄它。**历史**：7.2 时代那份是 46.7 / 21.5 / 6.2 MB，`MAIN_MODULE=2` + 11.3.0 之后已完全不同。）
 
 外加 **懒加载资产**（谁用到谁下载，不计入首包）。具体数字以包内
 `MANIFEST.sha256` 与 `du -sh assets` 为准。
@@ -126,8 +129,8 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**35 套 925 项全绿**（2026-09-24：`MAIN_MODULE=2` +
-FreeType 上线后实测，8761 与 8768 逐字节相同），
+本包内容 = 最近一次在浏览器实测通过的构建。**36 套 952 项全绿**（2026-09-24：`MAIN_MODULE=2` +
+FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同），
 在 `http://127.0.0.1:8761/`（**即本包内容**）上跑（用
 `/mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`；逐套日志在 `sweep-logs/`）。
 
@@ -154,12 +157,12 @@ FreeType 上线后实测，8761 与 8768 逐字节相同），
 | accept-forge-oct | 15 | Forge 编译件 |
 | accept-forge2 | 44 | signal + control（含 SLICOT 编译件的真数值） |
 | accept-slicot | 25 | `ss`/`step`/`tf2ss`/`lyap`/`care`/… 数值 |
-| accept-dldfcn | 68 | dldfcn 官方装载语义与真数值 |
+| accept-dldfcn | 71 | dldfcn 官方装载语义与真数值（含 **R4 之后 `voronoi` 单输出**能画） |
 | accept-ode15 | 14 | SUNDIALS `ode15s`/`ode15i`；`lsode` 那条已从「只查 exist」换成真调用 |
 | accept-archive | 20 | 压缩/归档无 shell 化 |
 | accept-image | 17 | 图像 I/O |
 | accept-print | 43 | `print -dsvg` |
-| accept-plotv2 | **72** | plot 桥 v2（2D）+ **参数契约**（句柄优先形态、宽度/颜色矩阵/句柄图例明确报错） |
+| accept-plotv2 | **82** | plot 桥 v2（2D）+ **参数契约**（句柄优先形态、宽度/颜色矩阵/句柄图例明确报错）+ **R4 的 `plot/hold/grid/axis` 句柄形态与 `plot(0)` 仍是数据** |
 | accept-plot3d | 34 | plot 桥 v2（3D） |
 | accept-audio | 47 | WebAudio 播放 |
 | accept-net | 30 | 同步网络 |
@@ -171,6 +174,7 @@ FreeType 上线后实测，8761 与 8768 逐字节相同），
 | accept-t6-audio-doc | 33 | `audiodevinfo` + `doc` + 输出落点 |
 | accept-t7-recorder | 40 | `audiorecorder`（MediaRecorder 桥） |
 | accept-t8-uigetfile | 20 | `uigetfile`（两步式 + 权限/取消三态） |
+| **accept-shellerr** | **14** | **无 shell 入口的清晰报错**（R1/R0 覆写层）：`which` 指向 `webshims/*.m`、`popen`/`st=system`/`system` 三条以前静默的形态现在报错、两输出文本不变、用法错误未被吞 |
 
 `lsode` **曾整页 trap，2026-09-22 已修好**（根因：ODEPACK 的用户回调给 4 个实参，
 而 Octave 的 `lsode_f` 有 5 个形参，wasm 的 `call_indirect` 做精确类型检查 → 不符即
@@ -178,7 +182,7 @@ FreeType 上线后实测，8761 与 8768 逐字节相同），
 `build/113/NOTES-lsode.md`）。现在 29/29 里含 5 条 `lsode` 断言。
 ⚠️ 注意 `lsode` 的返回约定是 **`[x, istate, msg]`**，不是 `[t, y]`。
 
-**2026-09-24 新增的两条探针**（不在 35 套里，按需跑；都只对真渲染器有意义）：
+**2026-09-24 新增的探针**（不在 36 套里，按需跑）：
 
 | 探针 | 项数 | 覆盖 |
 |---|---|---|
@@ -192,7 +196,10 @@ FreeType 上线后实测，8761 与 8768 逐字节相同），
 - ~~**`lsode` 调用即整页 trap**~~ **已修复**（2026-09-22）：详见上面的说明与
   `build/113/NOTES-lsode.md`。这条留档是因为它**在 7.2 上也存在**（不是换基线引入的），
   而且此前没被任何套件发现 —— 7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`**。
-- `system`/`unix`/`popen` 清晰报错（有意保持，wasm 无 shell）。
+- **无 shell 的入口一律"清晰报错"**（有意保持，wasm 里没有 shell）。2026-09-24 起这条**覆盖全部形态**：
+  `st = system(cmd)`、`system(cmd)`（无输出参数）、`popen(cmd,mode)` 以前**静默返回 -1 / 静默通过**，
+  现在与两输出形态一样抛 `unable to start subprocess`（覆写层 `build/webshims/`，HANDOFF §5.30）。
+  ⇒ 任何调 `system()` 的 `.m`（全树 34 个）现在会**明确失败**而不是拿到 -1 继续跑。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
 - `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。
 - **没有 WebGL2 的设备：图以 SVG 显示**（回落）。没有抗锯齿/硬件加速；页面每 250 ms 采样一次，

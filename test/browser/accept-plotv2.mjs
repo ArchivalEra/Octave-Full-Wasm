@@ -241,6 +241,35 @@ await ev(`${reset} t = linspace(0,1,20); plot3(t, t.^2, t); print('/tmp/pv_deg3.
   '有意分歧：plot3(X,Y) 抬成 z=y（核心会报错，脚本里它是"这条线用 3D 看"）');
 await svg('/tmp/pv_deg3.svg', 'plot3(X,Y) 的抬升形态确实出了图', { poly: 1 });
 
+console.log('--- R4：plot/axis/hold/grid 的句柄优先形态（HANDOFF §5.29 R4）---');
+// 起因：桥不支持 `plot(hax, …)` ⇒ `voronoi` 的**单输出**形态死在桥里（报一句看不出根因的
+// `X and Y sizes do not match`）。做法就是"和 xlim/ylim/title 同一种单面板语义"：
+// 首参是**当前 axes** 就剥掉照画；是别的 axes 就明确报错；**不是句柄**（含 `0` 与 figure）
+// 就按核心一样当数据/选项 —— 核心的判据在 `plot/util/__plt_get_axis_arg__.m` 里是
+// `isscalar && ishghandle && != 0 && ! isfigure`，桥的 `__pb_axes_arg__` 已逐条对齐。
+await ev(`${reset} a = gca(); h = plot(a, 1:5); disp(sprintf('n=%d', numel(h)))`,
+  '★ plot(hax, Y)（核心合法形态）被接受', 'n=1');
+await ev(`${reset} a = gca(); t = 0:0.1:1; h = plot(a, t, cos(t), 'r--'); disp(sprintf('n=%d', numel(h)))`,
+  '★ plot(hax, X, Y, SPEC) 同上', 'n=1');
+await ev(`${reset} plot(0); disp('ok0')`, '★ plot(0) 仍是**数据**（0 是 root 对象、不是 axes ⇒ 画一个点）', 'ok0');
+await ev(`${reset} plot(5); disp('ok5')`, '★ plot(5) 仍是数据（核心就是这么判的）', 'ok5');
+await evErr(`${reset} subplot(1,2,1); ax = gca(); subplot(1,2,2); plot(ax, 1:5)`,
+  '★ plot(别的 axes 句柄, …) 明确报错（桥只跟踪当前 axes，不猜）', 'only tracks the current axes');
+await ev(`${reset} a = gca(); plot(1:5); hold(a, 'on'); plot(6:9); disp('okhold')`,
+  '★ hold(hax, "on") 被接受（以前报 expected on or off）', 'okhold');
+await ev(`${reset} a = gca(); plot(1:5); grid(a, 'on'); disp('okgrid')`,
+  '★ grid(hax, "on") 被接受', 'okgrid');
+await ev(`${reset} a = gca(); plot(1:3); axis(a, [0 2 0 2]); disp(mat2str(__pstate__().ylim))`,
+  '★ axis(hax, LIMITS) 被接受（以前报 limits must be a 2- or 4-element vector）', '[0 2]');
+// ⚠️ 这条只断言"报错且点明是 axis"，**不钉死的文本**：`axis` 的镜像发生在剥首参之前
+//    （bridge 的 axis.m 有多处提前 return，镜像按设计放在开头）⇒ 真渲染器在线时
+//    报错文本来自**核心**（`LIMITS vector must have 2, 4, 6, or 8 elements`），
+//    切到 `web` toolkit 时镜像关掉、文本才来自桥（`limits must be a 2- or 4-element vector`）。
+//    两句话都对，钉其中一句会让这条断言随 toolkit 变红。
+await evErr(`${reset} axis(5)`, '★ axis(5) 仍报错且点明是 axis（5 不是句柄，不许被吞掉）', 'axis:');
+await ev(`${reset} plot(1:5); hold('on'); grid(); disp('oklegacy')`,
+  '对照：**不带句柄**的老形态一个都没坏（hold("on")/grid()）', 'oklegacy');
+
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(fail ? 1 : 0);

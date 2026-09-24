@@ -3,14 +3,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // 为什么要有它：HANDOFF §7 有一批"名字能用/不能用"的断言，而它们会**随构建变化而腐烂**
-// ——本轮就抓到三条与文档口径不符的：
-//   · `popen` **不是**"清晰报错"，它静默返回 `-1`（而 `system`/`unix` 是清晰报错）；
-//   · `listfonts()` **不是**"返回空"，它报 `structure has no member 'family'`；
-//   · "句柄/对话框一族未做"这条**大部分已经不成立**了 —— 真渲染器上线后
-//     `hgsave`/`copyobj`/`uicontrol`/`uimenu`/`gcbo`/`menu`/`movie` 实测都能用。
+// ——2026-09-24 首次跑出三条与文档口径不符的（`popen` 静默 -1、`listfonts` 报结构无成员、
+// 句柄/对话框族大多已能用）。
+//
+// ★ 这条探针的价值在"**两个方向都亮**"：缺口被修好、或该成立的东西坏掉，都必须当场变红。
+//   2026-09-24 第二轮改动（外部审核的 R1/R4）就触发了前一种：
+//     · `popen` / `st = system(cmd)` / `system(cmd)` 的**静默 -1** 已改成清晰报错（覆写层）；
+//     · `voronoi` 的**单输出**（要画图）已能走通（桥支持 `plot(hax, …)`）。
+//   所以下面这两组断言从"已知缺口，仍然如此"**翻成了"必须成立"**。
 //
 // 用法：/mnt/hdd/octave-wasm-build/harness/run.sh test/browser/probe-core-names.mjs [URL]
-// 退出码：0 = **该成立的都成立**（已知缺口按"仍然如此"记录，不算失败）；1 = 出现意外
+// 退出码：0 = **该成立的都成立**（仍存在的缺口按"仍然如此"记录，不算失败）；1 = 出现意外
 import { chromium } from 'playwright-core';
 
 const URL = process.argv[2] || 'http://127.0.0.1:8761/';
@@ -42,41 +45,54 @@ async function run (code, ms = 900) {
 let pass = 0, fail = 0;
 const check = (ok, label, detail) => { ok ? pass++ : fail++; console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${String(detail).slice(0, 150)}`); };
 
-// ── ① shell 一族：★ **"清晰报错"只在两输出形式成立**（本轮实测，HANDOFF §7 之前写笼统了）
+// ── ① shell 一族：★ **"清晰报错"现在四种形态都成立**（2026-09-24 R1/R0 覆写层）
 // 上游语义：`[st,out]=system(cmd)` 走 popen 那条路（失败即 error）；而 `st=system(cmd)` /
-// `system(cmd)` 走"返回状态"那条路 —— 在无 shell 的构建里就是**静默 -1 / 静默通过**。
+// `system(cmd)` 走"返回状态"那条路 —— 在无 shell 的构建里本来是**静默 -1 / 静默通过**。
+// 现在 `build/webshims/system.m` 与 `popen.m` 把后者也变成清晰报错（覆写只作用于
+// 解释器名字解析；C++ 内部的 `octave::popen()` 不受影响）。
 let r = await run('try; [st,out] = system("ls"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /unable to start subprocess/.test(r.out),
   'system [st,out]（两输出）：清晰报错（无 shell，有意保持）', r.out);
 r = await run('try; [st,out] = unix("pwd"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /unable to start subprocess/.test(r.out), 'unix [st,out]：同上', r.out);
-// ★ 静默失败那两条是**已知缺口**（候选：用覆写层改成清晰报错）
-r = await run('st = system("ls"); disp(sprintf("st=%d",st))');
-check(r.rc === 0 && /st=-1/.test(r.out),
-  '★ 已知缺口：`st = system(cmd)` **静默返回 -1**（不抛错 —— 与项目自己的"宁可清晰报错"相悖）', r.out);
-r = await run('system("ls"); disp("SURVIVED")');
-check(r.rc === 0 && /SURVIVED/.test(r.out),
-  '★ 已知缺口：`system(cmd)`（无输出参数）**静默通过**', r.out);
+// ★ 这三条以前是"已知缺口：静默 -1"（本轮修好 ⇒ 断言翻面）
+r = await run('try; st = system("ls"); disp(sprintf("st=%d",st)); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /unable to start subprocess/.test(r.out),
+  '★ 已修：`st = system(cmd)` 现在清晰报错（R1 覆写层；以前静默返回 -1）', r.out);
+r = await run('try; system("ls"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /unable to start subprocess/.test(r.out),
+  '★ 已修：`system(cmd)`（无输出参数）现在清晰报错（以前静默通过）', r.out);
+r = await run('try; st = unix("pwd"); disp(sprintf("st=%d",st)); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /unable to start subprocess/.test(r.out),
+  '★ 已修：`st = unix(cmd)` 也报同一条（unix.m 走 system 两输出，本来就报）', r.out);
 r = await run('try; print("/tmp/pn.png","-dpng"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /no rasteriser|not available/.test(r.out), 'print -dpng 清晰报错（无光栅器）', r.out);
 r = await run('try; print("/tmp/pn.pdf","-dpdf"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /Ghostscript|not available/.test(r.out), 'print -dpdf 清晰报错（无 gs）', r.out);
 
-// ── ② 已知缺口：**仍然如此**才算通过（变了就该改文档）─────────────────────
-r = await run('fid=popen("ls","r"); disp(sprintf("fid=%d",fid))');
-check(r.rc === 0 && /fid=-1/.test(r.out),
-  '★ 已知缺口：popen() **静默返回 -1**（不是清晰报错 —— §7 之前写错了）', r.out);
+// ── ② R1：popen 覆写层（已修 ⇒ "必须成立"）+ 剩下的已知缺口 ─────────────────
+r = await run('try; fid=popen("ls","r"); disp(sprintf("fid=%d",fid)); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /popen: unable to start subprocess/.test(r.out),
+  '★ 已修：popen() 现在清晰报错（R1；以前静默返回 -1）', r.out);
+r = await run('disp(which("popen"))');
+check(r.rc === 0 && /webshims\/popen\.m/.test(r.out),
+  '★ popen 确实被 load path 上的覆写遮住（which 指向 webshims/popen.m）', r.out);
+r = await run('disp(which("system"))');
+check(r.rc === 0 && /webshims\/system\.m/.test(r.out), '★ system 同上', r.out);
+r = await run('try; system(); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /Invalid call to system/.test(r.out), '对照：system() 无参仍是用法错误（覆写没吃掉它）', r.out);
 r = await run('try; L=listfonts(); disp(sprintf("nf=%d",numel(L))); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /structure has no member/.test(r.out),
-  '★ 已知缺口：listfonts() 报"结构无成员"（无 fontconfig 的后果，不是空列表）', r.out);
+  '★ 已知缺口（待 R3）：listfonts() 报"结构无成员"（无 fontconfig 的后果，不是空列表）', r.out);
 r = await run('try; questdlg("q?"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /not available in this version/.test(r.out),
   '已知缺口：questdlg 按上游口径报 not available（无 dialogs）', r.out);
-r = await run('x=[0 .5 1 .5 0]; y=[0 .5 0 1 .5]; try; voronoi(x,y); disp("NOERR"); catch e; disp(["E: " e.message]); end');
-check(r.rc === 0 && /sizes do not match/.test(r.out),
-  '已知缺口：voronoi **单输出**报尺寸不符（桥不支持 plot(hax,…)）', r.out);
+// ★ voronoi 单输出：R4（plot(hax,…)）之后**能画了** —— 断言翻面
+r = await run('clf; x=[0 .5 1 .5 0]; y=[0 .5 0 1 .5]; try; h=voronoi(x,y); disp(numel(h)>0); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /(^|\s)1(\s|$)/.test(r.out),
+  '★ 已修：voronoi **单输出**（要画图）现在能走通（R4 的 plot(hax,…)；以前报 sizes do not match）', r.out);
 r = await run('[vx,vy]=voronoi([0 .5 1 .5 0],[0 .5 0 1 .5]); disp(sprintf("cells=%d",numel(vx)))');
-check(r.rc === 0 && /cells=\d+/.test(r.out), '对照：voronoi **两输出**正常', r.out);
+check(r.rc === 0 && /cells=\d+/.test(r.out), '对照：voronoi **两输出**仍正常', r.out);
 
 // ── ③ 「句柄/对话框一族」：本轮实测**多数已能用**（以前记成"未做"）─────────
 const NAMES = [

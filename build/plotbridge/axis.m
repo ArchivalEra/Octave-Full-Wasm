@@ -51,7 +51,17 @@ function lim_out = axis (varargin)
     return;
   endif
 
-  a = varargin{1};
+  ## 首参可能是**目标 axes 句柄**（核心允许 `axis(hax, …)`；核心的 `__pie__` 就写
+  ## `axis(h, [-1.5 1.5 -1.5 1.5], "square", "off")`）：桥只接受"当前 axes"那一个，
+  ## 别的明确报错。以前这个形态落进下面 `isnumeric(a)` 的标量分支 ⇒ 报
+  ## `axis: limits must be a 2- or 4-element vector`（一句看不出根因的错）。见 `__pb_strip_axes__.m`。
+  args = __pb_strip_axes__ ("axis", varargin);
+
+  if (numel (args) == 0)
+    return;
+  endif
+
+  a = args{1};
 
   if (isnumeric (a))
     if (numel (a) == 4)

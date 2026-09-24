@@ -99,9 +99,15 @@ await ev('disp(convhulln([0 0;1 0;0 1])(:)\')', '★ convhulln 三角形', '1 3 
 await ev('V=convhulln(rand(20,3)); disp(size(V,2))', 'convhulln 3D 返回索引矩阵', '3');
 await ev('disp(size(delaunay([0;1;0],[0;0;1]),1))', 'delaunay 三角形数', '1');
 await ev('X=rand(30,2); T=delaunay(X); disp(size(T,2))', '★ delaunay 2D 三角剖分列数', '3');
-// voronoi 的**两输出形式**是纯计算（可用）；**单输出形式**会去画图（走 gca），
-// 本构建无图形句柄，故只能测两输出形式。这不是 .oct 的问题。
+// voronoi 的**两输出形式**是纯计算；**单输出形式**要画图 —— 它内部是
+// `plot(hax, …)`（首参是句柄），R4（2026-09-24）之后桥支持这个形态了。
 await ev('[vx,vy]=voronoi(rand(8,1),rand(8,1)); disp(numel(vx)>0)', '★ voronoi 出顶点（两输出）', '1');
+// ⚠️ 别断言句柄**个数**：单输出画的是 `Vv`（无穷远射线，按 NaN 分段成多条线），
+//    段数随随机数据变。断言"拿到了句柄"就够了。
+await ev('clf; h=voronoi(rand(8,1),rand(8,1)); disp(numel(h)>0)',
+  '★ voronoi **单输出**（要画图）现在能走通 —— R4 的 plot(hax,…)，以前死在桥里', '1');
+await ev('clf; a=gca(); h=voronoi(a, rand(8,1), rand(8,1)); disp(numel(h)>0)',
+  '★ voronoi(hax, …) 显式句柄形态', '1');
 // voronoin 至少 4 点（3 点构不出初始单纯形，qhull 会报错）
 await ev('[C,F]=voronoin(rand(12,2)); disp(numel(C)>0)', '★ voronoin 出顶点', '1');
 
@@ -168,8 +174,9 @@ console.log('--- 与核心 .m 包装层协同（这些才是用户真正调的�
 await ev('disp(size(convhull(rand(10,2)),1)>0)', 'convhull（.m 包装）', '1');
 await ev('K=convhull(rand(10,2)); disp(size(K,2))', '★ convhull 返回顶点索引', '1');
 await ev('T=delaunayn(rand(20,3)); disp(size(T,2))', '★ delaunayn（.m 包装）', '4');
-// voronoi 的单输出形式要画图（gca），本构建无图形 —— 只测两输出形式
+// voronoi 的单输出形式要画图（gca）—— R4 之后可用（见上面那两条）
 await ev('[vx,vy]=voronoi(rand(8,1),rand(8,1)); disp(numel(vx)>0)', 'voronoi（.m 包装，两输出）', '1');
+await ev('clf; h=voronoi(rand(8,1),rand(8,1)); disp(numel(h)>0)', 'voronoi（.m 包装，单输出=画图）', '1');
 await ev('[C,F]=voronoin(rand(12,2)); disp(numel(C)>0)', 'voronoin（.m 包装）', '1');
 // importdata 在音频文件上走 audioread（它的返回是结构体或 (data, fs) 两输出）
 await ev('d=importdata("/tmp/d_440.wav"); disp(isstruct(d) || isscalar(d))', '★ importdata 走 audioread 不报错', '1');

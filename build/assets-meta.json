@@ -59,6 +59,10 @@
       "webio"
     ]
   },
+  "webshims": {
+    "note": "R1/R0（2026-09-24，外部审核方案）：无 shell 构建下 shell 入口的清晰报错覆写（popen.m/system.m）。只影响解释器名字解析（C++ 内部直接调 octave::popen()，不被拦）；必须随页面装载——覆写要在路径前面才遮得住内建。",
+    "deps": []
+  },
   "webio": {
     "aliases": [
       "__web_zip__",

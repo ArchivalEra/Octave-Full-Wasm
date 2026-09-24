@@ -159,7 +159,11 @@
         //     用户第一个 `figure` 就撞 "no graphics toolkits are available!"。
         //   webdoc：**T6/D2a**——`doc` 的浏览器实现（官方 doc.m 末路是起 info
         //     浏览器进程，本构建无 shell）。它很小，且 `doc` 属于"开箱就该能用"。
-        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc'])
+        //   webshims：**R1/R0（2026-09-24）**——无 shell 构建下把 shell 入口的
+        //     **静默失败**变成清晰报错（`popen` 的 `-1`、`st = system(cmd)` 的 `-1`）。
+        //     它必须**随页面装**：覆写要在路径最前面才遮得住内建；等到用户真去调
+        //     `system` 时再装，那句静默 `-1` 已经发生了。
+        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc', 'webshims'])
           .catch(function (e) {
             console.warn('[assets] help 数据装载失败（help/lookfor 将不可用）: ' + e.message);
             return null;

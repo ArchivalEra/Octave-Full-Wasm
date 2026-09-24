@@ -11,12 +11,15 @@ function grid (varargin)
     return;
   endif
 
+  ## 首参可能是**目标 axes 句柄**（核心的 `grid(hax, …)`）：桥只接受"当前 axes"那一个。
+  args = __pb_strip_axes__ ("grid", varargin);
+
   s = __pstate__ ();
-  if (nargin == 0)
+  if (numel (args) == 0)
     s.grid = ! s.grid;
-  elseif (strcmpi (varargin{1}, "on"))
+  elseif (strcmpi (args{1}, "on"))
     s.grid = true;
-  elseif (strcmpi (varargin{1}, "off"))
+  elseif (strcmpi (args{1}, "off"))
     s.grid = false;
   else
     error ("grid: expected 'on' or 'off'.");

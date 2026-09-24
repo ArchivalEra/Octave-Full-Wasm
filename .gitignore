@@ -53,6 +53,7 @@
 !build/recover-113.sh
 !build/post.js
 !build/webshell/*
+!build/webshims/*
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*

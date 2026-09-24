@@ -31,7 +31,15 @@ function h = plot (varargin)
     s = __pb_clear_series__ (s);
   endif
 
-  ser = __pb_parse_series__ (varargin);
+  ## 首参可能是**目标 axes 句柄**（核心允许 `plot(hax, …)`；`voronoi` 的单输出形态就是
+  ## `plot(hax, …)`，见 §5.29 R4）：桥只接受"就是当前 axes"的那一个，别的**明确报错**
+  ## ——以前这个形态会掉进 `__pb_parse_series__`，把句柄当数据，于是报
+  ## `X and Y sizes do not match`（一句看不出根因的错，见 §7）。
+  ## ⚠️ 镜像那一步仍用**原样的 varargin**：核心 `plot` 自己认这个形态，且认得比桥宽
+  ##（`parent` 属性对、legend 的 tag 都认）——剥掉再交给它没必要。
+  args = __pb_strip_axes__ ("plot", varargin);
+
+  ser = __pb_parse_series__ (args);
   for k = 1:numel (ser)
     t = ser{k};
     s = __pb_add__ (s, t{1}, t{2}, t{3}, "lines");

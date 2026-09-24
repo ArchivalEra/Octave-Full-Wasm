@@ -1,32 +1,27 @@
 # HANDOFF · Octave-Full-Wasm（给 AI 的接续说明）
 
 > 本文唯一目的：**抗上下文压缩**。新会话只读这一份就能接着干。
-> 最后更新：**2026-09-23 晚（第三批：A 断言可证伪化 + B 桥参数契约 已落地；C 的 M2、D 的 FreeType 半途）**：
-> · **A 断言可证伪化（§5.23）**：新闸门 `.githooks/check-wants.py`（pre-commit 拦）+ 26 个套件的
->   匹配器从"裸子串"改成"**单个数字按数字边界**"，并新增探针 `probe-want-matcher.mjs`
->   （13 项，含"旧写法会被 `10` 满足"的红-绿对照）。**当场扫出 3 条假过断言**（`accept-net` 的 POST、
->   `accept-slicot` 的 step 误差、以及审计批已知的 `accept-hdf5`），全部按实测改真。
-> · **B 桥的参数契约（§5.24）**：4 个纯 helper（`__pb_axes_arg__`/`__pb_strip_axes__`/
->   `__pb_bar_args__`/`__pb_legend_args__`）+ 11 个 shim 改造 —— **能做对就做对（句柄优先形态）、
->   做不了就明确报错（`bar(Y,W)` 的宽度、`surf(Z,C)` 的颜色矩阵、`legend(h,…)` 的句柄）**，
->   不再静默曲解。`accept-plotv2` 从 54 增到 **72 项**（新增 18 条契约断言），**已 promote 到两个站点**。
-> · **C `MAIN_MODULE=2`（§5.25，已落地并上线）**：保活清单生成器 + **链接期保活闸门** +
->   `LIB_FUNCS` 解掉"JS 库符号"那道墙 ⇒ 主模块导出名 44,987 → **703**、wasm 大降。
->   懒加载证据：`probe-m2-lazyload.mjs`（7 项）。
-> · **D FreeType 文字渲染（§5.26，已落地并上线）**：库（PIC）、configure、全量重编、字体预载
->   全部做完，**链接已成功**；证据：`probe-text-render.mjs`（6 项，加标题后 `getframe` 非白像素
->   **+2130**，无 FreeType 时是 +0）。
-> · **两个站点已一致**（2026-09-24 起）：8761 与 8768 **逐字节相同**（M2 + FreeType + 新桥）。
->   回退点：`site-m1bridge-bak-20260924/`（M1+新桥那份）与 `siteWebGL-m1bak-20260923/`（更早）。
-> · **E 首帧冷启动（§5.28）已结案：不做预热**（首次 `drawnow` 只有 177 ms；预热只会把它挪到
->   开页、或抢占主线程 ⇒ 总额更长）。
+> 最后更新：**2026-09-24（第五批：外部审核的 R1/R4 已落地并上线 —— 见 §5.30；R3 fontconfig / R5 JSPI 探针待做）**：
+> · **R1/R0 无 shell 的清晰报错（§5.30，已上线）**：新资产 `build/webshims/{popen,system}.m` —— **同名 `.m` 覆写**
+>   （load path 里的 `.m` **实测遮得住内建**），把 `popen` 的 `-1`、`st = system(cmd)` 的 `-1`、
+>   `system(cmd)`（无输出参数）的**静默通过**全部变成清晰报错；两输出形态的既有文本**一字不改**。
+>   新套件 `accept-shellerr`（**14 项**）。
+> · **R4 `plot(hax, …)`（§5.30，已上线）**：桥支持"当前 axes 的句柄优先形态" ⇒ **`voronoi` 单输出可用**
+>   （以前报一句看不出根因的 `X and Y sizes do not match`）。顺手补齐 `hold/grid/axis` 的句柄形态，
+>   并把 `__pb_axes_arg__` 的判据**逐条对齐核心**（`__plt_get_axis_arg__.m`）—— 因此 `plot(0)`
+>   （合法：画一个点）不再被当句柄、`xlim(0)` 报的也是核心那句文本。`accept-plotv2` 72 → **82 项**。
+> · 全量：**见文末 `AUTO:STATE`**（本轮 **36 套 / 952 项**，比上批多一套 `accept-shellerr`）。
+> 上一批（第四批）的实况在 §5.23–§5.29：A 断言可证伪化 / B 桥参数契约 / C `MAIN_MODULE=2` /
+> D FreeType 文字渲染 / E 首帧冷启动（结案：不做预热）/ 缺口语义审计 + 交外部审核的需求书 R0–R5。
 > **部署件 sha、体积、最近一次全绿回归的套件数与项数一律见文末 `AUTO:STATE` 区块**（脚本从产物重算，
-> 别在这里手写）。**接续先读 §8（仍待办 + 恢复命令）与 §5.23–§5.26（本轮实况）。**
+> 别在这里手写）。**接续先读 §8（仍待办 + 恢复命令）与 §5.30/§5.29（本轮实况与需求书）。**
 > ⚠️ 七条必须在动手前知道的：
 > ① **构建主树现在是 opengl-ON + gl2ps-ON + FreeType-ON，GL 头是 gl4es+GLU 的**（见 §5.16 末尾
 >    "怎么切回去"、§5.21、§5.26）；**切回不带 FreeType 的那份**：重配时不给 `WITH_FREETYPE=1`
 >    + `make clean` + 重编（`config.h` 变了就必须 clean，§10.3 坑 2）。
-> ② 推送：`github.com` 2026-09-23 晚已恢复，`main` 已推到 `origin/main`；**若又被拦**，改走 GitHub API + 持久盘镜像（见 §5.17，含对齐命令）；
+> ② **推送仍阻塞在人**：`gh` token 2026-09-24 失效（`gh auth setup-git` 救不回来）⇒ 要**人**跑一次
+>    `gh auth login` 才能 `git push origin main`；内容一直有落到持久盘镜像 `refs/heads/main-20260924`
+>    （§5.17.1）。若 `github.com` 又被拦，照 §5.17 走 API。
 > ③ **容器里的构建脚本是另一份拷贝** —— 改完仓库的 `configure-113-full.sh`/`link-web.sh`
 >    必须 `docker cp` 进容器，否则跑的是旧的（§5.20 末为此白跑两个大重建）；
 > ④ `print` 的矢量输出依赖 **gl2ps + shell 管道 + (gs|svgconvert)**，本构建**没有 shell 是
@@ -37,12 +32,13 @@
 >    旧数字会被 `.githooks/check-handoff.py` **拒提交** —— 别改检查器，改断言（指向那个区块）。
 > ⑥ **别猜挂载点/路径**：`.githooks/check-consistency.py` 会核对"站点资产的 `addpath` ==
 >    `build/assets-meta.json` 的 `mount` 声明"（`pkgfix` **不是**默认的 `m/pkgfix`，是 `m/pkg`，
->    猜错会让 `pkg list` 整个坏掉而加载器一声不响 —— 本轮亲测）。**字体目录同理**：它不是
+>    猜错会让 `pkg list` 整个坏掉而加载器一声不响 —— 亲测）。**字体目录同理**：它不是
 >    `/usr/src/octave/...`，而是 configure 的 prefix `/src/work/octave-install/share/octave/11.3.0/fonts`
 >    （`link-web.sh` 现在是**从 Makefile 读 `octfontsdir`**，不写死；见 §5.26）。
-> ⑦ **两个站点的产物不一样**（本轮 A/B 之后）：**8761 = M1 + 新桥**，**8768 = M2 + 新桥**；
->    `octave.wasm` 是**不同的两份**。8768 的 M1 三件备份在 `siteWebGL-m1bak-20260923/`；
->    要回退 8768：把那三个文件拷回 `siteWebGL/`。**别再用"8761 与 8768 逐字节相同"当验收前提。**
+> ⑦ **两个站点的产物现在是"逐字节相同"的**（M2 + FreeType + 新桥 + `webshims`）。
+>    回退点：`site-m1bridge-bak-20260924/`（M1+新桥那份）与 `siteWebGL-m1bak-20260923/`（更早）。
+>    （历史：2026-09-23 那阵 8761 = M1、8768 = M2，`octave.wasm` 是**不同的两份** ——
+>    别再用"逐字节相同"或"不一样"当**验收前提**，一律以 `sha256sum` 实测为准。）
 
 > **文档约定（`.githooks/check-handoff.py` 按此执行，别违反）**
 > · **§5.x / §9 / §10 是历史记录（append-only）**：里面的数字与判断是"当时如此"，不必与今天一致。
@@ -682,6 +678,7 @@ makeinfo 生成 doc-cache）。
 | `build/render-docstrings.py` | **T1**：构建期用**真 makeinfo** 预渲染 `built-in-docstrings`（去 texinfo 标记 → `help` 走 plain text 分支）。宿主侧跑 |
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
+| `build/webshims/` | **R1/R0（2026-09-24）**：**无 shell 的清晰报错**覆写 —— `popen.m`（`-1` → error）、`system.m`（`status == -1` → error；两输出形态原样透传给内建）|
 | `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
 | `build/BASELINE-11.3.md` | **第四轮当前依据**：11.x 收益核实、19 patch 漂移实测、Edge-Tools 11.1.0 配方全文（5 处 sed / `emf77` / webgl toolkit / 接口 / COI 代价）、5 条 sed 对 11.3.0 命中实测、vanilla 11.3.0 三项核对、ccache 实测 |
 | `build/113/configure-113-full.sh` | **11.3.0 全开 configure**：依赖写成**一张表 + `SKIP` 变量**（按库集合二分只需改一行；`SKIP=umfpack` 即精确关单个库，且会**显式加 `--without-umfpack`**——仅不传 `--with-*` 不够） |
@@ -719,7 +716,7 @@ makeinfo 生成 doc-cache）。
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
 | `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
-| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，19 项 —— §7 那几条「能用/不能用」的断言靠它防腐）**、`probe-want-matcher`（断言匹配器的红-绿对照）|
+| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，23 项 —— §7 那几条「能用/不能用」的断言靠它防腐；R1/R4 上线时它当场把 3 条「已知缺口」翻成绿）**、`probe-want-matcher`（断言匹配器的红-绿对照）|
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
 | `build/BENCH.md` | **R10 结论**：O0/O1/O2 矩阵与采纳依据（取 O1） |
 | `build/build_oct.sh` | 编 dldfcn `*.cc` → `.oct`（官方装载车道，不挂终链） |
@@ -748,12 +745,14 @@ makeinfo 生成 doc-cache）。
 - ~~`gunzip`/`bunzip2` 调 `system` 报错~~ → **批次 4 已修复**：`zip/unzip/tar/untar/gunzip/bunzip2`
   全部改成进程内实现（`webio.oct` + `webshell` 覆写），二进制往返字节级一致。
   仍存在的同类：任何**其它**调 `system()` 的 `.m`（全树共 34 个文件）——本构建里会清晰报错。
-- **shell 一族："清晰报错"只有两输出形式成立**（2026-09-24 实测更正）：
-  `[st,out]=system("ls")` / `unix(...)` → **清晰报错**（`system: unable to start subprocess for 'ls'`，有意保持）；
-  但 **`st = system("ls")` 静默返回 `-1`**、**`system("ls")`（无输出参数）静默通过** ——
-  上游语义就是这样（单/无输出走"返回状态"那条路，不抛错），可它**与项目自己的"宁可清晰报错"相悖**；
-  同类：**`popen("ls","r")` 也静默返回 `-1`**。⇒ 这是**待修的缺口**（覆写层把它变成清晰报错），
-  已列进 §5.29 的需求书（R0）。**回归钉在 `test/browser/probe-core-names.mjs`**（19 项，含这三条"仍然如此"）。
+- ~~**shell 一族只有两输出形式"清晰报错"**~~ → **2026-09-24 已修（R1/R0 覆写层，见 §5.30）**：
+  `[st,out]=system("ls")` / `unix(...)` 一向清晰报错（`system: unable to start subprocess for 'ls'`，
+  **这条文本一字未改**）；而 `st = system("ls")`（静默 `-1`）、`system("ls")`（无输出参数，**静默通过**）、
+  `popen("ls","r")`（静默 `-1`）现在**也抛同一条清晰错误**。做法是 `build/webshims/{popen,system}.m`
+  **同名覆写**（只作用于解释器名字解析；C++ 内部的 `octave::popen()` 不受影响）。
+  回归钉在 `test/browser/accept-shellerr.mjs`（14 项）与探针 `probe-core-names.mjs`。
+  **仍存在的同类**：其它调 `system()` 的 `.m`（全树 34 个文件）现在会**清晰报错而不是静默继续** ——
+  这是有意的（"做不了明确报错"），但要记得它改变了这些 `.m` 的行为。
 - ~~**`help` 对非平凡输入会报 `makeinfo` 子进程错误**~~ → **T1 已修复（内建）**：
   构建期用真 makeinfo 预渲染 + 去掉 `-*- texinfo -*-` 标记，`help sin`/`help sqrt`/
   `help disp` 全部可用（见 §5.6）。**仍存在的部分**：`help ode45` 这类 `.m` 文件的
@@ -766,15 +765,15 @@ makeinfo 生成 doc-cache）。
   **半真化的边界（实测，2026-09-22）**——这些不是 bug，是"只救句柄、不碰绘图"的直接后果：
   - `plot(1:5)` 后 `get(gca,'children')` = **0**（plot 桥的序列不在真对象里，
     渲染走桥出 SVG）；`h = plot(...)` 返回**空句柄**。
-  - **`plot(hax, ...)` 这类"首参是句柄"的调用形态桥不支持**（`plot`/`hold`/`title`/
-    `xlabel` 实测全报错）→ 这就是 `voronoi` 单输出版本失败的真因。
+  - ~~**`plot(hax, ...)` 这类"首参是句柄"的调用形态桥不支持**~~ → **2026-09-24 已支持（R4，见 §5.30）**：
+    `plot/hold/grid/axis` 都接受"首参 = **当前** axes"的形态（是别的 axes 就明确报错）。
+    `title/xlabel/ylabel/xlim/ylim` 是 2026-09-23（批次 B）就已支持的。**这就是 `voronoi` 单输出失败的真因，现已修好。**
   - `getframe()` 报 `failed to capture frame data, potentially due to insufficient
     graphics capabilities`（toolkit 的 `get_pixels` 返回空）。
   ⚠️ **2026-09-23 起这几条的适用条件变了**：站点的**默认 toolkit 已是 `webgl`（真渲染器）**
   ⇒ **镜像层默认开着**：`plot(1:5)` 会**同时**建出真 line 对象（`get(gca,'children')` 不再是 0、
   `h = plot(...)` 拿到真句柄）、`getframe()` 返回真像素。上面那三条只在**显式切到 `web`**
   （`graphics_toolkit("web")`）时成立 —— `accept-t2-graphics` 就是显式切过去验老语义的。
-  `plot(hax, ...)` 那条是**桥自身**的限制，两种 toolkit 下都还在。
 - **（新，2026-09-23）桥的参数宽容度**：桥比核心宽容的写法（如 `plot(x,x,'+','')`）以前收下，
   现在默认有真渲染器 ⇒ 会走到核心实现 ⇒ **按核心（=桌面）的严格性报错**。这是向桌面看齐，
   但"凡桥比核心松的写法都要重新核"（§8 待办 8）。
@@ -832,9 +831,13 @@ makeinfo 生成 doc-cache）。
   （`step` 与 `1-e^-t` 误差 1.1e-16）。`accept-slicot.mjs` 25/25。
   **两个卡点的根因**（都在 `build/113/NOTES-slicot.md`）：精简 libf2c 去掉 I/O 子系统
   （表条目 13→1）+ 给 `f__r_mode`/`f__w_mode` 一个数据垫片。
-- `voronoi` 的**单输出形式**（要画图）：T2 之后**已能走到绘图**，但终点是 plot 桥的
-  `plot(hax, x, y)` 调用形态不支持（见上面的边界条目）→ 报 `X and Y sizes do not match`。
-  两输出形式正常。**根因在 plot 桥，不在句柄系统。**
+- ~~**`voronoi` 的**单输出形式**报 `X and Y sizes do not match`**~~ → **2026-09-24 已修（R4，见 §5.30）**：
+  根因确实是 plot 桥不支持 `plot(hax, …)`（首参句柄被当数据）——现在桥支持"当前 axes 的句柄优先形态"
+  （`voronoi` 内部就是 `plot(hax, …)`，`hax = gca()`），**单输出可用**、两输出照旧。
+  桥的判据同时**逐条对齐了核心**（`__plt_get_axis_arg__.m` 的 `scalar && ishghandle && != 0 && !isfigure`），
+  所以 `plot(0)`/`plot(5)` 仍是"画数据"，`plot(别的 axes, …)` 才明确报错。
+  **仍缺**：`parent` 属性对形态（`plot(x,y,"parent",hax)`）与核心的 `legend` tag 支路不复制 ——
+  桥不做多面板（§5.30 写明了理由）。
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
 - **句柄/对话框一族：大部分已能用**（2026-09-24 实测更正 —— 以前整条记成"未做，归图形分支"）。
   真渲染器（`webgl`）上线后，`accept-p5-graphics` 那套断言之外我又逐条实测了一遍
@@ -844,7 +847,7 @@ makeinfo 生成 doc-cache）。
   `menu`（回落成控制台菜单并真的提示，走 `input()`/`window.prompt`）、
   `movie`（**要 ≥2 帧**；内部用 `pause`，而 `pause` 会阻塞页面 ⇒ 动画观感未细验）。
   ❌ 仍不可用/仍缺：`questdlg`（上游口径 `not available in this version of Octave`）、
-  `uisetfont`（未测）、`voronoi` **单输出**（桥不支持 `plot(hax,…)`，见 §5.29 R4）。
+  `uisetfont`（未测）。（`voronoi` **单输出** 2026-09-24 已修 —— R4 之后桥支持 `plot(hax,…)`，见 §5.30。）
 
 ---
 - **（新，2026-09-24）首帧冷启动拆开量过：不做预热**（§5.28）：第一次 `clf` **375 ms** +
@@ -872,23 +875,32 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 
 ### ⬜ 仍待办（按建议顺序）
 
-> **▶ 当前状态**：**两个站点的产物不同** —— **8761 = M1（不带 FreeType）+ 新桥**；
-> **8768 = M2（`MAIN_MODULE=2`）+ 新桥**。8768 的 M1 三件备份在 `siteWebGL-m1bak-20260923/`。
+> **▶ 当前状态**：**两个站点的产物逐字节相同**（M2 + FreeType + 新桥 + `webshims`）——
+> 以 `sha256sum octave.wasm` 实测为准，别背旧话。回退点：`site-m1bridge-bak-20260924/`
+> （M1+新桥那份）、`siteWebGL-m1bak-20260923/`（更早）。
 > **部署件 sha、体积、最近一次全绿回归见文末 `AUTO:STATE` 区块**（别在这里手写）。
-> **本轮（第三批）**：A 断言可证伪化（§5.23，已 promote）、B 桥参数契约（§5.24，已 promote）、
-> C 的 M2（§5.25，只在 8768 上）、D 的 FreeType（§5.26，半途：只差一次链接）。
+> **本轮（第五批，2026-09-24）**：外部审核的方案 R1（popen/system 覆写）+ R4（`plot(hax,…)`）
+> 已落地并全量验绿（§5.30）；**R3（fontconfig）与 R5（JSPI 探针）还没做** —— 见下面第 1 条。
 >
-> **▶ 改胶水层时的三个快回环**（别一上来就跑 36MB 端到端）：
-> · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **66 项**：
->   含本轮新增的 5 个桥参数纯 helper —— 句柄判定 / 剥首参 / bar 拆分 / 图例拆分 / surf 拆分）；
+> **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
+> · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **69 项**：
+>   5 个桥参数纯 helper —— 句柄判定 / 剥首参 / bar 拆分 / 图例拆分 / surf 拆分 —— 含 R4 给
+>   `__pb_axes_arg__`/`__pb_strip_axes__` 补的「0 与 figure 都不是目标 axes」那几条）；
 > · `python3 .githooks/check-consistency.py` —— 路径/挂载点/启动清单一致性；
-> · `python3 .githooks/check-wants.py` —— 断言可证伪性（本轮新增，已接进 pre-commit）。
+> · `python3 .githooks/check-wants.py` —— 断言可证伪性（已接进 pre-commit）。
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
-> `probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
+> `accept-shellerr.mjs`（14 项，R1）、`probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
-1. **（进行中）等外部审核对 R0–R5 的方案**（§5.29）→ 拿到就按方案落地
-   （老规矩：8768 验绿 → promote 8761 → 闸门与文档同步）。**用户会直接把方案贴过来。**
-2. **（阻塞在人）`gh auth login` 之后 `git push origin main`**：重启后 token 失效
+1. **（进行中）按外部审核的方案继续 R3 / R5**（方案全文见 §5.29 的条目 + §5.30 的记录）：
+   · **R3 fontconfig**（价值最大）：静态 `libfontconfig` + **显式 MEMFS 配置**（`/fonts.conf` +
+     `<dir>` 指向已预载的 `octfontsdir` + `<cachedir>` 到可写目录），**不要** fake `listfonts`
+     —— 它会让"fontname 看起来能用、实际不影响渲染"变成假绿。做完 **R2（`listfonts` 报结构无成员）
+     自动消失**。先例：OpenSCAD-WASM 的静态 fontconfig 配方（GPT 给的依据）。
+   · **R5 JSPI**：`-sJSPI` 与 `-fwasm-exceptions`、与 `MAIN_MODULE=2`/`SIDE_MODULE`/`dlopen`
+     **没有公开的大型先例** ⇒ 先做**最小组合探针**（side module → 主模块导出 → JSPI suspending
+     import → `setTimeout` Promise → resume），**探针没过之前不许宣称 R5 可用**，更不许据此改
+     `pause`/`kbhit`/`recordblocking`。
+2. **（阻塞在人）`gh auth login` 之后 `git push origin main`**：token 失效
    （`gh auth setup-git` 救不回来），本地领先 `origin/main` 若干笔；内容**没丢** ——
    已落持久盘镜像 `mirror` 的 `refs/heads/main-20260924`（§5.17.1）。
 3. **手机真机速度**：模拟器验不了 WebGL（§5.19）⇒ 要真设备。桌面 + CPU 降频 + 分辨率标定的
@@ -897,8 +909,8 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
    **plot 桥自己那份 SVG 是唯一矢量实现**；无 GL 设备的显示回落（§5.22）也建立在它之上 —— 别当冗余砍。
 5. **无 GL 回落的边界**（**不是待办**）：没有抗锯齿/硬件加速；页面 250 ms 采样一次，
    最后一张图最多晚 250 ms 出现。见 `NOTES-webgl.md` §4.7。
-（非图形：本轮清零，只余 G1 的收尾 —— 已并入上面的批 C）
-1. **G1 `MAIN_MODULE=2`** → **见 §5.25（本轮做成了，只差 promote）**：保活清单生成器
+（非图形：已全部清零 —— 下面三条都是**已做完**的存档，不是待办）
+1. ✅ **G1 `MAIN_MODULE=2`**（§5.25 做成、2026-09-24 上线）：保活清单生成器
    `build/113/gen-keep-list.sh`（`wasm-dis` 读 IMPORT 段）+ **链接期保活闸门**
    `build/113/check-oct-imports.py`（与基线差分：只在"基线导得出、新构建导不出"时报失败）+
    `link-web.sh` 的 `MAIN_MODULE_LEVEL=1|2` / `KEEP_LIST=` / `OCT_SCAN_DIRS=` 口子。
@@ -2181,6 +2193,72 @@ CPU 一抢毫秒数就没意义）：冷/温**分开**量，并把"预热两条�
 
 ---
 
+### 5.30 第五批：外部审核的 R1/R4 落地（2026-09-24）—— 无 shell 的清晰报错 + `plot(hax,…)`
+
+**方案来源**：外部审核对 §5.29 需求书 R0–R5 的答复。它给的执行顺序是
+**R1（`popen.m` 覆写）→ R4（`plot(hax,…)`）→ R3（fontconfig）→ R5（JSPI 探针）**，
+并明确两条"别踩"：**别用 fake `listfonts` 把验收做绿**（会留下"fontname 看起来能用、渲染没变"）、
+**别因为 JSPI 已是正式特性就假设"JSPI + `MAIN_MODULE=2` + `SIDE_MODULE`/dlopen"这个组合被验证过**。
+本轮做完了前两项（第三项见下、第四项见 §8 待办）。
+
+#### R1/R0 —— shell 入口的**静默失败**改成清晰报错（新资产 `build/webshims/`）
+
+- **先量了机制再动手**：`load path` 里的同名 `.m` **确实遮得住内建** —— 宿主与 wasm 两侧都实测：
+  宿主 `which('popen')` 从 `libinterp/corefcn/file-io.cc` 变成 `…/popen.m`、调用落到覆写；
+  **wasm 侧同一套**（把 `popen.m` 写进 MEMFS + `addpath` 即可复现）。两条都带上游那句
+  `warning: function …/popen.m shadows a built-in function`。
+- **只补"上游语义本来就静默"的那一种**。逐行核过 `libinterp/corefcn/toplev.cc` 的 `DEFUN (system)`：
+  `return_output = (nargin == 1 && nargout > 1)`；为真时走 `popen` 那条路、失败即
+  `error ("system: unable to start subprocess for '%s'")`（**本来就清晰**）；为假时走 `sys::system()`
+  返回 waitpid 状态 —— 无 shell 的构建里是 **-1**，于是 `st = system(cmd)` 静默拿 -1、`system(cmd)`
+  静默通过。`build/webshims/system.m` 只把 **`status == -1`** 转成清晰报错，其余形态
+  （含"两输出 + 显式 `false`"会报 `element number 2 undefined in return list` 这种上游怪癖）**原样透传**；
+  `build/webshims/popen.m` 同理（`fid == -1` → 报错）。**两输出形态的文本一字未改**（那是对外契约）。
+- **为什么是覆写而不是改 C++**：覆写只作用于**解释器名字解析**；Octave 自己 C++ 里的
+  `octave::popen()`（`oct-prcstrm.cc`）不受影响 —— 核内唯一调用者 `__gnuplot_open_stream__.m`
+  本来也在 gnuplot 那条不可达的路上。
+- **代价（如实）**：`addpath` 该目录时 Octave 会打 2 条 `shadows a built-in function` 警告（`popen`/`system`）
+  —— 有意保留（它如实说明"这个内建被覆写了"），而且**不是新噪音**：站点上早有同类一条
+  （`m/forge/ifft.m` 遮住内建 `ifft`）。资产**随页面装载**（`index.html` 的启动清单加了 `webshims`）：
+  覆写要在 path 前面才遮得住内建，等到用户真调 `system` 时再装就已经晚了。
+- **证据**：新套件 `test/browser/accept-shellerr.mjs`（**14 项**）：`which` 指向覆写文件、
+  三种以前静默的形态现在都报 `unable to start subprocess`、两输出文本不变、`system()` 用法错误、
+  `exist`/普通函数不受影响。探针 `probe-core-names.mjs` 里原本记着"`popen` 静默 -1"的三条
+  **当场由红翻绿** —— 这正是那支探针"两个方向都会亮"的设计目的。
+
+#### R4 —— 桥支持 `plot(hax, …)` ⇒ `voronoi` 单输出可用
+
+- **根因**：核心 `voronoi.m` 的单输出路径是 `h = plot (hax, Vvx, Vvy, …, x, y, '+')`（`hax = gca()`），
+  而桥的 `plot` 没有"首参是目标 axes"这一层 ⇒ 句柄被当数据 ⇒ 报
+  `X and Y sizes do not match`（一句看不出根因的错）。做法就是**复用已有 helper**：
+  `args = __pb_strip_axes__ ("plot", varargin)` 之后照旧解析；镜像那一步仍用**原样的 `varargin`**
+  （核心自己认这个形态）。同批把 `hold/grid/axis` 的句柄形态也补齐（真实脚本里 `hold(hAx, …)` 是常规写法）。
+- **顺手把判据对齐核心**：`__pb_axes_arg__` 从 `isnumeric && isscalar && ishghandle` 改成核心
+  `plot/util/__plt_get_axis_arg__.m` 的 `isscalar && ishghandle && v != 0 && ! isfigure`。
+  **0 是 root 对象、不是 axes** —— 漏掉这条会让 `plot(0)`（合法：画一个点）被当"句柄优先"而报错。
+  收紧后 `xlim(0)` 报的也是核心那句 `LIMITS must be a 2-element vector`。
+- **它当场揪出一条"因为判据太松才过"的老测试**：`__pb_strip_axes__` 的 `%!test` 里原来拿
+  **figure 句柄**冒充"别的 axes"（`{h2, [0 1]}`），收紧后那条必红 ⇒ 改成用**真 axes 句柄**（`gca()`）。
+  这与批次 A 扫出三条假过断言是同一类问题，值得记：**测试里的"替身"如果比真实对象松，它就在骗你**。
+- **有意不复制**：`parent` 属性对形态与核心 `legend` tag 支路（桥不做多面板 —— 引入了
+  handle→panel 表就要维护 create/delete/subplot/figure 切换与失效，收益不足，见外部审核的比较）。
+- **证据**：`accept-plotv2` 72 → **82 项**（新增 10 条句柄契约）；`accept-dldfcn` +3（`voronoi` 单输出、
+  显式 `hax`、包装层）；`probe-core-names` 的"`voronoi` 单输出报错"由红翻绿。
+  ⚠️ `voronoi` 单输出的**句柄个数**随随机数据变（画的是按 NaN 分段的 `Vv` 射线）⇒ 只断言"拿到了句柄"。
+- **`axis(5)` 的文本有两种可能**（实测）：`axis` 的镜像在剥首参**之前**（该 shim 多处提前 return，
+  镜像按设计放在开头）⇒ 真渲染器在线时报错来自**核心**（`LIMITS vector must have 2, 4, 6, or 8 elements`），
+  切到 `web` toolkit 时镜像关掉、才来自桥。两句话都对 ⇒ 断言只钉"报错且点明是 axis"。
+
+#### 本批怎么上线的（**纯 `.m`/资产批，不重链**）
+
+`assets.py bundle-m <名字> <目录> <mount> <站点>/assets/m/<名字>.js` + `assets.py sync-js <站点> <名字>`
+（先打 8768 验绿，再打 8761），外加 `cp bridge/index.html <站点>/`。**wasm 一个字节都没动**
+（所以 promote 不需要走 `promote-webgl.sh` 的 docker cp 三段）；`promote-webgl.sh` 的 `M_ASSETS`
+已加 `webshims:build/webshims`，下次整站 promote 也会带上它。
+全量：`sweep-logs/20260924-031634/` —— **36 套 / 952 PASS / 0 FAIL**（上批 35 套 / 925 项）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
@@ -2467,8 +2545,8 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 | `octave.js` | 454,096 B raw / 87,294 B gz | sha256 `2e5ddcc77bbcbf7b…` |
 | `octave.data` | 8,674,455 B raw / 2,513,886 B gz | sha256 `c87be3d980dd1c60…` |
 | 三大件 gzip 合计 | **9,543,775 B** | |
-| 资产条目 | 47 | |
-| 最近一次**全绿**回归 | `20260924-8768-m2ft-c` · **35 套 / 925 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,756,258 B · `707db04d45650fc5…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 资产条目 | 48 | |
+| 最近一次**全绿**回归 | `20260924-031634` · **36 套 / 952 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,761,030 B · `b84bee2099ac225d…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
