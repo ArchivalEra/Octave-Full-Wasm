@@ -781,7 +781,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      `-djpg/-dbmp/-dtga` 借 webimage 转码；没 GL 时清晰报错）。两条旧断言**翻面**，
      `accept-print` 45 项、`accept-p5-fallback` 17 项；顺手翻掉 `probe-core-names` 里一条
      一直没跟着 R3 翻的 `listfonts` 断言（见 §7）。
-     余下：字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/ `check-wants` 规则 B 复核。
+     余下：~~字体家族 +1（FreeMono ×4）~~ / ~~持久化（IDBFS）~~ → **这两条经实测都是"重链车道"，
+     本会话有意未做**（8761 的部署件一字节没动）：IDBFS 要 `-lidbfs.js` 才会编进去
+     （实测 `FS.filesystems` 只有 `["MEMFS"]`）、FreeMono 是**预载**文件 ⇒ 加字体也得重链。
+     **与 JSPI 的 G1 是同一趟活**（一次重链把 `-lidbfs.js` + FreeMono + `-sJSPI` 一起做）。
+     配方与验收写在 HISTORY §5.38。仍余：`check-wants` 规则 B 复核（162 处）。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
      （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
      （`pause` + `unwind_protect` + EH/SjLj 六条矩阵、六条判据）→ G3 `ginput` 事件队列 →

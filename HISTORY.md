@@ -1920,6 +1920,41 @@ generating texture data` 警告 —— **不是本项引入的**：纯 `drawnow`
 
 ---
 
+### 5.38 第十三批（**开工即收口**）：小口子 6/7 都是**重链车道**，不是页面/资产活（2026-09-24）
+
+工作令把这一批列成"不碰 wasm 的小口子"，一量就发现**两条都要重链**：
+
+- **7）IDBFS 持久化**：`Module.FS.filesystems` 实测只有 **`["MEMFS"]`**
+  （`IDBFS` 是 `undefined`、`NODEFS` 也是），`FS.mount`/`FS.syncfs` 虽然有，但**没有可挂的
+  持久文件系统**。原因：Emscripten 的 IDBFS 在 `library_idbfs.js` 里，**必须显式 `-lidbfs.js`**
+  才会编进去，而 `build/113/link-web.sh` 的链接行里没有它。⇒ 要动的是**链接行 + 重链**，
+  之后才有页面侧那三件事（`FS.mount(IDBFS, {}, '/home/web_user')`、开机 `syncfs(true)` 读回、
+  明确的写回点）。**顺带量到**：`getenv('HOME')` = **`/home/web_user`**、`pwd()` = `/`
+  ⇒ 挂载点选它是对的（与计划一致）。
+- **6）字体家族 +1（FreeMono ×4）**：字体是**预载**进 MEMFS 的
+  （`/src/work/octave-install/share/octave/11.3.0/fonts/FreeSans*.otf` 在预载文件表里，
+  见 `link-web.sh` 的 PRELOAD）⇒ 加 4 个 FreeMono 面 = **改预载 + 重链**（顺带 data/js 变大），
+  不是"只往 fonts.conf 的 `<dir>` 里丢文件"。
+
+**因此这两条与 JSPI 车道的 G1（要加 `-sJSPI` 重链）是同一趟活** —— 一次重链把
+`-lidbfs.js`、FreeMono 预载、`-sJSPI`/`eval_async` 一起做，才是最省的做法。本轮到此为止：
+**没有重链**，8761 上的部署件一个字节没动（这是有意的 —— 验收底线优先）。
+
+**下一轮的配方（照抄即可）**：
+1. `docker cp` 改过的 `build/113/link-web.sh` 进容器（**别忘**，本仓为此白跑过两次大重建）；
+2. 链接行加 `-lidbfs.js`；PRELOAD 里加 `etc/fonts/FreeMono{,Bold,Oblique,BoldOblique}.otf`
+   （源在 Octave 树里，raw 约 1.04 MB）；
+3. `link-web.sh` 重链 → 自检（`FS.filesystems` 里有 IDBFS；`fonts.conf` 的 `<dir>` 覆盖到
+   FreeMono；`oct_fonts_dir()` 路径不变）= 产物 sha 与体积记档；
+4. 页面：`FS.mount(Module.FS.filesystems.IDBFS, {}, '/home/web_user')` + 开机 `syncfs(true)`
+   读回 + **明确写回点**（`Module.webSync()`，并在页面控制台每条命令后做一次去抖写回）；
+5. 验收（新套件 `accept-idbfs.mjs`）：`save('/home/web_user/x.mat','v')` → `webSync()` →
+   **整页 reload** → `load(...)` 取回 v；**负对照**：写到 `/tmp` 的东西 reload 后**必须不在**
+   （证明"真的重载了"、不是假过）；字体：`listfonts()` 里出现 FreeMono（R3 的探针已钉住
+   `fontname` 真改像素，这里加一条家族即可）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
