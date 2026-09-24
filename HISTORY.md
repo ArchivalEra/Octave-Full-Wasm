@@ -1941,7 +1941,21 @@ generating texture data` 警告 —— **不是本项引入的**：纯 `drawnow`
 **没有重链**，8761 上的部署件一个字节没动（这是有意的 —— 验收底线优先）。
 
 **下一轮的配方（照抄即可）**：
-1. `docker cp` 改过的 `build/113/link-web.sh` 进容器（**别忘**，本仓为此白跑过两次大重建）；
+0. **权威链接命令**（本仓已记录在 §5.26，**别再自己拼**）：批次 D/M2 的那条 + `WITH_FONTCONFIG=1`
+   —— 当前部署件就是这么链出来的（把输出目录换个名字即可）：
+   ```sh
+   sudo docker exec o113 bash -lc 'export PATH=/src/bin:$PATH; cd /src/bin && \
+     M_SRC=/src/work/m-prerendered/m GL_LIBS=1 GL_BACKEND=webgl P5_TOOLKIT=1 \
+     MAIN_MODULE_LEVEL=2 KEEP_LIST=/src/libwork/keep.txt \
+     LIB_FUNCS="emscripten_run_script,__assert_fail,abort,exit" \
+     OCT_SCAN_DIRS=/src/octs-site BASELINE_WASM=/src/websrc/out/octave.wasm \
+     WITH_FREETYPE=1 WITH_FONTCONFIG=1 bash link-web.sh /src/websrc/<新目录>'
+   ```
+   （`WITH_FONTCONFIG=1` 一个字都不能省 —— 省掉就是"编得过、链接过、自检全绿，但字体静默没有"，
+   与 HANDOFF ① 那条 `WITH_OPENGL=1` 是同一族陷阱。）
+1. `docker cp` 改过的 `build/113/link-web.sh` 进容器（**别忘**，本仓为此白跑过两次大重建；
+   顺带实测记一笔：容器里那份与仓库只差**一句注释**（`HANDOFF §10.3` → `HISTORY §10.3`），
+   功能一致 —— 但**每次改完仍要 cp**）；
 2. 链接行加 `-lidbfs.js`；PRELOAD 里加 `etc/fonts/FreeMono{,Bold,Oblique,BoldOblique}.otf`
    （源在 Octave 树里，raw 约 1.04 MB）；
 3. `link-web.sh` 重链 → 自检（`FS.filesystems` 里有 IDBFS；`fonts.conf` 的 `<dir>` 覆盖到

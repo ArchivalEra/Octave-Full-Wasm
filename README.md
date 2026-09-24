@@ -214,7 +214,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (6045 bytes)
 - `HANDOFF.md` (81072 bytes)
-- `HISTORY.md` (177561 bytes)
+- `HISTORY.md` (178612 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (15944 bytes)
