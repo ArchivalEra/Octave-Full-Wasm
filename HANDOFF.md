@@ -645,6 +645,28 @@ makeinfo 生成 doc-cache）。
 
 ---
 
+### 5.17.1 ⚠️ 2026-09-24：`gh` token 失效 ⇒ `origin` 推不上去（重启导致）
+
+**现象**：`git push origin main` → `could not read Username for 'https://github.com'`；
+`gh auth setup-git` 也救不回来（`The token in ~/.config/gh/hosts.yml is invalid`）。
+这正是 §3.5 记的那条"重启后 gh token 会失效"，只是这次 `setup-git` **救不了**，
+需要**人**跑一次 `gh auth login`（交互式）。
+
+**处置（已做，内容没丢）**：
+- 今天两笔提交（`5e9b56c` 认证收尾 + `4863a30` 跨天刷新）**已落到持久盘镜像**：
+  `/mnt/hdd/octave-wasm-build/mirror-Octave-Full-Wasm.git` 的
+  **`refs/heads/main-20260924`**（= `4863a30`）。
+- ⚠️ 镜像的 `main` 仍是**旧形状**（`9b211ae`，§5.17 那次 API 推送的产物），与本地 `main`
+  不是快进关系 ⇒ **不许 force-push**（铁律 2），所以推到一个新 ref，别去动 `main`。
+- **下次接续**：先 `gh auth login`，再 `git push origin main`
+  （本地领先 `origin/main` 两笔：`5e9b56c`、`4863a30`）。若 `github.com` 又被拦，照 §5.17 走 API。
+
+**顺带一条机制上的小坑**：`AUTO:STATE` 里记的是 **HEAD 的提交日期**，而"提交"本身会刷新它 ——
+**跨天那一笔提交之后，pre-push 一定会说机器块过期**（同一天内不会）。
+处置：把刷新后的机器块**再提交一笔**（`4863a30` 就是这么来的）。不是 bug，是自指的必然。
+
+---
+
 ## 6. 文件地图（仓库内）
 
 | 路径 | 作用 |
