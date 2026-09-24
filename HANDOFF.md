@@ -747,7 +747,12 @@ makeinfo 生成 doc-cache）。
 - ~~`gunzip`/`bunzip2` 调 `system` 报错~~ → **批次 4 已修复**：`zip/unzip/tar/untar/gunzip/bunzip2`
   全部改成进程内实现（`webio.oct` + `webshell` 覆写），二进制往返字节级一致。
   仍存在的同类：任何**其它**调 `system()` 的 `.m`（全树共 34 个文件）——本构建里会清晰报错。
-- `system`/`unix`/`popen` 清晰报错（本就达标，且是**有意**保持）。
+- **shell 一族："清晰报错"只有两输出形式成立**（2026-09-24 实测更正）：
+  `[st,out]=system("ls")` / `unix(...)` → **清晰报错**（`system: unable to start subprocess for 'ls'`，有意保持）；
+  但 **`st = system("ls")` 静默返回 `-1`**、**`system("ls")`（无输出参数）静默通过** ——
+  上游语义就是这样（单/无输出走"返回状态"那条路，不抛错），可它**与项目自己的"宁可清晰报错"相悖**；
+  同类：**`popen("ls","r")` 也静默返回 `-1`**。⇒ 这是**待修的缺口**（覆写层把它变成清晰报错），
+  已列进 §5.29 的需求书（R0）。**回归钉在 `test/browser/probe-core-names.mjs`**（19 项，含这三条"仍然如此"）。
 - ~~**`help` 对非平凡输入会报 `makeinfo` 子进程错误**~~ → **T1 已修复（内建）**：
   构建期用真 makeinfo 预渲染 + 去掉 `-*- texinfo -*-` 标记，`help sin`/`help sqrt`/
   `help disp` 全部可用（见 §5.6）。**仍存在的部分**：`help ode45` 这类 `.m` 文件的
@@ -795,7 +800,9 @@ makeinfo 生成 doc-cache）。
   `opengl_renderer::render_text: support for rendering text (FreeType) was unavailable
   or disabled when Octave was built`（`text-renderer.cc:53` 的 `static bool warned`，
   只在首次建 axes 时打一次），之后文本能力静默缺失；数值与 plot 桥不受影响。
-  **上线后的两条代价（如实，见 §5.26）**：无 fontconfig ⇒ `fontname` 属性被忽略、`listfonts` 为空。
+  **上线后的两条代价（如实，见 §5.26）**：无 fontconfig ⇒ `fontname` 属性**存得住但渲染时被忽略**
+  （实测 `set/get` 能回 "Courier"）；`listfonts()` **不是返回空、而是报 `structure has no member 'family'`**
+  （空结果喂给 `listfonts.m` 的字段假设 —— 与 `popen`/`system` 那几条同属"待修成清晰报错"，见 §5.29 R1/R2）。
 - **（新，2026-09-23）`urlread` 的 POST 形态只能"如实回报"**：本地预览服务器是
   `python3 -m http.server`，**不支持 POST**（返回 501）⇒ `urlread(url,"post",…)` 返回 `ok=0`。
   交付的静态托管同样如此。`accept-net` 那条断言已按实测改写（原来 `want='1'` 是靠错误消息里
@@ -828,13 +835,15 @@ makeinfo 生成 doc-cache）。
   `plot(hax, x, y)` 调用形态不支持（见上面的边界条目）→ 报 `X and Y sizes do not match`。
   两输出形式正常。**根因在 plot 桥，不在句柄系统。**
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
-- **句柄/对话框一族划归图形分支**（2026-09-22 用户拍板）：`hgsave`/`copyobj`/
-  `uicontrol`/`uimenu`/`uisetfont`/`movie`/`gcbo`/`questdlg`/`menu` 以及 `inputname`
-  （H4）**不在非图形轮次内** —— 它们要真图形对象才谈得上语义，归 `graphics-osmesa` 分支。
-  现状（源码级，供分支参考）：`exist=2` 但依赖真对象；`menu.m` 会回落成
-  **控制台菜单**（走 `input()`，T5 之后**可能已经能用** —— 分支开工时先验这一条）；
-  `questdlg.m:136-139` 在 `__event_manager_have_dialogs__()` 为假时是**直接报错**
-  "not available in this version of Octave"（上游行为，如实保持即可）。
+- **句柄/对话框一族：大部分已能用**（2026-09-24 实测更正 —— 以前整条记成"未做，归图形分支"）。
+  真渲染器（`webgl`）上线后，`accept-p5-graphics` 那套断言之外我又逐条实测了一遍
+  （`test/browser/probe-core-names.mjs`，19 项，8761 全绿）：
+  ✅ `hgsave`（写出 `.hgs`）、`copyobj`、`uicontrol`/`uimenu`（**建出对象、属性可读写**，
+  但**我们的 toolkit 不画控件** ⇒ 没有"看得见的按钮"）、`gcbo`、`waitfor`、`inputname`、
+  `menu`（回落成控制台菜单并真的提示，走 `input()`/`window.prompt`）、
+  `movie`（**要 ≥2 帧**；内部用 `pause`，而 `pause` 会阻塞页面 ⇒ 动画观感未细验）。
+  ❌ 仍不可用/仍缺：`questdlg`（上游口径 `not available in this version of Octave`）、
+  `uisetfont`（未测）、`voronoi` **单输出**（桥不支持 `plot(hax,…)`，见 §5.29 R4）。
 
 ---
 - **（新，2026-09-24）首帧冷启动拆开量过：不做预热**（§5.28）：第一次 `clf` **375 ms** +
@@ -876,27 +885,16 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
 > `probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
-1. **8761 的认证全量回归 —— 已跑**（`sweep-logs/20260924-8761-certified/`）：
-   · 首轮：**34 套全绿 + `accept-plotv2` 一次 `Target crashed`**（浏览器标签崩，非产品回归：
-     同一产物在 8768 上 72/72，且崩的时候我正在**并行**跑 `docker commit`（7.5GB）与 dist 打包），
-     ⇒ 汇总 853 项，**`0 FAIL`**。
-   · **干净复跑那套**（无并行负载）：`accept-plotv2` **72 PASS / 0 FAIL** ✓。
-   ⇒ **该产物 = 35 套 / 925 项**（与逐字节相同的 8768 那轮一致，见文末 `AUTO:STATE` 的指向）。
-   **教训**：跑验收时**别并行干重活**（docker commit / 打包）—— 会让 Chromium 标签崩，
-   症状长得像产品回归（`Target crashed`），白花一轮 35 分钟。
-2. **交付包重打**：`sh build/make-dist.sh` → 核对"包内 wasm 与部署件同 sha"
-   （文末 `AUTO:STATE` 会自动核对这条）。**必须等上面那轮绿了再打**（包内容 = 最近一次实测通过的构建）。
-3. **文档收尾**（本轮已经写了大部分）：`README`（✅ 已改）、`dist/DEPLOY.md` 验收表的项数、
-   `build/CLIBS.md`（✅ 已加 FreeType / M2 两节）、`NOTES-webgl.md` §4.8/§4.9（✅）、
-   `GRAPHICS-BRANCH.md`（✅）。
-4. **`docker commit` 检查点 + 提交推送**（**不 force-push / 不删对象 / 禁用 `--no-verify`**）。
-   ⚠️ 新增文件记得同步白名单 —— 而且**闸门有盲区**（§0 第 5 条的注脚 / §5.27）：
-   `git status --short --ignored <目录>` 主动看一眼。
-5. **手机真机速度**：模拟器验不了 WebGL（§5.19）⇒ 要真设备。桌面 + CPU 降频 + 分辨率标定的
+1. **（进行中）等外部审核对 R0–R5 的方案**（§5.29）→ 拿到就按方案落地
+   （老规矩：8768 验绿 → promote 8761 → 闸门与文档同步）。**用户会直接把方案贴过来。**
+2. **（阻塞在人）`gh auth login` 之后 `git push origin main`**：重启后 token 失效
+   （`gh auth setup-git` 救不回来），本地领先 `origin/main` 若干笔；内容**没丢** ——
+   已落持久盘镜像 `mirror` 的 `refs/heads/main-20260924`（§5.17.1）。
+3. **手机真机速度**：模拟器验不了 WebGL（§5.19）⇒ 要真设备。桌面 + CPU 降频 + 分辨率标定的
    结论见 `NOTES-webgl.md` §4.5（渲染器本身快 3.4–8.9×，端到端被桥与冷启动盖住）。
-6. **`print` 的核心矢量路径**不可达（**不是待办**）：缺 shell 管道（有意）+ gs。
+4. **`print` 的核心矢量路径**不可达（**不是待办**）：缺 shell 管道（有意）+ gs。
    **plot 桥自己那份 SVG 是唯一矢量实现**；无 GL 设备的显示回落（§5.22）也建立在它之上 —— 别当冗余砍。
-7. **无 GL 回落的边界**（**不是待办**）：没有抗锯齿/硬件加速；页面 250 ms 采样一次，
+5. **无 GL 回落的边界**（**不是待办**）：没有抗锯齿/硬件加速；页面 250 ms 采样一次，
    最后一张图最多晚 250 ms 出现。见 `NOTES-webgl.md` §4.7。
 （非图形：本轮清零，只余 G1 的收尾 —— 已并入上面的批 C）
 1. **G1 `MAIN_MODULE=2`** → **见 §5.25（本轮做成了，只差 promote）**：保活清单生成器
@@ -2150,6 +2148,35 @@ CPU 一抢毫秒数就没意义）：冷/温**分开**量，并把"预热两条�
 
 **结案**：§8 这条**收口为"不做"**，上表就是"为什么不做"的证据（§7 有对应条目）。
 将来真要抠，方向是**把首次 `clf` 的 375 ms 做小**（那是上下文/gl4es 初始化），不是预热。
+
+---
+
+### 5.29 缺口语义审计 + 交外部审核的需求书 R0–R5（2026-09-24）
+
+**起因**：用户问"现在离完整版还有什么差距"。我不凭记忆答，先**逐条实测** —— 结果**三处与 §7 口径不符**
+（已就地更正）：§7 这类"名字能用/不能用"的断言**会随构建腐烂**，这条经验本身值得记。
+
+| §7 原话 | 实测（8761） |
+|---|---|
+| "`system`/`unix`/`popen` 清晰报错" | **只有两输出形式**（`[st,out]=system(...)`）清晰报错；`st=system(...)` / `system(...)` / `popen(...)` 一律**静默 −1 / 静默通过**（上游语义如此，但与"宁可清晰报错"相悖 ⇒ 缺口） |
+| "无 fontconfig ⇒ `listfonts` 为空" | `listfonts()` **报错**：`structure has no member 'family'` |
+| "句柄/对话框一族未做（归图形分支）" | **大部分已能用**：`hgsave`/`copyobj`/`uicontrol`/`uimenu`/`gcbo`/`waitfor`/`inputname`/`menu`/`movie`（要 ≥2 帧）。仍缺：`questdlg`（上游口径）、`uisetfont`（未测）、`voronoi` 单输出 |
+
+**这次实测已固化成探针**：`test/browser/probe-core-names.mjs`（**19 项，8761 全绿**）。
+形状值得记：**该成立的断言必须成立**（`system` 两输出清晰报错、`voronoi` 两输出正常、句柄族可用），
+**已知缺口按"仍然如此"也算通过**（`popen` −1、`listfonts` 报错、`questdlg` 上游口径、`voronoi` 单输出报错）
+⇒ **两个方向的变化都会亮**（缺口被修好、或该成立的东西坏掉）。
+
+**交外部审核的需求书**（用户要"一份简短需求书，他拿去问网页 GPT 要**被广泛搜索验证过的成熟方案**"）：
+**按用户要求没有入仓**，只在对话里给了文本。条目（R0–R5）：
+- **R0**（本轮新发现）`system`/`unix`/`popen` 的**静默失败** → 清晰报错（覆写层？会不会踩到核心内部的调用？）
+- **R1** `popen` 静默 −1（R0 的同类，可并入）
+- **R2** `listfonts()` 报"结构无成员" → 人话，或返回只含 FreeSans 的列表；与 R3 的优先级取舍
+- **R3**（价值最大）**fontconfig**：建成 emscripten 静态库的先例？缓存目录 `~/.cache/fontconfig` 在只读 MEMFS 怎么办？或"构建期预算映射表"的更轻替代？字体资产策略（4 个 FreeSans gzip ≈1.2MB，已吃掉 M2 省下的 1.55MB 里的大部分）
+- **R4** 桥支持 `plot(hax,…)` ⇒ 救回 `voronoi` 单输出（多面板映射 vs handle→panel 表 vs 两输出自绘）
+- **R5**（最想请人广泛搜的）**"同步等浏览器"的成熟替代**：JSPI（`-sJSPI`）与 **wasm EH**、与 **side module** 的共存现状；或"分片/重入"的成熟实现（Emacs/GTK/CPython-wasm 那类）
+
+**接续**：用户会随后把 GPT 的方案贴过来 ⇒ 按方案落地，老规矩（8768 验绿 → promote 8761 → 闸门与文档同步）。
 
 ---
 
