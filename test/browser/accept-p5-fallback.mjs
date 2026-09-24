@@ -120,6 +120,13 @@ check(shown.last && shown.last.type === 'image/svg+xml',
 // ── 对照：GL 确实没工作（没有 PNG），所以 SVG 是唯一的显示路径 ─────────────────
 check((await fsSize('/tmp/p5_fig.png')) < 0, '★ 确实没有 PNG（GL 没工作，回落是唯一路径）', 'ok');
 
+// ── 小口子 5 的边界：**没有 GL 就没有那张 PNG** ⇒ `print -dpng` 必须明确报错并指向 -dsvg
+//    （而不是写出一个 0 字节文件、或报一句看不出根因的话）────────────────────────
+// ⚠️ 本套件的 `ev()` 返回 {rc,out}（不是字符串）—— 别拿它当字符串用。
+const pngErr = await ev('try; print("/tmp/x.png","-dpng"); disp("NOERR"); catch e; disp(["E: " e.message]); end', 900);
+check(/no working GL renderer/.test(pngErr.out), '★ 无 GL 时 `print -dpng` 清晰报错（指向 -dsvg）', pngErr.out);
+check((await fsSize('/tmp/x.png')) < 0, '★ 而且**没有**写出半个空文件（宁可不写）', 'ok');
+
 // ── 稳态：第二条命令画的图也要更新（由 __pstate__ 自动渲，不只靠页面那一下）────
 const before = svgSize;
 await ev('clf; bar([3 1 4 1 5]); drawnow; disp("bar")', 1200);

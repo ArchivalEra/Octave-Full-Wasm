@@ -65,8 +65,10 @@ check(r.rc === 0 && /unable to start subprocess/.test(r.out),
 r = await run('try; st = unix("pwd"); disp(sprintf("st=%d",st)); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /unable to start subprocess/.test(r.out),
   '★ 已修：`st = unix(cmd)` 也报同一条（unix.m 走 system 两输出，本来就报）', r.out);
-r = await run('try; print("/tmp/pn.png","-dpng"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
-check(r.rc === 0 && /no rasteriser|not available/.test(r.out), 'print -dpng 清晰报错（无光栅器）', r.out);
+// ★ 小口子 5（2026-09-24）之后**断言翻面**：`-dpng` 不再是报错 —— 它把页面渲出的
+// /tmp/p5_fig.png **逐字节拷**到目标路径（真渲染器在，就有图）。没 GL 时仍清晰报错。
+r = await run('clf; plot(1:3); try; print("/tmp/pn.png","-dpng"); disp(sprintf("OK=%d", dir("/tmp/pn.png").bytes > 1000)); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /OK=1/.test(r.out), '★ 已修：print -dpng 真出图（页面 PNG 逐字节拷贝）', r.out);
 r = await run('try; print("/tmp/pn.pdf","-dpdf"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /Ghostscript|not available/.test(r.out), 'print -dpdf 清晰报错（无 gs）', r.out);
 
@@ -81,9 +83,12 @@ r = await run('disp(which("system"))');
 check(r.rc === 0 && /webshims\/system\.m/.test(r.out), '★ system 同上', r.out);
 r = await run('try; system(); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /Invalid call to system/.test(r.out), '对照：system() 无参仍是用法错误（覆写没吃掉它）', r.out);
-r = await run('try; L=listfonts(); disp(sprintf("nf=%d",numel(L))); catch e; disp(["E: " e.message]); end');
-check(r.rc === 0 && /structure has no member/.test(r.out),
-  '★ 已知缺口（待 R3）：listfonts() 报"结构无成员"（无 fontconfig 的后果，不是空列表）', r.out);
+// ★ 这条也**翻面**了（2026-09-24 收口时发现它一直没跟着 R3 翻）：R3（fontconfig）上线后
+//   `listfonts()` 不再报"结构无成员"，而是真的列出字体（本构建只有 4 个 FreeSans 面）。
+//   ⇒ 这正是本探针存在的意义：构建变了、断言没改，它当场变红。
+r = await run('try; L=listfonts(); disp(sprintf("nf=%d F=%s",numel(L), L{1})); catch e; disp(["E: " e.message]); end');
+check(r.rc === 0 && /^\s*nf=1 F=FreeSans/.test(r.out),
+  '★ 已修（R3 之后）：listfonts() 列出 FreeSans（以前报"结构无成员"）', r.out);
 r = await run('try; questdlg("q?"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /not available in this version/.test(r.out),
   '已知缺口：questdlg 按上游口径报 not available（无 dialogs）', r.out);

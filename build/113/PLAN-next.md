@@ -142,6 +142,11 @@
    想让 `pkg load <未装载的包>` 自己触发资产装载，需要 ① 加载器/包格式支持 prepend，
    或 ② 同步装载资产（R5 的同步 XHR 可复用）。钉子 `accept-pkgview.mjs` 17 项；见 HISTORY §5.36。
 5. **`print -dpng/-djpg`** 走页面 PNG（实测 `/tmp/p5_fig.png` 已存在）；`-dpdf/-deps` 保持清晰报错。
+   **✅ 2026-09-24 收口**：那张 PNG 是**真渲染器每次重画自己写的**（`redraw_figure`→`publish_png`）
+   ⇒ `-dpng` = `drawnow()` 后**逐字节拷贝**（实测与页面那张 `isequal` 为真）；
+   `-djpg/-dbmp/-dtga` 借 webimage 资产转码（未装时给可操作报错）；没 GL 时明确报错并指向 `-dsvg`
+   且**不写空文件**。**两条旧断言翻面**（`accept-print` 与 `probe-core-names` 里原来要求"必须报错"），
+   另顺手翻掉一条一直没跟着 R3 翻的 `listfonts` 断言。见 HISTORY §5.37。
 6. **字体家族 +1**：预载 FreeMono ×4（镜像里有，`fonts.conf` 的 `<dir>` 天然覆盖），~1.04 MB raw。
 7. **持久化**：IDBFS（`index.html` 里有注释掉的挂载点）落 `/home/web_user` + 明确 sync 点；
    验收"写 → 刷新 → 还在"。

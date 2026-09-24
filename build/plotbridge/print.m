@@ -104,10 +104,62 @@ function [out1, out2] = print (varargin)
       printf ("print: wrote %s (%d bytes, %d series)\n", fname, numel (svg), ...
               numel (__pstate__ ().series));
 
-    case {"png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff"}
+    case {"png", "jpg", "jpeg", "bmp", "tga"}
+      ## ── 光栅输出：走**页面渲出的那张 PNG**（小口子 5，2026-09-24）────────────────
+      ## 真渲染器（webgl toolkit）每次重画都把当前图画成 PNG 落在 `/tmp/p5_fig.png`
+      ## （`webgl_toolkit.cc` 的 `redraw_figure` → `publish_png`）。所以：
+      ##   · `-dpng`：**逐字节拷贝**那张 PNG（不自造光栅器、不重编码 ⇒ 与页面里那张逐位相同）；
+      ##   · `-djpg/-dbmp/-dtga`：借本构建的 `imread`/`imwrite`（webimage 资产，R4）转码；
+      ##   · **没有 GL**（页面走 SVG 回落）时那张 PNG 根本不存在 ⇒ 明确报错并指向 `-dsvg`。
+      ## 先 `drawnow()` 保证它是**当前**这张图（否则拷到的是上一次重画的）。
+      if (isempty (ext))
+        fname = [fname "." fmt];
+      endif
+
+      drawnow ();
+
+      src = "/tmp/p5_fig.png";
+      if (! exist (src, "file"))
+        error (["print: no raster image to copy: this page has no working GL renderer " ...
+                "(the SVG fallback is active), so %s was never written.\n" ...
+                "  Use -dsvg here."], src);
+      endif
+
+      fid = fopen (src, "rb");
+      if (fid < 0)
+        error ("print: cannot open '%s' for reading", src);
+      endif
+      raw = fread (fid, Inf, "*uint8");
+      fclose (fid);
+
+      if (strcmp (fmt, "png"))
+        fid = fopen (fname, "wb");
+        if (fid < 0)
+          error ("print: cannot open '%s' for writing", fname);
+        endif
+        fwrite (fid, raw, "uint8");
+        fclose (fid);
+        printf ("print: wrote %s (%d bytes, PNG copied from the page render)\n", ...
+                fname, numel (raw));
+      else
+        ## 其他光栅格式：借用图像资产的读写（imread/imwrite），失败就说清缺什么
+        try
+          img = imread (src);
+          imwrite (img, fname);
+        catch err
+          error (["print: cannot convert the page PNG to -d%s (%s)\n" ...
+                  "  The converter is the webimage asset (imread/imwrite); load it first:\n" ...
+                  "    await OctaveAssets.load ('webimage')\n" ...
+                  "  or just use -dpng / -dsvg here."], fmt, err.message);
+        end_try_catch
+        printf ("print: wrote %s (-d%s, converted from the page render)\n", fname, fmt);
+      endif
+
+    case {"gif", "tif", "tiff"}
       error (["print: raster output (-d%s) is not available in this build.\n" ...
-              "  The sandbox has no rasteriser and no external commands.\n" ...
-              "  Use -dsvg here, then convert in the page (canvas) if you need a bitmap."], fmt);
+              "  Bitmaps that work here: -dpng (copied from the page render), and " ...
+              "-djpg/-dbmp/-dtga via the webimage asset.\n" ...
+              "  Or use -dsvg and convert in the page (canvas)."], fmt);
 
     case {"pdf", "eps", "epsc", "ps", "ps2", "psc", "psc2"}
       error (["print: vector output (-d%s) needs Ghostscript, which is not available in this build.\n" ...

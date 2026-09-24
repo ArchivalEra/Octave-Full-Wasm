@@ -194,10 +194,19 @@ console.log('--- 无参数 / 省略 -dsvg（按扩展名）---');
 await ev('clf; plot(1:4); print("/tmp/ext.svg")', '省略 -dsvg，靠扩展名');
 await svgCheck('/tmp/ext.svg', '扩展名推断格式', { minPolyline: 1 });
 
-console.log('--- 不支持的格式：清晰报错（不是 gs 那种困惑信息）---');
-await evErr('clf; plot(1:3); print("/tmp/a.png","-dpng")', '★ -dpng 给出可操作报错', 'raster output');
-await evErr('clf; plot(1:3); print("/tmp/a.png","-dpng")', '-dpng 建议改用 -dsvg', '-dsvg');
-await evErr('clf; plot(1:3); print("/tmp/a.pdf","-dpdf")', '★ -dpdf 指出 Ghostscript 缺失', 'Ghostscript');
+console.log('--- 光栅：走**页面渲出的那张 PNG**（小口子 5，2026-09-24；这两条以前断言"报错"）---');
+// 真渲染器每次重画都把当前图写成 /tmp/p5_fig.png（webgl_toolkit 的 publish_png）⇒ `-dpng`
+// 现在是**逐字节拷贝**那张图。断言从"必须报错"翻成"必须出图、且与页面那张逐位相同"。
+await ev('clf; plot(1:10); print("/tmp/a.png","-dpng")', '★ -dpng 写出 PNG（以前报 raster output 不可用）', 'PNG copied from the page render');
+// ⚠️ `evVal` 的 want 是**字符串**（它走 `wantHit` → `includes`），不是正则；也别传裸数字。
+await evVal('a=fopen("/tmp/a.png","rb"); ra=fread(a,Inf,"*uint8"); fclose(a); b=fopen("/tmp/p5_fig.png","rb"); rb=fread(b,Inf,"*uint8"); fclose(b); f=fopen("/tmp/__v__.txt","w"); fprintf(f,"SAME=%d BIG=%d", isequal(ra,rb), numel(ra) > 1000); fclose(f)',
+  '★ 与页面那张 PNG **逐字节相同**、且有内容（>1KB）', 'SAME=1 BIG=1');
+await ev('clf; plot(1:4); print("/tmp/b.png")', '省略 -dpng，靠 .png 扩展名也能出图', 'PNG copied from the page render');
+await evErr('clf; plot(1:3); print("/tmp/a.pdf","-dpdf")', '★ -dpdf 仍清晰报错（指出 Ghostscript 缺失）', 'Ghostscript');
+await evErr('clf; plot(1:3); print("/tmp/a.gif","-dgif")', '★ 不支持的位图（-dgif）仍清晰报错并列出可用的', 'not available');
+// `-djpg/-dbmp/-dtga` 靠 webimage 资产（imread/imwrite）转码：本套件没有装载它 ⇒
+// 期望的诚实行为是**可操作报错**（告诉你去 load webimage），而不是一句 imfinfo 的困惑话。
+await evErr('clf; plot(1:3); print("/tmp/a.jpg","-djpg")', '★ -djpg 未装 webimage 时给可操作报错（装了就能转）', 'webimage');
 await evErr('clf; plot(1:3); print("/tmp/a.xyz","-dxyz")', '未知格式也报错', 'unknown output format');
 
 console.log('--- 与 plot 桥其它功能共存（回归）---');

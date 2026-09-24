@@ -27,8 +27,10 @@
 >    `refs/heads/main-20260924`。若 `github.com` 又被拦，照 HISTORY §5.17 走 API。
 > ③ **容器里的构建脚本是另一份拷贝**：改完仓库的 `configure-113-full.sh`/`link-web.sh`
 >    必须 `docker cp` 进容器，否则跑的是旧的（HISTORY §5.20 末为此白跑两个大重建）。
-> ④ `print` 的矢量输出依赖 gl2ps + shell 管道 + (gs|svgconvert)，**没有 shell 是有意的**
+> ④ `print` 的**矢量**输出依赖 gl2ps + shell 管道 + (gs|svgconvert)，**没有 shell 是有意的**
 >    ⇒ **plot 桥自己那份 SVG 是唯一能出矢量的实现**，别当冗余砍。
+>    **光栅**走另一条路（小口子 5，2026-09-24）：真渲染器每次重画把当前图写成 `/tmp/p5_fig.png`，
+>    `-dpng` 就是**逐字节拷**它；`-djpg/-dbmp/-dtga` 借 webimage 资产转码；没 GL 时明确报错。
 > ⑤ **文档会自己更新，也会拦你**：文末 `AUTO:STATE` 是机器维护的（部署件 sha/体积、最近一次
 >    全绿回归、交付包、包内 wasm 与部署件同 sha），pre-commit 会重算并 `git add`；活状态段落里
 >    写死的旧数字会被 `.githooks/check-handoff.py` 拒提交 —— 改断言，别改检查器。
@@ -665,6 +667,19 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
     webgraphics P5 / oct P6 / plotbridge P7）**都排在它后面**，加载器又只会 `addpath(…)`（追加）
     ⇒ 资产**遮不住** `pkg.m`。两条备选路都没做：① 给加载器/包格式加 prepend 能力；
     ② 把 `pkg.m` 放进 `m/pkg` —— **不行**，那是核心 pkg 目录（pkgfix 的挂载点就是它），会**覆盖核心 pkg.m**。
+- **（新，2026-09-24，小口子 5）`print` 的光栅输出：`-dpng` 真出图**（这条**翻了原来的断言**）。
+  - 机制：真渲染器（webgl toolkit）每次重画都会把当前图写成 **`/tmp/p5_fig.png`**
+    （`redraw_figure` → `publish_png`）⇒ 桥的 `print.m` 现在：`-dpng` = `drawnow()` 后
+    **逐字节拷贝**那张 PNG（实测与页面那张 `isequal` 为真、10,635 字节）；
+    `-djpg/-dbmp/-dtga` 借图像资产（`imread`/`imwrite`，R4）转码 —— **未装 webimage 时给
+    可操作报错**（"load webimage"），不是 imfinfo 的困惑话；`-dgif/-dtif` 等仍清晰报错。
+  - **没 GL 的页面**（SVG 回落）那张 PNG 根本不存在 ⇒ `-dpng` 明确报错并指向 `-dsvg`，
+    而且**不写半个空文件**（`accept-p5-fallback` 钉住）。
+  - ⚠️ `print(...,'-dpng')` 会带出一条 `opengl_texture::create: OpenGL error while generating
+    texture data` 警告 —— **不是本项引入的**：纯 `drawnow` 也有（实测）。
+  - 钉子：`accept-print` 45 项（断言**翻面**：以前这两条要求"必须报错"）、`accept-p5-fallback` 17 项、
+    `probe-core-names` 的 `print -dpng` 一条也翻了面（另顺手翻掉一条**一直没跟着 R3 翻**的
+    `listfonts` 断言 —— 那正是这个探针存在的意义）。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -762,8 +777,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ⇒ `pkg list` 看得到、`pkg load` 成功、`normpdf` 真出数。**覆写 `pkg` 本身做不到**（核心
      `pkg.m` 在 path 第 2 位、排在所有资产目录之前，加载器只会追加）—— 实测原因记在 §7 与 HISTORY §5.36。
      钉子 `accept-pkgview.mjs` 17 项。
-     余下：`print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/
-     `check-wants` 规则 B 复核。
+     ✅ **5）`print -dpng`** → **真出图**（逐字节拷贝页面渲出的 `/tmp/p5_fig.png`；
+     `-djpg/-dbmp/-dtga` 借 webimage 转码；没 GL 时清晰报错）。两条旧断言**翻面**，
+     `accept-print` 45 项、`accept-p5-fallback` 17 项；顺手翻掉 `probe-core-names` 里一条
+     一直没跟着 R3 翻的 `listfonts` 断言（见 §7）。
+     余下：字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/ `check-wants` 规则 B 复核。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
      （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
      （`pause` + `unwind_protect` + EH/SjLj 六条矩阵、六条判据）→ G3 `ginput` 事件队列 →
@@ -846,8 +864,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 8,674,824 B raw / 2,515,502 B gz | sha256 `c2be24347381cb13…` |
 | 三大件 gzip 合计 | **9,619,254 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-092139` · **38 套 / 1,011 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,923,992 B · `2fd747e0953abb29…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-095204` · **38 套 / 1,016 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,927,281 B · `07ac32ec20de3c94…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

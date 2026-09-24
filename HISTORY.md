@@ -1884,6 +1884,42 @@ sha 相同 ⇒ 判为偶发（页面/渲染进程崩），不是本批改动引�
 
 ---
 
+### 5.37 第十二批：`print -dpng` 真出图（**断言翻面**，2026-09-24）
+
+工作令 §3 第 5 条："`print -dpng/-djpg` 走页面 PNG"。开工先弄清那张 PNG 是谁写的：
+**真渲染器自己**——`webgl_toolkit.cc` 的 `redraw_figure` → `publish_png` 每次重画都把当前图
+写成 `/tmp/p5_fig.png`（常量 `P5_PNG_PATH`）。所以根本不需要"在沙箱里造光栅器"：
+
+- **`-dpng`** = `drawnow()` 之后**逐字节拷贝**那张 PNG。实测与页面那张 `isequal` 为真、
+  10,635 字节（不是重编码，连字节都不动 ⇒ 页面里看到的和导出的是同一张）；省略 `-d`、
+  靠 `.png` 扩展名也同样走这条路。
+- **`-djpg/-dbmp/-dtga`** = 借图像资产（`imread`/`imwrite`，R4）转码：装了 `webimage` 时
+  实测 `-djpg` 出 `FFD8`（13,958 字节）、`-dbmp` 705,654 字节、`-dtga` 22,880 字节；
+  **没装时给可操作报错**（"load webimage"），而不是 `imfinfo: support for Image IO was
+  unavailable…` 那种困惑话。
+- **没 GL 的页面**（SVG 回落）那张 PNG 根本不存在 ⇒ `-dpng` 明确报错并指向 `-dsvg`，
+  而且**不写半个空文件**。`-dgif/-dtif` 等仍清晰报错并列出可用的。
+
+**两条旧断言翻面**（这正是本仓的规矩：行为变了就改断言，别改检查器）：
+`accept-print.mjs` 里"`-dpng` 必须报错、并建议 `-dsvg`"两条 → 改成"必须出图、且与页面那张
+逐字节相同"；`probe-core-names.mjs` 的 `print -dpng 清晰报错（无光栅器）` 同样翻面。
+**另外顺手翻掉一条一直没跟着 R3 翻的断言**：`probe-core-names` 里 `listfonts()` 还写着
+"已知缺口（待 R3）：报结构无成员"，而 R3（fontconfig）早就在线上了 ⇒ 探针当场变红
+（`nf=1`），改成"列出 FreeSans"。**这就是那个探针存在的意义**：构建变了、断言没改，它报警。
+（也因为它**不在 sweep 里**（sweep 只跑 `accept-*`），这条腐烂一直没被自动发现 —— 记一笔。）
+
+**踩到的两个小坑**：① `accept-print` 的 `evVal()` 的 `want` 是**字符串**（内部走
+`wantHit`→`includes`），传正则会抛 `TypeError: First argument to String.prototype.includes…`；
+② `accept-p5-fallback` 的 `ev()` 返回 `{rc,out}` 而**不是**字符串 —— 两个套件的 helper
+形状不同，别想当然（都是我这次踩的）。
+
+**顺带交底**：`print(...,'-dpng')` 会带出一条 `opengl_texture::create: OpenGL error while
+generating texture data` 警告 —— **不是本项引入的**：纯 `drawnow` 也有（实测）。
+**实测**：`accept-print` **45/0**（+2）、`accept-p5-fallback` **17/0**（+2）、
+`probe-core-names` **23/0**。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
