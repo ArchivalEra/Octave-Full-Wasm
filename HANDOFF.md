@@ -2420,5 +2420,5 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 | 资产条目 | 47 | |
 | 最近一次**全绿**回归 | `20260924-8768-m2ft-c` · **35 套 / 925 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
 | 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,756,258 B · `707db04d45650fc5…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `main` · HEAD 提交日期 2026-09-23 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
+| 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
