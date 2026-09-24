@@ -89,9 +89,22 @@ function h = figure (varargin)
   h = n;
 
   ## ---- T2：把真的 figure 对象也建出来（拿不到 toolkit 就退回纯编号）---------
+  ## ★ 2026-09-24（小口子 3）：**带 `integerhandle=off` 的图**以前一律建不出来。
+  ##   这一对参数要求 `__go_figure__` 的第一个实参是 **NaN**（"让 Octave 自己分配"）——
+  ##   宿主核心的 `figure.m` 在"没给图号"时传的就是 NaN。桥以前一律传自己的面板号 n，
+  ##   于是 `__go_figure__(5,"integerhandle","off")` 报 `invalid graphics object`，
+  ##   结果 **waitbar / dialog / uisetfont** 全部死在 `get: invalid handle (= 2)`
+  ##   （一句看不出根因的错）。实测：`__go_figure__(NaN,"integerhandle","off")` 正常
+  ##   （返回 -1.345、`ishghandle`=1、整套 waitbar 属性都吃得下）。
+  ##   ⚠️ 只有这一对触发的形态改走 NaN；**其余形态逐字不变**（面板号 == 真句柄这条
+  ##   假设仍然成立，`figure(1)/figure(2)` 的句柄语义一个字节都没动）。
+  figh = n;
+  if (__pb_integerhandle_off__ (props))
+    figh = NaN;
+  endif
   try
-    ## `__go_figure__` 要"图号 + 属性对"；整数句柄模式下返回的句柄就是 n。
-    h = __go_figure__ (n, props{:});
+    ## `__go_figure__` 要"图号或 NaN + 属性对"；整数句柄模式下返回的句柄就是 n。
+    h = __go_figure__ (figh, props{:});
     ## 顺手把它设成当前 figure —— 核心 figure.m 也这么做，
     ## gcf()/gca()/__pb_mirror_text__ 都靠这个属性。
     set (0, "currentfigure", h);

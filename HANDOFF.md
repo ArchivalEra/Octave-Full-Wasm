@@ -443,7 +443,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `build/render-docstrings.py` | **T1**：构建期用**真 makeinfo** 预渲染 `built-in-docstrings`（去 texinfo 标记 → `help` 走 plain text 分支）。宿主侧跑 |
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
-| `build/webshims/` | **R1/R0（2026-09-24）**：**无 shell 的清晰报错**覆写 —— `popen.m`（`-1` → error）、`system.m`（`status == -1` → error；两输出形态原样透传给内建）|
+| `build/webshims/` | **"做不了就清晰报错"的覆写层**（`.m` 遮住内建/核心同名函数；启动时那条 `shadows a built-in function` 警告有意保留）—— **R1/R0（2026-09-24）**：`popen.m`（`-1` → error）、`system.m`（`status == -1` → error；两输出形态原样透传给内建）；**小口子 3**：`ginput.m` / `keyboard.m` / `uisetfont.m` / `uiwait.m` / `waitfor.m`（以前**挂死页面**，现在清晰报错；实现 G3/G5 时删掉即可）|
 | `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
 | `build/BASELINE-11.3.md` | **第四轮当前依据**：11.x 收益核实、19 patch 漂移实测、Edge-Tools 11.1.0 配方全文（5 处 sed / `emf77` / webgl toolkit / 接口 / COI 代价）、5 条 sed 对 11.3.0 命中实测、vanilla 11.3.0 三项核对、ccache 实测 |
 | `build/113/configure-113-full.sh` | **11.3.0 全开 configure**：依赖写成**一张表 + `SKIP` 变量**（按库集合二分只需改一行；`SKIP=umfpack` 即精确关单个库，且会**显式加 `--without-umfpack`**——仅不传 `--with-*` 不够） |
@@ -631,10 +631,26 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
     时桥报错（核心会画到那个 axes 上）——桥只有当前面板一份状态，画错面板属于"静默做错"。
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
 - **（新，2026-09-24 实测）交互/阻塞面**：`pause(0.5)` 期间页面定时器 **0 次**（页面被完全堵死）；
-  **`ginput`/`keyboard` 会挂死**（8 s 无响应 —— 比"报错"更糟的一种"不清晰"）；
-  `waitbar` 报**误导性**的 `get: invalid handle (= 2)`；`edit` 是清晰报错（无 shell）；
-  `legend`/`plotyy`/`movie`（2 帧）/`diary`/`more` 实测可用。
-  ⇒ 修法与顺序见 `build/113/PLAN-next.md`（G3/G4/G5；"不许挂死"那一档先做）。
+  ~~`ginput`/`keyboard` 会挂死~~ · ~~`waitbar` 报误导性的 `get: invalid handle (= 2)`~~ ——
+  **这两条已由小口子 3 处置**（见下条）；`edit` 是清晰报错（无 shell）；
+  `legend`/`plotyy`/`movie`（2 帧）/`diary`/`more` 实测可用。`pause` 那条仍待 JSPI 车道（G2）。
+- **（新，2026-09-24，小口子 3）交互/等待一族：能用就用、不能用就清晰报错 —— 不再挂死、不再误导**
+  - ✅ **`waitbar` 真能用了**（也把 `dialog` 一族的地基修好了）。根因在**桥**：waitbar 建图带
+    `"integerhandle","off"`，而桥把**面板号**当图号传给 `__go_figure__` ⇒ `invalid graphics object`
+    ⇒ 整族死在 `get: invalid handle (= 2)`（一句看不出根因的错）。修法：带这一对参数时第一个实参
+    必须是 **NaN**（"让 Octave 自己分配"，宿主核心 `figure.m` 也这么传），由纯 helper
+    `__pb_integerhandle_off__` 判定；**其余形态逐字未动**。实测：`ishghandle`=1、`tag=waitbar`、
+    1 个 axes、`waitbar(0.75,h)` 真的更新 xdata（4 点）、`getframe` 有墨（INK≈8.9e6）、`close` 后失效。
+  - **`ginput` / `keyboard` / `uisetfont` / `uiwait` / `waitfor` 改成清晰报错**（以前**挂死页面**，
+    8 s 无响应 —— 比报错更糟的失败方式）。沿用 R1 的 `.m` 覆写层（`build/webshims/`），报错里
+    点明原因 + 替代办法（`input()` 走 `window.prompt` 可用；字体直接
+    `set(h,"fontname","FreeSans","fontsize",12)`）。**连带**：核心 `waitforbuttonpress`/`gtext`
+    （内部调 `ginput`）也从挂死变成清晰报错。**交底**：覆写后 `exist("keyboard")`/`exist("waitfor")`
+    由 **5（内建）** 变 **2**，`which` 指向 `webshims/*.m` —— 名字面如实反映"这是 `.m` 覆写"。
+    实现 G3/G5 时**删掉这几个文件**即可。
+  - ⚠️ **更正旧话**：早先记的"`waitfor` 可用"只验过"名字存在"、**没验语义**；实测它会挂死。
+  - 钉子：`test/browser/accept-interactive.mjs`（**15 项**）：每例开**新页面** + Node 侧 8 s 超时
+    ⇒ **"挂死"会被判成失败**，不会把整个套件卡在那里。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -723,8 +739,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。
      ✅ **2）属性对契约**（`plot(…,'parent',…)` 桥状态错记）→ **已修**，并顺手把同类的
      `plot3`/`loglog`/`semilogx`/`semilogy`/`surf`/`mesh`/`contour`/`errorbar` 一并对齐核心（见 §7）。
-     余下：`waitbar`+`uisetfont` 误导报错 / `ginput`+`keyboard` **不许挂死** / 可用包可见性 /
-     `print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/ `check-wants` 规则 B 复核。
+     ✅ **3）交互/等待一族** → **`waitbar` 修好真能用**（桥的 `figure.m` 的 integerhandle 形态 + 新
+     helper `__pb_integerhandle_off__`）；`ginput`/`keyboard`/`uisetfont`/`uiwait`/`waitfor`
+     由 `build/webshims/` 覆写成**清晰报错**（不再挂死）；钉子 `accept-interactive.mjs` 15 项（见 §7）。
+     余下：可用包可见性 / `print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/
+     `check-wants` 规则 B 复核。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
      （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
      （`pause` + `unwind_protect` + EH/SjLj 六条矩阵、六条判据）→ G3 `ginput` 事件队列 →
@@ -807,8 +826,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 8,674,824 B raw / 2,515,502 B gz | sha256 `c2be24347381cb13…` |
 | 三大件 gzip 合计 | **9,619,254 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-081041` · **36 套 / 975 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,911,975 B · `4b679bb2d8f30366…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-085027` · **37 套 / 991 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,916,124 B · `7c625bc2e7171fe9…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

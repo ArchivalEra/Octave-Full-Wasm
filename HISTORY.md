@@ -1783,6 +1783,58 @@ sha 相同 ⇒ 判为偶发（页面/渲染进程崩），不是本批改动引�
 
 ---
 
+### 5.35 第十批：交互/等待一族 —— `waitbar` 修好、"挂死族"改成清晰报错（2026-09-24）
+
+工作令 §3 第 3 条要的是"`waitbar`/`uisetfont` 的误导报错改清晰、`ginput`/`keyboard` 不许挂死"。
+开工先量（8768；**每例新页面 + Node 侧 8 s 超时**，因为挂死会阻塞页面主线程）：
+
+| 名字 | 改前 | 改后 |
+|---|---|---|
+| `waitbar(...)` | 报 `get: invalid handle (= 2)`（**整族坏**） | ✅ **能用**：句柄有效、`tag=waitbar`、1 个 axes、更新 xdata、`getframe` 有墨 ≈8.9e6 |
+| `uisetfont` | 报 `setappdata: H must be a scalar or vector of graphic handles` | 清晰报错（原因 + 替代写法） |
+| `ginput(1)` | **挂死**（8 s 无响应） | 清晰报错 |
+| `keyboard` | **挂死** | 清晰报错 |
+| `uiwait(gcf())` | **挂死** | 清晰报错 |
+| `waitfor(gcf())` | **挂死** | 清晰报错 |
+| `waitforbuttonpress` / `gtext` | **挂死**（内部就是调 `ginput`） | 同上（连带受益） |
+
+**`waitbar` 的根因在桥、不在核心**：它建图时带 `"integerhandle","off"`（一行 10 个属性对），
+而桥的 `figure.m` 一直把**面板号**当图号传给 `__go_figure__(n, props…)`。带这一对参数时 Octave
+要的是 **NaN**（"让 Octave 自己分配"——宿主核心 `figure.m` 在"没给图号"时写的正是 `f = NaN`）：
+- 宿主（真 11.3.0）：`figure('integerhandle','off')` OK（返回 -1.394）；
+  `__go_figure__(2,'integerhandle','off')` **报** `graphics_handle::free: invalid object 2`。
+- 8768：`__go_figure__(5,'integerhandle','off')` → `invalid graphics object`；
+  `__go_figure__(NaN,'integerhandle','off')` → 有效（-1.345）；`__go_figure__(0,…)` → `failed to create figure handle`。
+
+修法：新纯 helper `__pb_integerhandle_off__`（宿主可测）扫属性对，命中就传 NaN；**其余形态逐字未动**
+—— `figure(1)/figure(2)` 那条"面板号 == 真句柄"的假设一个字节都没改，所以 T2/plotv2/plot3d/p5
+那些套件不受影响（实测全绿）。**连带**：`dialog`/`errordlg`/`msgbox` 这些对话框的地基也一起好了
+（它们建的是同一种图）。
+
+**挂死族改成清晰报错**：新增 `build/webshims/{ginput,keyboard,uisetfont,uiwait,waitfor}.m`，
+沿用 R1 那条"load path 里的 `.m` 遮得住内建/核心"的路（`keyboard`/`waitfor` 是**内建**，
+另外三个是核心 `.m`）。报错点明原因（等浏览器事件需要 JSPI 挂起，本构建还没有）+ 替代办法
+（`input()` 走 `window.prompt` **可用**；字体直接 `set(h,"fontname","FreeSans","fontsize",12)`）。
+**交底**：覆写后 `exist("keyboard")`/`exist("waitfor")` 由 **5** 变 **2**、`which` 指向 `webshims/`
+—— 名字面在如实说话。**同时更正**了 HANDOFF 早先那句"`waitfor` 可用"（当时只验过"名字存在"）。
+
+**钉子**：新套件 `test/browser/accept-interactive.mjs`（15 项）。形状上的关键点是
+**"每例开一个新页面 + Node 侧 8 s 超时"** ⇒ **挂死会被判成失败**，而不是把整个套件卡在那里。
+
+**自己踩的两个坑（记下来，别再踩）**：
+1. 套件第一版用 `text.replace(/LIBGL:[^|]*/g, '')` 清噪音 —— 本构建的日志里**没有 `|`**，
+   于是 `[^|]*` 一路吃到**整段末尾**，把我们正要匹配的那一行也吃掉了 ⇒ 症状是"三条 waitbar 断言
+   永远读到空串"（我还一度以为是 waitbar 没输出）。**改成按行过滤**才对。
+2. 本构建**第一次建图**会先刷一屏 gl4es 初始化日志，`disp` 的输出排在它**后面** ⇒ 断言要
+   **轮询 sentinel**（出现即返回），别用固定 `sleep`；否则随机器负载随机假失败。
+
+**实测**：`accept-interactive` **15/0**；相邻八个套件全绿（`accept-t2-graphics` 26 /
+`accept-plotv2` 92 / `accept-plot3d` 44 / `accept-p5-graphics` 65 / `accept-print` 43 /
+`accept-p5-fallback` 15 / `accept-selftest` 34 / `accept-queue-drift` 12）；
+宿主 `glue-selftest` **84/84**（+2：`__pb_integerhandle_off__`）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

@@ -125,6 +125,13 @@
    （children=1）。钉子：`accept-plotv2` 92/0（+10）、`accept-plot3d` 44/0（+10）、宿主
    `glue-selftest` 82/82（+13）。过程与两个坑见 HISTORY §5.34。
 3. **`waitbar`/`uisetfont` 的误导报错** → 清晰报错；`ginput`/`keyboard` **不许挂死**（先报错，G3/G5 再实现）。
+   **✅ 2026-09-24 收口（比预期多做了一件）**：量下来发现 `waitbar` 的根因在**桥**
+   （建图带 `"integerhandle","off"`，而桥把面板号当图号传 `__go_figure__`）⇒ 修 `plotbridge/figure.m`
+   + 新 helper `__pb_integerhandle_off__`，**waitbar 真的能用了**（句柄/axes/xdata/`getframe` 有墨全实测）。
+   `ginput`/`keyboard`/`uisetfont` **外加** `uiwait`/`waitfor`（量出来它们同样挂死，是 uisetfont 的
+   底层机制）由 `build/webshims/` 覆写成清晰报错；连带 `waitforbuttonpress`/`gtext` 也不再挂死。
+   钉子 `accept-interactive.mjs` 15 项（每例新页面 + Node 侧 8 s 超时 ⇒ 挂死算失败）。
+   过程与两个坑见 HISTORY §5.35。
 4. **可用包可见性**：`OctaveAssets.list()` → `__webassets_available__()`，让 `pkg list` 能说清
    "有哪些可加载但尚未装载"。
 5. **`print -dpng/-djpg`** 走页面 PNG（实测 `/tmp/p5_fig.png` 已存在）；`-dpdf/-deps` 保持清晰报错。
