@@ -51,6 +51,25 @@
   B `await eval_async("pause(0.2); 42")` ⇒ Promise pending 期间**页面 timer 正常 tick**、最终 42；
   C `await eval_async("error('x')")` ⇒ **Promise reject** 且文本与同步入口一致。
 - **风险**：中（动了链接开关）。回退：产物退回 `m2fc-fonts-out` 的备份（已在容器里）。
+- **⛔ 2026-09-24 第一次尝试失败（已回退，8761 一字节未动）**：
+  `main.cc` 的绑定与 `link-web.sh` 的 `-sJSPI -sJSPI_EXPORTS=eval_async` 都加好了、五条自检全过、
+  `eval_async` 也**存在**（`typeof === 'function'`），但**一调就炸**：
+  `RuntimeError: null function`（三次调用全部如此，`ticks`=0）；随后的探针**把页面一起卡死**
+  （300 s 未返回）。**事故与教训**：G0 的冒烟原本**在开机时自动跑**，它会去调 `eval_async`
+  ⇒ 那个坏产物一部署，**8768 每次开页都卡死**（所有验收一起挂）。**已改成按需**
+  （`window.__octaveJspiProbe(timeoutMs)`，开机只记 `unprobed`），并加超时兜底与
+  `pass-blocking` 三态 —— **"探测一个可能把主线程卡住的东西"不能放在开机路径上**。
+  8768 已回滚到 `site` 的产物（两站点重新一致、全绿）。
+- **下一次怎么做（先小后大，别直接动 29MB 产物）**：
+  1. **容器里做最小复现**：一个十几行的 embind async 程序，按阶梯加设置
+     `{裸, -sJSPI} → 再加 -sMAIN_MODULE=2 → 再加 SIDE_MODULE/dlopen`，看**哪一步**把它打坏
+     （上游 `test/test_other.py::test_embind_jspi` 只用 `-lembind -sJSPI`，**不带 JSPI_EXPORTS**，
+     所以旗标本身大概率不是问题；嫌疑最大是 **M2 的 DCE 把 async invoker 那个 thunk 削了**，
+     或者 JSPI 需要把 **invoker** 而不是业务函数列进 `JSPI_EXPORTS`）。
+  2. 若确认是 M2 相关：先试把 invoker 的导出名列进 `JSPI_EXPORTS`（用 `--emit-symbol-map`
+     或 `wasm-dis` 找名字），或**对照一条 `MAIN_MODULE_LEVEL=1` 的产物**看它在 M1 下是否正常。
+  3. 机制在小复现里**证明**之后，才回来重链真产物；否则记成"这条路需要更多调查"，
+     把交互能力留在 G3/G5 的替代方案里（例如 JS 侧队列 + 现有同步入口的组合）。
 
 ### G2 · `pause` + `unwind_protect` + EH/SjLj 压力矩阵（**本计划的真正风险点**）
 - **改动**：`pause` 的等待从"忙等/阻塞"改成 **suspending import**（`web_pause_ms`），走 `-sJSPI_IMPORTS`。

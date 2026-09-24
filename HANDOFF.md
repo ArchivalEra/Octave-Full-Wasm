@@ -913,8 +913,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,260,744 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-111705` · **39 套 / 1,025 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 27,089,836 B · `c6614926bf0cdbc7…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-120049` · **39 套 / 1,025 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 27,090,799 B · `232c9e0a067ec471…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

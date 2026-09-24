@@ -444,7 +444,7 @@ fi
 echo "== 编 main.cc"
 em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
      ${P5_OBJS:+ $P5_DEF} \
-     "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
+     "${EXC_FLAGS[@]}" ${JSPI_DEF[@]+"${JSPI_DEF[@]}"} -c "$SRC/main.cc" -o "$SRC/main.o"
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
 cd "$SRC"
@@ -474,6 +474,35 @@ DIAG=()
 # ⚠️ **注释不能写进下面那条 `\` 续行的命令里**（会被当成 emcc 的输入参数，报 "no input files"
 #    —— 这个坑本仓在 JSPI 那轮踩过），所以说明一律写在命令**上面**。
 IDBFS_FLAGS=( -lidbfs.js )
+
+# ---- JSPI（G1，2026-09-24）：异步入口 `eval_async` 的运行期基础 -------------------
+# **为什么必须显式加**：libembind 里写明 `async bindings are only supported with JSPI`
+#（实测 emsdk 5.0.7）⇒ `main.cc` 里的 `emscripten::function("eval_async", …, async())`
+# 在**没有** `-sJSPI` 时编得过、链接过，运行时才炸 —— 属于"静默陷阱"那一类。
+#
+# 三条实现要求（全都撞过，见 `build/113/NOTES-jspi.md`）：
+#   ① 每个"可能间接挂起"的 JS 入口都要在 `-sJSPI_EXPORTS` 里（V8 要求**挂起点所在整条入口**
+#      都是 promising；只列最外层的那个不够）；
+#   ② JSPI 边界**不传 JS 字符串**（要 `ccall`/`cwrap`）—— 传了会得到 NULL，
+#      于是 `dlopen(NULL)` 返回主模块句柄、症状极像"没导出符号"；
+#   ③ side module 要**显式导出**符号（不写就是 `-O2` DCE 后的 64 字节空壳）。
+#
+# ★ 产物形状是**单产物 + 运行时能力门**（Gate 0 已实测：把 `WebAssembly.Suspending`/
+#   `promising` 删掉之后，带 `-sJSPI` 的产物**仍然能加载**，只是被包过的导出不存在）
+#   ⇒ 不抬浏览器下限、不维护两条车道。页面侧的门在 `bridge/index.html` 的 `__octaveJspi`。
+# `WITH_JSPI=0` 可以关掉（对照组用；关了 `eval_async` 就不存在，页面会如实报 no-entry）。
+# ⛔ **2026-09-24 起默认关闭**：G1 第一次尝试失败（`RuntimeError: null function`，一调还把页面卡死），
+#    已把产物回退。**在机制没于小复现里证明之前，别把它做成默认** —— 免得谁重链一次就拿到坏产物。
+#    开启时同时给编译期宏 `-DJSPI_EVAL_ASYNC=1`（main.cc 里那个绑定在 `#if` 里；宏不加就编不进去，
+#    这样"关掉"是真的关掉，不是留一个坏绑定在产物里）。
+JSPI_FLAGS=(); JSPI_DEF=()
+if [ "${WITH_JSPI:-0}" = "1" ]; then
+  JSPI_FLAGS=( -sJSPI -sJSPI_EXPORTS=eval_async )
+  JSPI_DEF=( -DJSPI_EVAL_ASYNC=1 )
+  echo "⚠⚠ WITH_JSPI=1：这是**实验车道** —— G1 的 eval_async 目前实测是坏的（见 HISTORY §5.43）"
+else
+  echo "== JSPI 关闭（默认）：不加 -sJSPI、不编 eval_async ⇒ 与现役产物一致"
+fi
 
 set -x
 # EXTRA_LDFLAGS：诊断/定点补救用（空格分隔的链接旗标）。

@@ -496,4 +496,18 @@ EMSCRIPTEN_BINDINGS(my_module) {
   emscripten::function("last_error_message", &last_err_msg);
   emscripten::function("feval", &feval);
   emscripten::function("eval_string", &eval_string);
+  // ── G1（2026-09-24）：**异步入口** `eval_async` ────────────────────────────
+  // 与 `eval_string` 是**同一个 C 函数**，只是走 Embind 的 async 绑定 ⇒ 调用返回 Promise，
+  // 期间 wasm **可以真挂起**（JSPI）。这样"等浏览器"的能力就有了一条不用改同步语义的路。
+  //
+  // ★ **同步的 `eval_string` 一字不改**，这是刻意的：
+  //   · 它被 39 个验收套件 + 页面命令队列**同步**调用，把它改成 async 会让全体调用点变形；
+  //   · 更糟的是会**掩盖 G2 的真风险**（`pause`+EH/SjLj 的挂起组合）—— 那才是要压的东西。
+  //
+  // ⚠️ `emscripten::async()` 要求链接期带 `-sJSPI`（libembind 里写明
+  //    "async bindings are only supported with JSPI"，实测 emsdk 5.0.7 如此），
+  //    旗标在 `build/113/link-web.sh` 的 JSPI_FLAGS（`WITH_JSPI=0` 可关掉，用于对照）。
+#if defined(JSPI_EVAL_ASYNC)
+  emscripten::function("eval_async", &eval_string, emscripten::async());
+#endif
 }

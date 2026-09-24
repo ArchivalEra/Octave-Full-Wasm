@@ -45,20 +45,30 @@ async function open (init) {
 // ── ① 正常浏览器：API 门必须过；冒烟按产物现状给结论 ─────────────────────────
 {
   const { page, logs } = await open(null);
-  const J = await page.evaluate(() => {
+  // ⚠️ 冒烟**不在开机时自动跑**（2026-09-24 事故：坏绑定会让开机自检把整页卡死）⇒ 这里**按需**触发。
+  const J = await page.evaluate(async () => {
     const j = window.__octaveJspi || {};
-    return { api: j.api, smoke: j.smoke, entry: j.entry, note: j.note,
+    const before = j.smoke;
+    let after = null;
+    try { after = await window.__octaveJspiProbe(5000); } catch (e) { after = 'throw:' + String(e).slice(0, 60); }
+    return { api: j.api, smoke: j.smoke, entry: j.entry, note: j.note, before, after,
              susp: typeof WebAssembly.Suspending, prom: typeof WebAssembly.promising,
+             hasProbe: typeof window.__octaveJspiProbe === 'function',
              hasRequire: typeof window.__octaveJspiRequire === 'function' };
   });
-  check(J.hasRequire && typeof J.api === 'boolean', '★ 页面暴露能力门对象 `__octaveJspi` / `__octaveJspiRequire`', JSON.stringify(J).slice(0, 160));
+  check(J.hasRequire && J.hasProbe && typeof J.api === 'boolean',
+    '★ 页面暴露能力门 `__octaveJspi` + **按需**冒烟 `__octaveJspiProbe()` + `__octaveJspiRequire()`', JSON.stringify(J).slice(0, 200));
+  check(J.before === 'unprobed', '★ 开机**不自动**跑冒烟（`unprobed`）—— 坏绑定不会在开机路径上把页面卡死', `before=${J.before}`);
   check(J.api === true && J.susp === 'function' && J.prom === 'function',
     '★ gate① API 门：Chromium 里 `Suspending`/`promising` 都在（api=true）', `susp=${J.susp} prom=${J.prom}`);
-  const known = ['pending', 'pass', 'fail', 'no-entry', 'api-missing'];
+  const known = ['unprobed', 'pending', 'pass', 'pass-blocking', 'fail', 'timeout', 'no-entry', 'api-missing'];
   check(known.indexOf(J.smoke) >= 0, '★ gate② 冒烟给出**已知状态之一**（不是沉默）', `smoke=${J.smoke} note=${J.note}`);
   // ★ 跟着产物走的硬要求：有入口就必须真过（G1 之后自动生效）
   if (J.entry) {
-    check(J.smoke === 'pass', '★ 有 suspending 入口 ⇒ 冒烟必须 pass（值对 **且** 等待期间定时器在跑）',
+    // G1 之后：值对 **且** 等待期间定时器在跑 = pass；值对但 ticks=0 = pass-blocking（挂起有了、
+    // `pause` 还没接上 —— 那是 G2 的活）；都不满足 = fail。**绝不允许 timeout/永不 settle**。
+    check(J.smoke === 'pass' || J.smoke === 'pass-blocking',
+      '★ 有 suspending 入口 ⇒ 冒烟必须给出 pass 或 pass-blocking（不许 timeout / 不许永不 settle）',
       `entry=${J.entry} smoke=${J.smoke} ${J.note}`);
   } else {
     check(J.smoke === 'no-entry',
@@ -79,8 +89,13 @@ async function open (init) {
     try { delete WebAssembly.Suspending; } catch (e) {}
     try { delete WebAssembly.promising; } catch (e) {}
   });
-  const J = await page.evaluate(() => ({ api: window.__octaveJspi.api, smoke: window.__octaveJspi.smoke,
-                                         susp: typeof WebAssembly.Suspending }));
+  const J = await page.evaluate(async () => {
+    const before = window.__octaveJspi.smoke;
+    let after = null;
+    try { after = await window.__octaveJspiProbe(3000); } catch (e) { after = 'throw'; }
+    return { api: window.__octaveJspi.api, smoke: window.__octaveJspi.smoke, before, after,
+             susp: typeof WebAssembly.Suspending };
+  });
   check(J.api === false && J.susp === 'undefined', '★ 删掉 API 之后 gate① 如实为 false', `api=${J.api} susp=${J.susp}`);
   check(J.smoke === 'api-missing', '★ gate② 状态为 `api-missing`（不是沉默、不是 TypeError）', `smoke=${J.smoke}`);
   const r = await page.evaluate(() => {

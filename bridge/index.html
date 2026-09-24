@@ -154,36 +154,48 @@
       window.__octaveJspi = {
         api: (typeof WebAssembly.Suspending === 'function'
               && typeof WebAssembly.promising === 'function'),
-        smoke: 'pending',       // pending | pass | fail | no-entry | api-missing
+        smoke: 'unprobed',      // unprobed | pending | pass | pass-blocking | fail | timeout | no-entry | api-missing
         entry: null, note: ''
       };
-      (function () {
+      // ★ 冒烟**不在开机时自动跑**（2026-09-24 事故改的）：G1 第一次把 `eval_async` 链进来时，
+      //   那个绑定是坏的（`RuntimeError: null function`），而开机自检去调它 ⇒ **整个页面卡死**，
+      //   所有浏览器验收一起挂。教训：**"探测一个可能把主线程卡住的东西"不能放在开机路径上**。
+      //   ⇒ 改成按需 `__octaveJspiProbe()`（带超时），开机只如实记 `unprobed`。
+      //   真正依赖 JSPI 的入口（G3/G5）在**第一次被调用时**才问它。
+      window.__octaveJspiProbe = function (timeoutMs) {
         var J = window.__octaveJspi;
-        if (!J.api) { J.smoke = 'api-missing'; J.note = '页面里没有 WebAssembly.Suspending/promising'; return; }
-        // G1 之后这里会是 `Module.eval_async`（Embind async 的绑定）；没有它 = 本产物还不支持挂起
+        if (!J.api) { J.smoke = 'api-missing'; J.note = '页面里没有 WebAssembly.Suspending/promising'; return Promise.resolve(J.smoke); }
         var fn = (typeof Module.eval_async === 'function') ? Module.eval_async : null;
-        if (!fn) { J.smoke = 'no-entry'; J.note = '本产物没有 suspending 入口（G1 会加 eval_async）'; return; }
+        if (!fn) { J.smoke = 'no-entry'; J.note = '本产物没有 suspending 入口（G1 会加 eval_async）'; return Promise.resolve(J.smoke); }
         J.entry = 'eval_async';
+        J.smoke = 'pending';
         var ticks = 0;
         var timer = setInterval(function () { ticks++; }, 20);
-        Promise.resolve(fn('pause(0.2); 43')).then(function (v) {
-          clearInterval(timer);
-          // 两条都要：**等到了**（值对）且**等待期间页面没被堵死**（timer 在跑）
-          J.smoke = (String(v).indexOf('43') >= 0 && ticks > 0) ? 'pass' : 'fail';
-          J.note = 'ticks=' + ticks + ' value=' + v;
-        }).catch(function (e) {
-          clearInterval(timer); J.smoke = 'fail'; J.note = String(e).slice(0, 140);
+        var done = function (state, note) { clearInterval(timer); J.smoke = state; J.note = note; return state; };
+        // 超时兜底：坏绑定可能**永不 settle**（实测会连页面一起卡住）⇒ 到点如实记 timeout
+        var guard = new Promise(function (res) {
+          setTimeout(function () { res(done('timeout', 'eval_async 在 ' + (timeoutMs || 5000) + 'ms 内没有 settle')); }, timeoutMs || 5000);
         });
-      })();
+        var real = Promise.resolve().then(function () { return fn('pause(0.2); 43'); }).then(function (v) {
+          // 两条都要：**值对**（43）且**等待期间页面没被堵死**（ticks > 0）。
+          // ticks=0 但值对 ⇒ `pass-blocking`：挂起能力有了，但 `pause` 还没接上（那是 G2 的活）。
+          return done(String(v).indexOf('43') >= 0 ? (ticks > 0 ? 'pass' : 'pass-blocking') : 'fail',
+                      'ticks=' + ticks + ' value=' + v);
+        }).catch(function (e) { return done('fail', String(e).slice(0, 140)); });
+        return Promise.race([real, guard]);
+      };
       // 依赖 JSPI 的入口在调用前问它：可用 ⇒ 返回 null；不可用 ⇒ 返回**一句能读懂的话**
       // （而不是让用户撞上 `TypeError: WebAssembly.Suspending is not a constructor`）。
+      // ⚠️ 还没冒烟过（`unprobed`）**不算失败** —— 依赖项自己会再走一次 `__octaveJspiProbe()`。
       window.__octaveJspiRequire = function (feature) {
         var J = window.__octaveJspi;
-        if (J.api && J.smoke !== 'fail' && J.smoke !== 'no-entry') return null;
+        var ok = J.api && J.smoke !== 'fail' && J.smoke !== 'timeout' && J.smoke !== 'no-entry';
+        if (ok) return null;
         return feature + ': 本构建的"等用户动作"需要 JSPI，而当前页面没通过能力门（'
                + (J.api ? ('smoke=' + J.smoke) : 'api-missing') + '）。'
                + '支持 JSPI 的浏览器：' + JSPI_SUPPORT + '。';
       };
+
 
 
       function chk(rv) {

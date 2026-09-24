@@ -2110,6 +2110,44 @@ Firefox ≥153 / Safari ≥27），而不是让用户撞上 `TypeError: WebAssem
 
 ---
 
+### 5.43 G1 第一次尝试：**失败并回退**，但换来一条产品级教训（2026-09-24 深夜）
+
+按 `PLAN-jspi.md` 做 G1（给主产物加 `eval_async`）。**做出来的东西是坏的，已经全部回退**，
+8761 一个字节没动。如实记下来，免得下一轮重踩。
+
+**做了什么**：`main.cc` 加 `emscripten::function("eval_async", &eval_string, async())`
+（同步 `eval_string` 一字未改）；`link-web.sh` 加 `JSPI_FLAGS=( -sJSPI -sJSPI_EXPORTS=eval_async )`
+（默认开，`WITH_JSPI=0` 可关）。重链成功、**五条自检全过**、`octave.wasm` 29,463,242 → 29,463,132。
+
+**实测（8768，部署后立刻发现）**：
+- `typeof Module.eval_async === 'function'` ✅ —— 绑定**在**；
+- 但**一调就炸**：`RuntimeError: null function`（`42` / `pause(0.2); 43` / `error("boom")` 三例全炸，
+  `ticks`=0）；
+- 紧接着的探针**把页面一起卡死**（300 s 未返回）。
+
+**事故（比 G1 本身更值钱）**：G0 的冒烟原本**在开机时自动跑**，而它第一步就是调 `eval_async`
+⇒ 那个坏产物一部署，**8768 上每次开页都会卡死**（所有浏览器验收一起挂）。**已改成按需**：
+`window.__octaveJspiProbe(timeoutMs)`（开机只记 `unprobed`），配超时兜底与
+`pass-blocking/timeout` 三态；探针改为**主动触发**再断言。
+**教训一句话**：**"探测一个可能把主线程卡住的东西"不能放在开机路径上** ——
+探测器的失败模式要和被探测的东西**解耦**。
+
+**为什么坏（还没查清，只记嫌疑）**：上游 `test/test_other.py::test_embind_jspi` 只用
+`-lembind -sJSPI`（**不带** `JSPI_EXPORTS`）⇒ 旗标本身大概率不是问题。嫌疑排序：
+① **`MAIN_MODULE=2` 的 DCE 把 async invoker 那个 thunk 削掉了**（embind 的 async 走的是一个
+原始 wasm invoker，`createJsInvoker` 里 `invoker(...)` 返回 Promise）；
+② JSPI 需要把 **invoker**（不是业务函数）列进 `JSPI_EXPORTS`。
+**下一步是小复现，不是大产物**：十几行的 embind async 程序按阶梯加设置
+（`{裸, -sJSPI} → +MAIN_MODULE=2 → +SIDE_MODULE/dlopen`）定位是哪一步打坏的；
+`--emit-symbol-map`/`wasm-dis` 找 invoker 名；或对照一条 `MAIN_MODULE_LEVEL=1` 的产物。
+**机制没在小复现里证明之前，不再动真产物。**
+
+**回退动作（已完成）**：`cp site/octave.{wasm,js,data} siteWebGL/`（`site` = 之前那版好产物），
+`check-site-parity.sh` 报**两站点完全一致**，8768 复测：同步 `eval_string('2+2')` 正常、
+`feval` 正常、`eval_async` 不存在、`__octaveJspi.smoke = 'no-entry'`（如实）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
