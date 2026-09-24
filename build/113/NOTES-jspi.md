@@ -135,3 +135,39 @@ cd /mnt/hdd/octave-wasm-build/harness && node _jspi_run.mjs /mnt/hdd/octave-wasm
 **顺带实测记一笔**：`-sEXPORTED_RUNTIME_METHODS` 里的名字**必须真实可用**，
 写错是**编译期硬错**（`undefined exported symbol`）而不是运行时忽略 —— 与 `-sJSPI_EXPORTS`
 写不存在的名字（无害）行为**不一样**，别把两者当同一类。
+
+### 再进一步：**加上真 dlopen / SIDE_MODULE**（v10，2026-09-24 深夜）
+
+在 v9 的基础上加一个真 side module（`side_add`，`EMSCRIPTEN_KEEPALIVE`）+ `dlopen("/side.wasm")`，
+并且**先调一次会走 dlopen 的同步绑定 `callSide(1)`，再调 `async_f('abcd')`**：
+
+| 调用 | 结果 |
+|---|---|
+| `callSide(1)`（同步绑定，内部 dlopen + dlsym） | ❌ **`SuspendError: trying to suspend without WebAssembly.promising`** |
+| `sync_f('abcd')` | ✅ 4 |
+| `async_f('abcd')` | ✅ **Promise → 4**（embind 的 async 这条路仍然正常） |
+
+★ **这就是"要求①"的现场演示**：一旦产物带 JSPI 且链里有 dlopen，**任何一个"可能间接挂起"的
+入口**（这里就是那个会调 dlopen 的同步绑定）在**没被 promising 包装**的情况下被调用，V8 就抛
+`SuspendError` —— 换句话说，**动态链接的存在会把它上游的整条入口都变成"可能挂起"**，
+而这与入口是不是 embind 的 async 绑定**无关**。
+
+**对我们那个坏产物意味着什么**：`eval_string`（`eval_async` 背后的 C 函数）在真产物里会走到
+**dldfcn / `oct-shlib` 那套动态装载**（`.oct` 的 dlopen 就在这条路上）⇒ 它的**同步入口
+`eval_string` 与异步入口 `eval_async` 都处在"可能挂起"的链上**。而我们的
+`-sJSPI_EXPORTS=eval_async` 里那个名字**不是 wasm 导出**（embind 的名字在 JS 侧），
+所以被 promising 包装的**不是真正需要它的那个 invoker** ⇒ 症状可以理解成"包装落空"。
+（v4 里"bogus 名字无害"是因为那个最小程序**不碰 dlopen**，整条链本来就不可能挂起。）
+
+**下一个实验（v11，写死在这里免得下一轮重新想）**：把 v10 的 `async_f` 换成一个**内部会 dlopen
+的函数**（即 `async_f = call_side`），看它给出的是
+① 同样的 `SuspendError`、② 我们真产物那个 `RuntimeError: null function`、还是 ③ 正常工作。
+按结果分派：
+- 若是 ①/③ ⇒ 真产物那次的 `null function` 另有原因（继续查 `KEEP_LIST`/`EXPORT_IF_DEFINED`/
+  `BASELINE_WASM` 那套，或直接用 `--emit-symbol-map` 找出真产物里 embind async invoker 的
+  **导出名**，把它列进 `-sJSPI_EXPORTS`）；
+- 若是 ② ⇒ 机制确认，修法是把**真正会挂起的那些入口**（含 embind invoker 的实际导出名）
+  列进 `-sJSPI_EXPORTS`，或者让 `eval_async` 走一条**不经过 dldfcn 的**受控路径。
+
+**另一个可用的对照**：`MAIN_MODULE_LEVEL=1` 产物没有 side module/DCE 那套，若它在 M1 下
+`eval_async` 正常，就进一步把范围钉死在"动态链接 × JSPI"上。
