@@ -804,9 +804,16 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ✅ **D4 两站点一致性闸门**：`build/check-site-parity.sh`（`--strict` 供 promote 后跑）。
      余下：**D5** 规则 B 162 处复核 / **D6** `pkg load <未装载>` 自动装载 /
      **D7** IDBFS 边界（写频次、配额、配额满行为）。
-   · **然后走 JSPI 主线**：G0 能力门 → G1 `eval_async`（重链，配方已验证）→
-     **G2 `pause`+EH/SjLj 压力矩阵（真正的风险点）** → G3 `ginput` → G4 Ctrl-C 协作式中断 →
-     G5 `keyboard`(experimental) → G6 dlopen×挂起压力。红线见计划 §0。
+   · **JSPI 主线**：
+     ✅ **G0 能力门**（两个独立 gate：API 存在性 + Octave 级冒烟；**按需**触发、不弹假警报；
+     探针 `probe-jspi-gate.mjs` **12 项**全绿）。
+     ⛔ **G1 `eval_async` 第一次尝试失败、已回退**（产物坏：`RuntimeError: null function`、
+     还会卡死页面；**8761 一个字节没动**）。**JSPI 车道默认关闭**（`WITH_JSPI=0`），
+     绑定在 `#if defined(JSPI_EVAL_ASYNC)` 里；关掉后重链**逐字节复现现役 wasm**（4faaa96d…）。
+     **下一步**：先在容器里做**十几行的最小复现**（阶梯 `{裸,-sJSPI} → +MAIN_MODULE=2 →
+     +SIDE_MODULE/dlopen` 定位是哪一步打坏的），**别直接动 29MB 产物**。
+     事故教训（"探测可能卡住主线程的东西不能放在开机路径上"）见 HISTORY §5.43 与 `PLAN-jspi.md` G1。
+     ⬜ 之后才是 **G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ G3/G4/G5/G6。
    · **先做"小口子"**（不碰 wasm、风险最低）：
      ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
      见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。

@@ -220,7 +220,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.gitignore` (2077 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (6045 bytes)
-- `HANDOFF.md` (85986 bytes)
+- `HANDOFF.md` (86668 bytes)
 - `HISTORY.md` (192315 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
