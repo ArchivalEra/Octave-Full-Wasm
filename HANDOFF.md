@@ -8,11 +8,13 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
-> **最后更新：2026-09-24**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
+> **最后更新：2026-09-24（晚）**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
 > **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
 > `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
-> **下一步的工作令在 [`build/113/PLAN-next.md`](build/113/PLAN-next.md)**
-> （JSPI 接交互 G0–G6 + 三块小口子，含 GPT 复审的红线与 Gate 0 实测）。
+> `PLAN-next.md` 的**七件小口子全部收口**（其中 toolkit 内部属性一件**实测翻案**成"不是缺口"，
+> 字体 +1 与 IDBFS 持久化两件**重链做成了**）⇒ **现在唯一的工作令是
+> [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md)**（JSPI 接交互 G0–G6 + 七条收尾债，
+> 含 GPT 复审的红线、Gate 0 实测与**已验证的重链配方**）。
 > 全量与部署 sha **见文末 `AUTO:STATE`**（机器维护，别在这里手写）。
 >
 > ⚠️ **动手前必须知道的七条**：
@@ -432,7 +434,8 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 
 | 路径 | 作用 |
 |---|---|
-| `build/113/PLAN-next.md` | **下一阶段工作令**（2026-09-24）：JSPI 接交互 G0–G6 + 三块小口子；含 Gate 0 实测与 GPT 复审的红线。**执行完把结果写回 HANDOFF/HISTORY，本文件转入历史** |
+| `build/113/PLAN-jspi.md` | **当前唯一工作令**（2026-09-24 晚）：JSPI 接交互 G0–G6 + 七条收尾债（D1–D7：文档对齐 / probe 纳入定期跑 / sweep 偶发崩重试 / 两站点一致性闸门 / 规则 B 复核 / `pkg load` 自动装载 / IDBFS 边界）。含 Gate 0 实测、GPT 复审红线与**已验证的重链配方**。**执行完把结果写回 HANDOFF/HISTORY，本文件转入历史** |
+| `build/113/PLAN-next.md` | **上一份工作令（已收口，留档）**：七件小口子全部做完（1 件实测翻案、6 件真做成）；其 §2 的 JSPI 顺序已并入 `PLAN-jspi.md` |
 | `HISTORY.md` | **历史记录（append-only）**：2026-09-24 从 HANDOFF 原样拆出（`§5.x`/`§9`/`§10`）。查"当年为什么这么做、踩过什么"用 `grep -n 关键词 HISTORY.md` |
 | `build/Makefile` | 构建主 Makefile（含 `EM_LDFLAGS` 全库清单 + dldfcn `.o` 挂载 + `STATIC_DLD_FCNS` 相关） |
 | `build/main.cc` | wasm 入口；`STATIC_DLD_FCNS` 注册表 + Phase 3 安装 + addpath 两段式 + feval/eval_string 绑定 |
@@ -758,15 +761,18 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 
 ### ⬜ 仍待办（按建议顺序）
 
-> **▶ 当前状态**：**两个站点的产物逐字节相同**（M2 + FreeType + 新桥 + `webshims`）——
-> 以 `sha256sum octave.wasm` 实测为准，别背旧话。回退点：`site-m1bridge-bak-20260924/`
-> （M1+新桥那份）、`siteWebGL-m1bak-20260923/`（更早）。
+> **▶ 当前状态**：**两个站点的产物逐字节相同**（M2 + FreeType + fontconfig + **IDBFS** +
+> **8 个字体的预载** + 新桥 + `webshims`）—— 以 `sha256sum octave.wasm` 实测为准，别背旧话。
+> 回退点：`siteWebGL-preidbfs-bak-20260924/`（IDBFS 之前那份）、`site-m1bridge-bak-20260924/`。
 > **部署件 sha、体积、最近一次全绿回归见文末 `AUTO:STATE` 区块**（别在这里手写）。
-> **近三批（2026-09-24）**：R1（popen/system 覆写）+ R4（`plot(hax,…)`）已上线（§5.30）、
-> R3（fontconfig）已上线（§5.31）、R5 的 JSPI 机制探针已通过（§5.32）。
-> ⇒ **下一步不是再写探针，而是按工作令执行**：[`build/113/PLAN-next.md`](build/113/PLAN-next.md)
-> （G0 能力门 → G1 `eval_async` → G2 `pause`+EH/SjLj 压力矩阵 → G3 `ginput` → G4 Ctrl-C 协作式中断
-> → G5 `keyboard`(experimental) → G6 dlopen×挂起压力；外加三块小口子先做）。
+> **2026-09-24 这一天做完的**：R1/R4（§5.30）、R3 fontconfig（§5.31）、R5 探针（§5.32）、
+> 小口子 1–7（§5.33–§5.39：属性对契约 / waitbar+挂死族 / 包可见性 / `print -dpng` /
+> **重链做出 IDBFS 持久化与 FreeMono**）。
+> ⇒ **下一步按新工作令干**：[`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md)
+> （G0 能力门 → G1 `eval_async` → **G2 `pause`+EH/SjLj 压力矩阵（真正的风险点）** →
+> G3 `ginput` → G4 Ctrl-C 协作式中断 → G5 `keyboard`(experimental) → G6 dlopen×挂起压力；
+> **外加七条收尾债 D1–D7 先穿插做**：文档对齐 / probe 纳入定期跑 / sweep 偶发崩重试 /
+> 两站点一致性闸门 / 规则 B 162 处复核 / `pkg load` 自动装载 / IDBFS 边界测量）。
 >
 > **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
 > · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **82 项**：
