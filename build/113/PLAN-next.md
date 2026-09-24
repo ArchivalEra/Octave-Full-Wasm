@@ -134,6 +134,13 @@
    过程与两个坑见 HISTORY §5.35。
 4. **可用包可见性**：`OctaveAssets.list()` → `__webassets_available__()`，让 `pkg list` 能说清
    "有哪些可加载但尚未装载"。
+   **✅ 2026-09-24 收口（一半）**：加载器把账本落进 `/tmp/webassets.json`，`.m` 侧
+   `__webassets_available__()` / `__webassets_pending__()` / `__webassets_info__()` 读它
+   （待装名单实测 12 个包）；**装载包后自动重对齐 pkg 数据库** ⇒ `pkg list` 看得到、
+   `pkg load` 成功、`normpdf` 真出数。**覆写 `pkg` 本身没做成**（实测：核心 `pkg.m` 在 path
+   第 2 位、排在所有资产目录之前，加载器只会追加 ⇒ 资产遮不住它；放进 `m/pkg` 会覆盖核心文件）。
+   想让 `pkg load <未装载的包>` 自己触发资产装载，需要 ① 加载器/包格式支持 prepend，
+   或 ② 同步装载资产（R5 的同步 XHR 可复用）。钉子 `accept-pkgview.mjs` 17 项；见 HISTORY §5.36。
 5. **`print -dpng/-djpg`** 走页面 PNG（实测 `/tmp/p5_fig.png` 已存在）；`-dpdf/-deps` 保持清晰报错。
 6. **字体家族 +1**：预载 FreeMono ×4（镜像里有，`fonts.conf` 的 `<dir>` 天然覆盖），~1.04 MB raw。
 7. **持久化**：IDBFS（`index.html` 里有注释掉的挂载点）落 `/home/web_user` + 明确 sync 点；

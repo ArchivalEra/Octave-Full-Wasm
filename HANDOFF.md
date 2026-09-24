@@ -444,7 +444,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `build/check_m.py` | `.m` 语法预检（宿主 Octave，秒级）：括号平衡 + 多函数同文件。**改 `.m` 前先跑它** |
 | `build/webfile/` | **T3**：`copyfile`/`movefile`/`ls` 的进程内实现（10 个纯 `.m`，同名覆写核心函数，无 shell） |
 | `build/webshims/` | **"做不了就清晰报错"的覆写层**（`.m` 遮住内建/核心同名函数；启动时那条 `shadows a built-in function` 警告有意保留）—— **R1/R0（2026-09-24）**：`popen.m`（`-1` → error）、`system.m`（`status == -1` → error；两输出形态原样透传给内建）；**小口子 3**：`ginput.m` / `keyboard.m` / `uisetfont.m` / `uiwait.m` / `waitfor.m`（以前**挂死页面**，现在清晰报错；实现 G3/G5 时删掉即可）|
-| `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同） |
+| `build/pkgfix/` `build/pkgrestore/` | **T4**：pkg 数据库生成器 + **还原**被 fork 删掉的 `installed_packages.m`（与 upstream 逐字节相同）。**小口子 4** 又加了三个只读 helper：`__webassets_info__` / `__webassets_available__` / `__webassets_pending__`（读加载器落在 `/tmp/webassets.json` 的账本；坏文件/缺文件都返回空结构而不报错）。⚠️ 本目录挂在 `/usr/src/octave/m/pkg`（**核心 pkg 目录**，为了解析 private 函数）⇒ **不许在这里放 `pkg.m`**，那会覆盖核心实现 |
 | `build/BASELINE-11.3.md` | **第四轮当前依据**：11.x 收益核实、19 patch 漂移实测、Edge-Tools 11.1.0 配方全文（5 处 sed / `emf77` / webgl toolkit / 接口 / COI 代价）、5 条 sed 对 11.3.0 命中实测、vanilla 11.3.0 三项核对、ccache 实测 |
 | `build/113/configure-113-full.sh` | **11.3.0 全开 configure**：依赖写成**一张表 + `SKIP` 变量**（按库集合二分只需改一行；`SKIP=umfpack` 即精确关单个库，且会**显式加 `--without-umfpack`**——仅不传 `--with-*` 不够） |
 | `build/113/build-libs.sh` | **② 的 11 个库**逐库独立构建（每库独立 prefix `/src/deps/<lib>` + 符号自检）。踩过的坑全在注释里（hdf5 交叉编译、zlib 非 autoconf、CHOLMOD 的 NPARTITION、rapidjson、bzip2 的 CC=gcc…） |
@@ -651,6 +651,20 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
   - ⚠️ **更正旧话**：早先记的"`waitfor` 可用"只验过"名字存在"、**没验语义**；实测它会挂死。
   - 钉子：`test/browser/accept-interactive.mjs`（**15 项**）：每例开**新页面** + Node 侧 8 s 超时
     ⇒ **"挂死"会被判成失败**，不会把整个套件卡在那里。
+- **（新，2026-09-24，小口子 4）可用包可见性**：本构建的能力一半在 `assets/` 里按需装载，但
+  解释器看不见加载器 ⇒ 以前 `pkg load statistics` 回 **"is not installed"**（而它就躺在
+  `assets/pkg/` 里）、`pkg list` 恒说 "no packages installed"。现在：
+  - 加载器把账本 `{available,loaded,pkg_available,pkg_loaded}` 落进 `/tmp/webassets.json`
+    （init 后 + 每次装载成功后）；`.m` 侧 `__webassets_available__()` / `__webassets_pending__()` /
+    `__webassets_info__()` 读它（**缺文件/坏文件都返回空结构、不报错**）。实测待装名单 **12 个包**。
+  - **装完就认识**：装载**包**之后自动重跑 `__pkgfix_sync_db__()`（pkg 的数据库原本只是**启动时
+    的一次快照**）⇒ `pkg list` 列出 `statistics *| 1.7.3`、`pkg load statistics` 成功、
+    `normpdf(0,0,1)`=0.398942。钉子 `accept-pkgview.mjs`（17 项，含"两侧数量一致"这条交叉校验）。
+  - ⚠️ **覆写 `pkg` 本身做不到（实测原因，别重踩）**：`which('pkg')` =
+    `/usr/src/octave/m/pkg/pkg.m` 在 **path 第 2 位**，而全部资产目录（webshims P3 / webdoc P4 /
+    webgraphics P5 / oct P6 / plotbridge P7）**都排在它后面**，加载器又只会 `addpath(…)`（追加）
+    ⇒ 资产**遮不住** `pkg.m`。两条备选路都没做：① 给加载器/包格式加 prepend 能力；
+    ② 把 `pkg.m` 放进 `m/pkg` —— **不行**，那是核心 pkg 目录（pkgfix 的挂载点就是它），会**覆盖核心 pkg.m**。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -742,7 +756,13 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ✅ **3）交互/等待一族** → **`waitbar` 修好真能用**（桥的 `figure.m` 的 integerhandle 形态 + 新
      helper `__pb_integerhandle_off__`）；`ginput`/`keyboard`/`uisetfont`/`uiwait`/`waitfor`
      由 `build/webshims/` 覆写成**清晰报错**（不再挂死）；钉子 `accept-interactive.mjs` 15 项（见 §7）。
-     余下：可用包可见性 / `print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/
+     ✅ **4）可用包可见性** → **账本 + 待装名单 + "装完就认识"**：加载器把
+     `{available,loaded,pkg_available,pkg_loaded}` 落进 `/tmp/webassets.json`；
+     `.m` 侧 `__webassets_pending__()` 一目了然（实测 12 个包）；装载包后**自动重对齐 pkg 数据库**
+     ⇒ `pkg list` 看得到、`pkg load` 成功、`normpdf` 真出数。**覆写 `pkg` 本身做不到**（核心
+     `pkg.m` 在 path 第 2 位、排在所有资产目录之前，加载器只会追加）—— 实测原因记在 §7 与 HISTORY §5.36。
+     钉子 `accept-pkgview.mjs` 17 项。
+     余下：`print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/
      `check-wants` 规则 B 复核。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
      （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
@@ -826,8 +846,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 8,674,824 B raw / 2,515,502 B gz | sha256 `c2be24347381cb13…` |
 | 三大件 gzip 合计 | **9,619,254 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-085027` · **37 套 / 991 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,916,124 B · `7c625bc2e7171fe9…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-092139` · **38 套 / 1,011 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,923,992 B · `2fd747e0953abb29…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

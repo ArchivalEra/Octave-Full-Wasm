@@ -1835,6 +1835,55 @@ sha 相同 ⇒ 判为偶发（页面/渲染进程崩），不是本批改动引�
 
 ---
 
+### 5.36 第十一批：可用包可见性 —— 账本 + "装完就认识"（2026-09-24）
+
+工作令 §3 第 4 条："`OctaveAssets.list()` → `__webassets_available__()`，让 `pkg list` 能说清
+'有哪些可加载但尚未装载'"。开工先量，量出**两句会误导人的话**（都在 8768 实测）：
+- `pkg load statistics` → **`package statistics is not installed`** —— 而 statistics 就在
+  `assets/pkg/statistics.js` 里等着被装；
+- `pkg list` → 恒 **`no packages installed`**，哪怕 `await OctaveAssets.load('statistics')` 已经装过。
+
+**根因两条**（都是"两边互相看不见"）：
+1. **解释器看不见 JS 的加载器对象** ⇒ 有什么可装、装了哪些，在 `.m` 侧完全不可问；
+2. **pkg 数据库是启动时的一次快照**（`index.html` 在 boot 时跑一次 `__pkgfix_sync_db__()`，
+   从磁盘现状生成）⇒ 之后按需装载的包**不在快照里**，所以 `pkg list`/`pkg load` 都当它不存在。
+
+**做法**：
+- **账本落盘**：`bridge/assets-loader.js` 新增 `publish()` —— 在 **init 之后**与**每次装载成功之后**
+  把 `{available, loaded, pkg_available, pkg_loaded, stamp}` 写进 `/tmp/webassets.json`
+  （`jsondecode` 本构建可用；写失败全 try 兜住，绝不弄坏主流程）。`pkg_available` 只放
+  `url` 以 `assets/pkg/` 开头的那些 ⇒ 自动排除基础设施资产与 `*-oct` 伴随件（实测名单 12 个：
+  control, geometry, matgeom, miscellaneous, nan, optim, quaternion, signal, splines, statistics,
+  struct, tsa）。
+- **`.m` 侧三个只读 helper**（`build/pkgfix/`，宿主可测，已进 `glue-selftest`）：
+  `__webassets_info__()`（读账本，坏文件/缺文件都**返回空结构而不报错**）、
+  `__webassets_available__()`（全量）、`__webassets_pending__()`（**可加载但未装载的包**）。
+- **装完就认识**：`publish()` 的兄弟 `afterLoad()` —— 装载的是**包**（`assets/pkg/*.js`）且页面就绪时，
+  顺手跑一次 `__pkgfix_sync_db__()`，让数据库随时反映磁盘现状。**这一条是"能不能用"的关键**：
+  实测装完 `statistics` 之后 `pkg list` 列出 `statistics *| 1.7.3`、`pkg load statistics` 成功、
+  `normpdf(0,0,1)` = **0.398942**。
+
+**没能做的那一半（如实记，附实测原因）**：**覆写 `pkg` 本身**（好让 `pkg load <未装载的包>`
+直接给"它是可加载的 web 资产"这句提示）**做不到**，因为
+`which('pkg')` = `/usr/src/octave/m/pkg/pkg.m` 位于 **path 的第 2 位**，而我们所有的资产目录
+（webshims P3 / webdoc P4 / webgraphics P5 / oct P6 / plotbridge P7）**都排在它后面**，
+加载器又只会 `addpath(...)`（**追加**）⇒ 资产目录**遮不住** `pkg.m`。
+两条能走的路（都没做，留给下一轮）：① 给加载器/包格式加"**prepend**"（`addpath('-begin', …)`）
+的能力；② 把 `pkg.m` 放进 `m/pkg`（**不行**：pkgfix 的挂载点就是 `/usr/src/octave/m/pkg`，
+放同名文件会**覆盖核心 pkg.m** —— 这条差点踩上，靠 `which('pkg')` 实测拦下）。
+⇒ 现在"能说清"的入口是 `__webassets_pending__()`（12 个包名一目了然），`pkg load` 对
+**已装载**的包完全正常。
+
+**钉子**：新套件 `test/browser/accept-pkgview.mjs`（**17 项**）：账本两侧**数量一致**
+（`OctaveAssets.list()` vs `__webassets_available__()`）、待装名单排除基础设施与 `-oct`、
+装完从名单消失、`pkg list` 看得到、`pkg load` 成功、`normpdf` 真出数。
+
+**实测**：`accept-pkgview` **17/0**；loader 相关套件全绿（`accept-pkg` 16 / `accept-113-assets` 16 /
+`accept-forge` 22 / `accept-forge2` 44 / `accept-forge-oct` 15 / `accept-selftest` 37）；宿主
+`glue-selftest` **91/91**（+7：三个 helper 的 `%!test`）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

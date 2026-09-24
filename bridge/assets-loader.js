@@ -258,6 +258,7 @@
 
     inflight[name] = p.then(function (r) {
       delete inflight[name];
+      afterLoad(name);
       listeners.forEach(function (f) { try { f(name, r); } catch (e) {} });
       return r;
     }, function (e) {
@@ -268,6 +269,52 @@
     return inflight[name];
   }
 
+  // ── 装载成功后：账本落盘 + **把 pkg 数据库重新对齐**（小口子 4）────────────────
+  // 为什么必须重对齐：pkg 的数据库是**启动时**由 `__pkgfix_sync_db__()` 从磁盘现状生成的一次
+  // 快照。按需装载的包（`await OctaveAssets.load('statistics')`）在那一刻还没落盘 ⇒
+  // `pkg list` 永远说 "no packages installed"、`pkg load statistics` 说
+  // **"is not installed"**（实测 —— 而 statistics 明明已经装好了）。
+  // ⇒ 每次装完**包**（`assets/pkg/*.js`）就重跑一次 sync，数据库随时反映现状。
+  // ⚠️ 只在包装载后做：boot 期间的前几个基础设施资产可能早于 Octave 就绪，那时 eval 是危险的。
+  function afterLoad (name) {
+    publish();
+    try {
+      var a = byName[name];
+      var isPkg = !!(a && typeof a.url === 'string' && a.url.indexOf('assets/pkg/') === 0);
+      var M = global.Module;
+      if (isPkg && global.__octaveReady === true && M && M.eval_string) {
+        M.eval_string("if (exist ('__pkgfix_sync_db__') == 2) try; __pkgfix_sync_db__ (); catch; end; end");
+      }
+    } catch (e) { /* 重对齐失败不致命：老快照仍然可用，只是看不到新装的包 */ }
+  }
+
+  // 为什么要落文件：Octave 的解释器**看不见 JS 的加载器对象**，而"包可见性"这件事必须能从
+  // `.m` 侧问出来（否则 `pkg load statistics` 只会说一句误导人的 "is not installed" ——
+  // statistics 明明就在 assets/ 里等着被装）。落一个小 JSON 是最省事又无副作用的桥
+  //（`jsondecode` 本构建可用，见批次 1a）。
+  // ⚠️ 读它的是 `build/pkgfix/__webassets_info__.m`；**只在 init 之后与每次装载成功之后**刷新，
+  //    失败不致命（try 全兜住）—— 这个文件只是"给人看的账"，不该弄坏任何主流程。
+  function publish () {
+    try {
+      var fs = (global.Module && global.Module.FS) || null;
+      if (!fs || !fs.writeFile) return;
+      // Forge 包（`assets/pkg/<名字>.js`）单独分出来：`pkg list` 只关心"包"，
+      // 不该把 `plotbridge`/`doc-cache` 这类**基础设施资产**当成可选包列给用户看。
+      function pkgs (names) {
+        return names.filter(function (n) {
+          var a = byName[n];
+          return !!(a && typeof a.url === 'string' && a.url.indexOf('assets/pkg/') === 0);
+        });
+      }
+      var av = Object.keys(byName), ld = Object.keys(loaded);
+      fs.writeFile('/tmp/webassets.json', JSON.stringify({
+        available: av, loaded: ld,
+        pkg_available: pkgs(av), pkg_loaded: pkgs(ld),
+        stamp: Date.now()
+      }));
+    } catch (e) { /* 记账失败不影响任何东西 */ }
+  }
+
   var API = {
     OCTAVE_M: OCTAVE_M,
     init: function (url) {
@@ -276,6 +323,7 @@
         manifest = m;
         (m.assets || []).forEach(function (a) { byName[a.name] = a; });
         log('清单就绪：' + Object.keys(byName).length + ' 个资产');
+        publish();                      // 账本落盘：`__webassets_available__()` 读它
         return manifest;
       });
     },
