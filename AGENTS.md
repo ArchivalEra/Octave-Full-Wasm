@@ -1,80 +1,74 @@
 # AGENTS.md · Octave-Full-Wasm
 
-## 路径铁律（最重要）
-只在本路径工作：
+> **接续先读两份**：`HANDOFF.md`（活状态）+ `build/113/PLAN-jspi.md` 的 **§0.5「现在的状态与下一步顺序」**（当前工作令）。
+> 历史与旧数字在 **`HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only；正文里单写的这些编号都指它）。
+> 分门别类的坑：C 库配方 `build/CLIBS.md`、图形线 `build/113/NOTES-webgl.md`、JSPI 机制 `build/113/NOTES-jspi.md`。
 
+## 路径铁律
 - 仓库：`/mnt/hdd/zcode-projects/Octave-Full-Wasm`（**唯一**可改的 git 仓）
 - 构建容器：docker `o113`（11.3.0 车道；`obuild`/`odld`/`obench` 是更早的车道）
 - 第三方源码/产物：`/mnt/hdd/octave-wasm-build/`、`/tmp/opencode/`
-
-**禁止**碰课程仓 `/mnt/hdd/zcode-projects/GONGCHENGSHUXUE20260917`
-（Octave 相关内容已刻意移出，与本项目无关）。
-
-**接续先读两份文档**：
-- **`HANDOFF.md` = 活状态**（现在什么样、下一步干什么）：§0 铁律 / §7 已知偏差 / §8 仍待办。
-- **`HISTORY.md` = 历史**（append-only）：第三轮 T1–T10、批次 A–E、图形线 P5→WebGL、
-  第四轮换 11.3.0 基线、`§5.23`–`§5.32` 的逐批实况。**正文里单写的 `§5.x`/`§9`/`§10` 一律指它。**
-- C 库配方与坑详见 **`build/CLIBS.md`**；图形线见 `build/113/NOTES-webgl.md`。
+- **禁止**碰课程仓 `/mnt/hdd/zcode-projects/GONGCHENGSHUXUE20260917`
 
 ## 三条不可违背
-1. **纯客户端计算**：Octave 恒跑在浏览器 wasm 内，禁止任何服务端执行代码的端点。
-2. **不 force-push / 不删 git 对象 / 不改历史**；**禁用 `--no-verify`**。
-3. **白名单仓库**：新增文件必须同步 `!路径` 进 `.gitignore`，否则 pre-commit 拒提交。
+1. **纯客户端计算**：Octave 恒跑在浏览器 wasm 内 —— 禁止任何服务端执行代码的端点。
+2. 不 force-push / 不删 git 对象 / 不改历史；**禁用 `--no-verify`**。
+3. **白名单仓库**：新增文件必须同步 `!路径` 进 `.gitignore`，否则 pre-commit 直接拒。
 
 ## 验收底线
-`http://127.0.0.1:8761/` 永远是**最近一次通过浏览器实测**的构建。
-新实验失败不许让它退化；失败就回滚镜像、记录、继续下一批。
+`http://127.0.0.1:8761/` 永远是**最近一次通过浏览器实测**的构建。新实验失败**不许**让它退化：
+失败就回退（`cp site/octave.{wasm,js,data} siteWebGL/`，或站点备份目录）+ 记档 + 继续下一批。
 
-## 事实纪律（**每句"现在如此"都要能被复跑的命令证明**）
-2026-09-24 一天里抓到 5 处文档说假话，**全都是照抄旧话**造成的：§7 的 shell 口径、
-"两个站点逐字节相同"、交付包里套件的项数（写 47、实测 48）、我自己刚写下的
-"桥不支持 `plot(…,'parent',…)`"，以及 6 个套件每次全量回归**白等 18 分钟**（无人察觉）。
+## 事实纪律（每句"现在如此"都要能被复跑的命令证明）
+**照抄旧话是文档说假话的唯一来源**（一天里抓到过 5 处）。四条：
+1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**；写不出复跑方式的句子 → 只能放进 HISTORY 当历史。
+2. **口径成组记录**：重配就是 `WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1` **一整组**；
+   漏一个会**静默退化**（漏 `WITH_OPENGL=1` ⇒ 默认 toolkit 掉回 `web`，而构建/链接/自检**全绿**）。
+   重链的**唯一权威命令**在 HISTORY §5.26（M2 那条 + `WITH_FONTCONFIG=1`；`WITH_JSPI` 默认**关**）。
+3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）必须**浏览器侧**实测；
+   构建成功 + 产物自检绿**不算**功能验收。
+4. **断言要能证伪**：替身不能比真实对象松；新契约至少配一条**反向**断言（该报错的必须报错）。
+   行为变了就**翻面**（改断言，别改检查器）；`probe-*` 会腐烂 ⇒ 每批用 `PROBES=1` 跑一遍。
 
-1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**（`accept-*.mjs` / `probe-*.mjs` / 一条命令）。
-   写不出复跑方式的句子，就别写成"现在如此" —— 放进 HISTORY.md 当历史。
-2. **口径要成组记录**：改构建/配置就写清**完整那一组**开关（现在重配是
-   `WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`）。漏一个可能**静默退化**
-   （漏 `WITH_OPENGL=1` 会让默认 toolkit 掉回 `web`，而构建、链接、自检全绿）。
-3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）的改动，验收必须来自
-   **浏览器侧**（探针或 suite 的实测数字）。构建成功 + 产物自检绿**不算**功能验收。
-4. **断言要能证伪**：测试里的"替身"不能比真实对象松（拿 figure 句柄冒充 axes 骗过一次）；
-   新契约至少配一条**反向**断言（该报错的必须报错），必要时做红-绿对照。
-5. **改动前先量当前行为**（`harness/run.sh test/browser/probe-*.mjs`），别信记忆与文档。
+## 批次收尾（固定动作，缺一步等于没做完）
+`sh build/glue-selftest.sh`（宿主秒级）→ **8768 验绿**（`sweep.sh http://127.0.0.1:8768/`）
+→ promote 8761（`build/promote-webgl.sh`；纯资产批用 `assets.py bundle-m` + `sync-js`）
+→ **开机自检** `sh build/check-boot.sh http://127.0.0.1:8761/`（30 秒，**不过就别往下走**）
+→ **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
+→ `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
+→ **两站点一致** `sh build/check-site-parity.sh --strict`
+→ 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**
 
-## 文档自更新（HANDOFF 是本项目唯一活文档，别让它烂）
-- **机器维护的数字别手写**：`HANDOFF.md` 文末 `AUTO:STATE` 区块（部署件 sha、raw/gz 体积、
-  最近一次**全绿**回归的套件数与项数、交付包、资产条目）由
-  `.githooks/update-handoff.py` 从**持久盘产物**重算；pre-commit 会刷新并 `git add`。**别手改那个区块。**
-- **活状态断言必须与产物一致**：`HANDOFF.md` 的头部 + §0–§4 / §6–§8 是活状态，那里的
-  sha/套件数/体积一旦与产物矛盾，`.githooks/check-handoff.py` 直接拦提交。
-- **历史留在 `HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only）：里面的数字是"当时如此"，
-  检查器不查；**不要把历史删掉来"对齐现状"**，也不要把它抄回活状态。
-- 活状态里要引用旧值，就在**那一行**写清 `历史` / `退役` / `之前` —— 检查器认这个标记。
-- 一段活干完（尤其是 promote / 跑完 sweep 之后）跑一次
-  `python3 .githooks/update-handoff.py`；ZCode 的 `Stop` hook 也会自动跑（`.zcode/config.json`）。
-
-## 批次收尾（固定动作，缺一步就等于没做完）
-8768 验绿 → promote 到 8761（`build/promote-webgl.sh`，纯资产批则用 `assets.py bundle-m`+`sync-js`）
-→ **8761 全量回归**（`sh /mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`）
-→ `sh build/make-dist.sh`（并核对包内 wasm 与部署件同 sha）→ 四道闸门 → 提交 → 推持久盘镜像。
-
-## 提交前
+## 提交前（六道闸门）
 ```bash
-python3 .githooks/update-readme.py --check   # README 的 AUTO:FILES 要新鲜（pre-commit 会自动重算并 git add）
-python3 .githooks/update-handoff.py          # HANDOFF 的 AUTO:STATE 机器块（pre-commit 也会重算）
+python3 .githooks/update-readme.py --check   # README 的 AUTO:FILES 要新鲜
+python3 .githooks/update-handoff.py          # HANDOFF 的 AUTO:STATE 机器块
 python3 .githooks/check-handoff.py           # 活状态断言不得与产物矛盾（只查 HANDOFF.md）
 python3 .githooks/check-consistency.py       # 挂载点/启动清单/车道路径一致
 python3 .githooks/check-wants.py             # 断言可证伪性（裸数字匹配/截断后匹配）
 python3 .githooks/check-whitelist.py         # 白名单覆盖
 ```
-⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件，被 `.gitignore` 忽略且从未
+⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件 ⇒ 被 `.gitignore` 忽略且从未
 `git add` 的文件它看不见（曾因此漏掉 4 个承重文件）。新增目录后主动看一眼
 `git status --short --ignored <目录>`。
 
-## 操作习惯（踩过的，别再来一次）
-- **长前台命令会把 ZCode 弄崩**：重活用 `setsid nohup … &` 起，再用 **≤3 分钟**的命令轮询；
-  输出一律 `tail -n` / `grep`，别把大段日志灌进上下文。
-- **跑验收时别并行干重活**（并发 docker commit / 压缩曾让一个套件假崩）。
+## 操作习惯与硬坑（踩过的，别再来一次）
+- **重活用 `setsid nohup … &` + ≤3 分钟的命令轮询**，输出只 `tail -n`/`grep` —— 长前台命令会把 ZCode 弄崩。
+  **跑验收时别并行干重活**（并发 docker commit / 压缩曾让一个套件假崩）。
 - **容器里的构建脚本是另一份拷贝**：改完仓库的 `configure-113-full.sh` / `link-web.sh` /
-  `main.cc`，必须 `docker cp` 进容器，否则跑的是旧的。
+  `main.cc` 必须 `docker cp` 进容器（`main.cc` → `/src/websrc/main.cc`，构建脚本 → `/src/bin/`），
+  否则跑的是旧的。（`link-web.sh` 自己会编 `main.cc`，不用手动编。）
+- **别猜挂载点**：`assets.py bundle-m <名字> <目录> <挂载点> <输出>` 的挂载点**逐字读
+  `build/assets-meta.json`**（`pkgfix` = `/usr/src/octave/m/pkg`、`plotbridge` =
+  `/usr/src/octave/m/plotbridge`）。**少写一层**会把文件铺到 `m/` 根上，桥的"摘桥目录"路径手术
+  就会把整棵核心 m 树摘掉（真发生过：`clf` 报 `no core implementation cached`）。
+- **探测/自检不许放在开机路径上**：坏产物会让**整页卡死**（JSPI 那次），连带所有浏览器验收全挂。
+  探测器要**按需触发 + 带超时**，它的失败模式必须和被探测的东西解耦。
+- **JSPI × dlopen 三条机制**（实测，详见 `NOTES-jspi.md`）：① 链里有 dlopen ⇒ 它**上游整条入口**
+  都可能挂起、**不能被同步调用**（会抛 `SuspendError: trying to suspend without WebAssembly.promising`）；
+  ② **顺序即机制** —— 先走一次被 promising 包装的入口，之后同步 dlopen 就正常了；
+  ③ **启动路径上碰 dlopen 会直接让页面起不来**。
+- **两处旗标不对称**：`-sEXPORTED_RUNTIME_METHODS` 写不存在的名字是**编译期硬错**（并中止编译）；
+  `-sJSPI_EXPORTS` 写不存在的名字**无害**。`--preload-file` 按**第一个 `@`** 切 `src@dst`
+  （`m/@ftp` 源路径自带 `@` ⇒ 整棵 m 树曾被复制错位，见 HISTORY §5.13）。
 - 结论只认**产物**：`sha256sum`、`sweep-logs/<时间戳>/`、探针输出；不认印象。

@@ -12,13 +12,14 @@
 > **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
 > `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
 > `PLAN-next.md` 的**七件小口子全部收口**（1 件实测翻案 + 6 件真做成，含**重链**做的 IDBFS 持久化
-> 与 FreeMono）；`PLAN-jspi.md` 的 **G0 能力门已完成、G1 `eval_async` 第一次尝试失败并已回退**
-> （**JSPI 车道默认关闭**，见 §7/§8）⇒ **现在唯一的工作令是
-> [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md) 的 §0.5「现在的状态与下一步顺序」** ——
-> 关键路径是 **G1 的机制问题**（先做 D8 开机自检 + G1 最小复现，**别直接动 29MB 产物**）。
+> 与 FreeMono）；`PLAN-jspi.md` 的 **G0 能力门 + D1–D8 已完成**，**G1 还在查**：第一次尝试失败已回退，
+> 随后用**最小复现把旗标层面全部排除**（**M2 不是元凶**），并把机制锁定到 **"JSPI × dlopen"**
+> （三条机制见 §7）——**JSPI 车道默认关闭**（`WITH_JSPI=0`）。⇒ **唯一工作令是
+> [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md) §0.5**，**下一步三候选**（(b) 免重链最便宜 /
+> (a) 找真正的导出名 / (c) 走不通才要人拍板）见 §8。
 > 全量与部署 sha **见文末 `AUTO:STATE`**（机器维护，别在这里手写）。
 >
-> ⚠️ **动手前必须知道的七条**：
+> ⚠️ **动手前必须知道的八条**：
 > ① **构建主树**：opengl-ON + gl2ps-ON + FreeType-ON + fontconfig-ON，GL 头是 gl4es+GLU。
 >    重配的口径是 **`WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`** ——
 >    ⚠️ **`WITH_OPENGL=1` 一个字都不能省**：它掌管"把被 configure 翻掉的
@@ -41,8 +42,13 @@
 >    `build/assets-meta.json` 的 `mount`"（`pkgfix` 挂的是 `m/pkg`，猜错会让 `pkg list` 静默坏掉）。
 >    **字体目录同理**：不是 `/usr/src/octave/...`，而是 configure 的 prefix 下
 >    `share/octave/11.3.0/fonts`（`link-web.sh` 从 Makefile 读 `octfontsdir`，不写死）。
-> ⑦ **两个站点现在是"逐字节相同"的**（M2 + FreeType + fontconfig + 新桥 + `webshims`）；
->    回退点见 §3.1。**验收前提一律以 `sha256sum` 实测为准**，别背旧话。
+> ⑦ **两个站点现在是"逐字节相同"的**（M2 + FreeType + fontconfig + **IDBFS** + 8 个字体面 +
+>    新桥 + `webshims`；用 `sh build/check-site-parity.sh --strict` 当场核）；回退点见 §3.1。
+>    **验收前提一律以 `sha256sum` 实测为准**，别背旧话。
+> ⑧ **JSPI 车道默认关**（`WITH_JSPI=0`；`main.cc` 的 `eval_async` 绑在
+>    `#if defined(JSPI_EVAL_ASYNC)` 里）—— 它还没调通，**别顺手打开**。三条实测机制（`NOTES-jspi.md`）：
+>    链里有 dlopen ⇒ 上游整条入口都可能挂起、**不能被同步调**；**顺序即机制**（先过一次 promising
+>    入口，之后同步 dlopen 就没事）；**启动路径上碰 dlopen 会直接让页面起不来**。
 >
 > **文档约定（`.githooks/check-handoff.py` 按此执行，别违反）**
 > · **活状态 = 头部 + §0–§4 / §6–§8**：那里的断言必须与产物一致，否则 pre-commit 直接拦。
@@ -435,7 +441,8 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 
 | 路径 | 作用 |
 |---|---|
-| `build/113/PLAN-jspi.md` | **当前唯一工作令**（2026-09-24 晚）：JSPI 接交互 G0–G6 + 七条收尾债（D1–D7：文档对齐 / probe 纳入定期跑 / sweep 偶发崩重试 / 两站点一致性闸门 / 规则 B 复核 / `pkg load` 自动装载 / IDBFS 边界）。含 Gate 0 实测、GPT 复审红线与**已验证的重链配方**。**执行完把结果写回 HANDOFF/HISTORY，本文件转入历史** |
+| `build/113/NOTES-jspi.md` | **JSPI 的全部一手记录**：R5 机制探针、G1 复现阶梯 v1–v13（逐档表格）、三条"JSPI 与 dlopen"机制、下一步三候选（(b) 免重链最便宜 / (a) 找真正的导出名 / (c) 要人拍板） |
+| `build/113/PLAN-jspi.md` | **当前唯一工作令**（2026-09-24）：JSPI 接交互 G0–G6 + 收尾债（D1–D8：文档对齐 / probe 纳入定期跑 / sweep 偶发崩重试 / 两站点一致性闸门 / 规则 B 复核 / `pkg load` 自动装载 / IDBFS 边界 / **promote 前开机自检**；另有 D9 门接线）。**接续先读它的 §0.5「现在的状态与下一步顺序」**，别从别处猜 |
 | `build/113/PLAN-next.md` | **上一份工作令（已收口，留档）**：七件小口子全部做完（1 件实测翻案、6 件真做成）；其 §2 的 JSPI 顺序已并入 `PLAN-jspi.md` |
 | `HISTORY.md` | **历史记录（append-only）**：2026-09-24 从 HANDOFF 原样拆出（`§5.x`/`§9`/`§10`）。查"当年为什么这么做、踩过什么"用 `grep -n 关键词 HISTORY.md` |
 | `build/Makefile` | 构建主 Makefile（含 `EM_LDFLAGS` 全库清单 + dldfcn `.o` 挂载 + `STATIC_DLD_FCNS` 相关） |
@@ -720,6 +727,24 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
     而现有网只能靠 40 个套件各自超时才发现）⇒ 新工作令里的 **D8** 就是补这个（30 秒）。
   - **还差一步接线**：`__octaveJspiProbe/Require` **目前只有探针在调**，产品里还没有入口问它
     （G3/G5 才接）⇒ 记在计划的 D9，别让门变摆设。
+  - **★ G1 的机制查到哪了（最小复现阶梯 v1–v13，逐档实测；详见 `NOTES-jspi.md`）**：
+    **旗标/语言层面全部排除** —— `-sJSPI` 本身、`MAIN_MODULE=2`（**我原来的主嫌疑，被推翻**）、
+    `-sJSPI_EXPORTS` 列不存在的名字（无害）、`std::string` 签名、`-fwasm-exceptions`、
+    "同一函数 sync+async 双绑定"（照抄 main.cc 的写法）、**收窄的 `EXPORTED_*` 口径**，
+    这些在最小复现里**都正常**（`await Module.f(...)` ⇒ Promise ⇒ 值对）。
+    **三条机制（实测）**：
+    ① 链里有 dlopen ⇒ 它**上游整条入口**都可能挂起、**不能被同步调用**
+       （同步绑定里 `dlopen` ⇒ `SuspendError: trying to suspend without WebAssembly.promising`）；
+    ② **顺序即机制**：**先**走一次被 promising 包装的入口，之后同一产物里的同步 dlopen 就正常了；
+    ③ **启动期（静态初始化）碰 dlopen ⇒ 模块初始化就抛 SuspendError ⇒ 页面永远到不了 ready**
+       （v13，这是个能复现"页面起不来"的最小例子）。
+    ⇒ 我们那条链的形状正是②③的反面：`main.cc` 的启动序列用**同步**入口装载 `.oct`（=dlopen），
+    而 `-sJSPI_EXPORTS=eval_async` 里那个是 **embind 的 JS 名字、不是 wasm 导出名**。
+    **下一步三候选（§8 有同样一份）**：(a) `--emit-symbol-map` 找**真正的导出名**列进
+    `-sJSPI_EXPORTS`；(b) **把启动期 `.oct` 装载挪到"首次 promising 入口之后"**（先 `await
+    eval_async("1")` 预热；**这条不用重链，最便宜**）；(c) 都不行 ⇒ 回到要人拍板的分叉。
+    **复现资产**：容器 `/src/websrc/embind-repro{,-out}/`（13 个变体）+ 浏览器 runner
+    `harness/_embind.mjs`（自host + playwright，含"卡住"超时兜底）。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -835,15 +860,21 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      **8761 一个字节没动**）。**JSPI 车道默认关闭**（`WITH_JSPI=0`）、绑定在
      `#if defined(JSPI_EVAL_ASYNC)` 里；关掉后重链**逐字节复现现役 wasm**（`4faaa96d…`）。
      ▶ **下一步（按顺序）**：
-     **① D8 开机自检**（30 秒，promote 前必须过 —— 坏产物的失败模式是"页面起不来"，
-     现有网只能靠 40 个套件各自超时才发现，又慢又吵）；
-     **② G1 最小复现**（容器里十几行 embind async，阶梯 `{裸,-sJSPI} → +MAIN_MODULE=2 →
-     +SIDE_MODULE/dlopen` 定位是哪一步打坏的 —— 嫌疑最大是 **M2 的 DCE 削掉了 async invoker 那个
-     thunk**；**别直接动 29MB 产物**）；③ 结论写回 `build/113/NOTES-jspi.md`；
-     **④ 需要人拍板的分叉**：若这条路走不通，就退"JS 侧队列 + 同步入口"（放弃 `pause` 中途等待）
-     或单开 `MAIN_MODULE=1` 车道 —— 两条都行，得人定；
-     **⑤ G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ **⑥ G3/G4/G5/G6**。
-     事故教训见 HISTORY §5.43；**"探测可能卡住主线程的东西不能放在开机路径上"**。
+     ✅ **① D8 开机自检**（已做完 `78eb1d0`：`build/check-boot.sh`，30 秒，已接进 promote 流程；
+     绿 1.6s + 两条红对照见 HISTORY §5.44）；
+     ✅ **② G1 最小复现**（已做完 v1–v13：**旗标层面全部排除、M2 不是元凶**；机制锁到
+     "JSPI × dlopen"，三条机制见 §7 与 `NOTES-jspi.md`）；
+     ▶ **③ 修法三候选（按便宜排序，谁先都行，别再重查机制）**：
+     **(b) 不用重链** —— 把**启动期的 `.oct` 装载挪到"首次 promising 入口之后"**
+     （页面先 `await Module.eval_async("1")` 预热，再走同步装载），拿**那个坏产物**直接试 ——
+     这条验证"顺序即机制"在真产物上成不成立；
+     **(a)** `--emit-symbol-map` + 查 wasm 导出表，把**真正被同步调用的导出名**列进
+     `-sJSPI_EXPORTS`（而不是 embind 的 JS 名 `eval_async`），重链后跑
+     `probe-jspi-eval.mjs` 三例（42 / `pause(0.2);42` 期间页面 timer 在跑 / `error('x')` ⇒ reject）；
+     **(c) 需要人拍板的分叉**：(a)(b) 都不行才走 —— 退"JS 侧队列 + 同步入口"（放弃 `pause`
+     中途等待）或单开 `MAIN_MODULE=1` 车道；
+     **④ G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ **⑤ G3/G4/G5/G6** → **⑥ D5–D7**。
+     教训：**"探测可能卡住主线程的东西不能放在开机路径上"**（HISTORY §5.43）。
    · **先做"小口子"**（不碰 wasm、风险最低）：
      ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
      见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。
