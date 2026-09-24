@@ -115,8 +115,9 @@ await OctaveAssets.load('__ode15__');    // 单个模块
   页面贴出 toolkit 渲的 PNG。`plot 桥`同时把这些调用**镜像**成真图形对象
   （于是 `get(gca,'children')` 能列出线、`h = plot(...)` 拿到真句柄）。
   显式切回"只出句柄、渲染归桥"的老模式：`graphics_toolkit("web")`。
-  ⚠️ 文字渲染仍缺（`--without-freetype`）：刻度/title 空白但不崩，且**每次会话**在第一条
-  axes 上打一条带调用栈的 warning。
+  **文字渲染已有**（2026-09-24）：构建开 FreeType + 预载 Octave 自带的 4 个 FreeSans 字体
+  ⇒ 刻度/标题/图例都出字（**不需要 fontconfig**）。代价如实记：`fontname` 属性被忽略、
+  `listfonts` 为空。
 - **图像**：`imread`/`imwrite`/`imfinfo`（stb_image）
 - **压缩归档**：`gzip`/`bzip2` + 进程内 `zip`/`unzip`/`tar`/`untar`/`gunzip`/`bunzip2`（无 shell）
 - **音频**：`audioread` 系列 + `audioplayer`（WebAudio 桥）
@@ -125,7 +126,8 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**35 套 902 项全绿**（2026-09-23 胶水层审计批后实测），
+本包内容 = 最近一次在浏览器实测通过的构建。**35 套 925 项全绿**（2026-09-24：`MAIN_MODULE=2` +
+FreeType 上线后实测，8761 与 8768 逐字节相同），
 在 `http://127.0.0.1:8761/`（**即本包内容**）上跑（用
 `/mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`；逐套日志在 `sweep-logs/`）。
 
@@ -135,10 +137,10 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | 套件 | 项数 | 覆盖 |
 |---|---|---|
 | accept-requirements | 14 | **需求级**：R1–R10 + 架构护栏 |
-| accept-p5-graphics | **64** | **真渲染（webgl → WebGL2/GPU）**：PNG/`getframe`/15 种图非空白 + 镜像层与 DEPTH 复位护栏 |
+| accept-p5-graphics | **65** | **真渲染（webgl → WebGL2/GPU）**：PNG/`getframe`/15 种图非空白 + 镜像层与 DEPTH 复位护栏 |
 | accept-t2-graphics | 26 | **图形对象句柄**（`web` toolkit：figure/gcf/gca/get/set/title/close） |
 | **accept-p5-fallback** | **15** | **没有 WebGL2 的设备上也要看得见图**：`--disable-webgl` 下桥用 SVG 回落（信号/判定/图元/文字/页面贴图/第二条命令更新） |
-| **accept-selftest** | **25** | **胶水层自带的 `%!test`**（webfile/pkgfix/plotbridge 的字段表与调色板/播放状态机）——此前从没人跑过 |
+| **accept-selftest** | **30** | **胶水层自带的 `%!test`**（webfile/pkgfix/plotbridge 的字段表与调色板/播放状态机、**以及 5 个桥参数纯 helper**）——此前从没人跑过 |
 | **accept-queue-drift** | **12** | **MEMFS 队列的行格式漂移**：`.m`/`.cc` 生产侧与 JS 读侧在同一条断言里相遇 |
 | accept-113-boot | 10 | 11.3.0 能起、能 eval |
 | accept-113-oct | 8 | 真 `.oct` side module 能被装载并调用 |
@@ -157,7 +159,7 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 | accept-archive | 20 | 压缩/归档无 shell 化 |
 | accept-image | 17 | 图像 I/O |
 | accept-print | 43 | `print -dsvg` |
-| accept-plotv2 | 54 | plot 桥 v2（2D） |
+| accept-plotv2 | **72** | plot 桥 v2（2D）+ **参数契约**（句柄优先形态、宽度/颜色矩阵/句柄图例明确报错） |
 | accept-plot3d | 34 | plot 桥 v2（3D） |
 | accept-audio | 47 | WebAudio 播放 |
 | accept-net | 30 | 同步网络 |
@@ -176,6 +178,15 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 `build/113/NOTES-lsode.md`）。现在 29/29 里含 5 条 `lsode` 断言。
 ⚠️ 注意 `lsode` 的返回约定是 **`[x, istate, msg]`**，不是 `[t, y]`。
 
+**2026-09-24 新增的两条探针**（不在 35 套里，按需跑；都只对真渲染器有意义）：
+
+| 探针 | 项数 | 覆盖 |
+|---|---|---|
+| `probe-text-render.mjs` | 6 | **文字真的画出来了**：无 FreeType warning + 加 `title/xlabel/ylabel` 后 `getframe` 非白像素 **+2130**、刻度换长文字 **+2754**（无 FreeType 时是 +0） |
+| `probe-m2-lazyload.mjs` | 7 | **`MAIN_MODULE=2` 没破坏懒加载**：加载期的 `.oct` 请求只有启动清单那 8 个、全在 `assets/` 下；按需装载 signal 后 `butter` 才可用 |
+| `probe-cold-start.mjs` | —（只测不判） | 首帧冷启动拆解：`clf` 375 / `plot` 73 / `drawnow` 177 ms，温出图 24–58 ms（结论：**不做预热**，见 HANDOFF §5.28） |
+
+
 ## 已知偏差（如实）
 
 - ~~**`lsode` 调用即整页 trap**~~ **已修复**（2026-09-22）：详见上面的说明与
@@ -189,13 +200,26 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 - **`audioplayer`/`audiorecorder` 每个对象占一个 slot + 一个 MEMFS 文件**，生命周期与对象
   一致 —— 本构建没有可靠的『对象已销毁』信号（`@audioplayer` 没有 `delete.m`，且 `stop`
   之后还能重播），所以不做清理。一次会话内增长有界。
-- **文字渲染仍缺**（`--without-freetype`）：刻度/title 空白但不崩；且**每次会话**在第一条
-  axes 上打一条 warning（`opengl_renderer::render_text: support for rendering text (FreeType)
-  was unavailable…`，带调用栈）。数值与绘图本身不受影响。
+- ~~**文字渲染仍缺**~~ → **2026-09-24 已补上**：构建开 FreeType（`build/113/build-freetype.sh`）
+  + 预载 Octave 自带的 4 个 FreeSans 字体；**不需要 fontconfig**（无 fontconfig 时的回落字体
+  就是那几个文件）。**代价如实记**：`fontname` 属性被忽略（任何字体名都落到 FreeSans）、
+  `listfonts` 返回空。证据：`test/browser/probe-text-render.mjs`（6 项：无那条 warning +
+  加 `title/xlabel` 后 `getframe` 非白像素 +2130、刻度换长文字 +2754）。
 - **首帧 ~0.6 s**（真渲染）：会话里第一次出图要建 WebGL 上下文 + `initialize_gl4es()` +
   编 shader + 首帧 `glReadPixels`/PNG 编码。**之后每张图 ~90 ms**（实测，桌面）。
 - **桥的参数宽容度与桌面一致**：桥以前比核心宽容的写法（如 `plot(x,x,'+','')`）现在会走到
   核心实现、按核心（=桌面）的严格性报错 —— 这是**向桌面看齐**，不是缺陷。
+- **（2026-09-24）桥的参数契约："能做对就做对，做不了就明确报错"**：
+  ✅ `xlim/ylim/title/xlabel/ylabel` 现在支持**句柄优先**形态（`xlim(hax,[0 1])` 与核心一致，
+  但只接受 `gca()`；别的句柄报 `only tracks the current axes`）；
+  ⛔ `bar/barh` 的**宽度**参数、`surf/mesh` 的**颜色矩阵**、`legend` 的**句柄形态**一律
+  **明确报错**（以前分别是"当 X 数据画错""静默丢掉""当标签存下"——静默曲解比报错糟得多）；
+  `scatter(1)` 这类用法错误也报得清楚。错误文本与核心逐字对齐。
+  另：**有意保留的降级**（饼图 `EXPLODE`/`LABELS`、`scatter3` 的 SIZE/COLOR、`print` 的
+  `-r/-color` 选项、`plot3(X,Y)` 抬 z）都写进了各自文件头并用断言钉住。
+- **`urlread` 的 POST 形态只能"如实回报"**：本地/静态预览服务器不支持 POST（返回 501）⇒
+  返回 `ok=0`。请求确实发出去了、状态如实回报（那条断言以前是靠错误消息里 `501` 的 `1`
+  假过的，2026-09-24 改真）。
 - **`plot(hax, …)` 这类"首参是句柄"的调用形态桥不支持**（两种 toolkit 下都一样）
   ⇒ `voronoi` 的**单输出形式**（要画图）因此不可用；两输出形式正常。
 - `xlim()`/`ylim()`/`axis()`/`clf()`/`legend()`/`title()` 等**接受输出参数但返回空**

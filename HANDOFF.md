@@ -10,13 +10,16 @@
 >   `__pb_bar_args__`/`__pb_legend_args__`）+ 11 个 shim 改造 —— **能做对就做对（句柄优先形态）、
 >   做不了就明确报错（`bar(Y,W)` 的宽度、`surf(Z,C)` 的颜色矩阵、`legend(h,…)` 的句柄）**，
 >   不再静默曲解。`accept-plotv2` 从 54 增到 **72 项**（新增 18 条契约断言），**已 promote 到两个站点**。
-> · **C `MAIN_MODULE=2`（§5.25，进行中）**：保活清单生成器 + **链接期保活闸门** +
->   `LIB_FUNCS` 解掉"JS 库符号"那道墙 ⇒ **wasm 36.86 → 28.71MB**。**M2 产物只在 8768 上**，
->   全量回归未跑完、尚未 promote。
-> · **D FreeType 文字渲染（§5.26，半途）**：库（PIC）、configure、**全量重编**、字体预载接线
->   全部做完，**只剩最后一次链接被打断**（命令原样抄在 §5.26）。
-> · **两个站点的产物现在不同**：8761 = **M1 + 新桥**，8768 = **M2 + 新桥**（别照旧假设"逐字节相同"）。
->   8768 的 M1 三件备份在 `siteWebGL-m1bak-20260923/`。
+> · **C `MAIN_MODULE=2`（§5.25，已落地并上线）**：保活清单生成器 + **链接期保活闸门** +
+>   `LIB_FUNCS` 解掉"JS 库符号"那道墙 ⇒ 主模块导出名 44,987 → **703**、wasm 大降。
+>   懒加载证据：`probe-m2-lazyload.mjs`（7 项）。
+> · **D FreeType 文字渲染（§5.26，已落地并上线）**：库（PIC）、configure、全量重编、字体预载
+>   全部做完，**链接已成功**；证据：`probe-text-render.mjs`（6 项，加标题后 `getframe` 非白像素
+>   **+2130**，无 FreeType 时是 +0）。
+> · **两个站点已一致**（2026-09-24 起）：8761 与 8768 **逐字节相同**（M2 + FreeType + 新桥）。
+>   回退点：`site-m1bridge-bak-20260924/`（M1+新桥那份）与 `siteWebGL-m1bak-20260923/`（更早）。
+> · **E 首帧冷启动（§5.28）已结案：不做预热**（首次 `drawnow` 只有 177 ms；预热只会把它挪到
+>   开页、或抢占主线程 ⇒ 总额更长）。
 > **部署件 sha、体积、最近一次全绿回归的套件数与项数一律见文末 `AUTO:STATE` 区块**（脚本从产物重算，
 > 别在这里手写）。**接续先读 §8（仍待办 + 恢复命令）与 §5.23–§5.26（本轮实况）。**
 > ⚠️ 七条必须在动手前知道的：
@@ -61,6 +64,10 @@
 3. **纯客户端计算**：Octave 解释器恒跑在浏览器 wasm 内。禁止任何服务端执行代码的端点。
 4. **不 force-push、不删 git 对象、不改历史**。
 5. 白名单仓库：新增文件必须同步 `!路径` 到 `.gitignore`，否则 pre-commit 直接拒。
+   ⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件 ⇒ **被忽略且从未 `git add`
+   的文件它看不见**。2026-09-24 就这么查出 4 个承重文件（`promote-webgl.sh`、`recover-113.sh`、
+   `post.js`、`build/webshell/*.m`）从来没进过 git（§5.27）。**新增文件后主动看一眼**
+   `git status --short --ignored <目录>`，别只信闸门。
 6. 每完成一批：更新本文件 + `build/CLIBS.md` + `README` 状态 → 提交推送。
 
 ---
@@ -808,6 +815,10 @@ makeinfo 生成 doc-cache）。
   "not available in this version of Octave"（上游行为，如实保持即可）。
 
 ---
+- **（新，2026-09-24）首帧冷启动拆开量过：不做预热**（§5.28）：第一次 `clf` **375 ms** +
+  第一次 `plot` 73 ms + 第一次 `drawnow` **177 ms**；之后每张图 **24–58 ms**。
+  预热两条路的算术都不划算（开页预热把总额从 ~1678 ms 拉到 ~1736 ms；ready 之后预热独占主线程
+  ~177 ms）⇒ **这是有意不做**，不是留着没做。
 
 ## 8. 一句话接续
 **当前基线 8761 = Octave 11.3.0**（2026-09-22 换的基线，原 7.2）。
@@ -843,37 +854,27 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
 > `probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
-1. **批 A+B 在 8761 上的全量确认**（上一次跑到 19 套全绿就被停；日志在
-   `sweep-logs/20260923-8761-batchAB/`）：
-   ```sh
-   sh /mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/
-   ```
-   期望全绿；其中 **`accept-plotv2` 只有在新桥上才绿**（旧桥上有 9 条契约断言红，见 §5.24），
-   `accept-net`/`accept-slicot` 的两条**假过断言已改真**（§5.23）。**结论没拿到就不算绿。**
-2. **批 C 收尾（M2 —— 体积账最大的一笔）**：
-   · 补跑 8768 的全量：`sh /mnt/hdd/octave-wasm-build/sweep2.sh http://127.0.0.1:8768/`
-     （`sweep2.sh` = harness2 车道，与 `sweep.sh` 并行、不抢 `_run.mjs`；上次跑到 17 套全绿被停）；
-   · **必须补两条懒加载证据**（M2 的核心风险，route A 就死在这）：页面加载期**不许**请求任何
-     `.oct`；随页面装的 7 个核心 `.oct` 与按需 `pkg load` 都要正常（`accept-full`/`accept-113-*` 覆盖）；
-   · 体积账（实测，M2 产物 `octave.wasm` = **28,707,654 B**，M1 = 36,858,344 B；gzip 待重算）；
-   · 之后 promote 到 8761（M2 产物在 `/src/websrc/m2keep-out`，要把它摆成 promote 脚本认的
-     `out-webgl`，或给 `SRC_OUT`/`GL_OUT` 指路）→ 8761 全量 → dist 重打。
-3. **批 D 收尾（FreeType 文字）**：容器里**已经全做完**（PIC 库 `build/113/build-freetype.sh`、
-   configure 开 `WITH_FREETYPE`、**全量重编**、字体预载接进 `link-web.sh`），
-   **只剩最后一次链接被打断** —— 那条命令原样抄在 **§5.26**。
-   验收：产物里含 `FreeSans.otf` 的预载记录、**不再**出现那条 FreeType warning、
-   用 `getframe` 的像素差异证明文字真画出来了（探针待写）、8768 全量 → promote → 8761 全量。
-4. **批 E 首帧冷启动**（**先量后定**，允许以"不做"收口）：写 `test/browser/probe-cold-start.mjs`，
-   把冷/温分量、预热对开页与首图时间的影响量清（§5.21 有实测拆解，也有"别再混着量"的教训）。
-5. **收尾**：dist 重打（`sh build/make-dist.sh` + 核对包内 wasm 与部署件同 sha）、
-   文档（README 状态表、`dist/DEPLOY.md` 验收表与偏差、`build/113/NOTES-webgl.md` 新增
-   FreeType/M2 小节、`build/CLIBS.md`、`build/113/GRAPHICS-BRANCH.md`）、`docker commit` 检查点、
-   提交推送（**不 force-push / 不删对象 / 禁用 `--no-verify`**）。
-6. **手机真机速度**：模拟器验不了 WebGL（§5.19）⇒ 要真设备。桌面 + CPU 降频 + 分辨率标定的
+1. **8761 的认证全量回归 —— 已跑**（`sweep-logs/20260924-8761-certified/`）：
+   · 首轮：**34 套全绿 + `accept-plotv2` 一次 `Target crashed`**（浏览器标签崩，非产品回归：
+     同一产物在 8768 上 72/72，且崩的时候我正在**并行**跑 `docker commit`（7.5GB）与 dist 打包），
+     ⇒ 汇总 853 项，**`0 FAIL`**。
+   · **干净复跑那套**（无并行负载）：`accept-plotv2` **72 PASS / 0 FAIL** ✓。
+   ⇒ **该产物 = 35 套 / 925 项**（与逐字节相同的 8768 那轮一致，见文末 `AUTO:STATE` 的指向）。
+   **教训**：跑验收时**别并行干重活**（docker commit / 打包）—— 会让 Chromium 标签崩，
+   症状长得像产品回归（`Target crashed`），白花一轮 35 分钟。
+2. **交付包重打**：`sh build/make-dist.sh` → 核对"包内 wasm 与部署件同 sha"
+   （文末 `AUTO:STATE` 会自动核对这条）。**必须等上面那轮绿了再打**（包内容 = 最近一次实测通过的构建）。
+3. **文档收尾**（本轮已经写了大部分）：`README`（✅ 已改）、`dist/DEPLOY.md` 验收表的项数、
+   `build/CLIBS.md`（✅ 已加 FreeType / M2 两节）、`NOTES-webgl.md` §4.8/§4.9（✅）、
+   `GRAPHICS-BRANCH.md`（✅）。
+4. **`docker commit` 检查点 + 提交推送**（**不 force-push / 不删对象 / 禁用 `--no-verify`**）。
+   ⚠️ 新增文件记得同步白名单 —— 而且**闸门有盲区**（§0 第 5 条的注脚 / §5.27）：
+   `git status --short --ignored <目录>` 主动看一眼。
+5. **手机真机速度**：模拟器验不了 WebGL（§5.19）⇒ 要真设备。桌面 + CPU 降频 + 分辨率标定的
    结论见 `NOTES-webgl.md` §4.5（渲染器本身快 3.4–8.9×，端到端被桥与冷启动盖住）。
-7. **`print` 的核心矢量路径**不可达（**不是待办**）：缺 shell 管道（有意）+ gs。
+6. **`print` 的核心矢量路径**不可达（**不是待办**）：缺 shell 管道（有意）+ gs。
    **plot 桥自己那份 SVG 是唯一矢量实现**；无 GL 设备的显示回落（§5.22）也建立在它之上 —— 别当冗余砍。
-8. **无 GL 回落的边界**（**不是待办**）：没有抗锯齿/硬件加速；页面 250 ms 采样一次，
+7. **无 GL 回落的边界**（**不是待办**）：没有抗锯齿/硬件加速；页面 250 ms 采样一次，
    最后一张图最多晚 250 ms 出现。见 `NOTES-webgl.md` §4.7。
 （非图形：本轮清零，只余 G1 的收尾 —— 已并入上面的批 C）
 1. **G1 `MAIN_MODULE=2`** → **见 §5.25（本轮做成了，只差 promote）**：保活清单生成器
@@ -2004,7 +2005,12 @@ sweep）。**当场抓到一条真 bug**：`__wf_basename__("/")` 返回 `""` �
 
 **当前状态**：M2 三件已部署到 **8768**（M1 三件备份在 `siteWebGL-m1bak-20260923/`），
 关键套件绿；`sweep-logs/20260923-8768-m2/` 那轮跑到 17 套全绿被停。
-**未做**：8768 全量 + **两条懒加载证据**（加载期不许请求 `.oct`；按需 `pkg load` 正常）+ promote。
+
+**2026-09-24 续做（懒加载证据补齐）**：新探针 **`probe-m2-lazyload.mjs`（7 项，8768 实测全绿）**
+把"懒加载没破"钉死 —— ① 加载期的 `.oct` 请求只有启动清单里那 **8 个、全在 `assets/` 下**
+（route A 那种"站点根目录找 `__bfgsmin.oct`"为 0）；② 装载前 `exist("butter")==0`、
+按需 `OctaveAssets.load('signal')` 之后 `==2` 且 `butter(4,0.2)` 真出 5 个系数。
+⇒ C 这一批**代码与证据都齐了**，只等 promote（HANDOFF §8 第 2 条）。
 
 ### 5.26 批次 D：FreeType 文字渲染 —— **只差最后一次链接**（2026-09-23，半途）
 
@@ -2050,6 +2056,78 @@ sudo docker exec o113 bash -lc 'export PATH=/src/bin:$PATH; cd /src/bin && \
 **上线后的两条代价（如实）**：无 fontconfig ⇒ `fontname` 被忽略（任何字体名落到 FreeSans）、
 `listfonts` 为空。
 **检查点**：`octave-build:113-freetype-wip-20260923`（树已开着 FreeType + freetype 归档都在镜像里）。
+
+**2026-09-24 续做：链接已跑通 + 文字渲染实测出字**
+- 链接（HANDOFF §8 第 3 条那条命令）**已成功**：`/src/websrc/m2ft-out`，
+  `octave.wasm` **29,280,186 B**（M2 不带 FreeType 是 28,707,654 ⇒ FreeType 的代码只 +572KB），
+  保活闸门过（主模块导出 703 个名字）、FreeType 自检过（4 个 `FreeSans*.otf` 都在产物里）。
+- **`build-freetype.sh` 的自检改对了**：`emnm -u <归档>` 的表**不能**直接当"缺符号"读
+  （含跨成员引用），改成"每个未定义的自家符号必须在归档**某个成员里有定义**"；
+  ⚠️ 比对前把多行串**压成空格**再做 `case` 匹配（命令替换出来是换行分隔，直接比会误判）。
+- **新探针 `probe-text-render.mjs`（6 项，8768 实测全绿）**：① 那条 FreeType warning **没了**；
+  ② 加 `title/xlabel/ylabel` 后 `getframe` 非白像素 **7391 → 9521（+2130）**（无 FreeType 时是
+  **+0**，所以这条是判别性的）；③ 刻度标签换成长文字再 **+2754**。
+- **体积账（M2+FreeType 实测）**：wasm 36,858,344 → **29,280,186**（gz 8,428,657 → 6,942,595）；
+  js 744,750 → 454,096（gz 160,980 → 87,294）；data 6,804,767 → 8,674,455（gz 1,314,025 →
+  **2,513,886**，那 +1,869,688 就是 4 个字体）⇒ **三大件 gzip 合计 9,903,662 → 9,543,775（−359,887）**。
+  ⚠️ **字体那 1.2MB gzip 几乎吃掉了 M2 省下的 1.55MB** —— 想再省就只发 `FreeSans.otf`（856,800 raw）
+  或做子集化（代价：粗/斜体或非拉丁字形变缺）。
+
+---
+
+### 5.27 仓库可复现性：4 个**承重文件从来没进 git**（2026-09-24）
+
+起因是核对 `promote-webgl.sh` 时顺手 `git check-ignore`：它**被 `.gitignore` 的 `*` 忽略、
+从未提交**。顺着查下去还有三个（都是脚本/产物，不是垃圾）：
+
+| 文件 | 为什么承重 |
+|---|---|
+| `build/promote-webgl.sh` | 8761 的**换装脚本**（§5.21 把它当"固化路径"用） |
+| `build/recover-113.sh` | 8762 车道的断电恢复（§10.5 的第二条命令） |
+| `build/post.js` | `link-web.sh` 开头**硬要求**它存在（`[ -f "$SRC/post.js" ] \|\| FATAL`） |
+| `build/webshell/*.m`（6 个） | zip/tar/gunzip 那批"无 shell 化"的覆写层 |
+
+四个都**已加白名单并提交**；`post.js`/`main.cc` 与容器里正在用的那份 **sha 逐字节一致**
+（`52b4aa7f…` / `6631c886…`），所以不是"旧副本顶替"的问题，纯属漏 add。
+
+**为什么闸门没抓到**：`.githooks/check-whitelist.py` 校验的是"**已暂存**的文件在不在白名单里"，
+**被忽略且从未 `git add` 的文件它看不见** —— 这是"白名单仓库"这条规矩的固有盲区。
+⇒ 教训（已写进 §0 第 3 条的注脚）：**新增文件后主动 `git status --short --ignored <目录>` 看一眼**，
+别只依赖闸门。（`build/113/vendor-edge-tools/`、`build/p5osmesa/` 是**有意**不进 git 的：
+一个第三方 vendor、一个退役的 OSMesa 目录 —— 别顺手也 add 进去。）
+
+---
+
+### 5.28 批次 E：首帧冷启动 —— **量清了，决定不做预热**（2026-09-24）
+
+**为什么要量**（§8 待办 5）：真渲染器第一次出图要建 WebGL 上下文 + `initialize_gl4es()` +
+编 shader + 首帧 `glReadPixels`/PNG，文档里一直记着"~0.6 s"。这一批的纪律是**先量后定**
+（计划里就写明允许以"不做"收口）。
+
+**新探针 `test/browser/probe-cold-start.mjs`**（只测不判；**单跑**，不与 sweep 并行 ——
+CPU 一抢毫秒数就没意义）：冷/温**分开**量，并把"预热两条路"的总额一起算出来。
+
+| 量（8761，桌面，真 GPU） | 值 |
+|---|---|
+| navigation → load | 113 ms |
+| navigation → `__octaveReady` | **1501 ms** |
+| 冷：`clf` / `plot(1:10)` / `drawnow` | **375 / 73 / 177 ms** |
+| 温：`clf;plot;drawnow` / 单次 `drawnow` | **58 / 24 ms** |
+| 3D：`surf(peaks(24))` 冷 / 温 | **172 / 29 ms** |
+
+⇒ **"0.6 s"拆开了**：真正花在第一次 `drawnow` 上的只有 **177 ms**，另外 ~375 ms 是**第一次
+`clf`**（建上下文 + 初始化 gl4es）。这与 §5.21 的更正一致：端到端那 2 s 的大头是**桥自己**
+（`surf(peaks(40))` ~1.9 s），不是渲染器。
+
+**决策：不做预热**（如实记，也不打算做）。三条理由都是上表的算术：
+1. **开页预热**：ready(1501) + 预热(177) + 温首图(58) ≈ **1736 ms** > 不预热的
+   ready + 冷首图 = **1678 ms** —— 预热只是把这段从"首次出图"挪到"开页"，还多付一次温首图。
+2. **ready 之后预热**：会**独占主线程** ~177 ms（Octave 的 eval 是同步的；`pause()` 期间浏览器
+   事件循环完全停摆，§5.10 实测过）⇒ 用户第一条命令要排队，等于把等待挪到更糟的地方。
+3. 收益本就小：177 ms 在"敲完 `plot` 到看见图"里几乎觉察不到（温出图 24–58 ms）。
+
+**结案**：§8 这条**收口为"不做"**，上表就是"为什么不做"的证据（§7 有对应条目）。
+将来真要抠，方向是**把首次 `clf` 的 375 ms 做小**（那是上下文/gl4es 初始化），不是预热。
 
 ---
 
@@ -2335,12 +2413,12 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 
 | 项 | 值 |
 |---|---|
-| `octave.wasm` | 36,858,344 B raw / 8,428,657 B gz | sha256 `c6f4be190756c92c…` |
-| `octave.js` | 744,750 B raw / 160,980 B gz | sha256 `b18f02ea995c47d9…` |
-| `octave.data` | 6,804,767 B raw / 1,314,025 B gz | sha256 `6bece3d87ab3aa3a…` |
-| 三大件 gzip 合计 | **9,903,662 B** | |
+| `octave.wasm` | 29,280,186 B raw / 6,942,595 B gz | sha256 `225130ab9f638683…` |
+| `octave.js` | 454,096 B raw / 87,294 B gz | sha256 `2e5ddcc77bbcbf7b…` |
+| `octave.data` | 8,674,455 B raw / 2,513,886 B gz | sha256 `c87be3d980dd1c60…` |
+| 三大件 gzip 合计 | **9,543,775 B** | |
 | 资产条目 | 47 | |
-| 最近一次**全绿**回归 | `20260923-8761-audit` · **35 套 / 902 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260923` · tar.zst 26,005,775 B · `439871597a261c68…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-8768-m2ft-c` · **35 套 / 925 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,756,258 B · `707db04d45650fc5…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-23 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

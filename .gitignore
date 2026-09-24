@@ -49,6 +49,10 @@
 !build/check_m.py
 !build/glue-selftest.m
 !build/glue-selftest.sh
+!build/promote-webgl.sh
+!build/recover-113.sh
+!build/post.js
+!build/webshell/*
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*

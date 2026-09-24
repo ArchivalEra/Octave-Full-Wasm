@@ -140,18 +140,33 @@ for s in $need; do
 done
 [ -z "$miss" ] || { echo "FATAL: 归档里缺符号：$miss" >&2; exit 4; }
 
-# 未定义符号：只需确认**没有 freetype 自己家的**漏定义（那些必须在本归档里）。
-# 其余（libc/wasm 机制名/`__stack_pointer`/`__table_base` 之类、以及 zlib 那家）由主模块
-# 或 `-lz` 提供，属正常 —— 别把整张表当问题（第一版就是那么干的，输出一屏噪音）。
-selfundef=$(emnm -u "$PREFIX/lib/libfreetype.a" 2>/dev/null | awk '{print $NF}' | \
+# 未定义符号：**归档口径要小心**。`emnm -u <归档>` 列的是**每个成员各自的**未定义符号，
+# 里面天然包含"本成员没定义、但别的成员定义了"的跨成员引用（freetype 的 base 目录就是
+# `ftbase.c` 把 `ftobjs.c`/`ftstream.c`… 用 `#include` 收进一个 TU 的）。
+# 所以正确的判据是：**每个未定义的自家符号，必须在归档的某个成员里有定义**。
+# （第一版直接拿 `-u` 的表当"缺符号"，于是误报了 `FT_Activate_Size`。）
+ALIB="$PREFIX/lib/libfreetype.a"
+defined=$(emnm "$ALIB" 2>/dev/null | awk '$2 ~ /^[TtDdRrWwBb]$/ {print $NF}' | sort -u || true)
+# ⚠️ 比对前要把换行**压成空格**：`case` 的 `*" $s "*` 匹配的是"空格分隔"的串，
+#    而命令替换出来的多行串分隔符是**换行** —— 直接比会"明明在表里却判成缺"（实测踩过）。
+defined_flat=" $(echo "$defined" | tr '\n' ' ') "
+selfundef=$(emnm -u "$ALIB" 2>/dev/null | awk '{print $NF}' | \
             grep -E '^(FT_|TT_|T1_|CFF_|PS_|AF_|CF2_|pcf_|bdf_|sdf_|svg_|af_|cf2_)' | sort -u || true)
-if [ -n "$selfundef" ]; then
-  echo "FATAL: freetype 自家符号还没定义（打包漏了 TU？）：$selfundef" >&2
-  exit 4
-fi
-zlibundef=$(emnm -u "$PREFIX/lib/libfreetype.a" 2>/dev/null | awk '{print $NF}' | \
+really_missing=""
+for s in $selfundef; do
+  case "$defined_flat" in
+    *" $s "*) ;;
+    *) really_missing="$really_missing $s" ;;
+  esac
+done
+[ -z "$really_missing" ] || {
+  echo "FATAL: 这些 freetype 自家符号在归档里**没有任何成员定义**（漏编 TU？）：$really_missing" >&2
+  exit 4; }
+
+zlibundef=$(emnm -u "$ALIB" 2>/dev/null | awk '{print $NF}' | \
             grep -E '^(inflate|deflate|crc32|adler32|zlibVersion|compress|uncompress|gz)' | sort -u || true)
-echo "   zlib 未定义符号（由主链 -lz 提供）：${zlibundef:-无}"
+echo "   自家未定义符号：$(echo "$selfundef" | wc -w) 个，全部由归档内其它成员定义 ✔"
+echo "   zlib 未定义符号（由主链 -lz 提供）：$(echo "$zlibundef" | tr '\n' ' ')"
 
 echo "== 产物：$PREFIX/lib/libfreetype.a $(stat -c%s "$PREFIX/lib/libfreetype.a") 字节"
 echo "   pkg-config：PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig pkg-config --modversion freetype2"

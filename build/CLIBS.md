@@ -1256,3 +1256,132 @@ PATH=/src/bin:$PATH SKIP= WITH_OPENGL=1 WITH_GL2PS=1 bash configure-113-full.sh
    Octave 把 gl2ps 输出**穿过 shell 管道**落盘，而本构建**故意没有 shell**。
    `-dpdf/-dps/-deps` 另需 gs。⇒ 这一批只把"gl2ps 缺失"这层去掉，
    离"核心 print 能出矢量"还差 popen/gs 那两层（详见 HANDOFF §5.20、NOTES-webgl §4.5.11）。
+
+---
+
+# 批次 D · FreeType → GL 文字渲染（2026-09-24）
+
+**背景**：图形线的刻度/`title`/`legend` 文字全部来自 `opengl_renderer::render_text` →
+`ft-text-renderer.cc`；configure 一直带 `--without-freetype` ⇒ `HAVE_FREETYPE` 未定义 ⇒
+`text_to_pixels()` 返回空 ⇒ **文字整块空白但不崩**。
+
+**★ 先查源码省掉一个库**：**不需要 fontconfig**。无 fontconfig 时
+`ft-text-renderer.cc:303-320` 的回落是 `OCTAVE_FONTS_DIR`（环境变量）→
+`SYSTEM_FREEFONT_DIR`（编译期）→ `config::oct_fonts_dir()`，在其中找
+**`FreeSans[Bold][Oblique].otf`**；而 Octave **自带**这几个字体（源码 `etc/fonts/`）。
+
+## 配方
+
+```sh
+# ① 建库（-fPIC；不吃 emscripten 端口那份非 PIC 归档）
+sh build/113/build-freetype.sh                      # → /src/deps/freetype（10 秒）
+# ② 重配（config.h 变 ⇒ 必须 make clean）
+cd /src/work/octave-11.3.0
+PATH=/src/bin:$PATH WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 SKIP= bash /src/bin/configure-113-full.sh
+make clean && emmake make -k -j24                    # PATH 必须 export，见坑 3
+# ③ 重链（link-web.sh 会自动链 libfreetype.a 并预载 4 个 FreeSans*）
+```
+
+## 坑
+
+1. ★ **别链 emscripten 端口的 freetype**。`emcc -sUSE_FREETYPE=1` 能自动建端口（10 秒、进
+   `cache/sysroot/lib/wasm32-emscripten/libfreetype.a`），但**那份是非 PIC**；本项目主链是
+   `MAIN_MODULE=1`（可重定位）+ 全树 `-fPIC`（zlib/bzip2 当年也要过 `--pic`）。
+   `build-freetype.sh` 因此改成**按端口自己的源文件清单**（`tools/ports/freetype.py`，42 个 TU）
+   自己用 `-fPIC` 编一遍。
+2. ★ **`-fwasm-exceptions` 必须与整棵树一致**。只写 `-O2 -fPIC` 时链接期直接断言失败：
+   `AssertionError: invoke_ functions exported but exceptions and longjmp are both disabled`
+   （非异常模式的目标文件把 `invoke_*` 胶水带进链接，而主链是 wasm 异常模式）。
+3. ★ **`PATH=/src/bin:$PATH` 要 `export` 给整条命令**。只写在 `make clean` 前面时，
+   后面的 `emmake make` 里 `emf77`（f2c 包装）找不到 ⇒ **264 个 Fortran 目标全红**
+   （`./libtool: line 1918: emf77: command not found`），看起来像"树坏了"。
+4. ★ **只设 `PKG_CONFIG_PATH` 不够，必须设 `EM_PKG_CONFIG_PATH`**。`emconfigure` 会让
+   emscripten sysroot 的 pkgconfig 目录**排在搜索路径最前面** ⇒ `freetype2` 解析到端口那份
+   `.pc`（`Libs/Cflags: -sUSE_FREETYPE`）⇒ `FT2_LIBS = -sUSE_FREETYPE` ⇒ 一串 in-tree 链接报
+   `undefined symbol: FT_Done_Face / FT_Reference_Face / FT_Set_Char_Size`。
+   自检：`grep '^FT2_LIBS' Makefile` 该是 `-L/src/deps/freetype/lib -lfreetype`。
+5. **字体挂载点不是 `/usr/src/octave/...`**。`main.cc` 那套 `/usr/src/octave/m/...` 是它自己
+   `addpath` 的；字体走 `defaults.cc` 的 `prepend_octave_home(OCTAVE_OCTFONTSDIR)`，实测 =
+   configure 的 prefix **`/src/work/octave-install/share/octave/11.3.0/fonts`**（与站点里
+   `doc-cache` 等 file 资产的 `mount` 前缀一致）。`link-web.sh` 现在**从 Makefile 读
+   `octfontsdir`**，不写死；并自检产物里含 `FreeSans.otf` 的预载记录。
+6. **归档的"未定义符号"不能直接当"缺符号"读**。`emnm -u <归档>` 列的是**每个成员各自**的
+   未定义符号，天然包含"本成员没定义、别的成员定义了"的跨成员引用（freetype 的 `ftbase.c`
+   就是把 `ftobjs.c`/`ftstream.c`… 用 `#include` 收进一个 TU 的）⇒ 正确的判据是
+   "每个未定义的自家符号，必须在归档的**某个成员里有定义**"。
+   ⚠️ 写这段比对时**把多行串压成空格**再做 `case` 匹配 —— 命令替换出来的是**换行**分隔，
+   直接 `case "$defined" in *" $s "*)` 会"明明在表里却判成缺"（实测踩过）。
+7. **重跑 configure 会把两个 GL 探测翻成 undef**（`GL_GLEXT_PROTOTYPES`、
+   `HAVE_GLBLENDFUNCSEPARATE`）：gl4es 头不声明它们，而**部署版就是 1**（当年换 GL 头之后
+   只增量重编了 3 个 TU、config.h 没重生成）。`configure-113-full.sh` 里**显式恢复为 1**，
+   理由是"换 FreeType 这一批不该顺带改图形行为"，且 gl4es 实测提供 `glBlendFuncSeparate`
+   （`/src/deps/glshim/lib/libGL.a` 里有它的符号）。
+
+## 体积与代价（实测）
+
+| | M1（`--without-freetype`） | M2 + FreeType |
+|---|---|---|
+| `octave.wasm` | 36,858,344 raw / 8,428,657 gz | **29,280,186 / 6,942,595** |
+| `octave.js` | 744,750 / 160,980 | 454,096 / 87,294 |
+| `octave.data` | 6,804,767 / 1,314,025 | 8,674,455 / **2,513,886**（+1,869,688 = 4 个字体）|
+| 三大件 gzip 合计 | 9,903,662 | **9,543,775（−359,887）** |
+
+⇒ **字体那 1.2MB gzip 几乎吃掉了 M2 省下的 1.55MB**；净赚只有 ~360KB。
+想再省：只发 `FreeSans.otf`（856,800 raw）或对字体做子集化（代价：粗/斜体或非拉丁字形变缺）。
+
+**代价（如实）**：没有 fontconfig ⇒ `fontname` 属性被忽略（任何字体名都落到 FreeSans）、
+`listfonts` 返回空。验收：`probe-text-render.mjs`（无警告 + `getframe` 墨水差：加标题后
++2130 像素、刻度换长文字 +2754 像素）。
+
+---
+
+# 批次 C · `MAIN_MODULE=2`（DCE）→ 保活清单（2026-09-24）
+
+**为什么**：M1 不做 DCE ⇒ 主模块导出全部符号（wasm 36.86MB）。M2 只导出"被保活的"，
+但我们的 `.oct` 走**资产车道**（不在主链命令行上）⇒ 拿不到 Emscripten 的自动保活。
+
+## 配方
+
+```sh
+# ① 保活清单：扫部署的全部 .oct 的 IMPORT 段（递归，含 octdir/<包>/）
+sh build/113/gen-keep-list.sh /src/octs-site > /src/libwork/keep.txt   # 45 个 .oct → 1267 符号
+# ② 主链（link-web.sh 的四个口子）
+M_SRC=/src/work/m-prerendered/m GL_LIBS=1 GL_BACKEND=webgl P5_TOOLKIT=1 \
+MAIN_MODULE_LEVEL=2 KEEP_LIST=/src/libwork/keep.txt \
+LIB_FUNCS="emscripten_run_script,__assert_fail,abort,exit" \
+OCT_SCAN_DIRS=/src/octs-site BASELINE_WASM=/src/websrc/out/octave.wasm \
+bash link-web.sh /src/websrc/m2-out
+# ③ 链后闸门自动跑（check-oct-imports.py；M2 时失败即 exit 4，不部署）
+```
+
+## 坑
+
+1. ★ **保活清单要从 IMPORT 段读**（`wasm-dis`）。文档里那句"从 `dylink.0` 段读 imported
+   symbols"**是错的**：那段只有 7 字节、不含符号名。
+2. ★ **JS 库符号靠 `LIB_FUNCS`，不是 `EXPORTED_FUNCTIONS`**。`emscripten_run_script`/
+   `__assert_fail`/`abort`/`exit` **不是 wasm 导出**，写进 `EXPORTED_FUNCTIONS` 是硬错误
+   （`undefined exported symbol`）；写进 `-s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=` 则 M2 下
+   **实测可用**（accept-net/image/slicot/forge2 全绿）⇒ 不必改写 R5、也不必包 `oct_js_run`。
+3. ★ **"缺导出"的假阳性**：side module **自己**的函数/数据在导入段里也会出现
+   （`GOT.func`/`GOT.mem`，取地址用），由加载器按**模块自己的导出表**解析 ——
+   `__ode15__.oct` 390 个导入里 **272 个是它自己的**。不排掉就是满屏假阳性（第一版报 453 个）。
+4. ★ **`exportdesc` 只是一个索引**（funcidx/tableidx/memidx/globalidx），**不能**复用 import
+   描述体（那个带 limits/typeidx）的跳过逻辑 —— 混用会把名字长度读错位、解出乱码名字。
+5. **判据只能是差分**：有一批符号今天（M1）就已经不在导出表里（实测 50–65 个，全在自包含的
+   `__control_slicot_functions__.oct`：SLICOT 引用了本仓 LAPACK 没有的 `*rfsx_`/`*geqrt3_`），
+   由加载器换成"一调用就抛"的 stub —— 今天的站点就这么跑着。所以闸门只在
+   **"基线导得出、新构建导不出"**时报失败。
+6. **`$(dirname "$0")` 在脚本 `cd` 之后会解成 `.`**：`link-web.sh` 中途 `cd "$SRC"`，
+   于是自检脚本路径变成 `/src/websrc/./check-oct-imports.py`（`can't open file`）——
+   改成在开头取一次 `HERE="$(cd "$(dirname "$0")" && pwd)"`。
+7. **懒加载没破的证据**（route A 就死在这，必须每次验）：`probe-m2-lazyload.mjs` ——
+   加载期的 `.oct` 请求只有启动清单里那 8 个、**全在 `assets/` 下**；按需装载 signal 后
+   `butter` 才可用（装载前 `exist=0`）。
+
+## 收益（实测）
+
+| | M1 | M2 |
+|---|---|---|
+| `octave.wasm` | 36,858,344 | **28,707,654（−22%）** |
+| `octave.js` | 744,750 | 451,719 |
+| 主模块导出名 | 44,987 | **703** |

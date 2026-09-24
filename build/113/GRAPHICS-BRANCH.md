@@ -19,6 +19,17 @@
 > 一手记录：**`build/113/NOTES-webgl.md`**（接手先读它）；OSMesa 那条线的全过程与教训保留在
 > **`build/113/NOTES-p5-osmesa.md`**（**该线已退役**，脚本与配方在 git 历史的
 > `graphics-osmesa` / `graphics-osmesa-p5` 分支）。
+>
+> ## ✅ 2026-09-24：**文字渲染补上（FreeType）+ 体积大降（`MAIN_MODULE=2`）**
+> 两件都不是"图形算法"改动，但都直接影响这条线的观感与首包：
+> 1. **FreeType 文字渲染上线**（批次 D）：刻度/`title`/`legend` 出字，**不需要 fontconfig**
+>    （回落字体就是 Octave 自带的 4 个 FreeSans）。验收 `probe-text-render.mjs`（6 项，
+>    加标题后 `getframe` 非白像素 **+2130**，无 FreeType 时是 +0）。见 `NOTES-webgl.md` §4.8
+>    与 `build/CLIBS.md`「批次 D」。
+> 2. **`MAIN_MODULE=2`（DCE）上线**（批次 C）：`octave.wasm` **36.86 → 29.28MB（含 FreeType）**、
+>    主模块导出名 **44,987 → 703**。核心风险是 `.oct` 懒加载（当年 route A 就死在那），
+>    每次换 M2 都必须过 `check-oct-imports.py` 保活闸门 + `probe-m2-lazyload.mjs`。
+>    见 `NOTES-webgl.md` §4.9 与 `build/CLIBS.md`「批次 C」。
 
 
 ## 一、现状（2026-09-23）
@@ -33,9 +44,9 @@
 | OSMesa（Mesa 软件光栅化） | ⛔ **已退役** | 它能跑（步骤①②③ 都通过过），但 CPU 逐像素、体积 +11.3MB ⇒ 被 gl4es 取代。脚本/配方在 git 历史；记录在 `NOTES-p5-osmesa.md` |
 
 **仍未做（如实记）**：① **手机真机速度**（模拟器验不了 WebGL，`HANDOFF` §5.19）；
-② **文字渲染缺**（`--without-freetype` ⇒ 刻度/title 空白但不崩，且会话第一条 axes 会打一条
-带调用栈的 warning）；③ **首帧冷启动 ~0.6 s**（建上下文 + `initialize_gl4es()` + 编 shader）；
-④ `print -dpdf/-dps` 的 gl2ps 路径未实测（缺 shell 管道，见上）。
+② ~~**文字渲染缺**~~ → **2026-09-24 已补上（FreeType，见上）**；
+③ **首帧冷启动 ~0.6 s**（建上下文 + `initialize_gl4es()` + 编 shader；批次 E 量过，结论
+见 `HANDOFF.md` §5.27）；④ `print -dpdf/-dps` 的 gl2ps 路径未实测（缺 shell 管道，见上）。
 
 
 ## 二、做法（**"主 wasm 带 GL"**）

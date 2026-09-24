@@ -891,3 +891,42 @@ graphics-osmesa         fb5b265  ← 历史遗留分支（只比当年的 main �
 的三样东西，本线直接用得上 —— ① `config.h` 那条根因修正；② toolkit 骨架
 （`figure_pixsize`/三件套/PNG）；③ plot 桥镜像层 + 验收套件。
 要从干净基线重来也就一条 `git rebase --onto main graphics-osmesa-p5 graphics-webgl`。
+
+---
+
+## 四点八、★ 文字渲染上线：FreeType（2026-09-24，批次 D）
+
+图形线的**刻度/title/legend 文字**来自 `opengl_renderer::render_text` → `ft-text-renderer.cc`；
+在这之前 configure 一直带 `--without-freetype` ⇒ `text_to_pixels()` 返回空 ⇒ **文字整块空白但不崩**。
+本批把它补上。**配方与 7 个坑写在 `build/CLIBS.md` 的「批次 D · FreeType」**（那里是配方的家），
+这里只记图形线自己必须知道的：
+
+- **不需要 fontconfig**：无 fontconfig 时的回落就是 `oct_fonts_dir()` 下的
+  `FreeSans[Bold][Oblique].otf`，而 **Octave 自带**那几个字体 ⇒ 预载 4 个文件即可
+  （**1,869,688 B raw**）。挂载点**不是** `/usr/src/octave/...`，是 configure 的 prefix
+  `/src/work/octave-install/share/octave/11.3.0/fonts`（`link-web.sh` 现在从 Makefile 读，不猜）。
+- **两个必须与树一致的东西**：`-fwasm-exceptions`（否则链接期断言
+  `invoke_ functions … both disabled`）与 `EM_PKG_CONFIG_PATH`（否则 `FT2_LIBS=-sUSE_FREETYPE`，
+  in-tree 链接报 `undefined symbol: FT_Done_Face`）。
+- **重跑 configure 会把两个 GL 探测翻成 undef**（`GL_GLEXT_PROTOTYPES`/`HAVE_GLBLENDFUNCSEPARATE`，
+  gl4es 头不声明）——`configure-113-full.sh` 里**显式恢复为 1**，因为**部署版就是 1**，
+  而且本批不该顺带改图形行为（gl4es 实测提供 `glBlendFuncSeparate`）。
+- **验收用新探针 `test/browser/probe-text-render.mjs`**（6 项，8768 实测 6 PASS）：
+  ① 不再出现那条 FreeType warning；② 加 `title/xlabel/ylabel` 后 `getframe` 的非白像素
+  **+2130**（无 FreeType 时是 **+0**，这就是判别性所在）；③ 刻度换成长文字再 **+2754**。
+- **代价（如实）**：无 fontconfig ⇒ `fontname` 属性被忽略（任何名字都落到 FreeSans）、
+  `listfonts` 为空。**体积**：字体那 1.2MB gzip 几乎吃掉 M2 省下的 1.55MB（净赚 ~360KB）；
+  想再省就只发 `FreeSans.otf` 或做子集化（代价见 CLIBS 表下那行）。
+
+## 四点九、★ `MAIN_MODULE=2`（DCE）上线（2026-09-24，批次 C）
+
+图形线**与 M2 无关**，但两件事必须一起知道：
+
+- **wasm 36,858,344 → 29,280,186（含 FreeType）**；主模块导出名 44,987 → **703**。
+  配方/坑在 `build/CLIBS.md` 的「批次 C · MAIN_MODULE=2」。
+- **每次换 M2 都要重跑保活闸门**（`check-oct-imports.py`，`link-web.sh` 里自动跑）：M2 漏保活
+  的症状是**装载期**的 `TypeError: resolved is not a function` / `Cannot read properties of
+  undefined (reading 'value')` —— 后者连缺哪个符号都看不见（SLICOT 那课）。
+- **懒加载没破**是 M2 的核心风险（当年 route A 死在"Emscripten 把 `.oct` 记成启动 dylib"），
+  证据在 `test/browser/probe-m2-lazyload.mjs`（7 项）：加载期的 `.oct` 请求只有启动清单里
+  那 8 个、**全在 `assets/` 下**；按需装载 signal 后 `butter` 才可用。
