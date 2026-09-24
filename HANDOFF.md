@@ -8,13 +8,14 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
-> **最后更新：2026-09-24（晚）**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
+> **最后更新：2026-09-24（深夜）**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
 > **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
 > `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
-> `PLAN-next.md` 的**七件小口子全部收口**（其中 toolkit 内部属性一件**实测翻案**成"不是缺口"，
-> 字体 +1 与 IDBFS 持久化两件**重链做成了**）⇒ **现在唯一的工作令是
-> [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md)**（JSPI 接交互 G0–G6 + 七条收尾债，
-> 含 GPT 复审的红线、Gate 0 实测与**已验证的重链配方**）。
+> `PLAN-next.md` 的**七件小口子全部收口**（1 件实测翻案 + 6 件真做成，含**重链**做的 IDBFS 持久化
+> 与 FreeMono）；`PLAN-jspi.md` 的 **G0 能力门已完成、G1 `eval_async` 第一次尝试失败并已回退**
+> （**JSPI 车道默认关闭**，见 §7/§8）⇒ **现在唯一的工作令是
+> [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md) 的 §0.5「现在的状态与下一步顺序」** ——
+> 关键路径是 **G1 的机制问题**（先做 D8 开机自检 + G1 最小复现，**别直接动 29MB 产物**）。
 > 全量与部署 sha **见文末 `AUTO:STATE`**（机器维护，别在这里手写）。
 >
 > ⚠️ **动手前必须知道的七条**：
@@ -467,6 +468,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
+| `build/check-site-parity.sh` | **两站点一致性闸门**（D4）：比部署件 + **清单引用到的**资产包 sha；默认只报告（差异**不一定是错**），`--strict` 供 promote 之后跑。未引用的遗留文件单独报出、不算差异 |
 | `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
 | `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
 | `build/fftw_threads_stub.c` | FFTW 线程桩（必须） |
@@ -490,7 +492,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
 | `test/browser/accept-*.mjs` | **验收套件（进仓库，断电不丢）**：套数与项数见文末 `AUTO:STATE` 区块；**逐套清单与覆盖说明**见 `dist/DEPLOY.md` 的表 |
 | `test/browser/accept-requirements.mjs` | **需求级验收（一屏看全 R1–R10）**——新会话起手体检用；按需求编号而非批次组织 |
-| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，23 项 —— §7 那几条「能用/不能用」的断言靠它防腐；R1/R4 上线时它当场把 3 条「已知缺口」翻成绿）**、`probe-want-matcher`（断言匹配器的红-绿对照）、**`probe-internal-props`（内部属性表与宿主真 Octave 的逐格差分：67 名字 × 2 阶段，参考表现算现比；11 项）** |
+| `test/browser/probe-*.mjs` | **探针**（不进 sweep，按需跑）：`probe-text-render`（FreeType 出字，6 项）、`probe-m2-lazyload`（M2 没破坏懒加载，7 项）、`probe-cold-start`（冷/温分量，只测不判）、**`probe-core-names`（名字面与已知偏差的当班实况，23 项 —— §7 那几条「能用/不能用」的断言靠它防腐；R1/R4 上线时它当场把 3 条「已知缺口」翻成绿）**、`probe-want-matcher`（断言匹配器的红-绿对照）、**`probe-internal-props`（内部属性表与宿主真 Octave 的逐格差分：67 名字 × 2 阶段，参考表现算现比；11 项）**、**`probe-jspi-gate`（JSPI 能力门两条路：有 API / 删掉 API；12 项）**、`probe-fontname`（`fontname` 真改像素 + 两个家族与替换策略，19 项） |
 | `test/browser/bench-core.mjs` | R10 基准套件（10 项计时 + ready + 体积；每项 3 次取中位数） |
 | `build/BENCH.md` | **R10 结论**：O0/O1/O2 矩阵与采纳依据（取 O1） |
 | `build/build_oct.sh` | 编 dldfcn `*.cc` → `.oct`（官方装载车道，不挂终链） |
@@ -700,6 +702,24 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
     ① `Courier`/`monospace` → FreeMono；② 其余要不到的**追加 weak 的 FreeSans 兜底**（回到旧默认）。
     复测：`Courier`=FreeMono、`Helvetica`/乱名字=**FreeSans**。`probe-fontname` 13 → **19 项**。
   - **教训**：**"多了一种东西"就要问"没有它时走哪条路，现在还走那条吗"** —— 这次兜底路径就变了。
+- **（新，2026-09-24 深夜）JSPI：G0 已完成，G1 第一次尝试失败并回退 —— 关键路径卡在"机制"上**
+  - ✅ **G0 能力门**：`bridge/index.html` 的 `__octaveJspi` + **按需** `__octaveJspiProbe(timeout)` +
+    `__octaveJspiRequire(feature)`。**两个独立 gate**（API 存在性 / Octave 级冒烟：值对**且**
+    等待期间页面定时器在跑）。探针 `probe-jspi-gate.mjs` **12 项**绿，含"删掉 API 后产物照样起得来"。
+  - ✅ 两个刻意的克制：**现在不弹任何提示**（没有任何功能依赖 JSPI，弹了是假警报）；
+    **冒烟不在开机时跑**（原因见下条事故），开机只记 `unprobed`。
+  - ⛔ **G1 `eval_async` 失败**：绑定在（`typeof === 'function'`）但**一调就炸**
+    `RuntimeError: null function`，随后**把页面一起卡死**。**已回退**（`cp site/octave.* siteWebGL/`），
+    `check-site-parity --strict` 报两站点一致，**8761 一个字节没动**。
+    **JSPI 车道默认关闭**：`WITH_JSPI=0`，绑定在 `#if defined(JSPI_EVAL_ASYNC)` 里；
+    **关掉后重链 `octave.wasm` sha 逐字节等于现役部署件**（`4faaa96d…`）⇒ 仓库与部署自洽。
+  - ★ **事故教训（比 G1 本身值钱）**：G0 的冒烟原本**在开机自动跑**，第一步就调 `eval_async`
+    ⇒ 坏产物一部署，**8768 每次开页都卡死**（所有验收一起挂）。
+    **"探测一个可能把主线程卡住的东西"不能放在开机路径上** —— 探测器的失败模式要和被探测物解耦。
+    连带的缺口：**promote 前没有"开机自检"**（坏产物的失败模式是"页面起不来"，
+    而现有网只能靠 40 个套件各自超时才发现）⇒ 新工作令里的 **D8** 就是补这个（30 秒）。
+  - **还差一步接线**：`__octaveJspiProbe/Require` **目前只有探针在调**，产品里还没有入口问它
+    （G3/G5 才接）⇒ 记在计划的 D9，别让门变摆设。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -803,17 +823,23 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ✅ **D3 sweep 对 `Target crashed` 自动重跑一次**（标 `[重跑]`）。
      ✅ **D4 两站点一致性闸门**：`build/check-site-parity.sh`（`--strict` 供 promote 后跑）。
      余下：**D5** 规则 B 162 处复核 / **D6** `pkg load <未装载>` 自动装载 /
-     **D7** IDBFS 边界（写频次、配额、配额满行为）。
-   · **JSPI 主线**：
-     ✅ **G0 能力门**（两个独立 gate：API 存在性 + Octave 级冒烟；**按需**触发、不弹假警报；
-     探针 `probe-jspi-gate.mjs` **12 项**全绿）。
-     ⛔ **G1 `eval_async` 第一次尝试失败、已回退**（产物坏：`RuntimeError: null function`、
-     还会卡死页面；**8761 一个字节没动**）。**JSPI 车道默认关闭**（`WITH_JSPI=0`），
-     绑定在 `#if defined(JSPI_EVAL_ASYNC)` 里；关掉后重链**逐字节复现现役 wasm**（4faaa96d…）。
-     **下一步**：先在容器里做**十几行的最小复现**（阶梯 `{裸,-sJSPI} → +MAIN_MODULE=2 →
-     +SIDE_MODULE/dlopen` 定位是哪一步打坏的），**别直接动 29MB 产物**。
-     事故教训（"探测可能卡住主线程的东西不能放在开机路径上"）见 HISTORY §5.43 与 `PLAN-jspi.md` G1。
-     ⬜ 之后才是 **G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ G3/G4/G5/G6。
+     **D7** IDBFS 边界（写频次、配额、配额满行为）/ **D8** `build/check-boot.sh` promote 前
+     的 30 秒开机自检（**事故教出来的**，见下）/ **D9** 门接线（随 G3/G5）。
+   · **JSPI 主线（关键路径，顺序就是 `PLAN-jspi.md` §0.5）**：
+     ✅ **G0 能力门**（两个独立 gate，**按需**触发、不弹假警报；`probe-jspi-gate.mjs` 12 项绿）。
+     ⛔ **G1 `eval_async` 第一次尝试失败、已回退**（`RuntimeError: null function` + 卡死页面；
+     **8761 一个字节没动**）。**JSPI 车道默认关闭**（`WITH_JSPI=0`）、绑定在
+     `#if defined(JSPI_EVAL_ASYNC)` 里；关掉后重链**逐字节复现现役 wasm**（`4faaa96d…`）。
+     ▶ **下一步（按顺序）**：
+     **① D8 开机自检**（30 秒，promote 前必须过 —— 坏产物的失败模式是"页面起不来"，
+     现有网只能靠 40 个套件各自超时才发现，又慢又吵）；
+     **② G1 最小复现**（容器里十几行 embind async，阶梯 `{裸,-sJSPI} → +MAIN_MODULE=2 →
+     +SIDE_MODULE/dlopen` 定位是哪一步打坏的 —— 嫌疑最大是 **M2 的 DCE 削掉了 async invoker 那个
+     thunk**；**别直接动 29MB 产物**）；③ 结论写回 `build/113/NOTES-jspi.md`；
+     **④ 需要人拍板的分叉**：若这条路走不通，就退"JS 侧队列 + 同步入口"（放弃 `pause` 中途等待）
+     或单开 `MAIN_MODULE=1` 车道 —— 两条都行，得人定；
+     **⑤ G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ **⑥ G3/G4/G5/G6**。
+     事故教训见 HISTORY §5.43；**"探测可能卡住主线程的东西不能放在开机路径上"**。
    · **先做"小口子"**（不碰 wasm、风险最低）：
      ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
      见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。

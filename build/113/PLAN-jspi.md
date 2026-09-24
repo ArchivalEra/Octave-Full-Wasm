@@ -24,6 +24,51 @@
   不许退 Asyncify（与 `-fwasm-exceptions` 互斥，已证伪）；不许把 JSPI 做成**全站硬门**；
   **`pause` 那一步没过就不许宣称"交互可用"**。
 
+## 0.5 现在的状态与**下一步顺序**（2026-09-24 深夜更新；先读这一节）
+
+| 阶段 | 状态 |
+|---|---|
+| D1–D4 | ✅ 文档对齐 / `PROBES=1` / sweep 偶发崩重试 / 两站点闸门 |
+| **G0** 能力门 | ✅ 完成（两个 gate，**按需**触发；`probe-jspi-gate.mjs` 12 项绿） |
+| **G1** `eval_async` | ⛔ **第一次尝试失败、已回退**（产物坏：`RuntimeError: null function` + 卡死页面）。**JSPI 车道默认关闭**（`WITH_JSPI=0`）；关掉后重链**逐字节复现现役 wasm** |
+| G2 `pause` 压力矩阵 | ⬜ 未开始（**真正的风险点**；依赖 G1） |
+| G3–G6 | ⬜ 未开始（都依赖 G1） |
+| D5–D7 | ⬜ 未开始 |
+
+**★ 关键路径 = G1 的机制问题**：没有可用的"挂起入口"，`pause` 就没法改成 suspending import，
+`ginput`/`keyboard` 也没法等浏览器事件 ⇒ **G2–G6 全部排在它后面**。
+
+**按这个顺序做**（前两条都很便宜，先做）：
+
+1. **D8 · promote 前的"开机自检"**（30 秒，**这次事故直接教出来的**）：新脚本
+   `build/check-boot.sh <URL>` —— 开页面、等 `window.__octaveReady === true`（≤30 s）、
+   跑一句 `eval_string("2+2")`；**不过就不许 promote**。
+   为什么必须有：坏产物的失败模式是**页面根本起不来**，而现有网只能靠"40 个套件各自超时
+   （每个最多 420 s）"才发现 —— 又慢又吵（这次就这么撞上的）。这个自检要**接进 promote 流程**：
+   `promote-webgl.sh` 末尾 + 手动 promote 的收尾清单里各加一步。
+2. **G1 最小复现**（**别直接动 29MB 产物**）：容器里写一个十几行的 embind async 程序，
+   按阶梯加设置，**定位是哪一步打坏的**：
+   ```
+   ① em++ -lembind -sJSPI            → 期望：Module.f(…) 返回 Promise 且能 settle
+   ② 再加 -sMAIN_MODULE=2            → 怀疑点：DCE 把 async invoker 那个 thunk 削掉
+   ③ 再加 SIDE_MODULE/dlopen          → 我们的真实组合
+   ```
+   线索：上游 `test/test_other.py::test_embind_jspi` 只用 `-lembind -sJSPI`（**不带** `JSPI_EXPORTS`）；
+   embind 的 async 走的是 `createJsInvoker` 里那个 `invoker(...)`（原始 wasm 函数）。
+   若②就坏 ⇒ 试把 **invoker 的名字**列进 `-sJSPI_EXPORTS`（`--emit-symbol-map`/`wasm-dis` 找名字），
+   并对照一条 `MAIN_MODULE_LEVEL=1` 的产物看它在 M1 下是否正常。
+3. **按复现结论更新 `build/113/NOTES-jspi.md`**：那三条要求是从**原始导出**的探针推的，
+   embind 这条路要不要列 invoker 还是未知数 —— 查清后**把结论写回 NOTES**（别只留在脑子里）。
+4. **⚠️ 需要人拍板的分叉**：若结论是"JSPI + embind + `MAIN_MODULE=2` 这条路走不通"，
+   按红线**没有等价 fallback**（Asyncify 已证伪）⇒ 只能退到"**JS 侧队列 + 现有同步入口**"
+   （能做"点一次恢复一次"，**做不了"命令中途停下来等"** ⇒ `pause`/`recordblocking` 放弃），
+   或者为它单开一条 `MAIN_MODULE=1` 车道（产物更大）。**这两条哪条都行，但得人来定**。
+5. **G2**（`pause`+EH/SjLj 压力矩阵，T1–T6 × 6 判据）→ 之后才是 **G3/G4/G5/G6**。
+6. **D5–D7**（规则 B 162 处 / `pkg load` 自动装载 / IDBFS 边界）。
+
+**门本身还差一步接线**：`__octaveJspiProbe()` / `__octaveJspiRequire()` 目前**只有探针在调** ——
+G3/G5 落地时必须让**依赖 JSPI 的入口先问门**（否则门是摆设）。这条记在 G3/G5 的验收里。
+
 ## 1. 阶段与验收
 
 ### G0 · 能力门 + Octave 级冒烟（**不碰 wasm**，只改页面与测试）
@@ -121,6 +166,13 @@
   验收：`pkg load statistics`（未装载）**自己把它装上**并成功；负对照：不存在的包仍然报"没有"。
 - **D7 IDBFS 边界测量**：写频次（去抖 800 ms 的实际合并率）、大批量写的耗时、
   IndexedDB 配额下的失败行为（配额满要**明确报错**而不是静默丢文件）。
+- **D8 promote 前的"开机自检"**（30 秒；**2026-09-24 事故直接教出来的**）：
+  新脚本 `build/check-boot.sh <URL>` —— 开页面、等 `__octaveReady`（≤30 s）、跑一句
+  `eval_string("2+2")`；**不过就不许 promote**，并接进 `promote-webgl.sh` 的收尾与手动 promote 清单。
+  为什么必须有：坏产物的失败模式是**页面根本起不来**，而现有网只能靠"40 个套件各自超时
+  （每个最多 420 s）"才发现 —— 又慢又吵（这次就是这么撞上的）。
+- **D9 门接线**（随 G3/G5 一起做）：`__octaveJspiProbe()`/`__octaveJspiRequire()` 现在只有探针在调；
+  依赖 JSPI 的入口**必须先问门**，否则门是摆设。
 
 ## 2. 明确不做（写下来免得下轮又讨论）
 - **Asyncify**（与 `-fwasm-exceptions` 互斥，已证伪）。
