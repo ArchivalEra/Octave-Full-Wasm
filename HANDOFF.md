@@ -680,6 +680,23 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
   - 钉子：`accept-print` 45 项（断言**翻面**：以前这两条要求"必须报错"）、`accept-p5-fallback` 17 项、
     `probe-core-names` 的 `print -dpng` 一条也翻了面（另顺手翻掉一条**一直没跟着 R3 翻**的
     `listfonts` 断言 —— 那正是这个探针存在的意义）。
+- **（新，2026-09-24，小口子 6+7）两件"要重链"的活做完了：IDBFS 持久化 + FreeMono 家族**
+  （**`octave.wasm` 逐字节未变** —— 只动预载与 JS 胶水；`octave.data` 8,674,824 → **9,712,174**、
+  `octave.js` 454,042 → **461,234**）：
+  - **IDBFS**：链接行加 **`-lidbfs.js`** + `EXPORTED_RUNTIME_METHODS` 加 `IDBFS`
+    （缺它时构建期**一声不响**、页面里 `FS.mount` 才炸 ⇒ 新增**构建期自检**）；页面
+    `postRun` 把 `FS.mount(IDBFS, {}, "/home/web_user")` 真挂上（挂载点 = 实测的 `HOME`）+
+    开机 `syncfs(true)` 读回 + **明确写回点** `Module.webSync()`（交互路径另有 800 ms 去抖写回）。
+    实测：整页 reload 后 `load('/home/web_user/persist.mat')` 取回 **x=4242**；**负对照** `/tmp`
+    那份 reload 后**不在**（证明真重载过）。钉子 `accept-idbfs.mjs`（9 项）。
+  - **FreeMono ×4**：字体预载 4 → **8 个面**（+1,036,292 字节）；自检从"含 FreeSans"扩成
+    **逐个点名 8 个面**。`listfonts()` 现在有 2 个家族。
+  - ★ **顺手炸出的真问题（探针当场抓住，已修）**：字体目录里出现**第二个**家族后，fontconfig 对
+    "要不到的家族"的兜底从 FreeSans 变成 **FreeMono**（按家族名排序）⇒ `fontname="Arial"`/
+    `"Helvetica"` 这些常写的名字会变**等宽**。修法：`fonts.conf` 里加两条规则 ——
+    ① `Courier`/`monospace` → FreeMono；② 其余要不到的**追加 weak 的 FreeSans 兜底**（回到旧默认）。
+    复测：`Courier`=FreeMono、`Helvetica`/乱名字=**FreeSans**。`probe-fontname` 13 → **19 项**。
+  - **教训**：**"多了一种东西"就要问"没有它时走哪条路，现在还走那条吗"** —— 这次兜底路径就变了。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -781,11 +798,12 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      `-djpg/-dbmp/-dtga` 借 webimage 转码；没 GL 时清晰报错）。两条旧断言**翻面**，
      `accept-print` 45 项、`accept-p5-fallback` 17 项；顺手翻掉 `probe-core-names` 里一条
      一直没跟着 R3 翻的 `listfonts` 断言（见 §7）。
-     余下：~~字体家族 +1（FreeMono ×4）~~ / ~~持久化（IDBFS）~~ → **这两条经实测都是"重链车道"，
-     本会话有意未做**（8761 的部署件一字节没动）：IDBFS 要 `-lidbfs.js` 才会编进去
-     （实测 `FS.filesystems` 只有 `["MEMFS"]`）、FreeMono 是**预载**文件 ⇒ 加字体也得重链。
-     **与 JSPI 的 G1 是同一趟活**（一次重链把 `-lidbfs.js` + FreeMono + `-sJSPI` 一起做）。
-     配方与验收写在 HISTORY §5.38。仍余：`check-wants` 规则 B 复核（162 处）。
+     ✅ **6+7）字体家族 +1 与 IDBFS 持久化** → **都已做完**（重链一趟：`-lidbfs.js` + FreeMono ×4
+     + 两条新自检）。`octave.wasm` **逐字节未变**，`octave.data`/`octave.js` 变了。
+     实测：整页 reload 后 `load('/home/web_user/persist.mat')` 取回 **x=4242**、`/tmp` 的负对照
+     不在；`listfonts()` 有 2 个家族；顺手修掉"第二个家族把兜底变成等宽"那个真问题（见 §7）。
+     钉子 `accept-idbfs.mjs` 9 项、`probe-fontname` 19 项。
+     仍余：`check-wants` 规则 B 复核（162 处）。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
      （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
      （`pause` + `unwind_protect` + EH/SjLj 六条矩阵、六条判据）→ G3 `ginput` 事件队列 →
@@ -864,12 +882,12 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | 项 | 值 |
 |---|---|
 | `octave.wasm` | 29,463,242 B raw / 7,016,523 B gz | sha256 `4faaa96d583ed978…` |
-| `octave.js` | 454,042 B raw / 87,229 B gz | sha256 `35401e7acff28505…` |
-| `octave.data` | 8,674,824 B raw / 2,515,502 B gz | sha256 `c2be24347381cb13…` |
-| 三大件 gzip 合计 | **9,619,254 B** | |
+| `octave.js` | 461,234 B raw / 89,174 B gz | sha256 `7b114b719ffba355…` |
+| `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
+| 三大件 gzip 合计 | **10,260,744 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-095204` · **38 套 / 1,016 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,927,281 B · `07ac32ec20de3c94…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-102953` · **39 套 / 1,025 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 27,086,964 B · `09734be223090fea…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

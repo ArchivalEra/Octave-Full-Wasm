@@ -91,10 +91,31 @@ check(s1 !== s3, '★ 判别性：只把 fontweight 改成 bold ⇒ 像素和**�
 check(s1 !== s4, '★ 判别性：只把 fontangle 改成 italic ⇒ 像素和**不同**', `normal=${s1} vs italic=${s4}`);
 check(s3 !== s4, '★ 判别性：bold 与 italic 互不相同（不是"只要一变就随便变"）', `bold=${s3} vs italic=${s4}`);
 
-// 落回行为的交底：家族名不存在 ⇒ 落到 FreeSans（**这不是失败**，是只有 4 个字体的必然）
-const d1 = await run(draw('Courier', 'normal', 'normal'), 1600);
-console.log(`   fontname="Courier"（本构建没有这个家族）⇒ 像素和 ${sum(d1.out)}（与 FreeSans 普通体相同？${sum(d1.out) === s1}）—— 预期的落回`);
-check(sum(d1.out) === s1, '交底：家族名不存在时落回 FreeSans（与普通体一致）', `${sum(d1.out)} vs ${s1}`);
+// ── ③c 家族替换策略（2026-09-24：加了 FreeMono 之后**实测出来的**，别照抄旧话）────────
+// 只加 FreeMono 而不写替换规则时，fontconfig 对"要不到的家族"的兜底会从 FreeSans 变成
+// **FreeMono**（按目录里家族名排序，FreeMono 在前）⇒ `fontname="Arial"` 这种学生常写的
+// 名字会变成**等宽**。所以 fonts.conf 里加了两条规则（见 link-web.sh）：
+//   ① 等宽请求（Courier / monospace）→ FreeMono；② 其余要不到的 → **弱兜底 FreeSans**。
+const mono = await run(draw('FreeMono', 'normal', 'normal'), 1600);
+const courier = await run(draw('Courier', 'normal', 'normal'), 1600);
+const helv = await run(draw('Helvetica', 'normal', 'normal'), 1600);
+const junk = await run(draw('NoSuchFontXYZ123', 'normal', 'normal'), 1600);
+console.log(`   替换实测：Courier=${sum(courier.out)} Helvetica=${sum(helv.out)} 乱名字=${sum(junk.out)}（FreeSans=${s1} FreeMono=${sum(mono.out)}）`);
+check(sum(courier.out) === sum(mono.out), '★ 等宽请求 `Courier` ⇒ 换到 **FreeMono**（与 FreeMono 像素一致；这是对的替换）', `Courier=${sum(courier.out)} FreeMono=${sum(mono.out)}`);
+check(sum(helv.out) === s1, '★ 要不到的家族（`Helvetica`）⇒ 仍落回 **FreeSans**（回到加 FreeMono 之前的默认）', `Helvetica=${sum(helv.out)} FreeSans=${s1}`);
+check(sum(junk.out) === s1, '★ 乱名字同理落回 FreeSans', `${sum(junk.out)} vs ${s1}`);
+
+// ── ③b **FreeMono ×4**（2026-09-24 重链加进来的第二个家族）────────────────────
+// 在这之前字体目录里只有 FreeSans ⇒ 换家族名一律静默落回；现在换到 FreeMono 必须**真的换**。
+const e1 = await run(draw('FreeMono', 'normal', 'normal'), 1600);
+const e2 = await run(draw('FreeMono', 'normal', 'normal'), 1600);
+const e3 = await run(draw('FreeMono', 'bold', 'normal'), 1600);
+const L = await run('disp(sprintf("NMONO=%d NSANS=%d", any(strcmp(listfonts(),"FreeMono")), any(strcmp(listfonts(),"FreeSans"))))', 900);
+console.log(`   FreeMono 普通 #1=${sum(e1.out)} #2=${sum(e2.out)} 粗体=${sum(e3.out)}（FreeSans 普通=${s1}）`);
+check(/NMONO=1/.test(L.out) && /NSANS=1/.test(L.out), '★ listfonts() 里 FreeSans 与 FreeMono **都在**', L.out);
+check(sum(e1.out) !== null && sum(e1.out) === sum(e2.out), 'FreeMono 画两次像素和相同（差异不是噪声）', `${sum(e1.out)} vs ${sum(e2.out)}`);
+check(sum(e1.out) !== s1, '★ 判别性：只把 fontname 换成 **FreeMono** ⇒ 像素和与 FreeSans **不同**（真换家族了，不再落回）', `FreeMono=${sum(e1.out)} vs FreeSans=${s1}`);
+check(sum(e3.out) !== sum(e1.out), '★ 判别性：FreeMono 的 bold 面也与普通面不同（4 个面都进来了）', `normal=${sum(e1.out)} vs bold=${sum(e3.out)}`);
 
 // ── ④ 控制台里不该有 fontconfig 的加载错误/警告（配置路径错时它会明说）────────
 const bad = logs.filter(l => /Cannot load default config file|Fontconfig error|Fontconfig warning/i.test(l));

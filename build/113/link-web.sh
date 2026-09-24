@@ -102,8 +102,10 @@ fi
 #    `prepend_octave_home(OCTAVE_OCTFONTSDIR)`，实测 = configure prefix
 #    `/src/work/octave-install/share/octave/$MV/fonts`（站点里 doc-cache 等 file 资产的
 #    mount 也是这个前缀 —— 两处对得上）。
-#    只预载 4 个 FreeSans*（无 fontconfig 时**只有**它们会被用到；FreeMono 那 4 个是
-#    绘图/打印用不到的），省 1MB。
+#    **2026-09-24 起预载 8 个**（FreeSans ×4 + **FreeMono ×4**）：以前只装 FreeSans，理由是
+#    "FreeMono 绘图/打印用不到"（省 1MB）；但 fontconfig 上线后 `listfonts()` 报的是**真实
+#    字体目录**，只有 FreeSans 时"换家族名"仍会落回 FreeSans（§5.31 已记录的那条边界）。
+#    加 FreeMono = 让 `fontname="FreeMono"` 真的换个等宽字体（raw +1,036,292 字节）。
 FONTS_PRELOAD_TAG=""
 if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   fontsdir="$(grep -m1 '^octfontsdir' "$OCT/Makefile" 2>/dev/null | sed 's/^octfontsdir *= *//')"
@@ -111,13 +113,14 @@ if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   [ -d "$fontsdir" ] || { echo "FATAL: $fontsdir 不存在（先 emmake make install）" >&2; exit 2; }
   stage_fonts="$PRELOAD_AT/fonts"
   rm -rf "$stage_fonts"; mkdir -p "$stage_fonts"
-  for f in FreeSans.otf FreeSansBold.otf FreeSansOblique.otf FreeSansBoldOblique.otf; do
+  for f in FreeSans.otf FreeSansBold.otf FreeSansOblique.otf FreeSansBoldOblique.otf \
+           FreeMono.otf FreeMonoBold.otf FreeMonoOblique.otf FreeMonoBoldOblique.otf; do
     [ -f "$fontsdir/$f" ] || { echo "FATAL: 缺字体 $fontsdir/$f" >&2; exit 2; }
     cp -a "$fontsdir/$f" "$stage_fonts/"
   done
   PRELOAD+=("--preload-file" "$stage_fonts@$fontsdir")
   FONTS_PRELOAD_TAG="FreeSans.otf"
-  echo "== preload FreeType 字体 4 个 → $fontsdir（$(du -sb "$stage_fonts" | cut -f1) 字节）"
+  echo "== preload FreeType 字体 8 个（FreeSans ×4 + FreeMono ×4）→ $fontsdir（$(du -sb "$stage_fonts" | cut -f1) 字节）"
 fi
 
 # ---- fontconfig 的**运行期配置**（WITH_FONTCONFIG=1 时）--------------------------
@@ -141,9 +144,28 @@ if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>
-  <!-- 只有 Octave 自带的 4 个 FreeSans（预载在 $fontsdir）——本构建没有系统字体目录 -->
+  <!-- Octave 自带的 8 个面（FreeSans ×4 + FreeMono ×4，预载在 $fontsdir）——本构建没有系统字体目录 -->
   <dir>$fontsdir</dir>
   <cachedir>/tmp/fontconfig-cache</cachedir>
+
+  <!-- ── 家族替换：**实测出来的两条规则**（2026-09-24，见 HISTORY §5.39）─────────────
+       背景：字体目录里出现第二个家族（FreeMono）之后，fontconfig 对"要不到的家族"的
+       **兜底**从 FreeSans 变成了 **FreeMono**（按目录里家族名排序，FreeMono 在前）——
+       于是 `fontname="Arial"`/`"Helvetica"` 这类学生常写的名字会变成**等宽**字体。
+       两条规则把它掰回来：
+         ① 等宽请求（Courier / monospace）→ **FreeMono**（这才是对味的替换）；
+         ② 其余要不到的名字 → 追加一个 **weak** 的 FreeSans 兜底 ⇒ 回到改动前的默认。 -->
+  <alias binding="same">
+    <family>Courier</family>
+    <accept><family>FreeMono</family></accept>
+  </alias>
+  <alias binding="same">
+    <family>monospace</family>
+    <accept><family>FreeMono</family></accept>
+  </alias>
+  <match target="pattern">
+    <edit name="family" mode="append" binding="weak"><string>FreeSans</string></edit>
+  </match>
 </fontconfig>
 EOF
   PRELOAD+=("--preload-file" "$stage_conf/fonts.conf@/fonts/fonts.conf")
@@ -444,6 +466,15 @@ DIAG=()
 #   `文件:行`（本仓的 wasm-opt/wasm-dis 不带 dwarfdump，只能走这条路）。
 [ "${DIAG_SOURCEMAP:-0}" = "1" ] && { DIAG+=( -g -gsource-map ); echo "== DIAG_SOURCEMAP=1：产出 source map"; }
 
+# ---- IDBFS（持久化）：**必须显式 -lidbfs.js**（2026-09-24 实测）--------------------
+# Emscripten 默认只编 MEMFS 进去：没有这一行，`Module.FS.filesystems` 实测只有
+# `["MEMFS"]`（IDBFS/NODEFS 都是 undefined），`FS.mount`/`FS.syncfs` 虽然在，**没有可挂的
+# 持久文件系统** ⇒ 页面侧 `FS.mount(IDBFS, {}, '/home/web_user')` 一定失败。
+# （挂载点就选 `/home/web_user`：实测 `getenv('HOME')` 正是它。）
+# ⚠️ **注释不能写进下面那条 `\` 续行的命令里**（会被当成 emcc 的输入参数，报 "no input files"
+#    —— 这个坑本仓在 JSPI 那轮踩过），所以说明一律写在命令**上面**。
+IDBFS_FLAGS=( -lidbfs.js )
+
 set -x
 # EXTRA_LDFLAGS：诊断/定点补救用（空格分隔的链接旗标）。
 #   当前用途：`-Wl,-u,dlsode_` —— 强制把 odepack 的入口从归档里拉进主模块
@@ -459,12 +490,13 @@ em++ --bind \
   ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
   ${KEEP_FLAGS[@]+"${KEEP_FLAGS[@]}"} \
   ${LF_FLAGS[@]+"${LF_FLAGS[@]}"} \
-  -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS"]' \
+  -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS","IDBFS"]' \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
   "${PRELOAD[@]}" \
   --post-js "$SRC/post.js" \
   "${EXC_FLAGS[@]}" -Wl,--allow-multiple-definition \
   "${LIBS[@]}" \
+  "${IDBFS_FLAGS[@]}" \
   ${GL2PS_FLAGS[@]+"${GL2PS_FLAGS[@]}"} \
   ${GL_FLAGS[@]+"${GL_FLAGS[@]}"} \
   -o "$OUT/octave.js" "$SRC/main.o" ${P5_OBJS[@]+"${P5_OBJS[@]}"}
@@ -534,7 +566,24 @@ fi
 if [ -n "$FONTS_PRELOAD_TAG" ]; then
   grep -q "FreeSans.otf" "$OUT/octave.js" || {
     echo "FATAL: octave.js 里没有 FreeSans.otf 的预载记录 ⇒ 文字会空白" >&2; exit 3; }
-  echo "== FreeType 自检: 产物里含 $(grep -o 'FreeSans[A-Za-z]*\.otf' "$OUT/octave.js" | sort -u | tr '\n' ' ')"
+  # 2026-09-24 起还要 FreeMono ×4（`fontname="FreeMono"` 才真的换家族，见上面那段注释）：
+  # 「预载成功了」与「四个面都在」是两件事，逐个点名查，缺一个就报出来。
+  for _mf in FreeMono.otf FreeMonoBold.otf FreeMonoOblique.otf FreeMonoBoldOblique.otf; do
+    grep -q "$_mf" "$OUT/octave.js" || {
+      echo "FATAL: octave.js 里没有 $_mf 的预载记录 ⇒ 等宽家族名会静默落回 FreeSans" >&2; exit 3; }
+  done
+  echo "== FreeType 自检: 产物里含 $(grep -o 'Free\(Sans\|Mono\)[A-Za-z]*\.otf' "$OUT/octave.js" | sort -u | tr '\n' ' ')"
+fi
+
+# ---- 自检：IDBFS 到底有没有编进去（2026-09-24）----------------------------------
+# 症状与"没写 -lidbfs.js"完全一致：页面里 `FS.filesystems` 只有 MEMFS、`FS.mount(IDBFS,…)`
+# 抛错，而构建期**一声不响**。⇒ 直接查产物里的 IDBFS 实现与运行时导出表。
+if [ "${#IDBFS_FLAGS[@]}" -gt 0 ]; then
+  grep -q "IDBFS" "$OUT/octave.js" || {
+    echo "FATAL: octave.js 里没有 IDBFS（-lidbfs.js 没生效？）⇒ 页面挂不上持久文件系统" >&2; exit 3; }
+  grep -q '"IDBFS"' "$OUT/octave.js" || {
+    echo "FATAL: octave.js 的 EXPORTED_RUNTIME_METHODS 里没有 IDBFS" >&2; exit 3; }
+  echo "== IDBFS 自检: octave.js 里有 IDBFS 实现 + 运行时导出"
 fi
 
 # ---- 自检：fontconfig 的配置到底进没进产物 --------------------------------------

@@ -148,9 +148,12 @@
    且**不写空文件**。**两条旧断言翻面**（`accept-print` 与 `probe-core-names` 里原来要求"必须报错"），
    另顺手翻掉一条一直没跟着 R3 翻的 `listfonts` 断言。见 HISTORY §5.37。
 6. **字体家族 +1**：预载 FreeMono ×4（镜像里有，`fonts.conf` 的 `<dir>` 天然覆盖），~1.04 MB raw。
-   **⛔ 2026-09-24 实测改判：这是"重链车道"，不是资产活。** 字体是**预载**进 MEMFS 的
-   （`link-web.sh` 的 PRELOAD 里就是那 4 个 FreeSans）⇒ 加 4 个 FreeMono 面要**改预载 + 重链**，
-   顺带 data/js 变大。**与 G1 的 `-sJSPI` 重链并成一趟做**（见下条与 HISTORY §5.38）。
+   **⛔ → ✅ 2026-09-24 当天就做完了（重链一趟）**：预载 4 → **8 个面**（FreeMono ×4），
+   `link-web.sh` 的自检扩成**逐个点名 8 个面**。实测 `listfonts()` 有 2 个家族、
+   `fontname="FreeMono"` 真的换像素（`probe-fontname` 13 → 19 项）。
+   ★ 顺手抓住并修掉一个真问题：字体目录出现**第二个**家族后，fontconfig 对"要不到的家族"的兜底
+   从 FreeSans 变成 **FreeMono** ⇒ `fontname="Arial"` 会变等宽；`fonts.conf` 加两条规则
+   （`Courier`/`monospace`→FreeMono；其余 weak 兜底 FreeSans）后复测正常。见 HISTORY §5.39。
 7. **持久化**：IDBFS（`index.html` 里有注释掉的挂载点）落 `/home/web_user` + 明确 sync 点；
    验收"写 → 刷新 → 还在"。
    **⛔ 2026-09-24 实测改判：同样要重链。** `Module.FS.filesystems` 实测只有 **`["MEMFS"]`**

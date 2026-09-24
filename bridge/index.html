@@ -106,8 +106,39 @@
       };
     })(),
     postRun() {
-      // Module.FS.mkdir("/working");
-      // Module.FS.mount(Module.FS.filesystems["IDBFS"], {}, "/working");
+      // ── 持久化：IDBFS 挂到 HOME（小口子 7，2026-09-24）──────────────────────
+      // 挂载点选 `/home/web_user`：实测 `getenv("HOME")` 就是它 ⇒ `save("x.mat")`、
+      // `cd` 之后不带路径的写法都落在持久区里，学生不必记路径。
+      // ⚠️ **前置条件**：产物必须带 `-lidbfs.js`（`build/113/link-web.sh` 有 IDBFS 自检），
+      //    否则 `FS.filesystems.IDBFS` 是 undefined。**那种情况下不报错、不挂**（页面照常可用），
+      //    只是没有持久化 —— 所以这里先判存在，再挂，再读回。
+      try {
+        if (Module.FS.filesystems && Module.FS.filesystems.IDBFS) {
+          try { Module.FS.mkdir("/home/web_user"); } catch (e) { /* 已存在 */ }
+          Module.FS.mount(Module.FS.filesystems.IDBFS, {}, "/home/web_user");
+          // 开机**读回**：IndexedDB 里的东西灌进 MEMFS（异步，但早于用户第一次敲命令）
+          Module.FS.syncfs(true, function (err) {
+            if (err) console.warn("[idbfs] 读回失败：" + err);
+            else console.log("[idbfs] 已读回 /home/web_user（IndexedDB）");
+          });
+        } else {
+          console.warn("[idbfs] 这个产物没编入 IDBFS（缺 -lidbfs.js）⇒ 本次会话不持久化");
+        }
+      } catch (e) { console.warn("[idbfs] 挂载失败：" + String(e).slice(0, 140)); }
+
+      // **明确的写回点**：把 MEMFS 的持久区刷进 IndexedDB。
+      //   · 交互用户：由 `ev()` 里的去抖自动写回兜住（800 ms 合并）；
+      //   · 脚本/测试：`await new Promise(r => Module.webSync(r))` 拿确定性（验收就靠它）。
+      Module.webSync = function (cb) {
+        try { Module.FS.syncfs(false, function (err) { if (cb) cb(err || null); }); }
+        catch (e) { if (cb) cb(e); }
+      };
+      var __syncTimer = null;
+      function syncSoon() {
+        if (__syncTimer) return;
+        __syncTimer = setTimeout(function () { __syncTimer = null; Module.webSync(); }, 800);
+      }
+      window.__octaveSyncSoon = syncSoon;
 
       function chk(rv) {
         if (rv.err) console.error(rv.err);
@@ -269,7 +300,13 @@
   }, 500);
 
   function ev(expr) {
-    try { return window.Module.eval_string(expr); }
+    try {
+      var r = window.Module.eval_string(expr);
+      // 每条命令之后**去抖写回**一次（800 ms 合并；明确的同步点在 postRun 的 webSync）。
+      // 不写回的话，`save("x.mat")` 只落在 MEMFS 里，一刷新就没了（MEMFS 是内存）。
+      if (window.__octaveSyncSoon) window.__octaveSyncSoon();
+      return r;
+    }
     catch (e) { log('ERR ' + String(e).slice(0, 160)); return -1; }
   }
 

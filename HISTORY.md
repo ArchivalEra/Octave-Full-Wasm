@@ -1969,6 +1969,53 @@ generating texture data` 警告 —— **不是本项引入的**：纯 `drawnow`
 
 ---
 
+### 5.39 第十四批：**重链把 6/7 两件真做成了**（IDBFS 持久化 + FreeMono）（2026-09-24）
+
+上一节刚判完"要重链"，接着就把它做了 —— 因为**权威链接命令是现成的**（§5.26 的 M2 那条 +
+`WITH_FONTCONFIG=1`，今天部署件就是这么链出来的），改两处、重链 30 秒，比攒着等下一轮便宜。
+
+**改了两处 `build/113/link-web.sh`**：
+1. **字体预载 4 → 8 个**（加 FreeMono ×4，raw +1,036,292 字节）；
+2. **`-lidbfs.js` + `EXPORTED_RUNTIME_METHODS` 加 `IDBFS`**；
+3. 顺手把**自检**补上（这是本轮最值钱的部分）：
+   - FreeType 自检从"含 FreeSans"扩成**逐个点名 8 个面**（缺一个就 FATAL）——
+     因为"预载成功了"与"四个面都在"是两件事，少一个的表现是"家族名静默落回"；
+   - 新增 **IDBFS 自检**（产物里要有 IDBFS 实现 + 运行时导出）——缺 `-lidbfs.js` 时构建期
+     **一声不响**，页面里 `FS.mount(IDBFS,…)` 才炸。
+
+**产物账（重链前后）**：`octave.wasm` **sha 逐字节不变**（`4faaa96d…`，29,463,242 B，因为只动
+预载与 JS 胶水）；`octave.data` 8,674,824 → **9,712,174**（+1,037,350 ≈ FreeMono 4 个面 +
+fonts.conf 的那几条规则）；`octave.js` 454,042 → **461,234**（IDBFS 胶水）。**五条自检全过**。
+
+**页面侧（`bridge/index.html`）**：
+- `postRun` 里把注释掉的挂载点**换成真代码**：`FS.mount(IDBFS, {}, '/home/web_user')`
+  （挂载点实测 `getenv('HOME')` 就是它）+ 开机 `syncfs(true)` 读回；
+- **明确的写回点** `Module.webSync(cb)`；交互路径由 `ev()` 里的**去抖写回**（800 ms 合并）兜住。
+- 没有 IDBFS 的产物**不报错、不挂**，只打一行 warn（页面照常可用）。
+
+**实测（8768）**：`FS.filesystems` = `["MEMFS","IDBFS"]`；`save('/home/web_user/persist.mat')` +
+`webSync()` + **整页 reload** ⇒ `load` 取回 **x=4242**；**负对照** `/tmp` 那份 reload 后
+`exist` = **0**（证明确实重载过）；`listfonts()` = 2 个家族（FreeSans + **FreeMono**）。
+新套件 `accept-idbfs.mjs`（9 项）全绿。
+
+**★ 加 FreeMono 顺手炸出的一个真问题（探针当场抓住）**：字体目录里一旦有**第二个**家族，
+fontconfig 对"要不到的家族"的兜底从 FreeSans 变成 **FreeMono**（按目录里家族名排序，FreeMono
+在前）⇒ `fontname="Arial"`/`"Helvetica"` 这些学生常写的名字会变成**等宽**字体（实测：全都
+等于 FreeMono 的像素和）。修法是在我们生成的 `fonts.conf` 里加两条规则：
+① 等宽请求（`Courier`/`monospace`）→ FreeMono（这才是对味的替换）；② 其余要不到的家族
+**追加一个 weak 的 FreeSans 兜底** ⇒ 回到改动前的默认。重链后复测：
+`Courier`/`monospace` = FreeMono、`Helvetica`/乱名字 = **FreeSans**（各与目标字体像素和一致）。
+`probe-fontname.mjs` 从 13 项涨到 **19 项**，把这套替换策略钉住。
+
+**教训**：加一个"资源"（这里是字体家族）会**改变兜底路径**，光看目标资源本身没问题。
+探针（`probe-fontname`）就是靠"同一段文字换家族名比像素和"这种判别性断言当场抓住的 ——
+**凡是"多了一种东西"，都要问一句"没有它的时候走哪条路，现在还走那条吗"**。
+
+**实测**：8768 全量全绿 → promote（`octave.{wasm,js,data}` + `index.html`）→ 8761 全量全绿；
+`accept-idbfs` 9 项、`probe-fontname` 19 项、宿主 `glue-selftest` 91/91。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**
