@@ -30,16 +30,23 @@ await page.evaluate(async () => {
 await new Promise(r => setTimeout(r, 500));
 console.log(`URL=${URL} ready=${((Date.now() - t) / 1000).toFixed(1)}s`);
 
+// 单个数字的 want 必须做边界匹配：`full.includes('1')` 会被别处的数字满足
+//（本仓那条假过几个月的断言就是这么来的）。其余 want 照旧子串匹配。
+function wantHit (hay, want) {
+  if (/^\d$/.test(want)) return new RegExp('(?<![\\d.])' + want + '(?![\\d.])').test(hay);
+  return hay.includes(want);
+}
 let pass = 0, fail = 0;
-async function ev(expr, label) {
+async function ev(expr, label, want) {
   logs.length = 0;
   let r;
   try {
     r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 130)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 600));
-  const out = [...logs].join(' ').replace(/\s+/g, ' ').trim().slice(0, 190);
-  const ok = r.rc === 0;
+  const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
+  const out = full.slice(0, 190);      // ★ 只用于显示：匹配必须用 full（截断后匹配会出假过）
+  const ok = r.rc === 0 && (!want || wantHit(full, want));
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 150))}`);
 }
@@ -129,6 +136,32 @@ await ev(`${reset} t=(0:0.1:2*pi)'; plot3(cos(t),sin(t),t); hold on; plot3(cos(t
 await svg('/tmp/pd_h.svg', 'hold 下两条 3D 曲线', { poly: 2 });
 await ev(`${reset} plot3(1:10, 1:10, (1:10).^2); title('三维螺旋'); print('/tmp/pd_t.svg','-dsvg')`, '3D + 中文标题');
 await svg('/tmp/pd_t.svg', '3D 图也能带中文标题', { poly: 1, text: 8 });
+
+// ── 属性对（2026-09-24，小口子 2）：3D 这三个 shim 的**位置参数**解析器都不认属性对 ──
+// plot3 以前只丢"名字与值都是字符"的形态 ⇒ `'parent',hax` 的句柄落进数据槽、**多记一条**；
+// surf/mesh 的 `__pb_surf_args__` 同理 ⇒ 4 个参数走不进任何 case，直接报
+// "expected (Z), (X,Y,Z), …"（**那时连图都记不下来**）。核心这两个形态都收（宿主实测），
+// 现在桥也对齐：属性对剥掉、`'parent'` 只接受 `gca()`。见 `__pb_strip_props__.m`。
+await ev(`${reset} plot3(1:3,2:4,3:5,'parent',gca()); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ plot3(…,"parent",gca())：桥状态只记 1 条（以前 2 条）', 'n=1');
+await ev(`${reset} plot3(1:3,2:4,3:5,'linewidth',2); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ plot3(…,"linewidth",2)：同上（以前 `2` 被当成数据）', 'n=1');
+await ev(`${reset} surf(1:3,1:3,[1 2 3;4 5 6;7 8 9],'parent',gca()); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ surf(…,"parent",gca())：与不带属性对**同样记 2 条**（以前直接报 expected (Z)…）', 'n=2');
+await ev(`${reset} mesh(1:3,1:3,[1 2 3;4 5 6;7 8 9],'parent',gca()); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ mesh(…,"parent",gca())：同样记 6 条', 'n=6');
+await ev(`${reset} contour(1:3,1:3,[1 2 3;4 5 6;7 8 9],'parent',gca()); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ contour(…,"parent",gca())：同样记 16 条（以前报 expected (Z), (Z,N), …）', 'n=16');
+await ev(`${reset} surf(1:3,1:3,[1 2 3;4 5 6;7 8 9],'linewidth',2); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ surf(…,"linewidth",2)：核心收这个形态，桥也收（以前报 expected (Z)…）', 'n=2');
+await ev(`${reset} try; surf(1:3,1:3,[1 2 3;4 5 6;7 8 9],'parent',99); catch e; disp(e.message); end`,
+  '★ surf(…,"parent",99)：与核心**同一句**（值必须是 axes 句柄）', 'value must be an axes handle');
+await ev(`${reset} plot3(1:3,2:4,3:5,'parent',gca()); print('/tmp/pd_pp.svg','-dsvg')`,
+  'parent 形态的 3D 线导出 SVG');
+{ const r = await svg('/tmp/pd_pp.svg', 'parent 形态的 3D SVG', { poly: 1 });
+  const ok = r.poly === 1;
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'PASS' : 'fail'} | ★ 3D SVG 里**恰好一条** polyline（以前会多画一条假的） :: poly=${r.poly}`); }
 
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();

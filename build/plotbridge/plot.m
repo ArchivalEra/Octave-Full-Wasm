@@ -38,6 +38,11 @@ function h = plot (varargin)
   ## ⚠️ 镜像那一步仍用**原样的 varargin**：核心 `plot` 自己认这个形态，且认得比桥宽
   ##（`parent` 属性对、legend 的 tag 都认）——剥掉再交给它没必要。
   args = __pb_strip_axes__ ("plot", varargin);
+  ## 属性对（`'parent',hax` / `'linewidth',2` …）从**桥自己的**解析里剥掉：以前
+  ## `plot(x,y,'parent',gca())` 会在桥状态里多记一条（`y = 句柄数值`），真渲染器看不出来
+  ## （核心画得对），但无 GL 设备的 SVG 回落会**多画一条不存在的线**。判据与 `'parent'`
+  ## 的校验见 `__pb_strip_props__.m`。镜像那一步仍用原样 varargin ⇒ 属性照旧真生效。
+  args = __pb_strip_props__ ("plot", args);
 
   ser = __pb_parse_series__ (args);
   for k = 1:numel (ser)

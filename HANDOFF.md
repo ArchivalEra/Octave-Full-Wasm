@@ -471,6 +471,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | `build/plotbridge/__pb_fields__.m` | **单个面板的字段表**（名字/默认值/新轴是否重置）——那三处的单一真源 |
 | `build/plotbridge/__pb_palette__.m` | 唯一的 7 色调色板（取色 `k` 从 1 起循环） |
 | `build/plotbridge/__pb_publish__.m` | **无 GL 设备的显示回落**：把当前状态渲成 SVG 交给页面（见 §5.22） |
+| `build/plotbridge/__pb_strip_props__.m` | **属性对契约**（2026-09-24 小口子 2）：把 `'parent'`/`'linewidth'` 这类属性对从**桥自己的**参数解析里剥掉（判据 = 核心 `__plt__.m`），`'parent'` 只接受 `gca()`。配套 `__pb_is_linespec__`（合法性问核心 `__pltopt__`）与 `__pb_check_parent__`（两句错误文本）|
 | `.githooks/update-handoff.py` | **HANDOFF 自更新**：从持久盘产物重算文末 `AUTO:STATE`（部署件 sha/体积、最近一次全绿回归、交付包…） |
 | `.githooks/check-handoff.py` | **陈旧断言闸门**：`HANDOFF.md` 的活状态段落（头部 + §0–§4/§6–§8）与产物矛盾就拒提交；**只看 `HANDOFF.md`**（历史在 `HISTORY.md`，不查） |
 | `.githooks/check-consistency.py` | 挂载根/启动清单/车道路径的一致性检查（pre-commit + pre-push） |
@@ -613,8 +614,21 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
   **真正的问题在桥自己的状态**：它对这一形态**静默多记了一条序列**
   （同一条线：普通形态 `numel(__pstate__().series)` = **1**，`parent` 形态 = **2**）⇒
   在**没有 GL 的设备上**（SVG 回落是**按桥状态**渲的）会多画一条不存在的线。
-  这是"静默曲解"那一类（批次 B 的靶子），**尚未修**；修法很小：在 `plot.m` 里认出
-  `"parent"` 属性对（值是 `gca()` 就剥掉、别的句柄就明确报错）。
+  ⇒ ~~**尚未修**~~ **2026-09-24 已修（小口子 2）**：桥的每个 shim 现在都先把**属性对**
+  从自己的参数解析里剥掉（判据 = 核心 `__plt__.m:92-104` 那条"不合法线型串就是属性名"，
+  合法性直接问核心的 `__pltopt__`），`'parent'` 额外校验（值不是 axes 句柄 ⇒ 与核心**同一句**
+  报错；是别的 axes ⇒ 明确报错"桥只跟踪当前 axes"）。**镜像那一步仍用原样 varargin**
+  ⇒ 属性照旧真生效（`'linewidth',2` 实测颜色/线宽照旧、`drawnow` 后 children=1）。
+  实现见 `__pb_strip_props__.m` / `__pb_is_linespec__` / `__pb_check_parent__`。
+  **顺手量出的同一类问题**（都在本轮一起修）：
+  · `plot3(…,'parent',gca())` / `loglog` / `semilogx` / `semilogy` 同样多记一条（已修）；
+  · `surf/mesh(…,'parent',gca())` 与 `surf(…,'linewidth',2)` 以前**直接报**
+    `expected (Z), (X,Y,Z), …`（桥的 `__pb_surf_args__` 只认"名字与值都是字符"的属性对）——
+    现在与核心一致地接受（已修）；
+  · `contour(…,'parent'|'linewidth',…)` 与 `errorbar(x,y,'parent',gca())` 以前也是**桥比核心严**
+    （核心收、桥报 `expected (Z), (Z,N), …` / `expected (Y,E), …`）—— 现已对齐（已修）。
+  · 仍**桥比核心严**的一处（有意，见 `__pb_check_parent__` 文件头）：`'parent'` 指向**别的 axes**
+    时桥报错（核心会画到那个 axes 上）——桥只有当前面板一份状态，画错面板属于"静默做错"。
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
 - **（新，2026-09-24 实测）交互/阻塞面**：`pause(0.5)` 期间页面定时器 **0 次**（页面被完全堵死）；
   **`ginput`/`keyboard` 会挂死**（8 s 无响应 —— 比"报错"更糟的一种"不清晰"）；
@@ -693,9 +707,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > → G5 `keyboard`(experimental) → G6 dlopen×挂起压力；外加三块小口子先做）。
 >
 > **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
-> · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **69 项**：
+> · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **82 项**：
 >   5 个桥参数纯 helper —— 句柄判定 / 剥首参 / bar 拆分 / 图例拆分 / surf 拆分 —— 含 R4 给
->   `__pb_axes_arg__`/`__pb_strip_axes__` 补的「0 与 figure 都不是目标 axes」那几条）；
+>   `__pb_axes_arg__`/`__pb_strip_axes__` 补的「0 与 figure 都不是目标 axes」那几条；
+>   2026-09-24「小口子 2」又加了 3 个：**`__pb_is_linespec__` / `__pb_check_parent__` /
+>   `__pb_strip_props__`**（属性对契约，13 项）；
 > · `python3 .githooks/check-consistency.py` —— 路径/挂载点/启动清单一致性；
 > · `python3 .githooks/check-wants.py` —— 断言可证伪性（已接进 pre-commit）。
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
@@ -704,8 +720,10 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 1. **（进行中）按 `build/113/PLAN-next.md` 执行下一阶段**（2026-09-24 制定，GPT 复审后的路线）：
    · **先做"小口子"**（不碰 wasm、风险最低）：
      ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
-     见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。余下：`plot(…,'parent',…)` 桥状态错记 /
-     `waitbar`+`uisetfont` 误导报错 / `ginput`+`keyboard` **不许挂死** / 可用包可见性 /
+     见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。
+     ✅ **2）属性对契约**（`plot(…,'parent',…)` 桥状态错记）→ **已修**，并顺手把同类的
+     `plot3`/`loglog`/`semilogx`/`semilogy`/`surf`/`mesh`/`contour`/`errorbar` 一并对齐核心（见 §7）。
+     余下：`waitbar`+`uisetfont` 误导报错 / `ginput`+`keyboard` **不许挂死** / 可用包可见性 /
      `print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/ `check-wants` 规则 B 复核。
    · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
      （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
@@ -789,8 +807,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 8,674,824 B raw / 2,515,502 B gz | sha256 `c2be24347381cb13…` |
 | 三大件 gzip 合计 | **9,619,254 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-064307` · **36 套 / 952 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,905,182 B · `d73c58dd08f27565…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260924-081041` · **36 套 / 975 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 25,911,975 B · `4b679bb2d8f30366…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

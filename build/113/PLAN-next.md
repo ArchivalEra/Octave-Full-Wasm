@@ -117,6 +117,13 @@
    `try/catch` 里）；qt/fltk/gnuplot 三个 toolkit × 67 名字 × 2 阶段 **逐格 0 差异**。
    钉子：`test/browser/probe-internal-props.mjs`（11 项）。证据与教训见 HISTORY §5.33。
 2. **`plot(…,'parent',hax)` 在桥状态里错记**（实测 `numel(__pstate__().series)` 1 → 2）。
+   **✅ 2026-09-24 收口：已修，且同类的都一起对齐了核心。** 新增三个纯 helper
+   （`__pb_strip_props__` / `__pb_is_linespec__`（判据委托核心 `__pltopt__`）/ `__pb_check_parent__`），
+   接到 `plot/plot3/loglog/semilogx/semilogy`（多记一条）、`__pb_surf_args__`（`surf/mesh` 的
+   `'parent'`/数值值属性对直接报错）、`contour`/`errorbar`（桥比核心严）。
+   实测：桥状态回到 1 条、`'parent',99` 与核心同句、别的 axes 明确报错、真渲染器照画
+   （children=1）。钉子：`accept-plotv2` 92/0（+10）、`accept-plot3d` 44/0（+10）、宿主
+   `glue-selftest` 82/82（+13）。过程与两个坑见 HISTORY §5.34。
 3. **`waitbar`/`uisetfont` 的误导报错** → 清晰报错；`ginput`/`keyboard` **不许挂死**（先报错，G3/G5 再实现）。
 4. **可用包可见性**：`OctaveAssets.list()` → `__webassets_available__()`，让 `pkg list` 能说清
    "有哪些可加载但尚未装载"。

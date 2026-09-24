@@ -270,6 +270,34 @@ await evErr(`${reset} axis(5)`, '★ axis(5) 仍报错且点明是 axis（5 不�
 await ev(`${reset} plot(1:5); hold('on'); grid(); disp('oklegacy')`,
   '对照：**不带句柄**的老形态一个都没坏（hold("on")/grid()）', 'oklegacy');
 
+// ── 属性对（2026-09-24，小口子 2）：核心认的属性对桥也要认，且**不许进桥状态** ──────
+// 以前 `plot(x,y,'parent',gca())` 会在桥状态里**多记一条**（`y = 句柄数值`）；
+// `'linewidth',2` 同理（`2` 被当成数据）。真渲染器那条路看不出来（核心画得对，
+// 镜像拿的是原样 varargin），但**无 GL 设备的 SVG 回落**是按桥状态渲的 ⇒ 多画一条假线。
+// 判据与核心 `__plt__.m:92-104` 同源（合法线型串 vs 属性名），实现见 `__pb_strip_props__.m`。
+await ev(`${reset} plot(1:3, 2:4, 'parent', gca()); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ plot(…,"parent",gca())：桥状态**只记 1 条**（以前 2 条，第二条是句柄数值）', 'n=1');
+await ev(`${reset} plot(1:3, 2:4, 'linewidth', 2); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ plot(…,"linewidth",2)：同上（以前 `2` 被当成数据，多记一条）', 'n=1');
+await ev(`${reset} plot(1:3, 2:4, 'parent', gca(), 'linewidth', 2); disp(sprintf('n=%d', numel(__pstate__().series)))`,
+  '★ 两个属性对连着来：仍然只记 1 条', 'n=1');
+await ev(`${reset} plot(1:3, 2:4, 'linewidth', 2, 'r--'); disp(__pstate__().series{1}.color)`,
+  '★ 属性对之后的线型串照旧生效（"r--" ⇒ 红）—— 剥属性对没把线型串也吃掉', '#FF0000');
+await ev(`${reset} plot(1:3, 2:4, 'parent', gca()); drawnow; disp(sprintf('kids=%d', numel(get(gca, "children"))))`,
+  '★ 剥属性对没弄坏镜像：真渲染器照样把线建出来（children=1）', 'kids=1');
+await evErr(`${reset} plot(1:3, 2:4, 'parent', 99)`,
+  '★ plot(…,"parent",99)：与核心**同一句**（值必须是 axes 句柄）', 'value must be an axes handle');
+await evErr(`${reset} subplot(1,2,1); ax = gca(); subplot(1,2,2); plot(1:3, 2:4, 'parent', ax)`,
+  '★ plot(…,"parent",别的 axes)：明确报错（桥只有当前面板一份状态，不画错面板）',
+  'only tracks the current axes');
+await ev(`${reset} plot(1:3, 2:4, 'parent', gca()); print('/tmp/pv_pp.svg', '-dsvg')`,
+  'parent 形态导出 SVG');
+{ const r = await svg('/tmp/pv_pp.svg', 'parent 形态恰好 **1** 条 polyline',
+    { poly: 1 });
+  const ok = r.poly === 1;
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'PASS' : 'fail'} | ★ SVG 里**恰好一条**线（以前会多画一条假的） :: poly=${r.poly}`); }
+
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(fail ? 1 : 0);

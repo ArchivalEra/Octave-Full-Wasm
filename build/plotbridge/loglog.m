@@ -27,7 +27,8 @@ function h = loglog (varargin)
     s = __pb_clear_series__ (s);
   endif
   s.logx = true; s.logy = true;
-  ser = __pb_parse_series__ (varargin);
+  ## 属性对从桥自己的解析里剥掉（`'parent',hax` 会多记一条序列）—— 见 __pb_strip_props__.m
+  ser = __pb_parse_series__ (__pb_strip_props__ ("loglog", varargin));
   for k = 1:numel (ser)
     t = ser{k};
     s = __pb_add__ (s, t{1}, t{2}, t{3}, "lines");

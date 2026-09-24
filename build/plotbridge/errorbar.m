@@ -39,6 +39,11 @@ function h = errorbar (varargin)
     s = __pb_clear_series__ (s);
   endif
 
+  ## 属性对从桥自己的解析里剥掉：核心接受 `errorbar(x,y,'parent',gca())`（宿主实测），
+  ## 以前它会掉进下面的分支判断 ⇒ 报 "expected (Y,E), (X,Y,E), …"（**桥比核心严**）。
+  ## 见 __pb_strip_props__.m。
+  varargin = __pb_strip_props__ ("errorbar", varargin);
+
   n = numel (varargin);
   if (n < 2)
     print_usage ();

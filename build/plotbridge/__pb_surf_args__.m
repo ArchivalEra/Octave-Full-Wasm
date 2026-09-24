@@ -8,6 +8,10 @@
 ##   f (X, Y, Z, SPEC)
 ## plus trailing property/value pairs, which are ignored (**已记录的降级**：曲面照画，
 ## 桥自己没有属性系统 —— 这与"把数据当别的东西"不同，所以保留）。
+## **2026-09-24 起**这段交给共用的 `__pb_strip_props__`：以前这里只认"名字与值**都是
+## 字符**"的形态，`surf(X,Y,Z,'parent',gca())`（句柄值）与 `surf(Z,'linewidth',2)`
+## （数值）都会落进数据槽 ⇒ 桥状态**一条都不记**（静默空图）；现在两句都正确处理，
+## 且 `'parent'` 会被校验（`gca()` 之外明确报错）。判据与核心 `__plt__.m` 同源。
 ##
 ## ★ `f (Z, C)` 是**明确报错**的一条（2026-09-23，HANDOFF §8 待办 7）：核心把第二个数值
 ##   参数当**颜色矩阵**（`surf(Z,C)` 是官方形态），而桥以前**静默丢掉**它 —— 形状对、
@@ -19,10 +23,11 @@ function [x, y, z, spec] = __pb_surf_args__ (fname, args)
 
   x = []; y = []; z = []; spec = "";
 
-  ## drop trailing property/value pairs
-  while (numel (args) >= 2 && ischar (args{end - 1}) && ischar (args{end}))
-    args(end - 1:end) = [];
-  endwhile
+  ## 属性对（`'parent',hax` / `'linewidth',2` / `'facecolor','interp'`…）交给共用 helper。
+  ## ★ 以前这个循环只认"名字与值**都是字符**"的形态 ⇒ `surf(X,Y,Z,'parent',gca())`
+  ## 的句柄值落进数据槽，`numel(args)` 变成 4 走不进任何 case ⇒ 桥状态**一条都不记**
+  ## （实测：base n=2 → parent n=0，静默空图）。见 `__pb_strip_props__.m`。
+  args = __pb_strip_props__ (fname, args);
 
   if (numel (args) == 0)
     error ("%s: not enough input arguments", fname);

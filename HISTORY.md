@@ -1716,6 +1716,73 @@ side module 回调主模块 helper → JS 的 **suspending import**（返回 Pro
 
 ---
 
+### 5.34 第九批：属性对契约 —— 桥不再"多记一条"、也不再"比核心严"（2026-09-24）
+
+工作令 §3 第 2 条要修的是 `plot(…,'parent',hax)` 在桥状态里**多记一条序列**（实测 1 → 2）。
+一开工先量，发现**同一类问题不止一处，而且有两头** —— 有的多记、有的干脆报错：
+
+| 形态 | 8761（改前） | 宿主核心 11.3.0（真值） |
+|---|---|---|
+| `plot(1:3,2:4,'parent',gca())` | 桥状态 **2 条**（第 2 条是 `y = 句柄数值`） | 收（画在当前 axes） |
+| `plot(1:3,2:4,'linewidth',2)` | **2 条**（`'linewidth'` 当线型串、`2` 当数据） | 收（真的改线宽） |
+| `plot3`/`loglog`/`semilogx`/`semilogy`(…,`'parent',gca()`) | 同样 **2 条** | 收 |
+| `surf`/`mesh`(X,Y,Z,`'parent',gca()`) 与 `surf(Z,'linewidth',2)` | **直接报** `expected (Z), (X,Y,Z), …` | 收 |
+| `contour(X,Y,Z,'parent'│'linewidth',…)` | 报 `expected (Z), (Z,N), …` | 收 |
+| `errorbar(x,y,'parent',gca())` | 报 `expected (Y,E), (X,Y,E), …` | 收 |
+| `plot(…,'parent',99)` | （改前静默进状态） | 报 `"parent" value must be an axes handle` |
+| `pie(1:3,'linewidth',2)` / `errorbar(…,'linewidth',2)` | 报（文本来自**核心**） | **同样报** ⇒ 这两条本来就对齐 |
+
+**根因三处**（都是"桥自己解析位置参数、没有一个认得出属性对"）：
+1. `__pb_parse_series__`：字符令牌一律当线型串，**下一个数值**就当新数据 ⇒ 句柄 / `2` 变成序列；
+2. `plot3.m` 与 `__pb_surf_args__.m` 的"丢属性对"循环只认**名字与值都是字符**的形态
+   （句柄、数值落进数据槽）；
+3. `contour.m` / `errorbar.m` 的 `switch`/`if` 按参数**个数**分支 ⇒ 多一对就落进 `otherwise`。
+
+**做法：判据跟核心同一条，不自己发明**。核心 `__plt__.m:92-104` 的规则是"字符令牌当线型串试，
+**不合法 ⇒ 它是属性名、下一个令牌是它的值**"，而"合不合法"由 `__pltopt__` 回答 —— 它是个
+**非 private** 的 `.m`（`scripts/plot/util/`），在我们的加载路径上（同目录的 `colstyle` 桥早就在用）。
+于是新增三个纯 helper（都能在宿主 `%!test`，进了 `glue-selftest` 名单）：
+- `__pb_is_linespec__` —— 委托 `__pltopt__`。**不许手写颜色字母表**：`"red"`、`";key;"` 也是合法
+  线型串，手写表必然走样（`__scatter__.m` 那种"关键字 + 无值"的语法更不能套这条规则，
+  所以只用在核心自己用 `__plt__` 解析的那几个 shim 上）。
+- `__pb_check_parent__` —— `'parent'` 值不是 axes 句柄时**与核心同一句**报错；是别的 axes 时报
+  "桥只跟踪当前 axes"（桥只有当前面板一份状态，画到别的面板属于静默做错）。
+- `__pb_strip_props__` —— 剥属性对；**末尾那个"孤零零的不合法字符"有意不动**（保持老行为，
+  核心在那里会报 `properties must appear followed by a value`，收紧要另开一项）。
+
+接到 `plot`/`plot3`/`loglog`/`semilogx`/`semilogy`（`__pb_parse_series__` 之前）、
+`__pb_surf_args__`（替掉那条只认双字符的循环）、`contour`/`errorbar`。**镜像那一步仍拿原样
+varargin** ⇒ 属性照旧真生效。
+
+**实测（8768，改后）**：`plot(…,'parent',gca())` 桥状态 **1 条**；`'linewidth',2` 之后 `'r--'`
+仍取红（`#FF0000`）；`drawnow` 后 `children=1`（真渲染器照画）；`'parent',99` 报核心同句；
+别的 axes 报 "only tracks the current axes"；surf 2 / mesh 6 / contour 16 / errorbar 2 ——
+**全部与不带属性对同数**。套件：`accept-plotv2` **92/0**（+10 条新断言）、`accept-plot3d` **44/0**
+（+10 条），相邻五个（`accept-p5-graphics` 65 / `accept-t2-graphics` 26 / `accept-print` 43 /
+`accept-p5-fallback` 15 / `accept-selftest` 33）全绿；宿主 `glue-selftest` **82/82**
+（+13：三个新 helper 自己的 `%!test`）。
+
+**踩到的两个坑（记下来，别再踩）**：
+1. ★ **`bundle-m` 的挂载点不是"约定"，是参数**。我第一次传了 `/usr/src/octave/m`（少一层），
+   于是 `__pb_mirror__.m` 被写到 `m/` 根上 ⇒ 桥的"摘桥目录"路径手术把**整棵核心 m 树**摘了
+   ⇒ `clf` 报 `no core implementation cached`，同时刷一串
+   `core handle for 'x' resolved to the bridge itself (/usr/src/octave/m/plot/...)` 的 warning。
+   **正确挂载点是 `/usr/src/octave/m/plotbridge`**（`promote-webgl.sh` 的口径就是
+   `meta.mount or 默认 = m/<名字>`）。**诊断线索**：warning 里的路径如果是核心自己的文件、
+   却被判成"就是桥"，那一定是 `BPDIR` 被算到了**上层目录**。
+2. 自己的 `%!test` 里写了 `{magic (3), …}` —— cell 字面量里"函数名 + 空格 + `(…)`"会掉进
+   **命令语法**、变成两个元素（`magic` 与 `3`）；这坑本仓记过两次（`__pb_surf_args__.m:92`），
+   这次是自己又踩了一遍。字面矩阵才是安全写法。
+
+**一次偶发（记档，别当成回归）**：promote 后 8761 的首轮全量 sweep 里 `accept-forge`
+**整页崩**（`Error: page.evaluate: Target crashed`，8 条 CRASH，不是断言失败），该轮合计
+36 套 / **953** 项、脚本点名 `accept-forge`；**单独重跑 22/0**，紧接着整轮重跑
+**36 套 / 975 项全绿**（`sweep-logs/20260924-081041`）。同一条资产在 8768 上是绿的、两边
+sha 相同 ⇒ 判为偶发（页面/渲染进程崩），不是本批改动引起。**教训**：sweep 的"有问题的套件"
+里若是 `Target crashed`，先单独重跑一次再下结论 —— 否则会把偶发记成回归（或反过来放过去）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

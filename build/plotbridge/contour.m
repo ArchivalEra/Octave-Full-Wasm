@@ -38,6 +38,11 @@ function [c_out, h] = contour (varargin)
 
   args = varargin;
 
+  ## 属性对从桥自己的解析里剥掉：核心接受 `contour(X,Y,Z,'parent',gca())` 与
+  ## `'linewidth',2`（宿主实测），而以前这两个形态会掉进下面的 switch ⇒ 报
+  ## "expected (Z), (Z,N), …"（**桥比核心严**，属"静默不许"那一类）。见 __pb_strip_props__.m。
+  args = __pb_strip_props__ ("contour", args);
+
   ## trailing spec string
   spec = "";
   if (numel (args) > 0 && ischar (args{end}) && ! strncmp (args{end}, "-", 1))

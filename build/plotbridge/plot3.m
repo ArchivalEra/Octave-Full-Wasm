@@ -36,10 +36,11 @@ function h = plot3 (varargin)
   endif
 
   args = varargin;
-  ## drop trailing property/value pairs: only data and one spec string matter
-  while (numel (args) >= 2 && ischar (args{end - 1}) && ischar (args{end}))
-    args(end - 1:end) = [];
-  endwhile
+  ## 属性对（`'parent',hax` / `'linewidth',2` / `'facecolor','interp'`…）从**桥自己的**
+  ## 解析里剥掉。以前这里只认"名字与值**都是字符**"的形态 ⇒ `'parent',hax` 的句柄值落进
+  ## 数据槽，桥状态**多记一条**（`y = 句柄数值`）。判据与 `'parent'` 的校验见
+  ## `__pb_strip_props__.m`。
+  args = __pb_strip_props__ ("plot3", args);
 
   n = numel (args);
   i = 1;
