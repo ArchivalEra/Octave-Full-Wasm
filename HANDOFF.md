@@ -823,8 +823,12 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ✅ **D3 sweep 对 `Target crashed` 自动重跑一次**（标 `[重跑]`）。
      ✅ **D4 两站点一致性闸门**：`build/check-site-parity.sh`（`--strict` 供 promote 后跑）。
      余下：**D5** 规则 B 162 处复核 / **D6** `pkg load <未装载>` 自动装载 /
-     **D7** IDBFS 边界（写频次、配额、配额满行为）/ **D8** `build/check-boot.sh` promote 前
-     的 30 秒开机自检（**事故教出来的**，见下）/ **D9** 门接线（随 G3/G5）。
+     ✅ **D8 开机自检**：新 `build/check-boot.sh`（30 秒：`__octaveReady` + `eval_string("2+2")`），
+     **已接进 `promote-webgl.sh`**（不过就 `exit 4` 并提示先回退）。三条实测：现役 8761 ✅ 1.6s；
+     截断 wasm ✅ 10.1s 按时失败；**忠实复现事故**（坏 JSPI 产物 + 当时那个开机自动冒烟的页面）
+     ✅ 15.0s 失败且线索正是 `RuntimeError: null function`（HISTORY §5.44）。
+     余下：**D5** 规则 B 162 处 / **D6** `pkg load` 自动装载 / **D7** IDBFS 边界 /
+     **D9** 门接线（随 G3/G5）。
    · **JSPI 主线（关键路径，顺序就是 `PLAN-jspi.md` §0.5）**：
      ✅ **G0 能力门**（两个独立 gate，**按需**触发、不弹假警报；`probe-jspi-gate.mjs` 12 项绿）。
      ⛔ **G1 `eval_async` 第一次尝试失败、已回退**（`RuntimeError: null function` + 卡死页面；

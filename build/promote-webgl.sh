@@ -120,5 +120,20 @@ fi
 
 echo
 echo "下一步（**必须**）："
-echo "  sh /mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/     # 全量（35 套）"
+# D8（2026-09-24）：**开机自检**放在最前面。坏产物的失败模式是**页面根本起不来**
+#（G1 那次就是：绑定坏 + 有人在开机路径上调它 ⇒ 卡死），而全量 sweep 只能靠"每个套件各自
+# 超时"才发现 —— 又慢又吵（40×最多 420 s）。这条 30 秒就能给结论。
+if [ "$DRY" = "0" ] && curl -s --noproxy '*' -o /dev/null --max-time 5 http://127.0.0.1:8761/ 2>/dev/null; then
+  echo "== D8 开机自检（8761，上限 30 s）"
+  if sh "$REPO/build/check-boot.sh" http://127.0.0.1:8761/ 30000; then
+    echo "   开机自检 ✓"
+  else
+    echo "FATAL: 开机自检没过 ⇒ **先回退**，别拿这个产物去跑验收" >&2
+    exit 4
+  fi
+else
+  echo "  （8761 上没有服务 / dry-run ⇒ 跳过开机自检；上线前手动跑：sh build/check-boot.sh http://127.0.0.1:8761/）"
+fi
+echo "  1) sh /mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/      # 全量"
+echo "  2) sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/check-site-parity.sh --strict   # 两站点一致"
 echo "回退：cp -a $BAK/. $SITE/   （并把容器 $SRC_OUT 换回 $NONGL_BAK）"

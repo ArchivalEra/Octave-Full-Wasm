@@ -62,6 +62,7 @@
 !build/pkgrestore/*
 !build/recover.sh
 !build/check-site-parity.sh
+!build/check-boot.sh
 !build/webio.cc
 !build/webimage.cc
 !build/webfilepick.cc
