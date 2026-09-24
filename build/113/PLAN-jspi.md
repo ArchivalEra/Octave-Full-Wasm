@@ -53,10 +53,15 @@
    ② 再加 -sMAIN_MODULE=2            → 怀疑点：DCE 把 async invoker 那个 thunk 削掉
    ③ 再加 SIDE_MODULE/dlopen          → 我们的真实组合
    ```
-   线索：上游 `test/test_other.py::test_embind_jspi` 只用 `-lembind -sJSPI`（**不带** `JSPI_EXPORTS`）；
-   embind 的 async 走的是 `createJsInvoker` 里那个 `invoker(...)`（原始 wasm 函数）。
-   若②就坏 ⇒ 试把 **invoker 的名字**列进 `-sJSPI_EXPORTS`（`--emit-symbol-map`/`wasm-dis` 找名字），
-   并对照一条 `MAIN_MODULE_LEVEL=1` 的产物看它在 M1 下是否正常。
+   **⚠️ 这一档已经做过了（2026-09-24 深夜，见 NOTES-jspi 的"G1 复现阶梯"）**：
+   ①/②/③/④/⑤/⑥ **全部正常** —— **M2 不是元凶**（主嫌疑被推翻），
+   `JSPI_EXPORTS` 写不存在的名字无害、`-fwasm-exceptions`、`std::string` 签名、
+   "同函数 sync+async 双绑定"都不是。⇒ 范围收窄到**我们那条链独有的结构**，按序试：
+   **① dlopen / SIDE_MODULE 的参与**（最强嫌疑：embind 的 async invoker 是 table 里的间接函数，
+   而启动时的 `dlopen` 会让表增长 ⇒ JSPI 包装的引用可能失效成 `null function`）——
+   在 v9 上加一个真 side module + `dlopen`（复用 `build/113/probe-jspi/` 的 side.c）；
+   ② `KEEP_LIST`/`EXPORT_IF_DEFINED`/`BASELINE_WASM` 那套保活与差分机制；
+   ③ `EXPORTED_FUNCTIONS`/`EXPORTED_RUNTIME_METHODS` 的口径；④ preload/post-js（理论无关，列着）。
 3. **按复现结论更新 `build/113/NOTES-jspi.md`**：那三条要求是从**原始导出**的探针推的，
    embind 这条路要不要列 invoker 还是未知数 —— 查清后**把结论写回 NOTES**（别只留在脑子里）。
 4. **⚠️ 需要人拍板的分叉**：若结论是"JSPI + embind + `MAIN_MODULE=2` 这条路走不通"，

@@ -88,3 +88,50 @@ cd /mnt/hdd/octave-wasm-build/harness && node _jspi_run.mjs /mnt/hdd/octave-wasm
   部署要求 Chrome/Chromium ≥137、Firefox ≥153、Safari ≥27；**更老的浏览器没有 JSPI
   的 JS API**（探针会以退出码 2 如实说"未做判定"，而不是假绿）。
 - **不要**回退到 Asyncify：本仓已实测它与 `-fwasm-exceptions` 互斥（HISTORY §5.11）。
+
+---
+
+## G1 复现阶梯（2026-09-24 深夜）：**五个嫌疑全部排除**，范围收窄到"dlopen/side module"
+
+**背景**：G1 把 `eval_async`（`emscripten::function("eval_async", &eval_string, async())`）链进主产物后，
+`typeof Module.eval_async === 'function'` 但**一调就炸** `RuntimeError: null function`，
+随后把页面卡住（见 HISTORY §5.43）。
+
+**做法**：容器里写十几行的 embind 程序（`/src/websrc/embind-repro/`），**一次只加一个"我们独有的配料"**，
+每一档都在**浏览器**里实测（`-lembind` + `async()` 绑定，看 `await Module.f(...)` 能不能 settle）：
+```
+① -lembind -sJSPI                      → v1
+② + -sMAIN_MODULE=2 -sALLOW_TABLE_GROWTH=1 -sERROR_ON_UNDEFINED_SYMBOLS=0   → v2
+③ + -sJSPI_EXPORTS=asynced（**不存在的 wasm 导出名**，模拟我们的 eval_async） → v4
+④ + std::string 参数（照抄 eval_string 的签名）                            → v5
+⑤ + -fwasm-exceptions（JSPI + wasm EH 组合）                              → v6
+⑥ 同一函数、同 arity、**两个名字**（一同步一异步，照抄 main.cc 的 eval_string 写法）→ v9
+```
+
+| 变体 | 结果 |
+|---|---|
+| v1 `-sJSPI` | ✅ `asynced(40)` → **Promise → 42** |
+| v2 `+ MAIN_MODULE=2` | ✅ **同样正常** ⇒ **M2 的 DCE 不是元凶**（我原来的主嫌疑被推翻） |
+| v4 `+ JSPI_EXPORTS=<不存在的名字>` | ✅ 正常 ⇒ **列一个不存在的导出名无害** |
+| v5 `+ std::string` 参数 | ✅ `aStr('abcd')` → Promise → 4 |
+| v6 `+ -fwasm-exceptions` | ✅ 正常 ⇒ **JSPI + wasm EH 在最小规模下没问题** |
+| v9 同函数 sync+async 两名字 | ✅ `sync_f('abcd')`=4、`async_f('abcd')` → **Promise → 4** |
+| v3（**不开** `-sJSPI`，对照） | `asynced` 返回的是**同步值**（`isPromise=false`）⇒ 确认 `-sJSPI` 就是"返回 Promise"的那个开关 |
+
+**结论**：最小复现**复现不出**那个坏 —— 也就是说，坏的不是 embind/JSPI/M2/wasm-EH/string 签名/双绑定
+这些**语言与旗标层面**的东西，而是**我们那条链里独有的结构**。剩下的差异（下一步按序试）：
+1. **dlopen / SIDE_MODULE 的参与**（`MAIN_MODULE=2` + 动态链接 + `ALLOW_TABLE_GROWTH=1`）——
+   最强的嫌疑：embind 的 async invoker 是一个**间接函数（table 条目）**，而我们的启动会
+   `dlopen` 若干 `.oct`（**表会增长**）⇒ 若 JSPI 包装的是"早先拿到的那个引用"，增长之后可能就
+   `null function` 了。**下一步实验**：在 v9 上加一个真 side module + `dlopen`（复用
+   `build/113/probe-jspi/` 的 side.c 那套），看是否当场坏。
+2. `KEEP_LIST` / `-Wl,--export-if-defined=…` / `BASELINE_WASM` 那套保活与差分机制。
+3. `-sEXPORTED_FUNCTIONS=["_main"]` + `-sEXPORTED_RUNTIME_METHODS=["FS","MEMFS","IDBFS"]`
+   （注意：**`EXPORTED_RUNTIME_METHODS` 里写一个不存在的名字会直接让 em++ 报错并中止**
+   —— 实测 `undefined exported symbol: "IDBFS"`，所以那几个名字必须与 `-lidbfs.js` 等
+   library 开关配套，别单独抄）。
+4. `--preload-file` 的一大堆文件 / `--post-js`（理论上无关，但列上）。
+
+**顺带实测记一笔**：`-sEXPORTED_RUNTIME_METHODS` 里的名字**必须真实可用**，
+写错是**编译期硬错**（`undefined exported symbol`）而不是运行时忽略 —— 与 `-sJSPI_EXPORTS`
+写不存在的名字（无害）行为**不一样**，别把两者当同一类。
