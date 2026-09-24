@@ -30,13 +30,26 @@
 |---|---|
 | D1–D4 | ✅ 文档对齐 / `PROBES=1` / sweep 偶发崩重试 / 两站点闸门 |
 | **G0** 能力门 | ✅ 完成（两个 gate，**按需**触发；`probe-jspi-gate.mjs` 12 项绿） |
-| **G1** `eval_async` | ⛔ **第一次尝试失败、已回退**（产物坏：`RuntimeError: null function` + 卡死页面）。**JSPI 车道默认关闭**（`WITH_JSPI=0`）；关掉后重链**逐字节复现现役 wasm** |
+| **G1** `eval_async` | ⛔ 第一次尝试**失败并已回退**；**2026-09-24 深夜查明那次根本没测到 JSPI**（§5.46：`-sJSPI` 从未进链接；`null function` 是「在 `execute_interp()` 之前碰解释器」）⇒ **`JSPI_FLAGS` 已接进链接行 + 加了旗标自检**，**重链真测还没做** |
 | G2 `pause` 压力矩阵 | ⬜ 未开始（**真正的风险点**；依赖 G1） |
 | G3–G6 | ⬜ 未开始（都依赖 G1） |
 | D5–D7 | ⬜ 未开始 |
 
 **★ 关键路径 = G1 的机制问题**：没有可用的"挂起入口"，`pause` 就没法改成 suspending import，
 `ginput`/`keyboard` 也没法等浏览器事件 ⇒ **G2–G6 全部排在它后面**。
+
+**★ 2026-09-24 深夜修正（HISTORY §5.46，取代下面 2/3/4 的措辞）**：真产物实测证明
+**那次「失败」测的是个不含 `-sJSPI` 的产物**（`JSPI_FLAGS` 赋值了却没被链接行引用），而
+`RuntimeError: null function` = **在 `execute_interp()` 之前调用解释器**（同步入口一样会炸），
+**与 JSPI 无关**。⇒ 下一步不再是 (a)/(b)/(c) 三选一，而是：
+
+1. **先重链一版真带 `-sJSPI` 的产物**（`link-web.sh` 已修 + 已加旗标自检），
+   **先验胶水**：`grep -o 'WebAssembly\.promising' out/octave.js` 必须命中 —— 一条命令、最便宜；
+2. 再跑三例（`42` / `pause(0.2); 43`（页面 timer 要 tick）/ `error('x')` ⇒ reject）；
+3. **只有这一步做完**，v1–v13 的三条机制与 (a)/(b)/(c) 才有资格被讨论 ——
+   `-sJSPI_EXPORTS=eval_async` 要不要换成真导出名，属于「真测之后」的问题。
+
+**下面这段是原计划（保留为历史口径；顺序已被上面取代）：**
 
 **按这个顺序做**（前两条都很便宜，先做）：
 

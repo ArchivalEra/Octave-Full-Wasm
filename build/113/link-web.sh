@@ -495,11 +495,18 @@ IDBFS_FLAGS=( -lidbfs.js )
 #    已把产物回退。**在机制没于小复现里证明之前，别把它做成默认** —— 免得谁重链一次就拿到坏产物。
 #    开启时同时给编译期宏 `-DJSPI_EVAL_ASYNC=1`（main.cc 里那个绑定在 `#if` 里；宏不加就编不进去，
 #    这样"关掉"是真的关掉，不是留一个坏绑定在产物里）。
+# ⛔⛔ **2026-09-24 深夜实测抓到的真 bug（HISTORY §5.46）**：`JSPI_FLAGS` 原来**只被赋值、
+#    从来没有被下面那条 `em++` 链接行引用** —— 而 `JSPI_DEF` 是给 `main.cc` 的**编译**行的。
+#    ⇒ `WITH_JSPI=1` 的产物里**宏进了 C++、`-sJSPI` 没进链接**，胶水里连
+#    `WebAssembly.promising` 都没有（判据：`grep -o 'WebAssembly\.promising' "$OUT/octave.js"`）。
+#    后果是 **G1 第一次"失败"测的是一件不存在的东西**。⇒ 现在两件事一起做：
+#    ① 链接行必须引用 `${JSPI_FLAGS[@]}`；② 链完**自检胶水**，旗标没生效就直接失败。
 JSPI_FLAGS=(); JSPI_DEF=()
 if [ "${WITH_JSPI:-0}" = "1" ]; then
   JSPI_FLAGS=( -sJSPI -sJSPI_EXPORTS=eval_async )
   JSPI_DEF=( -DJSPI_EVAL_ASYNC=1 )
-  echo "⚠⚠ WITH_JSPI=1：这是**实验车道** —— G1 的 eval_async 目前实测是坏的（见 HISTORY §5.43）"
+  echo "⚠⚠ WITH_JSPI=1：**实验车道**。机制层面 v1–v13 已查明（HISTORY §5.45），"
+  echo "     而真产物的第一次尝试测的是个**没带 -sJSPI 的产物**（§5.46）⇒ 这次才是第一次真测。"
 else
   echo "== JSPI 关闭（默认）：不加 -sJSPI、不编 eval_async ⇒ 与现役产物一致"
 fi
@@ -516,6 +523,7 @@ em++ --bind \
   ${EXTRA_LDFLAGS:-} \
   ${GL_INC_FLAGS[@]+"${GL_INC_FLAGS[@]}"} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
+  ${JSPI_FLAGS[@]+"${JSPI_FLAGS[@]}"} \
   ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
   ${KEEP_FLAGS[@]+"${KEEP_FLAGS[@]}"} \
   ${LF_FLAGS[@]+"${LF_FLAGS[@]}"} \
@@ -530,6 +538,21 @@ em++ --bind \
   ${GL_FLAGS[@]+"${GL_FLAGS[@]}"} \
   -o "$OUT/octave.js" "$SRC/main.o" ${P5_OBJS[@]+"${P5_OBJS[@]}"}
 set +x
+
+# ---- 自检：JSPI 旗标到底有没生效（**2026-09-24 深夜加，直接来自 HISTORY §5.46 的假失败**）----
+# 为什么查**胶水**而不是只信命令行：`JSPI_FLAGS` 曾因"赋值了但没被链接行引用"而整条失效 ——
+# 构建、链接、五条自检**全绿**，产物却是个普通非 JSPI 产物，然后浏览器侧把"绑定不异步"当成
+# "JSPI 坏了"，白查一晚。这条自检只要 1 条 `grep`，是这类**静默退化**最便宜的判据。
+if [ "${WITH_JSPI:-0}" = "1" ]; then
+  if ! grep -q 'WebAssembly\.promising' "$OUT/octave.js"; then
+    echo "FATAL: WITH_JSPI=1 但 octave.js 里没有 WebAssembly.promising —— -sJSPI 没生效" >&2
+    echo "       （多半是链接行没引用 \${JSPI_FLAGS[@]}；见 HISTORY §5.46）" >&2
+    exit 3
+  fi
+  echo "== JSPI 自检: octave.js 里有 WebAssembly.promising / Suspending ✓"
+elif grep -q 'WebAssembly\.promising' "$OUT/octave.js"; then
+  echo "⚠ WITH_JSPI 未开，但 octave.js 里出现了 WebAssembly.promising（产物不干净？）" >&2
+fi
 
 # ---- 自检：预载路径有没有错位 ------------------------------------------------
 # 专防上面那个 `@ftp` 坑复发：`--preload-file` 按第一个 `@` 切 src@dst，源路径里
