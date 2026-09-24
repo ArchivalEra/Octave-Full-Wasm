@@ -782,10 +782,31 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >   `__pb_strip_props__`**（属性对契约，13 项）；
 > · `python3 .githooks/check-consistency.py` —— 路径/挂载点/启动清单一致性；
 > · `python3 .githooks/check-wants.py` —— 断言可证伪性（已接进 pre-commit）。
+> · `sh build/check-site-parity.sh` —— **两站点一致性**（D4，2026-09-24）：比
+>   `octave.{wasm,js,data}`/`index.html`/`assets-loader.js`/`VERSION` + **清单引用到的**资产包 sha。
+>   默认只报告（差异**不一定是错**：8768 本来就允许先改）；**promote 之后跑 `--strict`，应当是 0 差异**。
+>   未引用的遗留文件（实测 8768 上有 `p5osmesa.js`）单独报出、**不算差异**（否则闸门每次都红就没人看了）。
+> · `PROBES=1 sh /mnt/hdd/octave-wasm-build/sweep.sh <URL>` —— **把 `probe-*` 也跑一遍**（D2）。
+>   默认只跑 `accept-*`（日常快）；**每批 promote 之后该跑一次带 PROBES 的** —— 探针才是"当班实况"
+>   的防腐层，它们不在任何自动跑里时断言会腐烂（本会话抓到 **2 条**）。
+>   `sweep.sh` 另有一条 D3：套件日志里出现 `Target crashed`（页面偶发崩）**自动重跑一次**，
+>   仍崩才算失败并在报告里标 `[重跑]`。
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
 > `accept-shellerr.mjs`（14 项，R1）、`probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
-1. **（进行中）按 `build/113/PLAN-next.md` 执行下一阶段**（2026-09-24 制定，GPT 复审后的路线）：
+1. **（进行中）按 [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md) 执行下一阶段**（2026-09-24 晚制定；
+   上一份 `PLAN-next.md` 已收口，其 §2 的 JSPI 顺序并入本文件）：
+   · **收尾债 D1–D7**（先做无风险的，已做完 D1–D4）：
+     ✅ **D1 文档与产物对齐**：`README` 交付包行（`-20260923`/9.9MB → `-20260924`/**10.26MB**）+
+     `dist/DEPLOY.md` 的偏差表（"`-dpng` 报错"已删、补上 `-dpng`/交互族/IDBFS/两个字体家族）。
+     ✅ **D2 `probe-*` 纳入定期跑**：`PROBES=1 sweep.sh`（见上面快回环）。
+     ✅ **D3 sweep 对 `Target crashed` 自动重跑一次**（标 `[重跑]`）。
+     ✅ **D4 两站点一致性闸门**：`build/check-site-parity.sh`（`--strict` 供 promote 后跑）。
+     余下：**D5** 规则 B 162 处复核 / **D6** `pkg load <未装载>` 自动装载 /
+     **D7** IDBFS 边界（写频次、配额、配额满行为）。
+   · **然后走 JSPI 主线**：G0 能力门 → G1 `eval_async`（重链，配方已验证）→
+     **G2 `pause`+EH/SjLj 压力矩阵（真正的风险点）** → G3 `ginput` → G4 Ctrl-C 协作式中断 →
+     G5 `keyboard`(experimental) → G6 dlopen×挂起压力。红线见计划 §0。
    · **先做"小口子"**（不碰 wasm、风险最低）：
      ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
      见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。

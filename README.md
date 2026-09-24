@@ -85,7 +85,7 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 | 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
 | `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
 | SLICOT（control 编译件） | ✅ 可用（根因：CHARACTER 隐藏长度 ABI + 主模块不导出 LAPACK/BLAS；`accept-slicot` 25/25） |
-| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260923`（**含真渲染**），首包 gzip ≈9.9MB |
+| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260924`（**含真渲染 + 持久化 + 两个字体家族**），首包 gzip ≈**10.26MB**（准确值见 `HANDOFF.md` 的 `AUTO:STATE`） |
 | 验收 | ✅ **全绿**（8761；**套件数与项数见 `HANDOFF.md` 的 `AUTO:STATE`**，含需求级 `accept-requirements`、图形线 `accept-p5-graphics` **65 项**、无 shell 报错 `accept-shellerr` 14 项） |
 
 
@@ -100,6 +100,13 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
   `[st,out]=system(...)`/`unix(...)` 一向如此；`st = system(...)`、`system(...)`（无输出参数）、
   `popen(...)` 这三条**以前静默返回 -1 / 静默通过**，现在同样抛清晰错误（HISTORY §5.30，`accept-shellerr` 14 项）。
   ⇒ 这不只是措辞：**任何调 `system()` 的 `.m` 现在会明确失败，而不是悄悄拿到 -1 继续跑**。
+- **"等用户动作"一族一律"清晰报错"**（2026-09-24 起，同一覆写层）：`ginput`/`keyboard`/
+  `uisetfont`/`uiwait`/`waitfor` **以前会挂死页面**（8 s 无响应，比报错更糟），现在报错并点明
+  替代办法（`input()` 走 `window.prompt` 可用；字体直接 `set(h,"fontname",…)`）。
+  连带 `waitforbuttonpress`/`gtext`（内部调 `ginput`）。钉子 `accept-interactive` 15 项。
+  ⇒ 真实现要等 JSPI 车道（`build/113/PLAN-jspi.md` 的 G3/G5），届时**删掉那几个覆写文件**。
+- **`waitbar` 可用**（2026-09-24 修）：以前整族坏在桥的 `figure` 上（`integerhandle=off` 形态），
+  现在建图/更新/取帧都正常（HISTORY §5.35）。
 - ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（HISTORY §5.15）：
   `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全可用且数值正确
   （`step` 与解析解 `1-e^-t` 误差 1.1e-16）。
@@ -210,11 +217,11 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/pre-push` (755 bytes)
 - `.githooks/update-handoff.py` (4836 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (2049 bytes)
+- `.gitignore` (2077 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (6045 bytes)
-- `HANDOFF.md` (83839 bytes)
-- `HISTORY.md` (185006 bytes)
+- `HANDOFF.md` (85986 bytes)
+- `HISTORY.md` (187255 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (15944 bytes)
@@ -300,6 +307,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
 - `build/build_pkg_oct.sh` (11790 bytes)
+- `build/check-site-parity.sh` (5395 bytes)
 - `build/check_m.py` (4166 bytes)
 - `build/fftw_threads_stub.c` (553 bytes)
 - `build/forge-build.sh` (2117 bytes)
@@ -508,7 +516,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/webshims/uisetfont.m` (1039 bytes)
 - `build/webshims/uiwait.m` (907 bytes)
 - `build/webshims/waitfor.m` (1090 bytes)
-- `dist/DEPLOY.md` (17835 bytes)
+- `dist/DEPLOY.md` (20510 bytes)
 - `dist/serve.py` (2668 bytes)
 - `test/browser/accept-113-assets.mjs` (7452 bytes)
 - `test/browser/accept-113-boot.mjs` (6814 bytes)

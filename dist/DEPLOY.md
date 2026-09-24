@@ -130,10 +130,16 @@ await OctaveAssets.load('__ode15__');    // 单个模块
 
 ## 验收状态
 
-本包内容 = 最近一次在浏览器实测通过的构建。**36 套 952 项全绿**（2026-09-24：`MAIN_MODULE=2` +
-FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同），
+本包内容 = 最近一次在浏览器实测通过的构建。**39 套 1025 项全绿**（2026-09-24 晚：`MAIN_MODULE=2` +
+FreeType + fontconfig + **IDBFS** + 8 个字体面 + 外部审核 R1/R4 与全部小口子上线后实测，
+8761 与 8768 逐字节相同；**准确数字以 `HANDOFF.md` 的 `AUTO:STATE` 为准**），
 在 `http://127.0.0.1:8761/`（**即本包内容**）上跑（用
 `/mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`；逐套日志在 `sweep-logs/`）。
+
+> ⚠️ 下面那张逐套表只列**主要**套件，不是全部；本会话新增的
+> `accept-interactive`(15) / `accept-pkgview`(17) / `accept-idbfs`(9) 也在跑，
+> 另有若干 `probe-*`（**不在 sweep 里**，按需跑：`probe-fontname` 19 / `probe-core-names` 23 /
+> `probe-internal-props` 11 / `probe-want-matcher` 13 …）。
 
 **需求级** `accept-requirements` **14/14**（R1–R10 各一条最小实测 + 架构护栏）。
 其中 R1 `ode15s`/`ode15i` 由内嵌 SUNDIALS 6.1.1 的真 `.oct` 提供（此前是"桩"）。
@@ -204,7 +210,27 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
   现在与两输出形态一样抛 `unable to start subprocess`（覆写层 `build/webshims/`，HISTORY §5.30）。
   ⇒ 任何调 `system()` 的 `.m`（全树 34 个）现在会**明确失败**而不是拿到 -1 继续跑。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
-- `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。
+- **`print` 的位图与矢量走两条不同的路**（2026-09-24 更新，**以前这里写的是"`-dpng` 报错"**）：
+  - **`-dpng` 真出图**：真渲染器每次重画都把当前图写成 `/tmp/p5_fig.png`（`redraw_figure` →
+    `publish_png`），所以 `print(x,'-dpng')` = `drawnow()` 之后**逐字节拷贝**那张图
+    （与页面里看到的完全一致，不是重编码）。**没有 GL 的页面**（SVG 回落）那张 PNG 不存在 ⇒
+    明确报错并指向 `-dsvg`，且**不写半个空文件**。
+  - **`-djpg/-dbmp/-dtga`**：借图像资产（`imread`/`imwrite`）转码；未装该资产时给可操作报错。
+  - **`-dpdf/-deps/...` 仍清晰报错**：核心矢量路要 gl2ps + **shell 管道** + (gs|svgconvert)，
+    而本构建**没有 shell**（`system`/`popen` 一律清晰报错，见上）。⇒ **`print -dsvg` 是唯一
+    的矢量出口**，别把它当冗余砍。
+- **"等用户动作"一族一律"清晰报错"**（2026-09-24 起）：`ginput`/`keyboard`/`uisetfont`/`uiwait`/
+  `waitfor` 以前**挂死页面**（8 s 无响应），现在报错并点明替代（`input()` 可用；字体直接 `set`）。
+  连带 `waitforbuttonpress`/`gtext`。真实现等 JSPI 车道（`build/113/PLAN-jspi.md` G3/G5）。
+  **`waitbar` 反过来是能用的**（2026-09-24 修好，以前整族坏在桥的 `figure` 上）。
+- **持久化：写在 `/home/web_user` 下的东西会留在浏览器里**（2026-09-24 起，IDBFS）。
+  页面开机把 IndexedDB 读回内存文件系统，之后每次命令做一次去抖写回（800 ms 合并）；
+  **明确的写回点**是页面控制台里的 `await new Promise(r => Module.webSync(r))`。
+  `save("x.mat")` 这类不写路径的用法也落在持久区（`HOME` 就是 `/home/web_user`）。
+  ⇒ 部署方注意：**同一浏览器/同源**才会看到自己的文件；换设备、清站点数据都会丢。
+- **字体有两个家族**：FreeSans ×4 + **FreeMono ×4**（2026-09-24 起）。等宽请求
+  （`Courier`/`monospace`）替换到 FreeMono；**其余要不到的家族名（如 `Arial`）落回 FreeSans**
+  （`fonts.conf` 里两条规则，实测见 HISTORY §5.39）。
 - **没有 WebGL2 的设备：图以 SVG 显示**（回落）。没有抗锯齿/硬件加速；页面每 250 ms 采样一次，
   所以最后一张图最多晚 250 ms 出现。矢量导出 `print -dsvg` 不受影响。
 - **`audioplayer`/`audiorecorder` 每个对象占一个 slot + 一个 MEMFS 文件**，生命周期与对象
@@ -212,13 +238,15 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
   之后还能重播），所以不做清理。一次会话内增长有界。
 - ~~**文字渲染仍缺**~~ → **2026-09-24 已补上，并进一步补了字体匹配**：构建开 FreeType
   （`build/113/build-freetype.sh`）+ **fontconfig**（`build/113/build-fontconfig.sh`），
-  预载 Octave 自带的 4 个 FreeSans 面；`fonts.conf` 预载在 `/fonts/fonts.conf`、
-  `main.cc` 启动时 `setenv("FONTCONFIG_FILE", …)`。
+  预载 Octave 自带的 **8 个面**（FreeSans ×4 + FreeMono ×4）；`fonts.conf` 预载在
+  `/fonts/fonts.conf`、`main.cc` 启动时 `setenv("FONTCONFIG_FILE", …)`。
   **因此"`fontname` 被忽略 / `listfonts` 报错"这两条代价已消除**（那是没有 fontconfig 时的行为）。
-  **仍如实记**：只有这 4 个面，别的家族名会落回 FreeSans（探针里有一条交底断言）。
-  证据：`test/browser/probe-fontname.mjs`（**13 项**：`listfonts`/`__get_system_fonts__` +
-  像素级判别"只改 weight/angle，`getframe` 像素和必须不同"）、`probe-text-render.mjs`
-  （6 项：无那条 warning + 加 `title/xlabel` 后非白像素 +2130、刻度换长文字 +2754）。
+  **仍如实记**：只有这 2 个家族；别的家族名按上面那条替换规则走（`Courier`→FreeMono、
+  其余→FreeSans），不是"有系统字体"。
+  证据：`test/browser/probe-fontname.mjs`（**19 项**：`listfonts`/`__get_system_fonts__` +
+  像素级判别"只改 weight/angle/家族，`getframe` 像素和必须不同" + 替换策略三条）、
+  `probe-text-render.mjs`（6 项：无那条 warning + 加 `title/xlabel` 后非白像素 +2130、
+  刻度换长文字 +2754）。
 - **首帧 ~0.6 s**（真渲染）：会话里第一次出图要建 WebGL 上下文 + `initialize_gl4es()` +
   编 shader + 首帧 `glReadPixels`/PNG 编码。**之后每张图 ~90 ms**（实测，桌面）。
 - **桥的参数宽容度与桌面一致**：桥以前比核心宽容的写法（如 `plot(x,x,'+','')`）现在会走到
