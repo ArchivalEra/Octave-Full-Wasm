@@ -557,7 +557,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/probe-bridge-mirror-cost.mjs` (5323 bytes)
 - `test/browser/probe-bridge-svg-out.mjs` (2214 bytes)
 - `test/browser/probe-cold-start.mjs` (4572 bytes)
-- `test/browser/probe-core-names.mjs` (9219 bytes)
+- `test/browser/probe-core-names.mjs` (9505 bytes)
 - `test/browser/probe-fontname.mjs` (10774 bytes)
 - `test/browser/probe-gfx-bench.mjs` (4496 bytes)
 - `test/browser/probe-gfx-e2e-breakdown.mjs` (2714 bytes)

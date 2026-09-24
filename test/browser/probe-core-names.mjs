@@ -86,9 +86,11 @@ check(r.rc === 0 && /Invalid call to system/.test(r.out), '对照：system() 无
 // ★ 这条也**翻面**了（2026-09-24 收口时发现它一直没跟着 R3 翻）：R3（fontconfig）上线后
 //   `listfonts()` 不再报"结构无成员"，而是真的列出字体（本构建只有 4 个 FreeSans 面）。
 //   ⇒ 这正是本探针存在的意义：构建变了、断言没改，它当场变红。
-r = await run('try; L=listfonts(); disp(sprintf("nf=%d F=%s",numel(L), L{1})); catch e; disp(["E: " e.message]); end');
-check(r.rc === 0 && /^\s*nf=1 F=FreeSans/.test(r.out),
-  '★ 已修（R3 之后）：listfonts() 列出 FreeSans（以前报"结构无成员"）', r.out);
+// ⚠️ 2026-09-24 又跟着**小口子 6**翻了一次面：预载了 FreeMono ×4 之后 `listfonts()` 返回
+//   **2 个家族**（而且 FreeMono 按字典序排在前面 —— 别写 `L{1} == "FreeSans"` 这种假设顺序的断言）。
+r = await run('L=listfonts(); disp(sprintf("nf=%d HASMONO=%d HASSANS=%d", numel(L), any(strcmp(L,"FreeMono")), any(strcmp(L,"FreeSans"))))');
+check(r.rc === 0 && /nf=2 HASMONO=1 HASSANS=1/.test(r.out),
+  '★ 已修（R3 + 小口子 6 之后）：listfonts() 列出 **FreeSans 与 FreeMono** 两个家族', r.out);
 r = await run('try; questdlg("q?"); disp("NOERR"); catch e; disp(["E: " e.message]); end');
 check(r.rc === 0 && /not available in this version/.test(r.out),
   '已知缺口：questdlg 按上游口径报 not available（无 dialogs）', r.out);
