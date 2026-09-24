@@ -8,11 +8,12 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
-> **最后更新：2026-09-24**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核给的
-> R0–R5 里 **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig
-> ⇒ `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**（把
-> `pause`/`kbhit`/`recordblocking` 接上去的那一步**没做**，见 §8）。全量与部署 sha **见文末
-> `AUTO:STATE`**（机器维护，别在这里手写）。
+> **最后更新：2026-09-24**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
+> **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
+> `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
+> **下一步的工作令在 [`build/113/PLAN-next.md`](build/113/PLAN-next.md)**
+> （JSPI 接交互 G0–G6 + 三块小口子，含 GPT 复审的红线与 Gate 0 实测）。
+> 全量与部署 sha **见文末 `AUTO:STATE`**（机器维护，别在这里手写）。
 >
 > ⚠️ **动手前必须知道的七条**：
 > ① **构建主树**：opengl-ON + gl2ps-ON + FreeType-ON + fontconfig-ON，GL 头是 gl4es+GLU。
@@ -429,6 +430,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 
 | 路径 | 作用 |
 |---|---|
+| `build/113/PLAN-next.md` | **下一阶段工作令**（2026-09-24）：JSPI 接交互 G0–G6 + 三块小口子；含 Gate 0 实测与 GPT 复审的红线。**执行完把结果写回 HANDOFF/HISTORY，本文件转入历史** |
 | `HISTORY.md` | **历史记录（append-only）**：2026-09-24 从 HANDOFF 原样拆出（`§5.x`/`§9`/`§10`）。查"当年为什么这么做、踩过什么"用 `grep -n 关键词 HISTORY.md` |
 | `build/Makefile` | 构建主 Makefile（含 `EM_LDFLAGS` 全库清单 + dldfcn `.o` 挂载 + `STATIC_DLD_FCNS` 相关） |
 | `build/main.cc` | wasm 入口；`STATIC_DLD_FCNS` 注册表 + Phase 3 安装 + addpath 两段式 + feval/eval_string 绑定 |
@@ -614,6 +616,28 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
   这是"静默曲解"那一类（批次 B 的靶子），**尚未修**；修法很小：在 `plot.m` 里认出
   `"parent"` 属性对（值是 `gca()` 就剥掉、别的句柄就明确报错）。
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
+- **（新，2026-09-24 实测）交互/阻塞面**：`pause(0.5)` 期间页面定时器 **0 次**（页面被完全堵死）；
+  **`ginput`/`keyboard` 会挂死**（8 s 无响应 —— 比"报错"更糟的一种"不清晰"）；
+  `waitbar` 报**误导性**的 `get: invalid handle (= 2)`；`edit` 是清晰报错（无 shell）；
+  `legend`/`plotyy`/`movie`（2 帧）/`diary`/`more` 实测可用。
+  ⇒ 修法与顺序见 `build/113/PLAN-next.md`（G3/G4/G5；"不许挂死"那一档先做）。
+- **（新，2026-09-24 实测）我们的 toolkit 缺核心内部属性**：`isprop(gca(),'__legend_handle__')`
+  与 `__plotyy_axes__`/`__original_looseinset__`/`__axes_limits__` 全部为 **0** ⇒ 核心 `.m`
+  里那些 `get` 一律报错（多数被 `try/catch` 吞掉，偶发漏进 `last_error_message()`，
+  **会污染测试判定**：本会话被这种"粘连错误"骗过数次）。修法见计划第 3 节第 1 条。
+- **（新，2026-09-24）JSPI 的现实边界（外部复审的判定，照抄结论）**：
+  `-sJSPI` / `JSPI_EXPORTS` / Embind `async()` / COI+pthreads 是**有上游先例**的；
+  但"**wasm EH/SjLj + `MAIN_MODULE=2` + dlopen + JSPI 挂起 + 大型 C++ 解释器 + 嵌套 REPL**"
+  这一整套**没有公开成熟先例** ⇒ 我们那个探针只能记为"**locally validated integration**"，
+  **不许写成"成熟架构"**。两条红线：① **不许**用"JS 往正在跑的 wasm 栈注入异常"做 Ctrl-C
+  （JSPI 是挂起/恢复，不是抢占）；② 没有 JSPI 又不用 Asyncify（我们已证伪）时，
+  **没有等价 fallback** ⇒ 只能做能力门 + 清晰报错。另：Pyodide 至今仍有 JSPI 稳定性 issue
+  并给"禁用 JSPI"的 workaround ⇒ 能力检测与"Octave 级冒烟测试"必须是**两个独立 gate**。
+- **（新，2026-09-24 实测）Gate 0：`-sJSPI` 产物在没有 JSPI 的浏览器里"能加载但不能用 JSPI 入口"**：
+  删掉 `WebAssembly.Suspending`/`promising` 后 `Module` 仍在、非 JSPI 的调用照常，
+  被包过的导出**不存在**（`_main_wait is not a function`，并抛一次
+  `TypeError: WebAssembly.Suspending is not a constructor`）⇒ **单产物 + 运行时能力门**可行，
+  **不需要**抬浏览器下限、**不需要**维护两条车道。
 - **句柄/对话框一族：大部分已能用**（2026-09-24 实测更正 —— 以前整条记成"未做，归图形分支"）。
   真渲染器（`webgl`）上线后，`accept-p5-graphics` 那套断言之外我又逐条实测了一遍
   （`test/browser/probe-core-names.mjs`，19 项，8761 全绿）：
@@ -654,8 +678,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 以 `sha256sum octave.wasm` 实测为准，别背旧话。回退点：`site-m1bridge-bak-20260924/`
 > （M1+新桥那份）、`siteWebGL-m1bak-20260923/`（更早）。
 > **部署件 sha、体积、最近一次全绿回归见文末 `AUTO:STATE` 区块**（别在这里手写）。
-> **本轮（第五批，2026-09-24）**：外部审核的方案 R1（popen/system 覆写）+ R4（`plot(hax,…)`）
-> 已落地并全量验绿（§5.30）；**R3（fontconfig）也已上线并验绿（§5.31）**；⇒ **只剩 R5（JSPI 探针）**。
+> **近三批（2026-09-24）**：R1（popen/system 覆写）+ R4（`plot(hax,…)`）已上线（§5.30）、
+> R3（fontconfig）已上线（§5.31）、R5 的 JSPI 机制探针已通过（§5.32）。
+> ⇒ **下一步不是再写探针，而是按工作令执行**：[`build/113/PLAN-next.md`](build/113/PLAN-next.md)
+> （G0 能力门 → G1 `eval_async` → G2 `pause`+EH/SjLj 压力矩阵 → G3 `ginput` → G4 Ctrl-C 协作式中断
+> → G5 `keyboard`(experimental) → G6 dlopen×挂起压力；外加三块小口子先做）。
 >
 > **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
 > · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **69 项**：
@@ -666,18 +693,18 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 浏览器侧对应 `accept-selftest.mjs`（30 项）、`accept-queue-drift.mjs`（12 项）、
 > `accept-shellerr.mjs`（14 项，R1）、`probe-want-matcher.mjs`（13 项：匹配器本身的红-绿对照）。
 
-1. **（R1/R4/R3 做完；R5 只剩"接到产品上"那一步）**：
-   · ✅ **R5 的机制探针已通过**（§5.32）：`-fwasm-exceptions` + `-sJSPI` + `MAIN_MODULE=2` +
-     `SIDE_MODULE`/dlopen 四件一起成立（`build/113/NOTES-jspi.md` 有配方与三条实现要求）。
-     **下一步（独立一批，未做）**：把真的 `.oct` 与 `pause`/`kbhit`/`keyboard`/`recordblocking`
-     接上去 —— 要动 Octave 本体 + 页面调用形态（入口必须 `WebAssembly.promising`）+ 全量回归。
-   · ✅ **R3 fontconfig**（§5.31）：静态 `libfontconfig`+`libexpat` + 显式 MEMFS 配置（`/fonts.conf` +
-     `<dir>` 指向已预载的 `octfontsdir` + `<cachedir>` 到可写目录）；`fontname` 现在真改像素、
-     `listfonts`/`__get_system_fonts__` 可用（R2 消失）。**没有**做 fake `listfonts`。
-   · 外部审核给 R5 的**警告仍然有效**（照抄在这里，免得下一轮忘）：
-     *"JSPI 已经在生产浏览器里了" ≠ "JSPI + `MAIN_MODULE=2` + `SIDE_MODULE`/dlopen 这个组合被验证过"*
-     —— 所以机制探针必须先过（已过，见上），**而"接到 `pause` 上"仍要自己重新验一遍**，
-     不许拿"探针通过"当"产品功能已完成"。
+1. **（进行中）按 `build/113/PLAN-next.md` 执行下一阶段**（2026-09-24 制定，GPT 复审后的路线）：
+   · **先做"三块小口子"**（不碰 wasm、风险最低，且第 1 条会消掉污染测试判定的"粘连错误"）：
+     补齐 toolkit 内部属性（`__legend_handle__` 等 22 个名字）/ `plot(…,'parent',…)` 桥状态错记 /
+     `waitbar`+`uisetfont` 误导报错 / `ginput`+`keyboard` **不许挂死** / 可用包可见性 /
+     `print -dpng` 走页面 PNG / 字体家族 +1（FreeMono ×4）/ 持久化（IDBFS）/ `check-wants` 规则 B 复核。
+   · **再做 JSPI 那条线**：G0 能力门（**单产物 + 运行时能力门**已实测可行）→ G1 Embind `async()`
+     （**新增** `eval_async`，不动被 36 个套件同步调用的 `eval_string`）→ **G2 是真正的风险点**
+     （`pause` + `unwind_protect` + EH/SjLj 六条矩阵、六条判据）→ G3 `ginput` 事件队列 →
+     G4 Ctrl-C 走 `OCTAVE_QUIT` 协作式中断（**不做** JS 注入异常的硬取消）→ G5 `keyboard`（experimental，一层）→ G6 dlopen×挂起压力。
+   · **红线**（GPT 复审，已写进 §7 与计划）：不许退 Asyncify；不许把 JSPI 做成全站硬门（抬浏览器下限）；
+     `pause` 那步没过就**不许**宣称交互可用；**8761 在所有阶段 promote 之前一动不动**。
+   · ✅ 已完成的机制证据：R5 探针 9/9（§5.32）+ Gate 0（无 JSPI 浏览器仍能加载产物，§7）。
 2. **（阻塞在人）`gh auth login` 之后 `git push origin main`**：token 失效
    （`gh auth setup-git` 救不回来），本地领先 `origin/main` 若干笔；内容**没丢** ——
    已落持久盘镜像 `mirror` 的 `refs/heads/main-20260924`（§5.17.1）。
