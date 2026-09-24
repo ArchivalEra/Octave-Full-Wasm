@@ -129,5 +129,5 @@ $ grep OCTAVE_IDX_TYPE config.h
 `build/113/build-libs.sh` 的 `do_suitesparse()`：
 `UMFPACK_CONFIG="-DNBLAS"`、`CHOLMOD_CONFIG="-DNPARTITION -DNSUPERNODAL"`，
 并在构建前 `rm -f UMFPACK/Lib/*.o CHOLMOD/Lib/*.o`（**改了 config 宏就必须先删旧对象**
-—— SuiteSparse 的 make 不会因为"命令行多了个 -D"就重编，与 HANDOFF §10.3 坑 2 同源）。
+—— SuiteSparse 的 make 不会因为"命令行多了个 -D"就重编，与 HISTORY §10.3 坑 2 同源）。
 

@@ -13,7 +13,7 @@
 ## 文本仍走**官方路径** `help()`：
 ##   · 内建函数 → 构建期用真 makeinfo 预渲染的 `built-in-docstrings`（T1，见 §5.6）；
 ##   · `.m` 文件  → 运行时读该文件的 docstring（带 -~*- texinfo -*- 标记的仍会
-##                  撞 makeinfo，那是**另一个**缺口，见 HANDOFF §5.6 的"剩余缺口"）。
+##                  撞 makeinfo，那是**另一个**缺口，见 HISTORY §5.6 的"剩余缺口"）。
 ## 也就是说本覆写**不重新实现文档渲染**，只把"宿主是 info 浏览器"换成
 ## "宿主是输出通道"。
 ##
@@ -21,7 +21,7 @@
 ## 正常输出通道。页面上 `bridge/index.html` 现在把 stdout/stderr 镜像进 DOM
 ## （<pre id="output">），所以 `doc sin` 的正文**真的显示在页面上**。
 ## 真正的"文档浏览器 UI"（可点击目录、跳转）属于**已后置的 UI 工作**，
-## 不在这一批（见 HANDOFF §5.5 的"托管/UI 已明确后置"）。
+## 不在这一批（见 HISTORY §5.5 的"托管/UI 已明确后置"）。
 
 function doc (name)
 

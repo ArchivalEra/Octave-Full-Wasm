@@ -74,5 +74,5 @@ const mroute = await run([
 ].join(' '));
 console.log(`     | ${'纯 .m 注册 web toolkit'.padEnd(34)} :: ${mroute.trap ? '整页崩' : (mroute.out || mroute.err || '(空)').slice(0, 200)}`);
 
-console.log('\n=== 探针结束（结论写进 HANDOFF §5.5 / CLIBS）===');
+console.log('\n=== 探针结束（结论写进 HISTORY §5.5 / CLIBS）===');
 await browser.close();

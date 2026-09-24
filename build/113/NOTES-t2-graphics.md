@@ -97,4 +97,4 @@ allchild/close` 这些**图形对象句柄语义**真正可用。
   与 plot 桥共存（`print -dsvg` 仍出图）→ 无 trap。
 - 探针留档：`test/browser/probe-t2-graphics.mjs`（零重链现状量测，含"纯 .m 路线被门禁挡住"
   的实证）、`probe-t2-figure.mjs`、`probe-t2-run.mjs` + `fixtures/t2-graphics-probe.m`。
-- 回归：全量 26 套（含本套）在 8761 上重跑，见 HANDOFF §10.1。
+- 回归：全量 26 套（含本套）在 8761 上重跑，见 HISTORY §10.1。

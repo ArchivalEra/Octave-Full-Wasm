@@ -3,7 +3,7 @@
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# ── 为什么需要它（HANDOFF §5.29 R3 / §5.30）─────────────────────────────────
+# ── 为什么需要它（HISTORY §5.29 R3 / §5.30）─────────────────────────────────
 # 批次 D 把 FreeType 编进来了，文字能画了 —— 但**没有 fontconfig**的两条代价是硬的：
 #   ① `fontname` 属性**存得住、渲染时被忽略**（`ft-text-renderer.cc` 只有在 `HAVE_FONTCONFIG`
 #      时才用 `FcFontMatch()` 去挑字体文件；没有它就走 FreeSans 回落）；

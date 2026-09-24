@@ -3,7 +3,7 @@
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# ── 这个脚本为什么存在（HANDOFF §10.6 第 5 项的"拦路雷"）──────────────────
+# ── 这个脚本为什么存在（HISTORY §10.6 第 5 项的"拦路雷"）──────────────────
 # 根目录的 `build/recover.sh` 是给 **8761（7.2 基线）** 用的：站点三大件它从
 # **obench** 取（那是 7.2 的检查点）。等哪天把 8761 换成 11.3.0 时，
 # 如果不改它，**下次断电恢复就会把 8761 悄悄打回 7.2**。
@@ -63,7 +63,7 @@ else
      "$REPO/bridge/webfilepick.js" \
      "$REPO/bridge/webnet.js" "$SITE/"
   sudo chown -R "$(id -u):$(id -g)" "$SITE"
-  echo "  ⚠ 资产目录（assets/）需要另外补——见 HANDOFF §10.4 的资产清单"
+  echo "  ⚠ 资产目录（assets/）需要另外补——见 HISTORY §10.4 的资产清单"
 fi
 
 echo "== 4) 资产清单完整性核对（**只读**，不重算）=="

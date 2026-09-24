@@ -71,7 +71,7 @@ em++: error: '/emsdk/upstream/bin/wasm-opt ... --asyncify ... ' failed (returned
 **Asyncify 与本构建的必要条件互斥，因此不可采用。**
 
 - 本构建**必须**用 `-fwasm-exceptions`（wasm 原生异常），这是第二轮换基线时
-  用血换来的结论（HANDOFF §10.3 坑 1）：JS 式异常（`-fexceptions`）会引入
+  用血换来的结论（HISTORY §10.3 坑 1）：JS 式异常（`-fexceptions`）会引入
   `invoke_*`/`__cxa_*` 这些**只存在于 JS 胶水里**的符号，而 `.oct` 是 side module，
   靠主模块的导出表解析导入 → **装载即崩**。
 - Emscripten 明确说 `ASYNCIFY=1` 与它不兼容，实测也确实链不出来。

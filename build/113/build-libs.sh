@@ -345,7 +345,7 @@ do_suitesparse () {
              CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC"
              BLAS="-lrefblas" LAPACK="-llapack" )
   # ⚠️ 改了 config 宏就必须**先删旧 .o 再编**：SuiteSparse 的 make 不会因为
-  #   "命令行里多了一个 -D" 就重编已有对象（与 HANDOFF §10.3 坑 2 同源）。
+  #   "命令行里多了一个 -D" 就重编已有对象（与 HISTORY §10.3 坑 2 同源）。
   #   只清受影响的两个库的 .o，精确且可解释。
   for _l in UMFPACK CHOLMOD; do
     [ -d "$_l/Lib" ] && { rm -f "$_l"/Lib/*.o; echo "  清了 $_l/Lib/*.o（config 变了，必须重编）"; }

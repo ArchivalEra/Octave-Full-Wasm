@@ -70,7 +70,7 @@ endfunction
 %!error <numeric or handle arguments are not supported> __pb_legend_args__ ({5, "a"})
 ## ⚠️ 这里用 `{1}`（以 `{` 开头的元素）而不是 `struct ("x", 1)`：Octave 的 cell 字面量里
 ##    「函数名 + 空格 + (…）」会掉进命令语法 —— `{struct ("a", 1)}` 实测是**两个**元素。
-##    本仓记过两次（`__svg_panel_boxes__.m:24`、HANDOFF §5.22 踩坑记）。
+##    本仓记过两次（`__svg_panel_boxes__.m:24`、HISTORY §5.22 踩坑记）。
 %!error <only accepts label strings> __pb_legend_args__ ({"a", {1}})
 %!error <must be followed by a location string> __pb_legend_args__ ({"a", "Location"})
 %!error <must be followed by a location string> __pb_legend_args__ ({"a", "Location", 12})

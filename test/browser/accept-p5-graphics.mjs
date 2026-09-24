@@ -34,7 +34,7 @@
 //
 // ⚠️ 三条写测试的坑（本项目踩过）：
 //   ① 必须等 `window.__octaveReady`（资产没装完会假失败）；
-//   ② 等待要在 JS 侧做（本构建 `pause()` 会阻塞页面，见 HANDOFF §5.10）；
+//   ② 等待要在 JS 侧做（本构建 `pause()` 会阻塞页面，见 HISTORY §5.10）；
 //   ③ 断言"非空白"要**解码 PNG 数颜色**，不能只看文件大小 —— 一张纯白图也有 7KB。
 import { chromium } from 'playwright-core';
 

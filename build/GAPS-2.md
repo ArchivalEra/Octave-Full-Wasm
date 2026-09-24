@@ -6,12 +6,12 @@
 >
 > | 条目 | 状态（2026-09-22） | 证据 |
 > |---|---|---|
-> | **A1** 图形栈（薄 toolkit） | ✅ **已完成**（T2） | `web` toolkit 登记+装载；`accept-t2-graphics` 26/26。**没走 Lane B** —— 见 HANDOFF §5.5.1 |
+> | **A1** 图形栈（薄 toolkit） | ✅ **已完成**（T2） | `web` toolkit 登记+装载；`accept-t2-graphics` 26/26。**没走 Lane B** —— 见 HISTORY §5.5.1 |
 > | **B1** `audiorecorder` | ✅ **已完成**（T7） | 19 个 `__recorder_*` 纯 `.m` + getUserMedia/MediaRecorder 桥；`accept-t7-recorder` 40/40。**`recordblocking` 如实报错**（需 Asyncify，实测不可用，见 G2） |
 > | **B2** `audiodevinfo` | ✅ **已完成**（T6） | 静态"浏览器默认设备"模型；`accept-t6-audio-doc` 33/33 |
 > | **C1** 文件操作（`copyfile` 等） | ✅ **已完成**（T3） | 无 shell 进程内实现；`accept-fileops` 20/20 |
-> | **D1** `help` 渲染 | ✅ **已完成**（T1）+ **`.m` 的 docstring 也已修**（P1，2026-09-23） | 构建期预渲染；`accept-help` 12/12、`accept-t9-helpm` 18/18（离线对照 25/25 与桌面逐字一致）。见 HANDOFF §5.13 |
-> | **D2a** `doc` | ✅ **已完成**（T6） | help 文本 + 页面 DOM 落点；见 HANDOFF §5.10 |
+> | **D1** `help` 渲染 | ✅ **已完成**（T1）+ **`.m` 的 docstring 也已修**（P1，2026-09-23） | 构建期预渲染；`accept-help` 12/12、`accept-t9-helpm` 18/18（离线对照 25/25 与桌面逐字一致）。见 HISTORY §5.13 |
+> | **D2a** `doc` | ✅ **已完成**（T6） | help 文本 + 页面 DOM 落点；见 HISTORY §5.10 |
 > | **D2b** `publish` | ❌ 仍暂缓 | 外部审核判定，会被 graphics/文件/页面 UI 一串拖住 |
 > | **E1** `input()` | ✅ **已完成**（T5） | 本就可用，只加官方 `Module.stdin` 扩展点；`accept-input` 9/9 |
 > | **E2** `keyboard`/`kbhit`/`pause` | ❌ 仍暂缓 | 需要 Asyncify；而 **Asyncify 已实测不可用**（见 G2） |
@@ -20,12 +20,12 @@
 > | **G3** pkg 语义 | ✅ **已完成**（T4） | `accept-pkg` 16/16 |
 > | **H1** `voronoi` 单输出 | ⬜ **仍不可用，且根因变了** | T2 之后已能走到绘图，终点是 plot 桥不支持 `plot(hax,…)` 这类"首参是句柄"的调用形态 |
 > | **H2** `uigetfile` | ✅ **已完成（T8）** | 走官方缝 `__fltk_uigetfile__`（必须是 `.oct` —— 中间层门禁 `exist==3`）；**两步**语义（异步/同步硬冲突），`accept-t8-uigetfile` 19/19 |
-> | **H3** `getframe`/`movie` | ✅ **`getframe` 已修（2026-09-23，图形线 P5）** | 原先报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）。P5 把 `opengl_renderer` 接上 OSMesa 后，`getframe` 返回**真像素**（420×560×3，`accept-p5-graphics.mjs` 里有硬断言）。**仅在真渲染器（`osmesa`/`webgl`）下生效**；8761（`web`）仍无渲染。见 HANDOFF §5.16 |
+> | **H3** `getframe`/`movie` | ✅ **`getframe` 已修（2026-09-23，图形线 P5）** | 原先报 `failed to capture frame data`（toolkit 的 `get_pixels` 返回空）。P5 把 `opengl_renderer` 接上 OSMesa 后，`getframe` 返回**真像素**（420×560×3，`accept-p5-graphics.mjs` 里有硬断言）。**仅在真渲染器（`osmesa`/`webgl`）下生效**；8761（`web`）仍无渲染。见 HISTORY §5.16 |
 > | **H4** `inputname`/`nargin` 反射 | ⬜ 仍暂缓 | 优先级低，未测 |
 >
 > ### 剩余（非图形）—— **只剩 G1 一件**（下表是 2026-09-22 的原文，已逐条收口）
 
-> 收口情况（2026-09-23）：**D1 的 `.m` docstring 已修**（HANDOFF §5.13）、
+> 收口情况（2026-09-23）：**D1 的 `.m` docstring 已修**（HISTORY §5.13）、
 > **H2 `uigetfile` 已完成**（§5.12）、**SLICOT 已修好并上线**（§5.15）。
 >
 > 1. **G1 `MAIN_MODULE=2` + 自动 keep 清单**（Lane B，1–3 d）：体积优化 —— **现在只剩这一件**。
@@ -40,7 +40,7 @@
 >    并如实标注"与 MATLAB 语义不同"。
 >
 > **~~不属于本清单的非图形长尾~~**：control 包 SLICOT 编译件（`ss`/`step`/`tf2ss`）
-> → ✅ **2026-09-23 已修好并上线**（HANDOFF §5.15、`build/113/NOTES-slicot.md` 第五/六节）。
+> → ✅ **2026-09-23 已修好并上线**（HISTORY §5.15、`build/113/NOTES-slicot.md` 第五/六节）。
 > （原先记的"签名不匹配"是错的：真因是那些符号**根本不存在**，加上控制包手写声明与 f2c 之间
 > 在 **CHARACTER 隐藏长度参数**上的分歧。最终做法 = 对齐声明 + `.oct` 自包含 PIC 库 + 精简 libf2c。）
 

@@ -64,7 +64,7 @@
 7.2 的 `test/browser/accept-ode15.mjs` 对 lsode **只断言了 `exist("lsode")==5`**，
 从没真的调用过；`build/CLIBS.md` 批次 3 写的"`ode45`/`ode23`/`lsode` 无回归"
 也只覆盖到存在性。
-> 这正是 HANDOFF §10.3 坑 4 说的那件事的第二次复现：
+> 这正是 HISTORY §10.3 坑 4 说的那件事的第二次复现：
 > **「装载类断言不够，判定缺陷的唯一可靠手段是装载之后真的调用」**。
 
 ## 已经排除的解释（都验过）
@@ -80,7 +80,7 @@
 2. 或者用 `-sASSERTIONS=1` / `-fsanitize=…` 的精简重链跑一次，让 abort 带上下文；
 3. 重点怀疑方向：ODEPACK（`dlsode`/`dls001_`）的 f2c COMMON 块处理
    —— 最终链接用了 `-Wl,--allow-multiple-definition` 来压 `dls001_`/`globe_` 的
-   重复定义（见 HANDOFF §10.3），**被丢弃的那份定义里如果含状态，行为就不对了**。
+   重复定义（见 HISTORY §10.3），**被丢弃的那份定义里如果含状态，行为就不对了**。
    值得先看 `liboctave/external/odepack/` 里 COMMON 块的编译产物。
 
 ---
@@ -136,7 +136,7 @@ A/B/C 之所以不炸，是因为它们在 `dlsode` 之前就 `return` 了。
   **sha256 完全相同**（`977307585df89acd…`）⇒ 链接器认为它已被引用/已定义，
   `-u` 是空操作。
 ⇒ 所以"漏链"**不成立**；名字串缺失是**命名表的表现**，不能当证据。
-（HANDOFF §10.3 坑 5 早就写过这条教训：**别用"符号在不在"推断 trap**。）
+（HISTORY §10.3 坑 5 早就写过这条教训：**别用"符号在不在"推断 trap**。）
 
 ### 结果 5：**插桩把 trap 夹死在 `dlsode` 调用内部**（决定性）
 在 `LSODE.cc` 的 `F77_XFCN (dlsode, …)` **前后各插一句 `fprintf(stderr,…)`**，
@@ -177,7 +177,7 @@ trap 已确认在 `dlsode` 内部（f2c 转出来的 odepack），且输入工�
 2. **f2c 的"未实现例程"**：odepack 出错路径会调 `xerrwv`/`s_stop` 一族，
    若 libf2c 里对应实现缺失或签名不符，走到就 trap。
 3. **COMMON 块**：最终链接用 `-Wl,--allow-multiple-definition` 压 `dls001_`/`globe_`
-   的重复定义（HANDOFF §10.3）；被丢弃的那份里若含状态，行为就不对了。
+   的重复定义（HISTORY §10.3）；被丢弃的那份里若含状态，行为就不对了。
    可以对比 `/src/deps` 之外 7.2 那份 odepack 的编译方式。
 4. 最快的定位：在 `dlsode.f` 的 f2c 产物里按 `wasm-function` 索引反查
    （用 `DIAG_NAMES=1` 那份带名字的构建，trap 栈里会直接出现 `dlsode` 或其被调函数）。
@@ -186,7 +186,7 @@ trap 已确认在 `dlsode` 内部（f2c 转出来的 odepack），且输入工�
 - 8761/8762（11.3.0）与 7.2 **都是这个状态**：`lsode` **从来没在这个项目里工作过**
   （不是本轮换基线引入的，也不是回归）。
   此前没被发现，是因为 7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`**。
-- 已记入 `HANDOFF.md` §10.6 作为独立待办；`accept-113-ode15` 第八节单独隔离复现它、
+- 已记入 `HISTORY.md` §10.6 作为独立待办；`accept-113-ode15` 第八节单独隔离复现它、
   不计入 PASS/FAIL，避免它一 trap 就把整个套件打死。
 - **诊断过程对部署产物零污染**：所有诊断构建都写到 `/src/websrc/diag*`、由临时站点
   （8763/8764/8765）服务，用完即停并清理；插桩后还原并**用 sha256 复验**

@@ -106,7 +106,7 @@ if [ "$DRY" = "0" ]; then
   echo "   站点 wasm 带 gl4es ✓"
   # FreeType（批次 D）：`EXPECT_FREETYPE=1` 时要求产物里有字体预载记录。
   # 为什么值得单列一条：**没预载字体的表现是"文字空白"**，在浏览器里很难一眼看出是
-  # "没编 FreeType"还是"字体路径不对"（HANDOFF §5.26）。
+  # "没编 FreeType"还是"字体路径不对"（HISTORY §5.26）。
   if grep -q 'FreeSans.otf' "$SITE/octave.js" 2>/dev/null; then
     echo "   带 FreeType 字体预载 ✓（$(grep -o 'FreeSans[A-Za-z]*\.otf' "$SITE/octave.js" | sort -u | tr '\n' ' ')）"
   elif [ "${EXPECT_FREETYPE:-0}" = "1" ]; then

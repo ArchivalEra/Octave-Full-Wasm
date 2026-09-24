@@ -115,7 +115,7 @@ f = hello.txt                              % 取消则 f = 0（与桌面一致�
 - `test/browser/accept-t8-uigetfile.mjs` **19/19**（用 Playwright 的 `fileChooser`
   把对话框确定性地走完：选单个 / 取消 / 多选三种场景都覆盖）
 - 另有覆盖率探针（本文件第一节那张表就是它的输出）
-- **`help uigetfile` 仍然报 makeinfo 错** —— 那是 `.m` docstring 的既存缺口（HANDOFF §5.6 / C7），
+- **`help uigetfile` 仍然报 makeinfo 错** —— 那是 `.m` docstring 的既存缺口（HISTORY §5.6 / C7），
   **不是本批引入的**；验收里专门用一条断言把它**钉成"已知缺口"**，免得将来误判。
 
 ## 五、复现命令

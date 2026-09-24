@@ -9,7 +9,7 @@
 > **2026-09-23：图形线收口 —— 本站点现在带真渲染器。** `octave.wasm` 由**带 GL** 的那份链接
 > 产出（gl4es → GLES2 → **WebGL2/GPU**），**默认 toolkit 就是 `webgl`** ⇒ 开箱
 > `figure; plot(1:10); drawnow` 就出真图。OSMesa（Mesa 软件光栅化）后端**已退役**。
-> 换装流程固化在 **`build/promote-webgl.sh`**；细节见 `HANDOFF.md` §5.21 与
+> 换装流程固化在 **`build/promote-webgl.sh`**；细节见 `HISTORY.md` §5.21 与
 > `build/113/NOTES-webgl.md` §4.5.13 / §4.6。
 > **回退点**：`/mnt/hdd/octave-wasm-build/site-prewebgl-bak/`（改之前那份站点）
 > 与容器里的 `/src/websrc/out-nongl-bak`（不带 GL 的链接产物）。
@@ -191,7 +191,7 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
 | `probe-jspi.mjs` | **9** | **R5 的机制闸门**（不在站点上跑，自起静态服务）：`-fwasm-exceptions` + `-sJSPI` + `MAIN_MODULE=2` + **`SIDE_MODULE`/dlopen** 四件一起成立 —— dlopen 的 side module 回调主模块 helper 再挂到 JS 的 Promise，实测 202 ms / tick +1 / 返回 43（配方与三条实现要求见 `build/113/NOTES-jspi.md`）|
 | `probe-fontname.mjs` | **13** | **`fontname` 真的生效**（R3）：`listfonts()`/`__get_system_fonts__()` + **像素级判别** —— 只改 `fontweight`/`fontangle`，`getframe` 像素和必须不同（`normal 178220056 / bold 178126621 / italic 178224151`），同属性重复必须相同 |
 | `probe-m2-lazyload.mjs` | 7 | **`MAIN_MODULE=2` 没破坏懒加载**：加载期的 `.oct` 请求只有启动清单那 8 个、全在 `assets/` 下；按需装载 signal 后 `butter` 才可用 |
-| `probe-cold-start.mjs` | —（只测不判） | 首帧冷启动拆解：`clf` 375 / `plot` 73 / `drawnow` 177 ms，温出图 24–58 ms（结论：**不做预热**，见 HANDOFF §5.28） |
+| `probe-cold-start.mjs` | —（只测不判） | 首帧冷启动拆解：`clf` 375 / `plot` 73 / `drawnow` 177 ms，温出图 24–58 ms（结论：**不做预热**，见 HISTORY §5.28） |
 
 
 ## 已知偏差（如实）
@@ -201,7 +201,7 @@ FreeType + 外部审核的 R1/R4 上线后实测，8761 与 8768 逐字节相同
   而且此前没被任何套件发现 —— 7.2 的 `accept-ode15` 对 `lsode` **只断言了 `exist`**。
 - **无 shell 的入口一律"清晰报错"**（有意保持，wasm 里没有 shell）。2026-09-24 起这条**覆盖全部形态**：
   `st = system(cmd)`、`system(cmd)`（无输出参数）、`popen(cmd,mode)` 以前**静默返回 -1 / 静默通过**，
-  现在与两输出形态一样抛 `unable to start subprocess`（覆写层 `build/webshims/`，HANDOFF §5.30）。
+  现在与两输出形态一样抛 `unable to start subprocess`（覆写层 `build/webshims/`，HISTORY §5.30）。
   ⇒ 任何调 `system()` 的 `.m`（全树 34 个）现在会**明确失败**而不是拿到 -1 继续跑。
 - `fftw('threads',N)` 静默 no-op（线程桩，数值不受影响）。
 - `-dpng`/`-dpdf` 打印清晰报错并提示改用 `-dsvg`（无光栅器、无 Ghostscript）。

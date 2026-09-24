@@ -628,7 +628,7 @@ TypeError: Cannot read properties of undefined (reading 'apply')
 > ② 让 `.oct` **自包含**：内嵌 `slicotlibrary` + **PIC 版** LAPACK/BLAS（`rebuild-pic-blas.sh`）
 > + **精简 libf2c**（剔 I/O 子系统，`tableSize` 13→1）+ `f2c-io-shim.c` 补数据符号。
 > 实测 `step` 与 `1-e^-t` 误差 1.1e-16；`accept-slicot` 25/25；全量 31 套 784 项全绿。
-> **完整记录见 `build/113/NOTES-slicot.md` 第五、六节**；HANDOFF §5.15。
+> **完整记录见 `build/113/NOTES-slicot.md` 第五、六节**；HISTORY §5.15。
 
 **已做的处置**：
 - signal 全量发布（纯 .m，无此问题）。
@@ -1027,7 +1027,7 @@ workspace 里求值 `k*2 → 42`）、字符串模式（不求值）、连续两
   `Fatal: Module::getFunction: __asyncify_get_call_index does not exist`（返回 1），
   `octave.js` 根本没生成。
 - **为什么代价不成比例**：本构建**必须**用 `-fwasm-exceptions`（见本文件"真 .oct
-  动态装载"与 HANDOFF §10.3 坑 1）——JS 式异常会引入只在胶水里的 `invoke_*`/`__cxa_*`，
+  动态装载"与 HISTORY §10.3 坑 1）——JS 式异常会引入只在胶水里的 `invoke_*`/`__cxa_*`，
   side module 装载即崩。上 Asyncify 等于**放弃整条 `.oct` 资产车道**。
 - **别把中间产物体积当结论**：换旗标后（Asyncify pass **之前**）的 wasm 41.17MB
   vs 部署版 35.97MB，但那不是有效产物。
@@ -1255,7 +1255,7 @@ PATH=/src/bin:$PATH SKIP= WITH_OPENGL=1 WITH_GL2PS=1 bash configure-113-full.sh
    "gl2ps unavailable" 变成 `failed to open pipe "| cat > …"`（`__opengl_print__.m:204`）——
    Octave 把 gl2ps 输出**穿过 shell 管道**落盘，而本构建**故意没有 shell**。
    `-dpdf/-dps/-deps` 另需 gs。⇒ 这一批只把"gl2ps 缺失"这层去掉，
-   离"核心 print 能出矢量"还差 popen/gs 那两层（详见 HANDOFF §5.20、NOTES-webgl §4.5.11）。
+   离"核心 print 能出矢量"还差 popen/gs 那两层（详见 HISTORY §5.20、NOTES-webgl §4.5.11）。
 
 ---
 
@@ -1394,7 +1394,7 @@ bash link-web.sh /src/websrc/m2-out
 `fontname` **存得住、渲染时被忽略**（`ft-text-renderer.cc` 只在 `HAVE_FONTCONFIG` 时用
 `FcFontMatch()` 挑字体文件）、`listfonts()` 报 `structure has no member 'family'`。
 两条**同一个根因** ⇒ 修法只有一个：把 fontconfig 接上（外部审核明确反对写 fake `listfonts`：
-那会让 ① 变成假绿）。完整记录见 HANDOFF §5.31。
+那会让 ① 变成假绿）。完整记录见 HISTORY §5.31。
 
 ## 配方
 

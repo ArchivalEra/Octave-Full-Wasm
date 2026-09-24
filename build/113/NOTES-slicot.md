@@ -62,7 +62,7 @@ wasm-ld: error: function signature mismatch: dggev_
 原生构建里这两者能"跑"，原因是**原生链接器不做类型检查**，而且 LAPACK 对
 `JOBVL`/`JOBVR` 的长度参数通常用不到（`lsame` 只比较首字符）—— **碰巧而已**。
 **wasm-ld 做精确类型检查**，于是这个长期潜伏的不一致第一次变成硬错误。
-（与 HANDOFF §10.3 坑 13 / `patch-odepack-callback-arity.sh` 同一类问题的**另一个实例**：
+（与 HISTORY §10.3 坑 13 / `patch-odepack-callback-arity.sh` 同一类问题的**另一个实例**：
 那次是实参个数 4 vs 5，这次是隐藏长度参数。）
 
 **冲突面（粗查）**：调度模块 TU 的未定义符号 125 个，其中**归档也有定义的 47 个** ——

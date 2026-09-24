@@ -6,7 +6,7 @@
 > 8761 的换装走 `build/promote-webgl.sh`（见 §四）。
 >
 > ## ✅ 2026-09-23：**A 档落地，图形线收口**
-> 用户拍板的 "A" 一次做完四件（详见 `HANDOFF.md` §5.21 与 `NOTES-webgl.md` §4.6）：
+> 用户拍板的 "A" 一次做完四件（详见 `HISTORY.md` §5.21 与 `NOTES-webgl.md` §4.6）：
 > 1. **`webgl` 成默认 toolkit** ⇒ 开箱 `plot(...); drawnow` 就出真图（`webgraphics/PKG_ADD`）；
 > 2. 加 `FULL_ES3`（上下文本来就是 WebGL2；ES3 管的是 emscripten 那层 GLES3 模拟，
 >    实测 +9,291 字节、全绿 ⇒ 保留）；
@@ -43,10 +43,10 @@
 | 让 **toolkit/核心** 自己扛 `print` 矢量输出 | ❌ **走不通**（非本线问题） | Octave 的 `__opengl_print__.m` 要 **gl2ps + shell 管道 + (gs\|svgconvert)**；gl2ps **已补上**，但**没有 shell 是本构建的有意设计** ⇒ **plot 桥的 SVG 仍是唯一矢量实现，别当冗余砍**（§5.20 / NOTES §4.5.9–4.5.11）|
 | OSMesa（Mesa 软件光栅化） | ⛔ **已退役** | 它能跑（步骤①②③ 都通过过），但 CPU 逐像素、体积 +11.3MB ⇒ 被 gl4es 取代。脚本/配方在 git 历史；记录在 `NOTES-p5-osmesa.md` |
 
-**仍未做（如实记）**：① **手机真机速度**（模拟器验不了 WebGL，`HANDOFF` §5.19）；
+**仍未做（如实记）**：① **手机真机速度**（模拟器验不了 WebGL，`HISTORY` §5.19）；
 ② ~~**文字渲染缺**~~ → **2026-09-24 已补上（FreeType，见上）**；
 ③ **首帧冷启动 ~0.6 s**（建上下文 + `initialize_gl4es()` + 编 shader；批次 E 量过，结论
-见 `HANDOFF.md` §5.27）；④ `print -dpdf/-dps` 的 gl2ps 路径未实测（缺 shell 管道，见上）。
+见 `HISTORY.md` §5.27）；④ `print -dpdf/-dps` 的 gl2ps 路径未实测（缺 shell 管道，见上）。
 
 
 ## 二、做法（**"主 wasm 带 GL"**）
@@ -84,7 +84,7 @@
 - **`build/113/NOTES-p5-osmesa.md`**（本线的主记录）：§1–§2 步骤①/② 已做成什么、
   §5 那张"误判更正"、§7 本轮过程（含一处**被推翻的卡点推断**）、
   **§8 根因与修法（缺 `config.h`）+ 镜像层 + 本轮 5 个新坑 —— 接手先读它**
-- **`HANDOFF.md` §5.16**（一句话现状 + 主树 opengl-ON 的切换办法）与 §5.17（网络/推送）
+- **`HISTORY.md` §5.16**（一句话现状 + 主树 opengl-ON 的切换办法）与 §5.17（网络/推送）
 - **`build/113/vendor-edge-tools/`**：Edge-Tools 的参考实现（`webgl-graphics-toolkit.cc`）
   与他们的结论（`MILESTONE-2.md`）—— GPL-3.0-or-later，**用前须注明出处**
 

@@ -1,4 +1,4 @@
-// 探针：FreeType 文字渲染到底"出来了没有"（批次 D，HANDOFF §5.26）
+// 探针：FreeType 文字渲染到底"出来了没有"（批次 D，HISTORY §5.26）
 // Copyright (C) 2026 ArchivalEra
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //

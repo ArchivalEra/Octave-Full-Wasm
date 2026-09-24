@@ -9,7 +9,7 @@
 // （改动前的实测记录见 test/browser/probe-t2-graphics.mjs）。
 // T2 挂上一个最小的 `web` toolkit，让**图形对象真的存在**；渲染仍归 plot 桥。
 //
-// ── 实现要点（详见 HANDOFF §5.5 与 build/113/web_graphics_toolkit.cc）────────
+// ── 实现要点（详见 HISTORY §5.5 与 build/113/web_graphics_toolkit.cc）────────
 //   · toolkit 本体是**资产车道的 side module**（`__init_web__.oct`），**主 wasm 零改动** ——
 //     关键发现：`available_graphics_toolkits()` 返回的是**运行时注册表**
 //     （`gtk_manager::available_toolkits_list()`），不是编译期清单，且有内建

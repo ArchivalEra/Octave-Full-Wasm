@@ -6,7 +6,7 @@
 # `__ode15__.oct` 是 `-sSIDE_MODULE=1` 的 side module，**SUNDIALS 的静态码整个打进去**，
 # 产物自包含（7.2 批次 3 实测 568 KB）。主 wasm 零增长、零重链、零重配。
 #   ⇒ 所以 configure 里保持 `--without-sundials_*` 就行，**不必**改成 `--with-*`。
-#   （HANDOFF §10.6 第 1 项原写"重配 → 重编 → 重链"是按 configure 车道设想的；
+#   （HISTORY §10.6 第 1 项原写"重配 → 重编 → 重链"是按 configure 车道设想的；
 #     实车走 .oct 车道，更短也更安全：主 wasm 的字节数不变，回归面为零。）
 #
 # ── 7.2 踩过、这里原样保留的两个坑（build/CLIBS.md 批次 3）──────────────────
@@ -18,7 +18,7 @@
 #      `duplicate symbol: N_VGetVectorID_Serial`。⇒ 链接时**只给 -lsundials_ida**。
 #
 # ── 11.3.0 相对 7.2 的唯一差别 ─────────────────────────────────────────────
-#   CFLAGS 加 `-fwasm-exceptions`：11.3.0 全树用 wasm 原生异常（HANDOFF §10.3 坑 1），
+#   CFLAGS 加 `-fwasm-exceptions`：11.3.0 全树用 wasm 原生异常（HISTORY §10.3 坑 1），
 #   side module 必须同模型；C 代码里它近乎空操作，但保证了 EH 模型一致。
 #   （本目录其它 C 库 glpk/hdf5 也是这么编的，见 build-libs.sh:104。）
 #

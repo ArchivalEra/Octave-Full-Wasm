@@ -448,7 +448,7 @@ set -x
 # EXTRA_LDFLAGS：诊断/定点补救用（空格分隔的链接旗标）。
 #   当前用途：`-Wl,-u,dlsode_` —— 强制把 odepack 的入口从归档里拉进主模块
 #   （`lsode` 整页 trap 的候选根因：dlsode_ 没被链进来，调用落到空导入 → trap；
-#    与 HANDOFF §10.3 坑 3 的 zlib 完全同一类问题、同一个修法）。
+#    与 HISTORY §10.3 坑 3 的 zlib 完全同一类问题、同一个修法）。
 em++ --bind \
   "${DIAG[@]}" \
   "${SFLAGS[@]}" \

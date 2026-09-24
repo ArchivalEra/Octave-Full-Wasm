@@ -7,11 +7,11 @@
 > 容器里的同名件删除、`link-web.sh` 的 osmesa 分支删掉（给 `GL_BACKEND=osmesa` 会**明确失败**
 > 并指路到 git 历史的 `graphics-osmesa` / `graphics-osmesa-p5` 分支）、`main.cc` 去掉
 > `P5_OSMESA_TOOLKIT`、`__pb_real_renderer__` 白名单收成 `{"webgl"}`。
-> 详见 `HANDOFF.md` §5.21 与 `NOTES-webgl.md` §4.6。
+> 详见 `HISTORY.md` §5.21 与 `NOTES-webgl.md` §4.6。
 > **本文件仍然值得读**：那条线上的教训（`config.h` 必须最先 include、镜像层的由来、
 > A 档三道墙、`shared-glapi`/meson 的坑）**大部分对 WebGL 线同样成立**。
 
-> 计划里 P5 分三步，并**明确允许"只完成第 1 步并如实记录"**（HANDOFF §9.3）。
+> 计划里 P5 分三步，并**明确允许"只完成第 1 步并如实记录"**（HISTORY §9.3）。
 > 现状：**三步都做完了** —— 步骤① OSMesa 在 wasm 里渲出图形（硬断言）；
 > 步骤②③ `plot(...); drawnow` 走 Octave 自己的 `opengl_renderer` + OSMesa
 > **真渲出像素**，8763 上 `accept-p5-osmesa.mjs` **54 PASS / 0 FAIL**（该文件后来**改名** `accept-p5-graphics.mjs`，按站点自动选后端 —— 见 NOTES-webgl）。

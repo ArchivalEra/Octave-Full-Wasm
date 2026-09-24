@@ -1,4 +1,4 @@
-// 探针：`MAIN_MODULE=2`（DCE）下的**懒加载证据**（批次 C，HANDOFF §5.25）
+// 探针：`MAIN_MODULE=2`（DCE）下的**懒加载证据**（批次 C，HISTORY §5.25）
 // Copyright (C) 2026 ArchivalEra
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //

@@ -22,7 +22,7 @@
 #     >>> defined as (i32 ×17) -> i32 in __control_slicot_functions__.oct.o
 #     >>> defined as (i32 ×19) -> i32 in slicotlibrary.a(AB13DD.o)
 #
-# （与 HANDOFF §10.3 坑 13 / `patch-odepack-callback-arity.sh` 同类问题的另一个实例。）
+# （与 HISTORY §10.3 坑 13 / `patch-odepack-callback-arity.sh` 同类问题的另一个实例。）
 #
 # ── 做法 ────────────────────────────────────────────────────────────────────
 # 只在**声明**上补尾部参数，且给它们**默认值 1**：

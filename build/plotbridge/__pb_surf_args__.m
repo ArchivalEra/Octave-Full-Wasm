@@ -91,7 +91,7 @@ endfunction
 ## ⚠️ 上面一律用**字面矩阵**而不是 `{peaks (5)}` 这种写法：Octave 的 cell 字面量里
 ##    「函数名 + 空格 + (…）」会掉进**命令语法**（`{peaks (5)}` 实测是**两个**元素：
 ##    `peaks` 与 `5` —— 而 `peaks` 无参调用返回 49×49！）。这条坑本仓已经记过两次
-##    （`__svg_panel_boxes__.m:24`、HANDOFF §5.22 踩坑记），写测试时别再踩。
+##    （`__svg_panel_boxes__.m:24`、HISTORY §5.22 踩坑记），写测试时别再踩。
 %!error <colour-matrix form> __pb_surf_args__ ("surf", {[1 2; 3 4], [5 6; 7 8]})
 %!error <colour-matrix form> __pb_surf_args__ ("mesh", {[1 2; 3 4], [1 1; 1 1]})
 ## 注意两条会先被别的分支吃掉、落不到本断言上的写法：

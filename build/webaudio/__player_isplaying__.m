@@ -12,7 +12,7 @@ function tf = __player_isplaying__ (handle)
   if (id < 1), tf = false; return; endif
 
   ## ⚠️ 这个**谓词会推进状态**（tick）—— 因为本构建没有定时器，"播完了"只能被查出来
-  ##    （Octave 侧 `pause()` 期间页面事件循环完全停摆，见 HANDOFF §5.10）。
+  ##    （Octave 侧 `pause()` 期间页面事件循环完全停摆，见 HISTORY §5.10）。
   ##    以前这里是谓词自己算时长、自己写 Running/CurrentSample；那套逻辑现在只属于
   ##    __pba_transition__.m，这里只问结果。
   tf = __pba_transition__ (id, "tick");

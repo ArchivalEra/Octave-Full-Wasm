@@ -2,7 +2,7 @@
 // Copyright (C) 2026 ArchivalEra
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// 背景：HANDOFF §5.20 把桥 `figure; clf; surf(peaks(40))` 剩下的 ~480 ms 归因成
+// 背景：HISTORY §5.20 把桥 `figure; clf; surf(peaks(40))` 剩下的 ~480 ms 归因成
 // "镜像的两次 path() 手术"。2026-09-23 把那套手术换成**一次性句柄缓存**（`__pb_core__.m`）
 // 之后端到端只从 517 → 431 ms —— 说明那个归因是错的：端到端那个数被**冷启动**盖住了。
 // 所以本探针把①冷启动（第一次画图：建上下文/编 shader/首帧这些一次性成本）与

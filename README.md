@@ -6,7 +6,7 @@ SuiteSparse / ARPACK / FFTW / QHull / GLPK / HDF5、图像与音频 I/O、同步
 plot 桥 + `print -dsvg`。
 
 起点是 `rwl/octave-wasm`（BSD）的 7.2 骨架；**第四轮已换基线到 vanilla
-Octave 11.3.0 + emsdk 5.0.7**（计划见 `HANDOFF.md` §9，实况与坑见 §10）。
+Octave 11.3.0 + emsdk 5.0.7**（计划见 `HISTORY.md` §9，实况与坑见 §10）。
 构建产物（wasm/data/js）体积大，走 Release 分发，不进 git。
 
 ## 为什么是网页版
@@ -62,7 +62,7 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
 别在这里抄 —— 默认 toolkit = `webgl`）。
 **全量回归的套件数与项数以 `HANDOFF.md` 文末的 `AUTO:STATE` 区块为准** —— 那几件数字由
 `.githooks/update-handoff.py` 从部署件与最近一次全绿回归重算，本文不再抄一份（抄一份必烂）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
-（见 `build/GAPS.md` 的需求书与 `HANDOFF.md` §5 / §10 的结论表）。
+（见 `build/GAPS.md` 的需求书与 `HISTORY.md` §5 / §10 的结论表）。
 
 | 项 | 结果 |
 |---|---|
@@ -94,27 +94,27 @@ Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recom
   构建期用**真 makeinfo 预渲染** `built-in-docstrings`（与 Octave 自己的
   `mk-doc-cache.pl` 同一技术），运行时零新代码。`help sin`/`help sqrt`/`help disp` 可用。
   （**2026-09-23 更新**：`help ode45` 这类 `.m` 的 docstring 也修好了 —— 构建期预渲染 + 去标记，
-  见 HANDOFF §5.13；`accept-t9-helpm` 18/18。**该缺口已彻底消除。**）
+  见 HISTORY §5.13；`accept-t9-helpm` 18/18。**该缺口已彻底消除。**）
 - `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
 - **无 shell 的入口一律"清晰报错"**（2026-09-24 起，覆写层 `build/webshims/`）：
   `[st,out]=system(...)`/`unix(...)` 一向如此；`st = system(...)`、`system(...)`（无输出参数）、
-  `popen(...)` 这三条**以前静默返回 -1 / 静默通过**，现在同样抛清晰错误（HANDOFF §5.30，`accept-shellerr` 14 项）。
+  `popen(...)` 这三条**以前静默返回 -1 / 静默通过**，现在同样抛清晰错误（HISTORY §5.30，`accept-shellerr` 14 项）。
   ⇒ 这不只是措辞：**任何调 `system()` 的 `.m` 现在会明确失败，而不是悄悄拿到 -1 继续跑**。
-- ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（HANDOFF §5.15）：
+- ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（HISTORY §5.15）：
   `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全可用且数值正确
   （`step` 与解析解 `1-e^-t` 误差 1.1e-16）。
-- ~~`voronoi` 单输出形式（要画图）不可用~~ → **2026-09-24 已修**（桥支持 `plot(hax,…)`，HANDOFF §5.30）；两输出形式照旧。
+- ~~`voronoi` 单输出形式（要画图）不可用~~ → **2026-09-24 已修**（桥支持 `plot(hax,…)`，HISTORY §5.30）；两输出形式照旧。
 - **`print` 的矢量输出只有 plot 桥那一条路**（`-dsvg` 由桥自己的 `__svg_render__.m` 出）。
   Octave **核心**的 `print` 管线（`__opengl_print__.m`）要 **gl2ps + shell 管道 + (gs|svgconvert)**：
   gl2ps **2026-09-23 已补上**（`build/113/build-gl2ps.sh` + `configure-113-full.sh` 的
   `WITH_GL2PS=1`），但**"没有 shell"是本构建的有意设计**（`system`/`unix`/`popen` 清晰报错）
   ⇒ `print -dsvg` 仍报 `failed to open pipe "| cat > …"`，`-dpdf/-dps/-deps` 另需 gs。
-  **所以别把桥的数据管线当冗余砍掉**（详见 `HANDOFF.md` §5.20、`build/113/NOTES-webgl.md` §4.5.9–4.5.11）。
+  **所以别把桥的数据管线当冗余砍掉**（详见 `HISTORY.md` §5.20、`build/113/NOTES-webgl.md` §4.5.9–4.5.11）。
 
 ## 下一步（第三轮：浏览器环境语义）
 
 R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 API 怎么换成浏览器原生"**
-（完整计划见 `HANDOFF.md` §5.5）：
+（完整计划见 `HISTORY.md` §5.5）：
 
 **T1** `help`（构建期 makeinfo 预渲染）、**T2** graphics 句柄半真化（薄 `web` toolkit）、
 **T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`、
@@ -129,7 +129,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 `debian_missing_handler`（不属 Octave）。详见 `build/113/NOTES-coverage-100.md`。
 
 **非图形待办已清零**（2026-09-23/24）：`help` 覆盖 `.m` docstring 已完成（构建期预渲染，见
-`HANDOFF.md` §5.13）；**T9/G1 `MAIN_MODULE=2` + 保活清单也做成了** —— `octave.wasm` 从
+`HISTORY.md` §5.13）；**T9/G1 `MAIN_MODULE=2` + 保活清单也做成了** —— `octave.wasm` 从
 36.86MB 降到 **29.46MB**（含 FreeType + fontconfig），主模块导出名 44,987 → **703**，`.oct` 仍走资产车道懒加载。
 配方与 7 个坑见 `build/CLIBS.md`「批次 C · `MAIN_MODULE=2`」。
 
@@ -159,7 +159,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 > **已上线 8761**（换装脚本 `build/promote-webgl.sh`）：首包 gzip 9.62MB → 9.91MB。
 > **没有 WebGL2 的设备也能看见图**（2026-09-23 起）：浏览器拿不到 GL 上下文时（旧设备、
 > GPU 被 blocklist、`--disable-webgl`）桥把自己渲的 **SVG** 交给页面显示
-> —— 此前是『命令成功、页面静默空白』。见 `HANDOFF.md` §5.22 / `NOTES-webgl.md` §4.7。
+> —— 此前是『命令成功、页面静默空白』。见 `HISTORY.md` §5.22 / `NOTES-webgl.md` §4.7。
 > **文字渲染 + 字体匹配都有**（2026-09-24）：构建开 FreeType（批次 D）+ **fontconfig（R3）**，
 > 预载 Octave **自带**的 4 个 FreeSans 面 ⇒ 刻度/标题/图例都出字，且
 > `fontname`/`fontweight`/`fontangle` **真的改像素**、`listfonts()` 返回 `FreeSans`。
@@ -168,11 +168,11 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 > 证据：`test/browser/probe-text-render.mjs`（加 `title/xlabel` 后 `getframe` 非白像素 +2130，
 > 无 FreeType 时是 +0）。一手记录：`build/CLIBS.md`「批次 D」、`NOTES-webgl.md` §4.8。
 > 一手记录：**`build/113/NOTES-webgl.md`**（§4.5.12 / §4.5.13 / §4.6）、
-> `build/113/GRAPHICS-BRANCH.md`、`HANDOFF.md` §5.20 / §5.21。
+> `build/113/GRAPHICS-BRANCH.md`、`HISTORY.md` §5.20 / §5.21。
 
 ## 第四轮：已换基线到 **Octave 11.3.0**（2026-09-22 落地）
 
-计划见 `HANDOFF.md` §9，**实况、坑与结论见 §10**，外部事实依据 `build/BASELINE-11.3.md`。
+计划见 `HISTORY.md` §9，**实况、坑与结论见 §10**，外部事实依据 `build/BASELINE-11.3.md`。
 要点：
 
 - **收益**：11.x 的卷积快 10%–150×、`randi` 4.5×、logical 求和最高 6×；MATLAB 兼容
@@ -200,20 +200,21 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 
 <!-- AUTO:FILES -->
 - `.githooks/check-consistency.py` (7950 bytes)
-- `.githooks/check-handoff.py` (7961 bytes)
+- `.githooks/check-handoff.py` (8211 bytes)
 - `.githooks/check-wants.py` (8921 bytes)
 - `.githooks/check-whitelist.py` (1251 bytes)
-- `.githooks/handoff-context.py` (2903 bytes)
+- `.githooks/handoff-context.py` (2986 bytes)
 - `.githooks/handoff_facts.py` (7496 bytes)
 - `.githooks/install.sh` (388 bytes)
 - `.githooks/pre-commit` (694 bytes)
 - `.githooks/pre-push` (755 bytes)
 - `.githooks/update-handoff.py` (4836 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.gitignore` (2037 bytes)
+- `.gitignore` (2049 bytes)
 - `.zcode/config.json` (791 bytes)
-- `AGENTS.md` (2593 bytes)
-- `HANDOFF.md` (223458 bytes)
+- `AGENTS.md` (6045 bytes)
+- `HANDOFF.md` (67374 bytes)
+- `HISTORY.md` (155194 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (13046 bytes)

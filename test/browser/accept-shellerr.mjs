@@ -5,7 +5,7 @@
 // 用法：/mnt/hdd/octave-wasm-build/harness/run.sh test/browser/accept-shellerr.mjs [URL]
 //
 // ── 本套钉住什么 ──────────────────────────────────────────────────────────────
-// 缺口的形状（2026-09-24 实测，HANDOFF §5.29 R0/R1）：Octave 的 `system` 只有
+// 缺口的形状（2026-09-24 实测，HISTORY §5.29 R0/R1）：Octave 的 `system` 只有
 // **两输出**形态会走 `popen` 那条路并在失败时 `error`；`st = system(cmd)` / `system(cmd)`
 // 走"返回状态"那条路 —— 在无 shell 的构建里**静默拿到 -1 / 静默通过**。
 // `popen` 同理（内建直接返回 -1）。这与本项目"能做对就做对、做不了明确报错"相悖。

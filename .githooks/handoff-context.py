@@ -48,8 +48,9 @@ def main():
     # 先把机器块刷新（静默），这样注入的就是**当前**状态
     subprocess.run([sys.executable, os.path.join(REPO, ".githooks", "update-handoff.py"),
                     "--quiet"], cwd=REPO, capture_output=True)
-    ctx = ["[HANDOFF] 本仓库是浏览器版 Octave（wasm）。接续工作**先读 HANDOFF.md 的 §8**"
-           "（一句话接续 + 仍待办）与 §5.13–§5.21（近几轮实况）；铁律见 §0 与 AGENTS.md。",
+    ctx = ["[HANDOFF] 本仓库是浏览器版 Octave（wasm）。接续工作**先读 HANDOFF.md**"
+           "（活状态：§0 铁律 / §7 已知偏差 / §8 仍待办），历史与过程在 HISTORY.md"
+           "（第三轮 T1–T10、批次 A–E、图形线、§5.23–§5.32 的逐批实况）。",
            "当前部署状态（由 .githooks/update-handoff.py 从持久盘产物重算，**别手写**）："]
     ctx += ["  · " + r for r in state_lines()]
     ctx.append("改动前先读 §0 三条不可违背；验收底线是 8761 永不退化（先在 8768 上验）。")

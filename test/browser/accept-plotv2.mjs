@@ -241,7 +241,7 @@ await ev(`${reset} t = linspace(0,1,20); plot3(t, t.^2, t); print('/tmp/pv_deg3.
   '有意分歧：plot3(X,Y) 抬成 z=y（核心会报错，脚本里它是"这条线用 3D 看"）');
 await svg('/tmp/pv_deg3.svg', 'plot3(X,Y) 的抬升形态确实出了图', { poly: 1 });
 
-console.log('--- R4：plot/axis/hold/grid 的句柄优先形态（HANDOFF §5.29 R4）---');
+console.log('--- R4：plot/axis/hold/grid 的句柄优先形态（HISTORY §5.29 R4）---');
 // 起因：桥不支持 `plot(hax, …)` ⇒ `voronoi` 的**单输出**形态死在桥里（报一句看不出根因的
 // `X and Y sizes do not match`）。做法就是"和 xlim/ylim/title 同一种单面板语义"：
 // 首参是**当前 axes** 就剥掉照画；是别的 axes 就明确报错；**不是句柄**（含 `0` 与 figure）

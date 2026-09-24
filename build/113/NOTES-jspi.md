@@ -87,4 +87,4 @@ cd /mnt/hdd/octave-wasm-build/harness && node _jspi_run.mjs /mnt/hdd/octave-wasm
 - **浏览器下限**：本探针在 Chromium 152 上通过；按外部审核给的矩阵，
   部署要求 Chrome/Chromium ≥137、Firefox ≥153、Safari ≥27；**更老的浏览器没有 JSPI
   的 JS API**（探针会以退出码 2 如实说"未做判定"，而不是假绿）。
-- **不要**回退到 Asyncify：本仓已实测它与 `-fwasm-exceptions` 互斥（HANDOFF §5.11）。
+- **不要**回退到 Asyncify：本仓已实测它与 `-fwasm-exceptions` 互斥（HISTORY §5.11）。
