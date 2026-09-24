@@ -857,8 +857,14 @@ makeinfo 生成 doc-cache）。
   （`voronoi` 内部就是 `plot(hax, …)`，`hax = gca()`），**单输出可用**、两输出照旧。
   桥的判据同时**逐条对齐了核心**（`__plt_get_axis_arg__.m` 的 `scalar && ishghandle && != 0 && !isfigure`），
   所以 `plot(0)`/`plot(5)` 仍是"画数据"，`plot(别的 axes, …)` 才明确报错。
-  **仍缺**：`parent` 属性对形态（`plot(x,y,"parent",hax)`）与核心的 `legend` tag 支路不复制 ——
-  桥不做多面板（§5.30 写明了理由）。
+  **★ 2026-09-24 更正一句（当场量的，别照抄旧话）**：`parent` 属性对形态
+  （`plot(x,y,"parent",hax)`）**不是"不复制"** —— 真渲染器那条路是**核心在画**（镜像把原样
+  varargin 交给核心），实测 `drawnow` 之后图**正常出**、`getframe` 有墨（ink=12306）。
+  **真正的问题在桥自己的状态**：它对这一形态**静默多记了一条序列**
+  （同一条线：普通形态 `numel(__pstate__().series)` = **1**，`parent` 形态 = **2**）⇒
+  在**没有 GL 的设备上**（SVG 回落是**按桥状态**渲的）会多画一条不存在的线。
+  这是"静默曲解"那一类（批次 B 的靶子），**尚未修**；修法很小：在 `plot.m` 里认出
+  `"parent"` 属性对（值是 `gca()` 就剥掉、别的句柄就明确报错）。
 - nan / tsa 的 MEX 源、miscellaneous 的 `sample.cc`/`text_waitbar.cc` 未编入。
 - **句柄/对话框一族：大部分已能用**（2026-09-24 实测更正 —— 以前整条记成"未做，归图形分支"）。
   真渲染器（`webgl`）上线后，`accept-p5-graphics` 那套断言之外我又逐条实测了一遍
