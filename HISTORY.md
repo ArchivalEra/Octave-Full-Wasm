@@ -2175,6 +2175,69 @@ Firefox ≥153 / Safari ≥27），而不是让用户撞上 `TypeError: WebAssem
 
 ---
 
+### 5.45 G1 复现阶梯 v1–v13：把**旗标/语言层面全部排除**，把机制锁定到"dlopen × JSPI"（2026-09-24 深夜）
+
+容器里写十几行的 embind async 程序（`/src/websrc/embind-repro{,-out}/`，13 个变体），**一次只加一个配料**，
+每档都在浏览器里实测（`await Module.f(...)` 能不能 settle）。**逐档结果**：
+
+| 变体 | 内容 | 结果 |
+|---|---|---|
+| v1 | `-lembind -sJSPI` | ✅ Promise → 42 |
+| v2 | `+ -sMAIN_MODULE=2 -sALLOW_TABLE_GROWTH=1` | ✅ 正常 ⇒ **M2 的 DCE 不是元凶**（原主嫌疑推翻） |
+| v3 | **不开** `-sJSPI`（对照） | 返回**同步值**（`isPromise=false`）⇒ `-sJSPI` 就是"返回 Promise"的开关 |
+| v4 | `+ -sJSPI_EXPORTS=<不存在的名字>` | ✅ 正常 ⇒ 列不存在的导出名**无害** |
+| v5 | `+ std::string` 参数（照抄 `eval_string` 签名） | ✅ 正常 |
+| v6 | `+ -fwasm-exceptions` | ✅ 正常 ⇒ JSPI + wasm EH 在最小规模下没问题 |
+| v9 | 同一函数、同 arity、**一同步一异步两个名字** | ✅ 都正常 |
+| v10 | v9 + **真 side module + `dlopen`**，先调同步绑定 `callSide(1)` | ❌ 同步绑定抛 **`SuspendError: trying to suspend without WebAssembly.promising`**；而 `async_f` 仍正常 ⇒ **链里有 dlopen ⇒ 上游整条入口都可能挂起、不能被同步调** |
+| v11a | **异步绑定 + 内部 dlopen** | ✅ Promise → 2；且**先调它之后**，同一产物里的**同步** `callSide` **也不再抛** ⇒ **顺序即机制** |
+| v11b / v12 | v11a + 各种冗余/不存在的 `JSPI_EXPORTS`；v12 再把 `EXPORTED_*` 收窄成 `link-web.sh` 口径 | ✅ 正常 ⇒ **旗标层面全部排除** |
+| **v13** | **静态初始化里就用同步路径 dlopen**（照抄真产物时序） | ❌ **页面起不来**（`ready=false`），pageerror 正是 `SuspendError` |
+
+**由此得到三条机制**（都写进了 NOTES-jspi）：① dlopen ⇒ 上游入口变"可能挂起"、不能同步调；
+② **顺序即机制**（先走一次 promising 入口，之后同步 dlopen 就正常）；③ 启动路径碰 dlopen 会要命。
+**顺带实测一笔**：`-sEXPORTED_RUNTIME_METHODS` 写不存在的名字是**编译期硬错**（`undefined exported symbol`），
+与 `-sJSPI_EXPORTS` 写不存在的名字（无害）**行为不一样**，别当同一类。
+
+### 5.46 ★ G1 真产物实测：**`-sJSPI` 从来没进过链接**；而 `RuntimeError: null function` **根本不是 JSPI 的问题**（2026-09-24 深夜）
+
+**这一节推翻 §5.43 的两个前提。** 做法：把留档的坏产物（`o113:/src/websrc/m2fc-jspi-out/`，sha `c93c4453…`）
+取到宿主起**独立车道**（8769），另做三个变体页（8770 = git `e71f4ae` 那版页、8771 = 现役页 + `execute_interp()`
+**之前**插一句同步 `eval_string`、8772 = 同位置插 `eval_async`）。**8761/8768 一个字节没动。**
+
+**发现 ①（真 bug）：`WITH_JSPI=1` 从来没把 `-sJSPI` 传给 em++ ⇒ 那个产物根本不是 JSPI 产物。**
+判据是一条 `grep`（见 NOTES-jspi）：`-sJSPI` 产物 `jspi-probe/main.js` 里有
+`WebAssembly.promising` + `new WebAssembly.Suspending`；**坏产物 `octave.js` 里 0 处**
+（它那 3 个 `jspi` 全是路径串 `m2fc-jspi-out`）。根因：`link-web.sh` 里 `JSPI_FLAGS` 只在
+`WITH_JSPI=1` 分支**赋值**，而 `em++` 那条**链接行从来没有引用它** —— 只有 `JSPI_DEF`（宏）用在了
+`main.cc` 的**编译**行。浏览器侧佐证：`Module.eval_async('1')` 返回 **`0`（number）不是 Promise**
+⇒ embind 的 `isAsync` 被无视（`createJsInvoker` 里 `ASYNCIFY != 2` 时该分支不生成）。
+
+**发现 ②（比 ① 值钱）：`RuntimeError: null function` 与 JSPI 无关 —— 是"在 `execute_interp()` 之前碰解释器"。**
+| 车道 | 第一次解释器调用的位置 | 结果 |
+|---|---|---|
+| 8771 | 早（**同步** `eval_string`） | ❌ `null function`；**boot 之后**再调 `2+2` → rc=0 |
+| 8772 | 早（`eval_async`） | ❌ **同样** `null function` |
+| 8769 | 正常顺序（postRun 里的 `execute_interp()`） | ✅ `BOOT OK: 1.1s`，随后三例 `eval_async` 全返回数字、解释器存活 |
+| 8770 | 早（e71f4ae 开机自动冒烟，**无 try/catch**） | ❌ **逐字复现事故**（不 ready + `null function`） |
+
+⇒ **同步与异步入口炸得一模一样**，所以这不是 JSPI 的性质，而是"解释器还没装配好"。
+**事故的真实形状**：冒烟在 postRun 头部调 `eval_async` 且**没有 try/catch** ⇒ 异常打断 postRun 剩下的
+所有步骤 ⇒ `__octaveReady` 永远 false ⇒ "页面卡死"。
+
+**改正 §5.43 的说法**：原文"产物层面：`eval_async` 一调就炸"——**不准确**，
+它一调就炸的原因是**调用时机**（在 `execute_interp()` 之前），而且在那个产物上它**本来就不是异步的**。
+"探测不能放开机路径"这条教训**仍然成立**，但要补一条：**开机路径上的探测必须 try/catch、且不得早于
+`execute_interp()`**。
+
+**已落地的修复**：`build/113/link-web.sh` 的 `em++` 链接行补上 `${JSPI_FLAGS[@]}`（默认关闭时是空数组，
+**不影响现役产物**）；并在该文件里加了一条**旗标生效自检**（见 §5.46 同日的代码改动）。
+
+**下一步（改写后的顺序）**：① 重链 `WITH_JSPI=1`，先验**胶水里有 `WebAssembly.promising`**（比任何浏览器
+断言都便宜）；② 再跑三例（`42` / `pause(0.2); 43` / `error('x')`）；③ 之后才轮到 G2。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

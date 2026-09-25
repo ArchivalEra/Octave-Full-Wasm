@@ -12,11 +12,15 @@
 > **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
 > `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
 > `PLAN-next.md` 的**七件小口子全部收口**（1 件实测翻案 + 6 件真做成，含**重链**做的 IDBFS 持久化
-> 与 FreeMono）；`PLAN-jspi.md` 的 **G0 能力门 + D1–D8 已完成**，**G1 还在查**：第一次尝试失败已回退，
-> 随后用**最小复现把旗标层面全部排除**（**M2 不是元凶**），并把机制锁定到 **"JSPI × dlopen"**
-> （三条机制见 §7）——**JSPI 车道默认关闭**（`WITH_JSPI=0`）。⇒ **唯一工作令是
-> [`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md) §0.5**，**下一步三候选**（(b) 免重链最便宜 /
-> (a) 找真正的导出名 / (c) 走不通才要人拍板）见 §8。
+> 与 FreeMono）；`PLAN-jspi.md` 的 **G0 能力门 + D1–D8 已完成**。
+> **★ G1 于 2026-09-24 深夜翻案（HISTORY §5.46，两个实测发现）**：① **`WITH_JSPI=1` 从来没有把
+> `-sJSPI` 传给链接** —— 那个"坏产物"的胶水里连 `WebAssembly.promising` 都没有
+> ⇒ **第一次"失败"测的是一件不存在的东西**（`link-web.sh` 已修 + 已加旗标自检）；
+> ② **`RuntimeError: null function` 与 JSPI 无关** —— 它是**「在 `Module.execute_interp()` 之前
+> 碰解释器」**，同步 `eval_string` 与 `eval_async` **炸得一模一样**；事故的真实形状是"开机冒烟
+> 没有 try/catch ⇒ 打断 postRun ⇒ 页面永远到不了 ready"。⇒ **下一步只有一条**：
+> **重链一版真带 `-sJSPI` 的产物、先 `grep WebAssembly.promising` 验胶水**（§0.5 修正段）。
+> **JSPI 车道仍默认关闭**（`WITH_JSPI=0`；关掉时 `JSPI_FLAGS` 是空数组 ⇒ **不影响现役产物**）。
 > 全量与部署 sha **见文末 `AUTO:STATE`**（机器维护，别在这里手写）。
 >
 > ⚠️ **动手前必须知道的八条**：
@@ -740,11 +744,14 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
        （v13，这是个能复现"页面起不来"的最小例子）。
     ⇒ 我们那条链的形状正是②③的反面：`main.cc` 的启动序列用**同步**入口装载 `.oct`（=dlopen），
     而 `-sJSPI_EXPORTS=eval_async` 里那个是 **embind 的 JS 名字、不是 wasm 导出名**。
-    **下一步三候选（§8 有同样一份）**：(a) `--emit-symbol-map` 找**真正的导出名**列进
-    `-sJSPI_EXPORTS`；(b) **把启动期 `.oct` 装载挪到"首次 promising 入口之后"**（先 `await
-    eval_async("1")` 预热；**这条不用重链，最便宜**）；(c) 都不行 ⇒ 回到要人拍板的分叉。
+    ~~**下一步三候选**：(a) `--emit-symbol-map` 找真正的导出名；(b) 把启动期 `.oct` 装载挪到
+    "首次 promising 入口之后"；(c) 回到要人拍板的分叉。~~
+    **★ 这三条已被 §5.46 取代**：那次"失败"的产物里**根本没有 `-sJSPI`**
+    （`JSPI_FLAGS` 赋值了却没被链接行引用）⇒ 三条候选**都还没到能选的时候**。
+    正确的下一步只有一条：**重链真带 `-sJSPI` 的产物，先 `grep WebAssembly.promising` 验胶水**。
     **复现资产**：容器 `/src/websrc/embind-repro{,-out}/`（13 个变体）+ 浏览器 runner
-    `harness/_embind.mjs`（自host + playwright，含"卡住"超时兜底）。
+    `harness/_embind.mjs`（自host + playwright，含"卡住"超时兜底）；真产物侧宿主
+    `site-jspi-bad/` + **8769/8770/8771/8772 四条对照车道**（§5.46 那四个页面，复跑见 NOTES-jspi）。
 - ~~**我们的 toolkit 缺核心内部属性**（2026-09-24 初判）~~ → **同日实测翻案：不是缺口，未做改动**。
   `isprop(gca,'__legend_handle__')` 为 **0** 是**上游语义**：这些名字由核心在**用到它们的那一刻**
   用 `addproperty` 现加（`legend.m:286`、`plotyy.m`、`colorbar.m`），没建过 legend 的 axes 上本就
@@ -856,25 +863,41 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      **D9** 门接线（随 G3/G5）。
    · **JSPI 主线（关键路径，顺序就是 `PLAN-jspi.md` §0.5）**：
      ✅ **G0 能力门**（两个独立 gate，**按需**触发、不弹假警报；`probe-jspi-gate.mjs` 12 项绿）。
-     ⛔ **G1 `eval_async` 第一次尝试失败、已回退**（`RuntimeError: null function` + 卡死页面；
-     **8761 一个字节没动**）。**JSPI 车道默认关闭**（`WITH_JSPI=0`）、绑定在
-     `#if defined(JSPI_EVAL_ASYNC)` 里；关掉后重链**逐字节复现现役 wasm**（`4faaa96d…`）。
+     ⛔ **G1 `eval_async` 第一次尝试失败、已回退**（当时记成"`RuntimeError: null function` + 卡死页面"；
+     **8761 一个字节没动** —— 但**那个说法已被 §5.46 推翻**，见下面 ③）。
+     **JSPI 车道默认关闭**（`WITH_JSPI=0`）、绑定在 `#if defined(JSPI_EVAL_ASYNC)` 里；
+     关掉后重链**逐字节复现现役 wasm**（`4faaa96d…`）。
      ▶ **下一步（按顺序）**：
      ✅ **① D8 开机自检**（已做完 `78eb1d0`：`build/check-boot.sh`，30 秒，已接进 promote 流程；
      绿 1.6s + 两条红对照见 HISTORY §5.44）；
      ✅ **② G1 最小复现**（已做完 v1–v13：**旗标层面全部排除、M2 不是元凶**；机制锁到
      "JSPI × dlopen"，三条机制见 §7 与 `NOTES-jspi.md`）；
-     ▶ **③ 修法三候选（按便宜排序，谁先都行，别再重查机制）**：
-     **(b) 不用重链** —— 把**启动期的 `.oct` 装载挪到"首次 promising 入口之后"**
-     （页面先 `await Module.eval_async("1")` 预热，再走同步装载），拿**那个坏产物**直接试 ——
-     这条验证"顺序即机制"在真产物上成不成立；
-     **(a)** `--emit-symbol-map` + 查 wasm 导出表，把**真正被同步调用的导出名**列进
-     `-sJSPI_EXPORTS`（而不是 embind 的 JS 名 `eval_async`），重链后跑
-     `probe-jspi-eval.mjs` 三例（42 / `pause(0.2);42` 期间页面 timer 在跑 / `error('x')` ⇒ reject）；
-     **(c) 需要人拍板的分叉**：(a)(b) 都不行才走 —— 退"JS 侧队列 + 同步入口"（放弃 `pause`
-     中途等待）或单开 `MAIN_MODULE=1` 车道；
-     **④ G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ **⑤ G3/G4/G5/G6** → **⑥ D5–D7**。
-     教训：**"探测可能卡住主线程的东西不能放在开机路径上"**（HISTORY §5.43）。
+     ✅ **③ G1 真产物实测（候选 (b) 那一轮）** —— **两个发现，把 ① 的两个前提都推翻了**
+     （HISTORY §5.46，NOTES-jspi 有复跑命令）：用留档坏产物（`c93c4453…`）起独立车道 8769 +
+     三个变体页 8770/8771/8772，**8761/8768 一个字节没动**：
+     · **发现 ①（真 bug）**：`WITH_JSPI=1` **从来没把 `-sJSPI` 传给链接** ——
+       `JSPI_FLAGS` 只在分支里赋值、`em++` 链接行没引用它（只有 `JSPI_DEF` 用在了 `main.cc`
+       的**编译**行）⇒ 胶水里连 `WebAssembly.promising` 都没有、`eval_async('1')` 返回 `0`
+       而不是 Promise。**⇒ 那次"失败"测的是个不含 JSPI 的产物。**
+       **已修**：链接行接上 `${JSPI_FLAGS[@]}` + **新增旗标自检**（`grep WebAssembly.promising`，
+       不过就 `exit 3`）。
+     · **发现 ②**：`RuntimeError: null function` **与 JSPI 无关**，是
+       **"在 `Module.execute_interp()` 之前碰解释器"** —— 8771（早调**同步** `eval_string`）与
+       8772（早调 `eval_async`）**炸得一模一样**；**8769（正常顺序）绿**、之后三例全返回数字；
+       8770（e71f4ae 那版**无 try/catch** 的开机冒烟）**逐字复现事故**。
+       **⇒ 事故形状 = "冒烟抛异常打断 postRun ⇒ `__octaveReady` 永远 false"，不是"绑定坏"。**
+       页面侧护栏（`__octaveJspiProbe` **先等 `__octaveReady` 再调**，免得把"叫早了"误判成 `fail`）
+       **已写好但有意推迟到本批之外** —— 改 `bridge/index.html` 要走完整 promote 周期（否则两站点一致性
+       闸门红），而它对现役产物**零影响**（现役无 `eval_async` ⇒ 走 `no-entry` 早退）
+       ⇒ **并进 ④ 那一批一起部署**。
+     ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
+     **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
+     → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。
+     **只有这一步做完**，§7 那三条机制与"(a) 真导出名 / (b) 顺序预热 / (c) 人拍板分叉"
+     才有资格被讨论。
+     **⑤ G2**（`pause`+EH/SjLj 压力矩阵，**真正的风险点**）→ **⑥ G3/G4/G5/G6** → **⑦ D5–D7**。
+     教训（§5.43，仍成立且要加一条）：**"探测可能卡住主线程的东西不能放在开机路径上"**；
+     **开机路径上的任何探测都必须 try/catch，且不得早于 `execute_interp()`**。
    · **先做"小口子"**（不碰 wasm、风险最低）：
      ✅ **1）toolkit 内部属性** → **实测不是缺口、未做改动**（与宿主三个 toolkit 逐格差分 0 差异，
      见 §7；钉子 `probe-internal-props.mjs`，11 项全绿）。

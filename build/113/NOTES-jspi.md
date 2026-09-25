@@ -204,3 +204,61 @@ cd /mnt/hdd/octave-wasm-build/harness && node _jspi_run.mjs /mnt/hdd/octave-wasm
 2. **把启动期的 `.oct` 装载挪到"首次 promising 入口之后"**（v11a 的顺序）——例如启动序列先
    调一次 `await eval_async("1")` 预热，再走同步装载；这条即使第 1 条不成也能单独试。
 3. 若两条都不行 ⇒ 回到工作令 §0.5 那个**要人拍板的分叉**（JS 队列 / 单开 M1 车道）。
+
+---
+
+## G1 真产物实测（2026-09-24 深夜，候选 (b) 那一轮）：**两个发现 —— 旗标从未生效；"null function" 跟 JSPI 无关**
+
+**做法（不重链、不碰 8761/8768，独立车道）**：把留档的坏产物
+（`o113:/src/websrc/m2fc-jspi-out/octave.{wasm,js,data}`，sha `c93c4453…`）取到宿主
+`site-jspi-bad`，起 8769；另做三个变体页起 8770/8771/8772。
+
+### 发现 ①（真 bug）：`WITH_JSPI=1` **从来没有把 `-sJSPI` 传给 em++** ⇒ 那个产物根本不是 JSPI 产物
+
+**判据（可复跑，一条命令）**：
+```sh
+grep -o 'WebAssembly\.promising\|WebAssembly\.Suspending' <octave.js>
+# 已知 -sJSPI 产物 jspi-probe/main.js → 1×promising + 1×new Suspending
+# 坏产物 octave.js               → **0 处**（它里面 3 个 "jspi" 全是路径串 m2fc-jspi-out）
+```
+- **根因**：`build/113/link-web.sh` 里 `JSPI_FLAGS=( -sJSPI -sJSPI_EXPORTS=eval_async )` 只在
+  `WITH_JSPI=1` 分支**赋值**，而那条 `em++ --bind …` **链接行里从来没有引用 `${JSPI_FLAGS[@]}`**
+  （只有 `JSPI_DEF` 用在了 `main.cc` 的**编译**行）⇒ 宏进了 C++、**旗标没进链接**。
+- **浏览器侧佐证**：坏产物上 `Module.eval_async('1')` 返回 **`0`（typeof `number`）**，不是 Promise
+  ⇒ embind 的 `isAsync` 被无视（`libembind_shared.js` 的 `createJsInvoker`：`ASYNCIFY != 2` 时
+  `isAsync` 那个 `rv.then(onDone)` 分支**根本不生成**，函数就是普通同步 invoker）。
+- **⇒ G1 第一次"失败"测的是一件不存在的东西。** 之前记的"嫌疑①②"（M2 的 DCE 削掉 async thunk /
+  invoker 要进 `JSPI_EXPORTS`）**没有被证伪，只是从来没被测到** —— 它们的验证要等旗标真传进去。
+
+### 发现 ②（比 ① 更值钱）：`RuntimeError: null function` **与 JSPI 无关** —— 是"在 `execute_interp()` 之前碰解释器"
+
+同一产物、四个页面，**唯一变量 = 第一次解释器调用发生在什么时候**（全部实测，Chromium 152）：
+
+| 车道 | 页面 | 第一次解释器调用 | 结果 |
+|---|---|---|---|
+| 8771 | 现役页 + 在 `execute_interp()` **之前**插一句 `Module.eval_string("42")` | 早（**同步** `eval_string`） | ❌ `THROW: RuntimeError: null function`；**boot 之后**再调 `eval_string('2+2')` → **rc=0** |
+| 8772 | 同上，插的是 `Module.eval_async("42")` | 早（`eval_async`，实为同步） | ❌ **`RuntimeError: null function`**（一模一样） |
+| 8769 | **现役页原样**（第一次解释器调用 = postRun 里的 `execute_interp()`） | 正常顺序 | ✅ `BOOT OK: 1.1s`；之后三例 `eval_async`（`42`/`pause(0.2); 43`/`error("boom")`）**全返回数字**（`0`/`0`/`2`），解释器存活 |
+| 8770 | **e71f4ae 那版页**（开机自动冒烟，第一步就调 `eval_async`，**无 try/catch**） | 早 | ❌ **逐字复现事故**：30 s 不 ready、`pageerror: RuntimeError: null function`、连同步 `eval_string(42)` 也 `null function` |
+
+★ **机制**：解释器入口（`eval_string` / `eval_async` / `feval`）在 **`Module["execute_interp"]()` 之前不可调用**
+—— 那之前 Octave 的 `interpreter` 还没装配，被调到的函数指针是空的 ⇒ `null function`。
+**同步入口与异步入口炸得一模一样** ⇒ **这条不是 JSPI 的性质**。
+★ **事故的真实形状**：e71f4ae 的冒烟在 postRun **头部**调 `eval_async` 且**没有 try/catch**
+⇒ 异常打断 postRun **剩下的所有步骤** ⇒ `__octaveReady` 永远 false ⇒ "页面卡死"。
+原来记的"JSPI 绑定坏 + 探测不能放开机路径"：**前半句错了**（绑定根本没编进去），
+**后半句仍然成立**；正确的教训要多一条：**开机路径上的任何探测都必须 try/catch，且不得早于 `execute_interp()`**。
+
+### 对下一步的影响（据此改写 `PLAN-jspi.md §0.5` 的顺序）
+
+1. **先修旗标**：把 `${JSPI_FLAGS[@]}` 真正接进 `link-web.sh` 的链接行，重链一版 `WITH_JSPI=1`，
+   先验**"胶水里出现 `WebAssembly.promising`"**（比任何浏览器断言都便宜，而且正是这次漏掉的一环）。
+2. **再谈机制**：旗标真进去之后再跑三例（`42` / `pause(0.2); 43` / `error('x')`）。
+   **v1–v13 那十三档复现仍然有效**，但它们排除的是"最小规模下旗标组合的问题"，
+   **从来没有排除"我们真产物里旗标没生效"**这一档。
+3. 页面侧顺手两件事：冒烟/预热类调用**一律 try/catch**；**不得早于 `execute_interp()`**
+   （真要预热，就放在 postRun 里 `execute_interp()` **之后**、第一批资产装载**之前**）。
+4. **页面侧的护栏有意推迟到本批之外**：`__octaveJspiProbe` 里"先等 `__octaveReady` 再调"那 6 行
+   **改好又回退了** —— 因为改 `bridge/index.html` 必须走完整 promote 周期（否则两站点
+   一致性闸门直接红），而它对**现役产物**是**零影响**（现役没有 `eval_async`，走 `no-entry` 那条早退路）。
+   ⇒ **并进 G1 重做那一批一起部署**。

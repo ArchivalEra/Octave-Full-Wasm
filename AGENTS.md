@@ -71,4 +71,14 @@ python3 .githooks/check-whitelist.py         # 白名单覆盖
 - **两处旗标不对称**：`-sEXPORTED_RUNTIME_METHODS` 写不存在的名字是**编译期硬错**（并中止编译）；
   `-sJSPI_EXPORTS` 写不存在的名字**无害**。`--preload-file` 按**第一个 `@`** 切 `src@dst`
   （`m/@ftp` 源路径自带 `@` ⇒ 整棵 m 树曾被复制错位，见 HISTORY §5.13）。
+- ★ **"赋值了但没被引用"的旗标会静默失效**（2026-09-24 深夜，HISTORY §5.46）：
+  `link-web.sh` 里 `JSPI_FLAGS` 只在分支里赋值，而 `em++` **链接行从来没引用它**
+  ⇒ `WITH_JSPI=1` 的产物里**宏进了 C++、`-sJSPI` 没进链接**，构建/链接/五条自检**全绿**，
+  浏览器侧却把"绑定不异步"当成"JSPI 坏了"，白查一晚。
+  ⇒ **改旗标组之后，必须有一条"从产物里读出来"的自检**（这里就是
+  `grep -o 'WebAssembly\.promising' "$OUT/octave.js"`）；**只信命令行的旗标组不算验收**。
+- ★ **`Module.execute_interp()` 之前不许碰解释器**（同上，§5.46）：那之前的 `eval_string` /
+  `eval_async` / `feval` **一律抛 `RuntimeError: null function`**（同步异步一样）。
+  开机路径上的任何探测/预热**必须 try/catch**，否则异常会打断 `postRun` 剩下的步骤
+  ⇒ `__octaveReady` 永远 false ⇒ **页面看起来"卡死"**（G1 那次事故的真身）。
 - 结论只认**产物**：`sha256sum`、`sweep-logs/<时间戳>/`、探针输出；不认印象。
