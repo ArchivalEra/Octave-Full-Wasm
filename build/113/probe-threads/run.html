@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- Octave-Full-Wasm — E3 探针宿主页：pthread × 运行期 dlopen
+     Copyright (C) 2026 ArchivalEra · SPDX-License-Identifier: AGPL-3.0-or-later
+     ⚠️ 两个硬约束：
+       ① **必须是顶层页**（实测：顶层未 COI 时，iframe 自带 COOP/COEP 无效 ⇒ SAB 缺席）；
+          runner 自托管时给这个页注入 COOP/COEP。
+       ② 非模块化胶水**污染全局作用域**（自带 run/doRun/Module/…）⇒ 自定义名字一律 e3 前缀。 -->
+<meta charset="utf-8">
+<title>E3 · pthread × dlopen</title>
+<body style="font:13px monospace">
+<pre id="out">booting…</pre>
+<script>
+window.__e3Result = null;
+window.__e3Error = null;
+var e3Log = [];
+function e3Say(s) { e3Log.push(String(s)); if (e3Log.length > 200) e3Log.shift(); }
+function e3Done(o) {
+  window.__e3Result = o;
+  document.getElementById('out').textContent = JSON.stringify(o, null, 1).slice(0, 2000);
+}
+
+window.Module = {
+  print: e3Say, printErr: e3Say,
+  onRuntimeInitialized: function () {
+    setTimeout(function () {          // 让池里的 pthread worker 先就绪（池预热是异步的）
+      e3Main().catch(function (e) { window.__e3Error = String(e); e3Done({ error: String(e) }); });
+    }, 500);
+  },
+};
+
+// 把 side module 写进虚拟 FS —— 这是 dlopen 能找到它的前提
+// （probe-jspi 的 runner 也是这么做的；忘了这步会得到
+//  "file not found, and synchronous loading of external files is not available"）。
+async function e3Main() {
+  var buf = await (await fetch('side.wasm')).arrayBuffer();
+  Module.FS.writeFile('/side.wasm', new Uint8Array(buf));
+  var pre = {
+    coi: self.crossOriginIsolated,
+    sab: typeof SharedArrayBuffer,
+    sabNew: (function () { try { new SharedArrayBuffer(8); return 'ok'; } catch (e) { return 'throw:' + e.name; } })(),
+  };
+  var t0 = performance.now();
+  var ok = Module._e3_run(100);                    // 期望 100
+  var t1 = performance.now();
+  var missing = Module._e3_dlopen_missing();       // 期望 0（反向断言）
+  var busy = Module._e3_busy_counter();
+  e3Done({ pre: pre, ok: ok, missing: missing, busy: busy,
+           runMs: Math.round(t1 - t0), totalMs: Math.round(performance.now() - t0),
+           log: e3Log.slice(-8) });
+}
+</script>
+<script src="main.js"></script>

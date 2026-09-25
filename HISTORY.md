@@ -2428,6 +2428,55 @@ M2 车道 `GL_OUT=$SRC_OUT`、测试用例从仓库原路径直跑（勿 cp 到 
 
 ---
 
+### 5.53 线程化/并行度第一批实验：Q4 / E3 / E1 三探针（2026-09-25，branch `Slay`）
+
+**背景**：`/goal 完成所有todo` 收口后，用户转新方向「浏览器内的多线程 Octave 探索」+「把 DOM 这块蛋糕吃了」
+（教材站嵌入）。先出**第四轮去身份化评审书**（`build/113/GPT-REVIEW-4-threads.md`，C1–C7 + Q1–Q12），
+外部评审回来后**逐条复核并实测**（`build/113/GPT-REVIEW-4-threads-reply.md`），再按 `PLAN-threads.md`
+做掉第一批三件。**产物零改动**：8761 全程未动（现役 `45d288b1…`）。
+
+**① Q10 实测（推翻我自己的判断）**：`test/browser/probe-iframe-coi.mjs` 九格矩阵 **6 PASS / 0 FAIL** ——
+未 COI 的顶层里，iframe 自己带 COOP/COEP **完全无效**（同源、跨源都一样），`allow="cross-origin-isolated"`
+也不起作用 ⇒ **C7（自有 origin 跨源 iframe）否决**（外部评审的判定成立，我原来的判断错了）。
+**但实测挖出一条评审没列的路（记为 C8）**：顶层用 **credentialless** 隔离 ⇒ 宿主 COI ⇒ PreTeXt 生成的
+**同源 iframe 继承 COI**（SAB 与 iframe 内 worker 的 SAB 都可用），且 credentialless **不拦 CDN**
+（同一条无 CORP 跨源脚本：require-corp 下 `ERR_BLOCKED_BY_RESPONSE`，credentialless 下正常加载）。
+
+**② Q4（JSPI × DedicatedWorker）= 6/0**：B 姿势手搓 JSPI 在 worker 里挂起/恢复 **100/100**、tick 真递增、
+反向断言（未包 promising 直调）照常抛 `SuspendError` ⇒ **C3 的最后一个未知数清除**。
+产物：`build/113/probe-jspi-worker*`、runner `test/browser/probe-jspi-worker.mjs`。
+
+**③ E3（pthread × dlopen）= 6/0**：`-pthread -sSHARED_MEMORY -sMAIN_MODULE=2` + side 同带 `-pthread`，
+2 个 pthread 存活时 100 轮 `dlopen/dlsym/dlclose` 全成功、无死锁（totalMs=28），
+反向断言（dlopen 不存在的模块）照常失败 ⇒ **emscripten#9582 的"硬互斥"在 5.0.7 已不成立**
+（现代官方文档化但仍标 experimental）。产物：`build/113/probe-threads*`、runner
+`test/browser/probe-threads.mjs`；runner 必须给**顶层页**注入 COOP/COEP。
+
+**④ E1（`-msimd128`）= 绿**：新脚本 `build/113/build-blas-simd.sh` 只给 refblas/lapack 的**每个 TU** 注入
+`-msimd128`（wasm SIMD 是逐 TU codegen，混编是 `wasm-ld` 默认路径），落 `/src/deps/lapack-simd`（**不覆盖 `/usr/local`**）；
+重链用权威口径 + `WITH_JSPI=1 WITH_FONTCONFIG=1` + `EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`
+（该口子在 `LIBS` 之前 ⇒ 赢搜索顺序）→ `/src/websrc/m2fc-simd-out`，`BASELINE_WASM` 取**现役** `m2fc-jspb-out/octave.wasm`。
+**决定性验证**：`llvm-objdump -d | grep -c v128`：SIMD 产物 **4752** vs 基线 **0**（体积 29,632,229 vs 29,464,307）。
+DGEMM 中位数（3 次，`test/browser/bench-dgemm.mjs`，独立车道 8771 vs 基线 8768）：
+**512² 1.62×、1024² 1.75×、2000² 1.31×**；数值回归 5 套 **97 PASS / 0 FAIL**（boot/libs/hdf5/slicot/ode15）
+⇒ 判据"数值全过 且 ≥1 主要尺寸 ≥1.5×"达成。
+
+**本轮踩到的三个新坑（都已在产物注释与 NOTES-threads.md 记档）**：
+1. `-sENVIRONMENT=worker` **单独指定会打坏开机**：`initRuntime → _environ_get` 抛
+   `RangeError: Maximum call stack size exceeded`（页面对照组同样复现 ⇒ 与 worker 无关）⇒ 用默认环境。
+2. **非模块化胶水污染全局**（自带 `run/doRun/Module/FS`）：宿主页/worker 把自己的函数命名成 `run`
+   ⇒ 覆盖胶水的 `run()` ⇒ 重入 `initRuntime` ⇒ 同一个 `RangeError`（栈顶显示 `_environ_get`，极具误导性）
+   ⇒ 自定义名字必须加前缀。
+3. `grep -c simd128 <wasm>` 当 SIMD 判据**无效**（两版都没有 `target_features` 段，命中数都是 0）
+   ⇒ 只能反汇编数 `v128`。
+
+**结论与下一步**：C4 是"最便宜的真提速"（不需 COI/SAB/宿主改动，且 SIMD 下限 Chrome≥91/FF≥89/Safari≥16.4
+**低于** JSPI 基线 ⇒ 不抬全站下限）；C3 可以动手（只剩 worker 侧 dlopen × preload FS 未测）；
+C2（pthread BLAS）前置未知数已清但仍属"COI 环境下的可选增强"；C7 否决、C5 不进计划。
+三批的完整数据、复跑命令与判据见 `build/113/NOTES-threads.md`。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

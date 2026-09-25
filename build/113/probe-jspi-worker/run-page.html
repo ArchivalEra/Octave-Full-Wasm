@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Octave-Full-Wasm — Q4 探针宿主页（页面对照组）：同一份产物在页面里跑
+     Copyright (C) 2026 ArchivalEra · SPDX-License-Identifier: AGPL-3.0-or-later
+     ⚠️ 坑（2026-09-25 实测）：非模块化胶水**污染全局作用域**（自带 run/doRun/Module/FS…）。
+        宿主页里用 `run` 当自己的函数名 ⇒ 覆盖胶水的 `run()` ⇒ 重入 initRuntime ⇒
+        `RangeError: Maximum call stack size exceeded`（栈里显示 `_environ_get`，极具误导性）。
+        所以本文件所有自定义名字一律 `q4Probe*` 前缀。 -->
+<meta charset="utf-8">
+<title>Q4 · 页面对照组</title>
+<body style="font:13px monospace">
+<pre id="out">booting…</pre>
+<script>
+window.__workerResult = null;
+window.__workerError = null;
+var Q4N = 100, Q4WAIT = 1;
+var q4Result = { apiSuspending: typeof WebAssembly.Suspending === 'function',
+  apiPromising: typeof WebAssembly.promising === 'function',
+  n: Q4N, ok: 0, fails: [], ticks: 0, wallMs: 0, ping: null, error: null, log: [] };
+function q4Say(s) { q4Result.log.push(String(s)); if (q4Result.log.length > 40) q4Result.log.shift(); }
+function q4Finish() {
+  q4Result.ticks = (window.Module && window.Module.__tick) || q4Result.ticks;
+  window.__workerResult = q4Result;
+  document.getElementById('out').textContent = JSON.stringify(q4Result, null, 1).slice(0, 1600);
+}
+
+window.Module = {
+  print: q4Say, printErr: q4Say,
+  onRuntimeInitialized: function () { q4ProbeRun().catch(function (e) { q4Result.error = String(e); q4Finish(); }); },
+  instantiateWasm: function (info, receiveInstance) {
+    try {
+      if (typeof WebAssembly.Suspending === 'function' && info && info.env
+          && typeof info.env.browser_wait_ms === 'function') {
+        info.env.browser_wait_ms = new WebAssembly.Suspending(info.env.browser_wait_ms);
+      }
+    } catch (e) { q4Result.error = 'wrap-failed: ' + String(e).slice(0, 140); q4Finish(); return {}; }
+    fetch('main.wasm').then(function (r) { return r.arrayBuffer(); })
+      .then(function (b) { return WebAssembly.instantiate(b, info); })
+      .then(function (out) { receiveInstance(out.instance, out.module); })
+      .catch(function (e) { q4Result.error = 'instantiate: ' + String(e).slice(0, 160)
+              + ' || stack: ' + String(e && e.stack || '').slice(0, 900); q4Finish(); });
+    return {};
+  },
+};
+
+async function q4ProbeRun() {
+  q4Result.ping = Module._worker_ping(35);
+  var wait = WebAssembly.promising(Module._worker_wait);
+  var t0 = performance.now();
+  for (var i = 0; i < Q4N; i++) {
+    try { var r = await wait(Q4WAIT); if (r === Q4WAIT + 1) q4Result.ok++; else q4Result.fails.push('ret=' + r); }
+    catch (e) { q4Result.fails.push('throw=' + String(e).slice(0, 100)); }
+  }
+  q4Result.wallMs = Math.round(performance.now() - t0);
+  q4Result.ticks = Module.__tick || 0;
+  try { q4Result.unpromising = 'no-throw:ret=' + Module._worker_wait(1); }
+  catch (e) { q4Result.unpromising = 'throw:' + String(e).slice(0, 140); }
+  q4Finish();
+}
+</script>
+<script src="main.js"></script>

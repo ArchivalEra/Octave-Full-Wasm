@@ -57,6 +57,8 @@
 !build/webshell/*
 !build/webshims/*
 !build/113/probe-jspi/*
+!build/113/probe-jspi-worker/*
+!build/113/probe-threads/*
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*

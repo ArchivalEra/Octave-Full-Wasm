@@ -27,24 +27,27 @@
 
 ## §0.5 现在的状态与下一步顺序
 
-**现在的状态**：分支 `Slay` 上只有文档与探针，**产物零改动**（8761 = `45d288b1…` 原封不动）。
-C7 已否决、C8 已实测成立、Q10 已闭环；性能侧（C4/C2）**一个字节都还没测**。
+**现在的状态（2026-09-25 晚更新）**：第一批三件**已做完并全绿**（分支 `Slay`；**8761 全程未动** = `45d288b1…`）：
 
-**下一步顺序（按"先便宜后昂贵、先证伪后投入"排）**：
+| 已做 | 结果 | 数据在哪 |
+|---|---|---|
+| Q10 iframe COI 九格 | **6/0**，C7 否决、**C8** 成立（credentialless ⇒ 同源 iframe 继承 COI 且不拦 CDN） | `probe-iframe-coi.mjs` + reply 文档 |
+| **Q4** JSPI × DedicatedWorker | **6/0**（100 次挂起/恢复、tick=100、反向抛 SuspendError） | `NOTES-threads.md` §B1 |
+| **E3** pthread × dlopen | **6/0**（100 轮无死锁，2 个 pthread 存活） | `NOTES-threads.md` §B2 |
+| **E1** `-msimd128` | **绿**（512² 1.62×、1024² 1.75×、2000² 1.31×；数值 97/0；v128 4752 vs 0） | `NOTES-threads.md` §B3 |
 
-1. **E6 · C6 去单例嵌入契约**（改代码，不动产物语义）——mount + 资源 base + 实例命名空间 + IDBFS 命名空间。
-   判据：同页 2 实例交替 eval 100 次，0 串扰 / 0 404 / 0 全局覆盖。
-2. **E1 · C4 SIMD 基准**（重编 refblas + 重链，独立输出目录）——512²/1024²/2000² DGEMM。
-   判据：数值过容差 **且** 至少一个主要尺寸中位数 ≥1.5×；否则整条 pthread 线降级。
-3. **E2 · OpenBLAS SIMD 单线程**（配方换 BLAS 库）——对 refblas 的 `B/A`。
-   **若 E1/E2 已够用 ⇒ C2（pthread BLAS）优先级下调，不背 COI 复杂度。**
-4. **E4 · C3 Worker 化探针**（不带 pthread）——Worker 里 JSPI + **真实 side module + 真实 preload FS**；
-   判据：100 次循环无 hang + 主线程计算期间仍响应 UI。
-5. **E3 · C2 pthread × dlopen 探针**（最小车道，先于任何真实 pthread 移植）：main `-pthread
-   -sSHARED_MEMORY -sMAIN_MODULE=1` + side `-pthread -sSIDE_MODULE=1`，2 个 pthread 忙等下 dlopen ×100。
-6. **E7 · C8 宿主 credentialless 真书站验证**（需宿主配合装 SW）：scope / 首访 reload / bfcache /
-   硬刷新各 20 次 + CDN 无失败。
-7. **Q4 · JSPI × DedicatedWorker 探针**（半日）：worker 内最小 `Suspending(fetch)` ×100 次挂起恢复。
+**下一步顺序**：
+
+1. **C4 落地决策**：把 SIMD BLAS 打进产品需要一次重链 + 全量回归 + promote（不改任何接口 ⇒ 可回退）。
+   若做，**顺带合并 C6 的 wasm 侧改动**（canvas 契约 + `publish_png` 分派），省一次 29MB 链接。
+2. **E4 · C3 真落地**：JSPI×Worker 已证（Q4）⇒ 只剩"worker 侧 dlopen × preload FS"未测；
+   第一版必须带**真实 side module + 真实 preload FS**（不带 pthread）。
+3. **E6 · C6 去单例嵌入契约**：页面层（mount/base/实例命名空间/**IDBFS 命名空间**）可独立先做，
+   判据 = 同页 2 实例交替 eval 100 次 0 串扰 + 8768 上 41 套 accept 全绿不改。
+4. **E2 · OpenBLAS SIMD 1T**：触发条件（E1 红或提速 <1.5×）**不成立** ⇒ 维持"可选增强"，
+   排在 C4 落地与 C3 之后。
+5. **C2/C8**：pthread BLAS 的前置未知数已清（E3），但仍只在 COI 成立的环境里开
+   （第一方自控头，或宿主同意装 coi-serviceworker 的 credentialless 路径）。
 
 ---
 
@@ -65,14 +68,14 @@ C7 已否决、C8 已实测成立、Q10 已闭环；性能侧（C4/C2）**一个
 
 | # | 实验 | 绿 | 红 |
 |---|---|---|---|
-| E1 | C4 SIMD（仅差 `-msimd128`） | 数值过容差 且 ≥1 主要尺寸 ≥1.5× | 全尺寸 <1.1× 或数值回归 |
+| E1 | C4 SIMD（仅差 `-msimd128`） | ✅ **已做：512² 1.62× / 1024² 1.75× / 2000² 1.31×，数值 97/0** | — |
 | E2 | OpenBLAS SIMD 1T | `B/A ≥ 1.5×` | `B/A < 1.2×` |
-| E3 | pthread × dlopen | 三家基线 100/100 无 hang | 任一 deadlock / LinkError / abort |
+| E3 | pthread × dlopen | ✅ **已做：6/0（100 轮无死锁）** | — |
 | E4 | Worker + JSPI + dlopen + preload FS | 100/100 无 hang，主线程仍响应 | 依赖 window/document，或 dlopen 回退网络 |
 | E5 | Q10 iframe COI 九格 | ✅ 已跑通 6/0 | 任一格与表不符 |
 | E6 | C6 双实例 | 0 串扰 / 0 404 / 0 全局覆盖 | 任一实例改动另一实例状态 |
 | E7 | C8 宿主 credentialless | 稳定 `crossOriginIsolated=true` + CDN 无失败 | 任一基线持续 reload / 资源被拦 |
-| Q4 | JSPI × Worker | 100/100 挂起恢复 | 任一引擎无法 resume |
+| Q4 | JSPI × Worker | ✅ **已做：6/0（100 次挂起恢复）** | — |
 
 **线程分档判据**：`crossOriginIsolated===true && typeof SharedArrayBuffer==='function'` 才启用 pthread；
 否则单线程 + SIMD（优雅降级，不许整站死）。
