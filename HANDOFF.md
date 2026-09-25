@@ -360,7 +360,7 @@ dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
 - 容器内 Node 14 太旧：**任何需要在 configure 期“运行”的测试都可能假失败**（`unexpected section <Exception>`）。对策：预置对应 `octave_cv_*` 缓存变量。
 - 容器有网络；`docker cp` 会重置可执行位。
 
-### 4.8 断电（2026-09-20 真发生过一次，代价与教训）
+### 4.8 断电（2026-09-20、2026-09-25 各一次；**第二次见 HISTORY §5.47**：提交对象丢失 + `bridge/index.html` 被截成 0 字节，已全部救回）
 - **宿主机 `/tmp` 是 tmpfs**：站点、浏览器测试脚本、node_modules 全丢，恢复靠人肉拼。
   已改正：站点 → `/mnt/hdd/octave-wasm-build/site`；harness → `.../harness`；
   **验收套件进仓库** `test/browser/accept-full.mjs`；一键恢复 `build/recover.sh`。
@@ -1006,6 +1006,6 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | 资产条目 | 48 | |
 | 最近一次**全绿**回归 | `20260924-120049` · **39 套 / 1,025 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20260924` · tar.zst 27,090,799 B · `232c9e0a067ec471…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `main` · HEAD 提交日期 2026-09-24 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
+| 仓库 | 分支 `main` · HEAD 提交日期 2026-09-25 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 
