@@ -289,7 +289,8 @@
         // 其余资产仍按需懒加载。
         // 装不上不算致命——页面照常可用，只是这些函数不存在（会清晰报错）。
         var CORE_DLDFCN = ['convhulln', '__delaunayn__', '__voronoi__',
-                           '__glpk__', 'fftw', 'gzip', 'audioread'];
+                           '__glpk__', 'fftw', 'gzip', 'audioread',
+                           '__web_pause_ms__'];
         return OctaveAssets.load(CORE_DLDFCN).catch(function (e) {
           console.warn('[assets] dldfcn 核心组装载失败（这些函数将不可用）: ' + e.message);
           return null;

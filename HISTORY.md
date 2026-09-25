@@ -2298,6 +2298,32 @@ probe 加"先等 `__octaveReady`"护栏（§5.46 教训的落地）。
 
 ---
 
+### 5.49 G2 落地：`pause` 真让出 + 压力矩阵全绿（2026-09-25）
+
+**wasm 一个字节没动**（纯资产批）：新 `webpause.oct`（2.4KB side module，`DEFUN_DLD(__web_pause_ms__)`
+调主模块导出 `web_pause_ms`）+ `webshims/pause.m`（遮蔽内建 `pause` ⇒ 走挂起 import）。
+编译配方照 `build/113/build-oct.sh` 的 11.3.0 口径（`-fwasm-exceptions -fPIC -sSIDE_MODULE=1`、
+不链任何库，`web_pause_ms` 由主模块导出表在 dlopen 时解析）。
+
+**踩坑一个（当场抓）**：`.oct` 与 shim 各做了一次"秒→毫秒"换算 ⇒ `pause(0.05)` 实际睡 50 秒，
+压力矩阵 8 个 HARD-TIMEOUT 假象"挂死"。修法 = **`.oct` 是纯毫秒原语，换算归 shim**（单位只换一次）。
+
+**验收**：新 `accept-jspi-stress.mjs` **11/0** ——
+A `pause(0.2)` rc 0 / 墙上 204ms / **tick+1**（真让出）；能力门冒烟自动升格 **`pass`**；
+B `unwind_protect` cleanup 恰一次（"TC"）；C `onCleanup` 哨兵恰一次；D pause 后 error 被
+try/catch 抓到（跨挂起点异常完好）；E 10 连挂起墙上 602ms/tick=10；F pause↔资产装载交错三轮全稳
+（B 姿势下 dlopen 不是挂起点）；G **重入测量（复审第一优先）**：并发第二条 `eval_async` **双双正常
+settle**（`{r1:"settled:0", r2:"settled:0"}`）——影子栈危害在本用例未显现，但产品规则仍定为
+**串行使用**（页面命令队列天然保证），复审的警告继续记档。事后新页面无跨页污染。
+sweep：8768 **40 套/1036/0**（stress 矩阵被收编为第 40 套）、8761 `PROBES=1` **67 套/1174/0**。
+
+**★ 架构规则（第三轮复审判据①的产品层应验，写死）**：`pause` 变成挂起点之后，
+**凡可能执行到 pause 的命令必须走 `eval_async`（promising 栈）**；同步 `eval_string`
+碰到 Suspending import 会抛 `SuspendError`（accept-audio 的 sound/playblocking 两例当场炸出，
+已把该套件驱动切到 eval_async ⇒ 48/0）。同步 `eval_string` 从此**只用于无 pause 的内部自检**。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

@@ -66,7 +66,16 @@ async function ev(expr, label, want) {
   logs.length = 0;
   let r;
   try {
-    r = await page.evaluate(x => { const rc = window.Module.eval_string(x); return { rc, err: window.Module.last_error_message() }; }, expr);
+    // ★ G2（2026-09-25）起 sound/playblocking 内部走 `pause` ⇒ 会触达挂起 import。
+    //   架构规则：**凡可能执行到 pause 的命令必须走 eval_async（promising）**；
+    //   同步 eval_string 在 B 姿势下碰到 Suspending import 会抛 SuspendError
+    //   （GPT 复审判据①的产品层应验，见 HISTORY §5.49）。
+    r = await page.evaluate(async x => {
+      const rc = (typeof window.Module.eval_async === 'function')
+        ? await window.Module.eval_async(x)
+        : window.Module.eval_string(x);
+      return { rc, err: window.Module.last_error_message() };
+    }, expr);
   } catch (e) { console.log(`CRASH | ${label} :: ${String(e).slice(0, 120)}`); fail++; return; }
   await new Promise(rr => setTimeout(rr, 550));
   const full = [...logs].join(' ').replace(/\s+/g, ' ').trim();
