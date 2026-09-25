@@ -235,7 +235,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/GATE3-QUESTION.md` (8148 bytes)
 - `build/113/GPT-REVIEW-3-bridge-reply.md` (18378 bytes)
 - `build/113/GPT-REVIEW-3-bridge.md` (8131 bytes)
-- `build/113/GPT-REVIEW-4-threads.md` (8818 bytes)
+- `build/113/GPT-REVIEW-4-threads.md` (12952 bytes)
 - `build/113/GRAPHICS-BRANCH.md` (7731 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)

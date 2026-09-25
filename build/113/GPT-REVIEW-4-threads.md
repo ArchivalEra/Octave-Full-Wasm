@@ -22,6 +22,12 @@
 - **优雅降级**：能力不足的浏览器上功能不能死（JSPI 已这么做：单产物 + 运行期能力门 + 清晰报错），
   多线程路线必须同样可降级，不许抬全站浏览器下限。
 - 浏览器基线：Chrome≥137 / Firefox≥153 / Safari≥27（JSPI 基线）。
+- **新约束（本轮加入）：我们要被第三方静态站点嵌入**。宿主站是一个大型静态 HTML 教材站（生成器叫 PreTeXt，
+  如果你熟悉它可直接针对它的交互件机制回答），它的页面**大量加载第三方 CDN 脚本**（MathJax、GeoGebra、
+  语法高亮、分析统计等，**都带** crossorigin 缺失问题），而它嵌入我们的方式是把我们放进
+  **一个同源 iframe**（生成的最小 HTML 页；作者的 `<script>`/`<link>` 由生成器注入，我们拿不到 iframe 的
+  `allow`/`sandbox` 属性）。我们**不能改宿主的响应头**，也不能要求宿主放弃 CDN。
+  同时宿主的同页可能有**多个**我们的实例，每个实例 = 约 29 MB wasm + 约 24 MB 资源。
 
 ## 1. 现栈（全部实测过）
 
@@ -49,6 +55,8 @@
 4. 我们有"最小探针车道"的习惯：每个机制先在最小复现程序上验证，再上真产物。
 
 ## 3. 候选路线（请逐个判定）
+
+（性能轨 C1–C5；嵌入轨 C6–C7。C5 是"预判否决"项，请复核而非设计；C6/C7 是本轮新增的嵌入形态问题。）
 
 ### C1 · COI 基建 + 线程能力门（铺路石）
 coi-serviceworker 式 service worker 注 COOP/COEP（静态托管变通）+ 运行期能力门
@@ -80,6 +88,19 @@ Worker 直建）；测试加一层 Worker RPC 垫片保持 `Module` API 面不�
 天然成立。请作为 C2 的**对照基线**一起评：如果 SIMD 够用，pthread 的 R1–R4 复杂度是否可不背？
 风险：数值位型差异、29 MB 大模块的 codegen 回归。
 
+### C6 · 去单例嵌入契约（宿主可换 / 多实例 / 资源 base）
+现状：宿主层把一切钉死在固定 DOM id、固定 `window` 全局、固定单例上，且资源 URL 基准分裂
+（wasm 与资产按**宿主文档**解析、data 文件按**脚本**解析）⇒ 放进别人目录必一半 404，同页两份必互踩。
+改法：① 实例化时传**根元素**（输出/图形/canvas 全在其内）；② 统一 `locateFile` + 资源 base URL 参数；
+③ `Octave*` 全局收进工厂返回的实例对象。要审：**Q10**（这是不是被低估的前置项）、**Q12**（多实例策略）。
+
+### C7 · 托管形态：自有 origin 的 iframe，而不是同源 iframe
+线程要 cross-origin isolation，而宿主书站**不能**被 COI（它的 CDN 脚本在 `COEP: require-corp` 下会被拦；
+`credentialless` 可缓解但 Safari 没有）。替代形态：把解释器部署在**另一个 origin**（能设真响应头 ⇒ 直接
+COOP+COEP，不需要 service worker），宿主用 `<interactive iframe="https://…">` 嵌入；该 iframe 文档自带 COI
+⇒ threads 可用，宿主完全不必 COI。要审：**Q11**（这是不是正解；同源嵌套 iframe 的 `crossOriginIsolated`
+到底继承自谁——这决定"同源嵌入能否用线程"）、以及跨源带来的权限/分区代价。
+
 ### C5 · 解释器内部真并行（我们预判不可行，请复核）
 三条证据：① 解释器求值状态非线程安全（单一符号表；上游明确不支持线程化解释）；② 上游并行扩展包用
 `fork()`，wasm 无 fork；③ 多 Worker 多实例 = N×29 MB + 数据交换要序列化或 SAB 数据平面（堆指针
@@ -102,6 +123,21 @@ Worker 直建）；测试加一层 Worker RPC 垫片保持 `Module` API 面不�
 - **Q8** WebGL2 + OffscreenCanvas 在 DedicatedWorker 的成熟度与坑（`transferControlToOffscreen`
   一次性绑定、context lost、帧同步、字体渲染替代）？
 - **Q9** 红线检查：以上哪些路线会破坏"纯静态托管 / 纯客户端 / 优雅降级 / 现有回归不退化"四条底线？
+- **Q10 · 嵌套 iframe 的 COI 语义（本评审最想知道的一条）**：在一个**未被** cross-origin isolated 的顶层页面里，
+  一个**同源** iframe（其文档自己带 COOP/COEP 头，或由 service worker 注入）能否获得
+  `crossOriginIsolated === true` 与 `SharedArrayBuffer`？还是说同源嵌套共享 agent cluster ⇒ 必须顶层也 COI？
+  **跨源** iframe 呢（自己的 origin + 自己的头）？请给可证伪判据——我们打算用一个最小探针页当场测
+  （顶层无头 + iframe 有头 / 反过来），你只需告诉我们正确的预期与陷阱（例如 Safari 的差异）。
+- **Q11 · 嵌入形态选型**：面对"宿主站不能改头、不能放弃 CDN、Safari 无 credentialless"这组约束，
+  是不是应该**把我们的应用部署在自有 origin 并用跨源 iframe 嵌入**（应用自带 COOP/COEP，宿主零改动）？
+  这么做会失去什么（Permissions Policy 下的麦克风/摄像头/文件选择、第三方存储分区对 IndexedDB 的影响、
+  Safari/Firefox 的差异）？有没有比"自有 origin + iframe"更省的形态？另外：在同源 iframe 场景下用
+  service worker 注入 COOP/COEP，是否会把宿主的 CDN 脚本一起打掉（credentialless 能否救）？
+- **Q12 · 多实例策略**：宿主一个页面可能有多个我们这种"约 29 MB wasm + 约 24 MB 资源"的实例。
+  请评估三条路：① 每实例一个独立 wasm 模块（内存 ×N、各自 dlopen）；② 共享一个 wasm 实例、
+  多会话复用（解释器状态非线程安全 ⇒ 是否只能串行，收益多大）；③ **按需启动 + 并发上限 + 共享 worker 池**
+  （宿主生成器对另一类交互件已有先例：默认最多 3 个存活、最多 2 个同时启动、可选共享后台 worker 池）。
+  我们倾向 ③+①组合，请指出更优解与判据。
 
 ## 5. 交付格式
 
