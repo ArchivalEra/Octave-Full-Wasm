@@ -35,6 +35,7 @@ extern "C" int web_suspend_ok_impl (void);
 extern "C" int web_ginput_arm_impl (void);
 extern "C" int web_ginput_pending_impl (void);
 extern "C" int web_ginput_pop_impl (double *v);
+extern "C" void emscripten_run_script (const char *s);   // JS 库符号（LIB_FUNCS）
 
 DEFUN_DLD (__web_pause_ms__, args, nargout,
            "__web_pause_ms__ (MS)\n"
@@ -84,6 +85,17 @@ DEFUN_DLD (__web_ginput_pending__, args, nargout,
            "__web_ginput_pending__ (): 队列里的未取点数。")
 {
   return octave_value (web_ginput_pending_impl ());
+}
+
+DEFUN_DLD (__web_run_js__, args, nargout,
+           "__web_run_js__ (JS_CODE)\n"
+           "\n"
+           "在页面里同步执行一段 JS（D6：触发 OctaveAssets.load 等页面侧能力）。")
+{
+  if (args.length () != 1 || ! args(0).is_string ())
+    error ("__web_run_js__: 需要一个字符串参数");
+  emscripten_run_script (args(0).string_value ().c_str ());
+  return octave_value_list ();
 }
 
 DEFUN_DLD (__web_ginput_pop__, args, nargout,

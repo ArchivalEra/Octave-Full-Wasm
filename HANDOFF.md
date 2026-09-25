@@ -8,9 +8,10 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
-> **最后更新：2026-09-25**。**★ 批次 1–3 已全部落地 8761**（`octave.wasm` `45d288b1…`：
-> eval_wait/pause 挂起/**ginput 取点**（数据坐标）/**Ctrl-C**（rc=3）/D9 门槛/keyboard v1——
-> 两站 PROBES=1 全量 **69 套/1187/0**，见 HISTORY §5.48–§5.50；
+> **最后更新：2026-09-25**。**★ PLAN-jspi 全部收口（批次 1–4）**：`octave.wasm` `45d288b1…`
+> 上 8761 —— eval_wait/pause 挂起/**ginput 取点**（数据坐标）/**Ctrl-C**（rc=3）/D9 门槛/
+> keyboard v1/**D6 pkg load 自动装载**/**D7 IDBFS 边界**/D5 规则 B 复核收口；
+> 两站 PROBES=1 全量 **71 套/1194/0**，见 HISTORY §5.48–§5.51；
 > **架构规则：可能执行到 pause 的命令必须走 `eval_async`**；
 > **部署件 SHA 铁律：跑测试前先跑 `check-deploy-sha.sh` + `probe-artifact-sha.mjs`**）。
 > 2026-09-24（深夜）的旧状态：现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
@@ -908,7 +909,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ✅ **批次 3 已落地（同日，HISTORY §5.50）**：G3 ginput（数据坐标全链）、G4 Ctrl-C
      （web_pause_ms 投递点 ⇒ rc=3）、D9 门槛（`__web_suspend_ok__`）、G5 keyboard v1、
      accept-interactive 翻面、G6 由压力矩阵 F + b 探针覆盖。**部署件 SHA 铁律已入 AGENTS**。
-     ▶ **剩余 = 批次 4**：D5 规则 B 复核（162 处）/ D6 `pkg load` 自动装载 / D7 IDBFS 边界。
+     ✅ **批次 4 已落地（同日，HISTORY §5.51）**：D6 pkg load 自动装载（pkg.m shim +
+     `__web_run_js__` + 轮询）、D7 IDBFS 边界（同 context reload + 全量读回轮询）、
+     D5 规则 B 复核收口（162 处全同类、口径有意保留）。
+     ▶ **PLAN-jspi 全部收口**。JSPI 交互线（pause/ginput/Ctrl-C/keyboard）已在 8761 可用；
+     用户侧遗留：`gh` 已通 ⇒ origin 已同步；真机（手机浏览器）实测仍待做。
      ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
      **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
      → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。
@@ -1024,7 +1029,7 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | 三大件 gzip 合计 | **10,261,604 B** | |
 | 资产条目 | 49 | |
 | 最近一次**全绿**回归 | `20260925-061510` · **40 套 / 1,036 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
-| 交付包 | `octave-full-wasm-site-20260925` · tar.zst 27,105,897 B · `bd346bcadc6a6d50…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 交付包 | `octave-full-wasm-site-20260925` · tar.zst 27,108,013 B · `6e8afb6eb0a09a05…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-25 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

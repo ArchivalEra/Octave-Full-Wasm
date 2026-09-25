@@ -2363,6 +2363,39 @@ ginput.m（覆写已删）。sweep：8768 **69 套/1187/0**、8761 `PROBES=1` **
 
 ---
 
+### 5.51 批次 4 落地：D6 `pkg load` 自动装载 + D7 IDBFS 边界 + D5 规则 B 复核收口（2026-09-25）
+
+**wasm 一个字节没动**（纯资产批：webshims/pkg.m shim + webpause.oct 增 `__web_run_js__` 原语 + aliases）。
+
+**D6 `pkg load <未装载的包>` 自动装载**（`probe-pkg-d6` 4/0）：webshims/pkg.m shim 只拦
+`pkg load <名>` 且包在 `__webassets_pending__()` 名单里 ⇒ `__web_run_js__` 调
+`OctaveAssets.load`（页面 fetch + 写盘）+ `__web_pause_ms__` 轮询等落盘 ⇒ **路径手术委托
+核心 pkg.m**（把 shim 目录临时摘出路径，跑完按原位置插回、核心新增的包目录按原顺序补回）。
+实测 `pkg load statistics` rc=0、896ms、`geomean([1 2 4])`=2；accept-pkg **16/0**（含
+"未安装的包清晰报错"——错误传播路径正常）。三个当场坑：① m 文件里不能直接调
+`emscripten_run_script`（C 符号）⇒ 走 `.oct` 原语转发；② `__web_run_js__` 忘建 aliases
+符号链接 ⇒ undefined（§4.11 再次应验）；③ shim 的 cleanup 引用未赋值的 `newp` 会吞掉
+核心的原始错误 ⇒ 先赋初值再 unwind_protect。
+
+**D7 IDBFS 边界**（`probe-idbfs-bounds` 3/0，run.sh 方式连跑两次稳定）：50 个小文件 +
+8MB 大文件 + webSync + **同 context reload** ⇒ 全部存活（内容与首尾字节核验）；写回 21ms
+（~8MB 脏数据，informational）；配额满行为**无法在测试里可靠触发 ⇒ 如实记未测**（webSync
+错误走 callback、页面不崩已由 accept-idbfs 覆盖）。两个坑：IndexedDB 是 **per-context**
+（换 context = 换库，必须同 context reload——accept-idbfs 既知约束的再次应用）；读回是
+异步的 ⇒ **页内轮询直到全部可读**（只等单个文件会与其余文件竞态，sweep 实测 flaky）。
+
+**D5 规则 B 复核（162 处）**：`check-wants --report` 显示 162 处**全部同类** ——
+"单数字 want 对 `exist()`/`rows()`/`numel()` 的计数"，且每处已带**数字边界**正则
+（`(?<![\d.])N(?![\d.])`）挡住"计数含该数字"的子串误配；抽样 3 处对照源码确认断言
+与被测值一致（如 `disp(exist('fftw'))` want='3'）。**结论：口径有意、风险已控、保留**；
+行为级断言（内容/坐标/异常文本）本批新增者均走结构化读取，不再新增裸数字。
+
+**sweep**：8768 **71 套/1194/0**、8761 `PROBES=1` **71 套/1194/0**（新增 probe-pkg-d6 4 项、
+probe-idbfs-bounds 3 项收编）。dist/parity/闸门全绿。**PLAN-jspi.md 的 G0–G6 与 D1–D9
+至此全部收口**；wasm 最终 sha `45d288b1…`。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

@@ -355,7 +355,7 @@
         //     **静默失败**变成清晰报错（`popen` 的 `-1`、`st = system(cmd)` 的 `-1`）。
         //     它必须**随页面装**：覆写要在路径最前面才遮得住内建；等到用户真去调
         //     `system` 时再装，那句静默 `-1` 已经发生了。
-        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc', 'webshims'])
+        return OctaveAssets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc', 'pkgfix'])
           .catch(function (e) {
             console.warn('[assets] help 数据装载失败（help/lookfor 将不可用）: ' + e.message);
             return null;
@@ -371,7 +371,7 @@
         //   以前这里挂着它，清单里又没有这个资产 → 每次开页都打一句
         //   "pkg 支持装载失败（pkg list/load 将不可用）"，而 pkg 其实是好的，
         //   属**误导性告警**（accept-pkg 在 8761/8762 上都 16/16，已实测）。
-        return OctaveAssets.load(['pkgfix'])
+        return OctaveAssets.load(['pkgfix', 'webshims'])   // ★ webshims 必须在 pkgfix **之后**装载：两者都 addpath，后装载者排前 —— pkg.m 的 shim 必须排在核心 m/pkg 之前（D6）
           .then(function () {
             try {
               window.Module.eval_string(
