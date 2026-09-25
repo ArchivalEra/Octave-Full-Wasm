@@ -1,0 +1,143 @@
+# Octave-Full-Wasm -> heart/deploy/Octave
+#
+# site/ 是仓库自带的可部署产物（DEPLOY.md：8761 的逐字节镜像，wasm sha 见 preflight 输出），
+# 所以这里**没有构建步骤** —— 部署 = 把 site/ 原样发布到 heart 仓 deploy 分支的 Octave/。
+# 最终 URL：https://isui.ren/Octave/
+#
+# 触发方式刻意收窄：手动 + 仅当 site/** 变更时。
+# 不在任意 push 上跑，是因为 site/ 只应在批次收尾、8761 验绿之后才变
+# （AGENTS.md「验收底线」：site/ 与 8761 不一致 = 不能宣称验收通过）。
+name: deploy-heart
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+
+concurrency:
+  group: heart-deploy-octave
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish site/ to isui.ren/Octave
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight
+        id: artifact
+        run: |
+          set -euo pipefail
+          for f in octave.wasm octave.js octave.data index.html VERSION assets/manifest.json; do
+            [ -f "site/$f" ] || { echo "::error::site/$f 缺失 —— site/ 不是完整产物"; exit 1; }
+          done
+          sha=$(sha256sum site/octave.wasm | cut -d' ' -f1)
+          {
+            echo "wasm_sha=$sha"
+            echo "version=$(cat site/VERSION)"
+          } >> "$GITHUB_OUTPUT"
+          echo "site/ 体积：$(du -sh site | cut -f1)"
+          echo "octave.wasm sha256：$sha"
+
+      - name: Push site/ to heart deploy/Octave
+        env:
+          HEART_DEPLOY_KEY: ${{ secrets.HEART_DEPLOY_KEY }}
+          WASM_SHA: ${{ steps.artifact.outputs.wasm_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HEART_DEPLOY_KEY:-}" ]; then
+            echo "::error::HEART_DEPLOY_KEY 未配置（Settings -> Secrets and variables -> Actions）"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$HEART_DEPLOY_KEY" > ~/.ssh/heart_deploy
+          chmod 600 ~/.ssh/heart_deploy
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          export GIT_SSH_COMMAND='ssh -i ~/.ssh/heart_deploy -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes'
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          rm -rf /tmp/heart-deploy
+          git clone --branch deploy --depth 1 \
+            git@github.com:ArchivalEra/isui.ren-heart.git /tmp/heart-deploy
+
+          # 只替换 Octave/；heart 的根、404.html 与其它站点目录（MangoMesa/、Bahnhof/）不动。
+          rm -rf /tmp/heart-deploy/Octave
+          mkdir -p /tmp/heart-deploy/Octave
+          cp -r site/. /tmp/heart-deploy/Octave/
+
+          cd /tmp/heart-deploy
+          git add Octave
+          if git diff --cached --quiet; then
+            echo "site/ 与线上一致，无需推送。"
+            exit 0
+          fi
+
+          git commit -m "deploy Octave: $(cat "$GITHUB_WORKSPACE/site/VERSION") wasm ${WASM_SHA:0:16} at $(date -u +%Y-%m-%dT%H:%M:%SZ) from Octave-Full-Wasm ${GITHUB_SHA:0:8}"
+
+          # deploy 是共享分支（博客与 Bahnhof 也会推），clone 到 push 之间可能被人推走。
+          # 撞车就 fetch + rebase 重来，最多三次。
+          for attempt in 1 2 3; do
+            if git push origin deploy; then
+              exit 0
+            fi
+            echo "::warning::push 被拒（第 $attempt 次），rebase 后重试"
+            git fetch origin deploy --depth 5
+            git rebase origin/deploy
+          done
+          echo "::error::三次重试后仍推不动 heart@deploy"
+          exit 1
+
+      # 线上校验：EdgeOne 收不收 29MB 的 wasm、MIME 对不对、Range 通不通。
+      # 边缘缓存与站点构建有延迟，所以这一步只报告、不拦部署。
+      - name: Verify live (informational)
+        if: always()
+        continue-on-error: true
+        env:
+          WASM_SHA: ${{ steps.artifact.outputs.wasm_sha }}
+        run: |
+          set -uo pipefail
+          URL="https://isui.ren/Octave"
+
+          for i in 1 2 3 4 5 6; do
+            sleep 20
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/" || echo 000)
+            echo "第 $i 次探测：$URL/ -> $code"
+            [ "$code" = "200" ] && break
+          done
+
+          echo "── octave.wasm 响应头 ──"
+          curl -sI --max-time 120 "$URL/octave.wasm" | tr -d '\r' \
+            | grep -iE '^(HTTP/|content-type|content-length|accept-ranges|content-range|cache-control|x-cache|age:)' || true
+
+          echo "── 字节比对 ──"
+          live=$(curl -s --max-time 300 "$URL/octave.wasm" | sha256sum | cut -d' ' -f1)
+          echo "线上   sha256: $live"
+          echo "构建件 sha256: $WASM_SHA"
+          if [ "$live" = "$WASM_SHA" ]; then
+            echo "OK 线上字节与 site/ 一致"
+          else
+            echo "::warning::线上 sha 与 site/ 不一致（边缘缓存或站点构建延迟；稍后可用 build/check-deploy-sha.sh 复核）"
+          fi
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Octave deploy"
+            echo ""
+            echo "- 产物：\`site/\`（\`${{ steps.artifact.outputs.version }}\`，无构建步骤）"
+            echo "- wasm sha256：\`${{ steps.artifact.outputs.wasm_sha }}\`"
+            echo "- 部署目标：\`isui.ren-heart@deploy:Octave/\`"
+            echo "- URL：https://isui.ren/Octave/"
+          } >> "$GITHUB_STEP_SUMMARY"
