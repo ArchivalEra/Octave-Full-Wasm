@@ -262,3 +262,58 @@ grep -o 'WebAssembly\.promising\|WebAssembly\.Suspending' <octave.js>
    **改好又回退了** —— 因为改 `bridge/index.html` 必须走完整 promote 周期（否则两站点
    一致性闸门直接红），而它对**现役产物**是**零影响**（现役没有 `eval_async`，走 `no-entry` 那条早退路）。
    ⇒ **并进 G1 重做那一批一起部署**。
+
+---
+
+## A2 最小实验（2026-09-25）：**dlopen 在 5.0.7 是无条件挂起点**；机制② 改写为"装载缓存"
+
+**做法**：按第三轮外部复审（`GPT-REVIEW-3-bridge-reply.md` §2）的三条判据扩展最小探针
+（`build/113/probe-jspi/` 新增 `main_wait_unmarked` / `run_ctor_unmarked` / `run_ctor_marked`
++ `side_ctor.c`（带全局构造函数做间接调用的 side module）；runner =
+`test/browser/probe-jspi-a2.mjs`，每阶段独立浏览器、每次调用 10 s 硬超时）。
+
+**结果（Chromium 152，9 PASS / 2 fail，两条 fail 是"预期绿、实测红"的如实记录）**：
+
+| 用例 | 预期 | 实测 |
+|---|---|---|
+| 判据1：未列 `JSPI_EXPORTS` 的同步入口直达挂起 import | **红** | ✅ **红**：`SuspendError: trying to suspend without WebAssembly.promising`，tick=0；**且炸完运行期还活着**（随后的 promising 调用正常） |
+| 判据2：plain 栈上 dlopen 带构造函数的新模块 | 绿 | ❌ **红**：同一个 SuspendError —— **VTK 案例复现**，但根因比"构造函数"更底层（见下） |
+| 判据3：promising ↔ 同步 dlopen 交替三轮 | 观察是否需要热身 | **新模块的同步 dlopen 每轮都炸**（3/3）⇒ **"热身"救不了新模块** |
+| 补测A：**promising 栈**上 dlopen 带构造函数的**新模块** | 绿（推论） | ✅ 绿（`ctor_ping` 返回 7，构造函数间接调用无碍） |
+| 补测B：模块**已装载**后 plain 栈再 dlopen | 绿（推论） | ✅ 绿 —— **"机制②"的真身 = 装载缓存**（已装载 ⇒ 不再走 `__dlopen_js`），不是什么 V8 热身 |
+
+### 根因（胶水逐字，5.0.7 263db4c）
+
+```js
+// 生成胶水 main.js 里的 instrumentWasmImports：
+var importPattern = /^(browser_wait_ms|invoke_.*|__asyncjs__.*)$/;
+let isAsyncifyImport = original.isAsync || importPattern.test(x);   // ★ .isAsync 优先于名单
+if (isAsyncifyImport) imports[x] = new WebAssembly.Suspending(original)
+```
+而 `_dlopen_js` 在 `libdylink.js` 里是 `_dlopen_js__async: 'auto'` + `#if ASYNCIFY ⇒ {loadAsync:true}`；
+**`-sJSPI` 就是 `ASYNCIFY=2`** ⇒ 生成胶水 `__dlopen_js.isAsync = true` ⇒ **任何 `-sJSPI` 产物里
+`dlopen` 一律是 Suspending 挂起点，`-sJSPI_IMPORTS` 收窄管不住它**。
+
+### 三条机制改写（取代 §"v11/v12/v13"里的旧口径）
+
+1. ① 不变但表述更准：**"漏标入口"不是被自动标记，而是真踩到挂起点才炸**（判据1；炸完运行期仍可用）。
+2. ② **作废，改为**：`dlopen` 的 SuspendError 只在**装载新模块那一刻**发生；同一模块第二次 dlopen
+   走 LDSO 缓存不再调 `__dlopen_js` ⇒ 表现为"先 promising 过一次就正常"。**不是可依赖的契约，
+   连"热身"都救不了新模块**（判据3 实测 3/3 炸）。
+3. ③ 不变且更宽：启动期任何 `__wasm_call_ctors`/静态初始化路径若触 dlopen 必死（同根因）。
+
+### 对产品架构的直接结论（A2 的隐藏代价）
+
+**在 5.0.7 上选 A2（`-sJSPI`），就等于接受"一切可能 dlopen 的代码都必须跑在 promising 栈上"**：
+- 用户命令必须全部走 promising 的 eval 入口（否则命令里一次懒加载 `.oct` 就当场炸）；
+- **开机期的资产装载也必须走 promising**（CORE_DLDFCN 那一批就是开机 dlopen 的）；
+- `execute_interp()` 是否触 dlopen 要单独实测，触了也得 promising 化。
+这正是原候选 (b) 的形状，但现在**从"可选优化"变成了"强制架构"**。
+
+### ⭐ 由此浮出的 B 方案新优势（需求书里没人列过）
+
+**手搓 JSPI（方案 B）不加 `-sJSPI` ⇒ `ASYNCIFY` 为假 ⇒ `_dlopen_js` 走 `{loadAsync:false}` 同步分支、
+没有 `.isAsync` ⇒ `dlopen` 永远不是挂起点**。爆炸半径回到真正的 1 import（`web_pause_ms`）+ 1 export
+（promising 的 eval 入口），开机序列**不需要**改成全异步、plain 栈上的 dlopen 照常。
+⇒ A2 实验的最大产出：**B 从"备选"升格为"应当先测的方案"**——下一步实验就是它
+（同一份探针 C 代码，只换包装方式，见复审 §3 的判据）。

@@ -891,11 +891,12 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
        **已写好但有意推迟到本批之外** —— 改 `bridge/index.html` 要走完整 promote 周期（否则两站点一致性
        闸门红），而它对现役产物**零影响**（现役无 `eval_async` ⇒ 走 `no-entry` 早退）
        ⇒ **并进 ④ 那一批一起部署**。
-     ⏸ **暂停（2026-09-25）：重链姿势先过第三轮外部选型** —— 需求书
-     `build/113/GPT-REVIEW-3-bridge.md` 已出（方案 A 全量 `-sJSPI` / **A2 收窄 `-sJSPI`** /
-     **B 手搓 JSPI** / C JS 队列 / D Worker+SAB / E 留白），核心问题 =
-     "有没有比全量 `-sJSPI` 更小爆炸半径的桥"。**G1 重链等回音**；
-     A2/B 的公共形状已写死：唯一挂起 import `web_pause_ms` + 唯一 `extern "C"` 导出 `eval_wait`。
+     ✅ **回音已到 + A2 最小实验已跑完（2026-09-25，见 `GPT-REVIEW-3-bridge-reply.md` 与
+     `NOTES-jspi.md`「A2 最小实验」）**：复审判定 A2 核心/B 备选；但实验把根因钉死到胶水逐字 ——
+     **5.0.7 里 `-sJSPI` 使 `dlopen` 无条件成为挂起点**（`__dlopen_js.isAsync=true`，
+     `-sJSPI_IMPORTS` 收窄管不住）⇒ A2 隐藏代价 = "一切可能 dlopen 的入口都必须 promising"；
+     **B（手搓、不加 `-sJSPI`）没有这个问题 ⇒ B 升格为"应当先测"**。
+     **下一步 = B 的最小实验**（同一份探针只换包装方式），B 成立就按 B 重链。
      ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
      **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
      → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。

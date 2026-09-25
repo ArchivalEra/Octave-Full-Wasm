@@ -27,7 +27,7 @@ OUT="${1:-/src/libwork/jspi}"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$SRC/main.c" ] || SRC=/src/probe-jspi     # 容器里单独拷过来时的落点
 mkdir -p "$OUT"
-cp -a "$SRC"/main.c "$SRC"/side.c "$SRC"/jslib.js "$SRC"/run.html "$OUT/"
+cp -a "$SRC"/main.c "$SRC"/side.c "$SRC"/side_ctor.c "$SRC"/jslib.js "$SRC"/run.html "$OUT/"
 
 cd "$OUT"
 
@@ -40,7 +40,7 @@ JSPI="-sJSPI -sJSPI_IMPORTS=browser_wait_ms"
 #        SuspendError: trying to suspend without WebAssembly.promising
 #     —— 因为 V8 要求**挂起点所在的整条入口**都是 promising 的。这正是将来接 `pause()`
 #     时要记的一条：**JS 侧调的必须是 `JSPI_EXPORTS` 里的那个入口**。
-JSPI_EXPORTS="-sJSPI_EXPORTS=main_wait,run_side"
+JSPI_EXPORTS="-sJSPI_EXPORTS=main_wait,run_side,run_ctor_marked"
 MAINMOD="-sMAIN_MODULE=2 -sALLOW_TABLE_GROWTH=1 -sERROR_ON_UNDEFINED_SYMBOLS=0"
 
 echo "== P0/P1：主模块（JSPI + wasm EH + MAIN_MODULE=2）"
@@ -51,7 +51,7 @@ echo "== P0/P1：主模块（JSPI + wasm EH + MAIN_MODULE=2）"
 # ⚠️ `FS` 必须**显式导出**：宿主脚本要把 `side.wasm` 写进 MEMFS 才能 dlopen；
 #    不写它时 `Module.FS` 是 `undefined`（第一版就卡在这里）。
 emcc $COMMON $JSPI $JSPI_EXPORTS $MAINMOD \
-  -sEXPORTED_FUNCTIONS=_main_wait,_run_side \
+  -sEXPORTED_FUNCTIONS=_main_wait,_run_side,_main_wait_unmarked,_run_ctor_unmarked,_run_ctor_marked \
   -sEXPORTED_RUNTIME_METHODS=FS,ccall,cwrap \
   main.c --js-library jslib.js -o main.js 2>&1 | tail -5
 echo "   main.js=$(stat -c%s main.js 2>/dev/null) main.wasm=$(stat -c%s main.wasm 2>/dev/null)"
@@ -66,6 +66,14 @@ emcc $COMMON -fPIC -sSIDE_MODULE=2 -sERROR_ON_UNDEFINED_SYMBOLS=0 \
   -sEXPORTED_FUNCTIONS=_side_wait -Wl,--export=side_wait \
   side.c -o side.wasm 2>&1 | tail -5
 echo "   side.wasm=$(stat -c%s side.wasm 2>/dev/null) 导出：$(strings -a side.wasm | grep -c side_wait) 处出现 side_wait"
+
+echo "== A2：带全局构造函数的 side module（判据 2/3 用）"
+# ctor 里做一次与挂起无关的**间接调用**；若 dlopen 它就炸 SuspendError ⇒ VTK 案例复现。
+# ⚠️ 同 side.wasm：side module 的符号面必须显式声明，否则 -O2 DCE 掉只剩 64 字节壳。
+emcc $COMMON -fPIC -sSIDE_MODULE=2 -sERROR_ON_UNDEFINED_SYMBOLS=0 \
+  -sEXPORTED_FUNCTIONS=_ctor_ping -Wl,--export=ctor_ping \
+  side_ctor.c -o side_ctor.wasm 2>&1 | tail -5
+echo "   side_ctor.wasm=$(stat -c%s side_ctor.wasm 2>/dev/null) 导出：$(strings -a side_ctor.wasm | grep -c ctor_ping) 处出现 ctor_ping"
 
 echo "== 产物就绪：$OUT"
 ls -l "$OUT"

@@ -86,3 +86,73 @@ run_side (int ms)
   dlclose (h);
   return r;
 }
+
+/* ── A2 最小实验（第三轮外部复审的判据 1，2026-09-25）────────────────────────
+ * **不进 JSPI_EXPORTS** 的同步导出，内部直达挂起 import。
+ * 预期：从 JS 调它 = **红**（抛 SuspendError: trying to suspend without
+ * WebAssembly.promising）—— 这条量化"漏标入口"的代价：不是优雅降级，是当场炸。
+ * 对照组是上面的 main_wait（列了表的 ⇒ 从 JS 调拿到 Promise）。 */
+EMSCRIPTEN_KEEPALIVE int
+main_wait_unmarked (int ms)
+{
+  browser_wait_ms (ms);
+  return 43;
+}
+
+/* ── A2 判据 2/3：dlopen 一个**带全局构造函数**的 side module ─────────────────
+ * 构造函数里做一次**与挂起完全无关**的间接调用（函数指针）。它有两个用途：
+ * · 判据 2（预期**绿**）：若 dlopen 它就炸 SuspendError ⇒ binaryen 的 JSPI pass
+ *   把不该包的也包了（外部复审引的 VTK 案例在我们的布局下复现）。
+ * · 判据 3：它**不碰**挂起 import ⇒ 若未标记的同步 dlopen 一直绿，则"必须先热身"
+ *   （机制②）在收窄口径下不成立/不需要依赖。
+ * 故意**不列进 JSPI_EXPORTS**：同一段代码在"未标记同步"语境下测。 */
+EMSCRIPTEN_KEEPALIVE int
+run_ctor_unmarked (void)
+{
+  const char *path = "/side_ctor.wasm";
+  void *h = dlopen (path, RTLD_NOW);
+  if (! h)
+    {
+      printf ("[wasm] dlopen(%s) 失败：%s\n", path, dlerror ());
+      return -1;
+    }
+  int (*fn) (void) = (int (*) (void)) dlsym (h, "ctor_ping");
+  if (! fn)
+    {
+      printf ("[wasm] dlsym(ctor_ping) 失败：%s\n", dlerror ());
+      return -2;
+    }
+  printf ("[wasm] 调 ctor_ping()（构造函数已跑过间接调用）\n");
+  int r = fn ();
+  printf ("[wasm] ctor_ping 返回 %d\n", r);
+  return r;
+}
+
+/* ── A2 补测（根因确认后的 2×2 矩阵收尾，2026-09-25）────────────────────────
+ * 根因：5.0.7 胶水 `instrumentWasmImports` 里 `original.isAsync || importPattern.test(x)`
+ * 且 `-sJSPI`(=ASYNCIFY=2) 使 `__dlopen_js.isAsync=true` ⇒ **dlopen 无条件是挂起点**，
+ * `-sJSPI_IMPORTS` 收窄管不住。⇒ 2×2 矩阵：
+ *   plain 栈 × 新模块   = 红（判据2 实测）；
+ *   plain 栈 × 已装载   = 绿（"机制②"的真身：只是不再走 __dlopen_js）；
+ *   promising 栈 × 新模块 = **本函数测这个**（预期绿）—— 这正是产品侧
+ *     "所有可能 dlopen 的解释器入口都必须走 promising"这条架构规则的直接依据。 */
+EMSCRIPTEN_KEEPALIVE int
+run_ctor_marked (void)
+{
+  const char *path = "/side_ctor.wasm";
+  void *h = dlopen (path, RTLD_NOW);
+  if (! h)
+    {
+      printf ("[wasm] dlopen(%s) 失败：%s\n", path, dlerror ());
+      return -1;
+    }
+  int (*fn) (void) = (int (*) (void)) dlsym (h, "ctor_ping");
+  if (! fn)
+    {
+      printf ("[wasm] dlsym(ctor_ping) 失败：%s\n", dlerror ());
+      return -2;
+    }
+  int r = fn ();
+  printf ("[wasm] ctor_ping(marked) 返回 %d\n", r);
+  return r;
+}

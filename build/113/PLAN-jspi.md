@@ -49,13 +49,20 @@
 3. **只有这一步做完**，v1–v13 的三条机制与 (a)/(b)/(c) 才有资格被讨论 ——
    `-sJSPI_EXPORTS=eval_async` 要不要换成真导出名，属于「真测之后」的问题。
 
-**★ 2026-09-25 更新：G1 重链暂缓** —— 重链姿势先过一轮外部选型：
-第三轮复审需求书已出（`build/113/GPT-REVIEW-3-bridge.md`），核心问题 =
-**"有没有比全量 `-sJSPI` 更小爆炸半径的桥"**，新增两个候选：
-**A2 收窄 `-sJSPI`**（`-sJSPI_IMPORTS=web_pause_ms -sJSPI_EXPORTS=eval_wait`，5.0.7 官方支持窄列）
-与 **B 手搓 JSPI**（`instantiateWasm` 钩子 + 原生 `Suspending`/`promising`，胶水零变形）。
-两个候选的公共形状：**唯一挂起 import（`web_pause_ms`）+ 唯一导出薄入口（`eval_wait`，真导出名）**。
-等回音后按选定姿势做第 1/2 步。
+**★ 2026-09-25 更新 2：回音已到，A2 最小实验已跑完 —— 结论改写了选型**：
+- 复审判定：**A2 有条件推荐 ★（核心）、B 有条件推荐（备选/并行）**、A 不推荐、C 保底、D 红线维持
+  （回音全文：`build/113/GPT-REVIEW-3-bridge-reply.md`）。
+- **A2 三判据实验（`NOTES-jspi.md`「A2 最小实验」）**：判据1 红✅（漏标入口当场炸，运行期可恢复）；
+  **判据2/3 意外红** —— 根因钉死到胶水逐字：5.0.7 里 `__dlopen_js.isAsync=true`
+  （`-sJSPI` ⇒ ASYNCIFY=2 ⇒ `_dlopen_js__async:'auto'` 生效）+ `instrumentWasmImports` 的
+  `original.isAsync ||` ⇒ **`dlopen` 无条件是挂起点，`-sJSPI_IMPORTS` 收窄管不住**。
+  ⇒ A2 的隐藏代价 = **"一切可能 dlopen 的代码都必须跑在 promising 栈上"**
+  （用户命令、开机资产装载、`execute_interp` 全在内，开机序列要整体异步化）。
+- **B 升格为"应当先测的方案"**：不加 `-sJSPI` ⇒ `ASYNCIFY` 假 ⇒ `dlopen` 走同步分支、
+  永不是挂起点 ⇒ 爆炸半径回到真正的 1 import + 1 export，开机序列不用动。
+  **下一步 = B 的最小实验**（同一份探针 C 代码，只换包装方式：`instantiateWasm` 钩子包
+  `browser_wait_ms` + JS 侧 `promising` 包 `main_wait`，对照 A2 的 2×2 矩阵结果）。
+  B 若成立 ⇒ 产品姿势 = B；B 不成立 ⇒ 回 A2 并接受"dlopen 全走 promising"的架构约束。
 
 **下面这段是原计划（保留为历史口径；顺序已被上面取代）：**
 
