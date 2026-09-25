@@ -896,7 +896,12 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      **5.0.7 里 `-sJSPI` 使 `dlopen` 无条件成为挂起点**（`__dlopen_js.isAsync=true`，
      `-sJSPI_IMPORTS` 收窄管不住）⇒ A2 隐藏代价 = "一切可能 dlopen 的入口都必须 promising"；
      **B（手搓、不加 `-sJSPI`）没有这个问题 ⇒ B 升格为"应当先测"**。
-     **下一步 = B 的最小实验**（同一份探针只换包装方式），B 成立就按 B 重链。
+     **★ B 实验已跑完（同日）：13 PASS / 0 FAIL —— 产品姿势定案 = B（手搓 JSPI，不加 `-sJSPI`）**。
+     A2 的隐藏代价实测坐实（`dlopen` 无条件挂起点），B 全绿且胶水零变形。
+     **下一步 = G1 重链按 B 姿势**（改动清单见 `NOTES-jspi.md`「B 方案对照实验」）：
+     main.cc 加 `eval_wait` 薄导出；link-web.sh 去 `-sJSPI*`、旗标自检翻面（B 下胶水里 Suspending=0）；
+     页面上 `instantiateWasm` 钩子 + promising 包装 + probe 改走新入口；
+     8768 验绿后 probe-jspi-eval 三例（42 / 拒绝路径 / 穷举反证）。
      ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
      **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
      → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。

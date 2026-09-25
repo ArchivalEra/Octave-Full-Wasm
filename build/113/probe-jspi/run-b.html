@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- B 方案（手搓 JSPI）探针宿主页：不用 -sJSPI，钩子里自己包 import，JS 侧自己包入口 -->
+<meta charset="utf-8">
+<title>JSPI probe B</title>
+<pre id="out">loading…</pre>
+<script>
+  window.__probeLog = [];
+  var Module = {
+    print: function (t) { window.__probeLog.push(String(t)); document.getElementById('out').textContent += t + "\n"; },
+    printErr: function (t) { window.__probeLog.push('[err] ' + t); },
+    // ★ B 的全部机关都在这：**先**把挂起 import 包成 Suspending，再自己实例化；
+    //   其余 import 原样透传。返回 {} ⇒ 胶水等 receiveInstance 回调（异步模式）。
+    instantiateWasm: function (info, receiveInstance) {
+      try {
+        var env = info.env || {};
+        if (typeof env.browser_wait_ms === 'function') {
+          env.browser_wait_ms = new WebAssembly.Suspending(env.browser_wait_ms);
+        }
+        fetch('main.wasm').then(function (r) { return r.arrayBuffer(); })
+          .then(function (b) { return WebAssembly.instantiate(b, info); })
+          .then(function (out) { receiveInstance(out.instance, out.module); })
+          .catch(function (e) { console.error('B-instantiate: ' + e); });
+      } catch (e) { console.error('instantiateWasm: ' + e); }
+      return {};
+    }
+  };
+</script>
+<script src="main.js"></script>

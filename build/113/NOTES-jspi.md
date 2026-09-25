@@ -317,3 +317,47 @@ if (isAsyncifyImport) imports[x] = new WebAssembly.Suspending(original)
 （promising 的 eval 入口），开机序列**不需要**改成全异步、plain 栈上的 dlopen 照常。
 ⇒ A2 实验的最大产出：**B 从"备选"升格为"应当先测的方案"**——下一步实验就是它
 （同一份探针 C 代码，只换包装方式，见复审 §3 的判据）。
+
+---
+
+## B 方案对照实验（2026-09-25）：**13 PASS / 0 FAIL —— 定案，产品姿势 = B**
+
+**做法**：同一份探针 C 代码（main.c / side.c / side_ctor.c 一字未改），**唯一变量 = 包装方式**：
+`build/113/probe-jspi-b.sh` **不加 `-sJSPI`**（其余旗标 `-fwasm-exceptions + MAIN_MODULE=2 + dlopen` 不变），
+挂起能力全部来自 `run-b.html` 的 `instantiateWasm` 钩子（把 `browser_wait_ms` 包成
+`WebAssembly.Suspending`，其余 import 原样透传）+ 页面按需 `WebAssembly.promising`。
+runner = `test/browser/probe-jspi-b.mjs`。
+
+| 用例 | 结果 |
+|---|---|
+| **B1 plain 栈 dlopen 新模块（带构造函数）** | ✅ 绿（7）—— **A2 在这一格是红**，B 的决定性优势 |
+| B2 `promising(main_wait)(100)` | ✅ 42，tick+1，墙上 ≥100ms —— 手包 Suspending import 的挂起/恢复真成立 |
+| B3 `promising(main_wait_unmarked)(100)` | ✅ 43，tick+1 —— **不需要任何 JSPI_EXPORTS 名单**：想包谁页面就包谁，"漏标=当场炸"变成"页面自己选" |
+| B4 完整链 `promising(run_side)(200)` | ✅ 43 = 42+1，tick+1，≥200ms —— 跨模块链成立 |
+| B5 promising 栈 dlopen 新模块 | ✅ 绿 |
+| B6 反证：直调未包装入口 | ✅ 预期红：`SuspendError`，且事后运行期存活 —— 穷举语义不变，但名单在页面手里 |
+| B7 sync dlopen ↔ promising 交替三轮 | ✅ **全绿，无需热身、无需全异步开机** |
+
+**产物自证**：B 胶水里 `Suspending` 出现 **0 次**（全部包装在页面层，emscripten 胶水零变形）。
+
+### 定案与理由（写死，免得重想）
+
+1. **产品姿势 = B（手搓 JSPI，不加 `-sJSPI`）**。理由：A2 在 5.0.7 上有隐藏代价
+   （`dlopen` 无条件是挂起点 ⇒ 开机序列与一切可能 dlopen 的路径都要 promising 化）；
+   B 没有这个问题（`ASYNCIFY` 假 ⇒ `dlopen` 走同步分支），爆炸半径 = 页面里一个钩子 +
+   一个 promising 的 eval 入口，embind/`JSPI_EXPORTS` 命名问题整体消失。
+2. **B 的已知代价（接受并记档）**：`instantiateWasm` 钩子与 5.0.7 胶水的耦合 ——
+   **升 emsdk 必须重跑本探针**（B1/B2/B6/B7 四条是最低集）；复审提示的
+   "side module 缓存旧表项绕过包装"风险在本探针的 B4（跨模块回调链）上**未观察到**，
+   G2 压力矩阵里继续盯（双向调用 + table 增长）。
+3. **G1 重链改动清单（B 姿势）**：
+   - `main.cc`：加 `extern "C" int eval_wait(const char*)` 薄导出（内部转调 eval_string）；
+     embind 的 `eval_async` 绑定**不再需要**（`JSPI_EVAL_ASYNC` 宏可以退役）。
+   - `link-web.sh`：`WITH_JSPI=1` 时**不再加任何 `-sJSPI*` 旗标**；`JSPI_FLAGS` 分支删除或置空；
+     `eval_wait` 进 EXPORTED_FUNCTIONS；★ 2026-09-24 加的那条"grep 胶水里的 promising"自检
+     **要翻面**（B 下胶水里恰好应该是 **0** 个 Suspending，自检改为断言 0 + 页面钩子存在）。
+   - 页面（G1 批次一起上）：`instantiateWasm` 钩子（**产物没有 web_pause_ms 时无害**）+
+     `eval_wait` 的 promising 包装 + `__octaveJspiProbe` 改走新入口；
+     `pause` 的接线（web_pause_ms import + m 侧 shim）是 G2 的活。
+4. **复盘一句话**：复审的判定"A2 核心/B 备选"建立在"两者机制相同"上；实验证明**机制并不相同**
+   —— A2 因 `-sJSPI` 连带把 dlopen 变成挂起点。这正好演示了为什么判据必须可证伪。

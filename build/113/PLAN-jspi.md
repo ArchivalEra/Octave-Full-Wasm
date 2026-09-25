@@ -60,9 +60,14 @@
   （用户命令、开机资产装载、`execute_interp` 全在内，开机序列要整体异步化）。
 - **B 升格为"应当先测的方案"**：不加 `-sJSPI` ⇒ `ASYNCIFY` 假 ⇒ `dlopen` 走同步分支、
   永不是挂起点 ⇒ 爆炸半径回到真正的 1 import + 1 export，开机序列不用动。
-  **下一步 = B 的最小实验**（同一份探针 C 代码，只换包装方式：`instantiateWasm` 钩子包
-  `browser_wait_ms` + JS 侧 `promising` 包 `main_wait`，对照 A2 的 2×2 矩阵结果）。
-  B 若成立 ⇒ 产品姿势 = B；B 不成立 ⇒ 回 A2 并接受"dlopen 全走 promising"的架构约束。
+  **★ 2026-09-25 更新 3：B 实验跑完 —— 13 PASS / 0 FAIL，产品姿势定案 = B**：
+  同一份 C 代码不加 `-sJSPI`，页面钩子包 import + 按需 promising ⇒
+  plain 栈 dlopen 新模块绿（A2 红的那格）、跨模块链挂起/恢复真成立、
+  不需要 JSPI_EXPORTS 名单、**无需热身无需全异步开机**、胶水里 0 个 Suspending。
+  **G1 重链按 B 姿势做**（改动清单见 `NOTES-jspi.md`「B 方案对照实验」§定案：
+  main.cc 加 `eval_wait` 薄导出、link-web.sh 去掉 `-sJSPI*` 并把旗标自检翻面、
+  页面上钩子 + promising 包装 + probe 改走新入口）。B 的已知代价：钩子与 5.0.7 胶水耦合，
+  **升 emsdk 必须重跑探针**（B1/B2/B6/B7 最低集）。
 
 **下面这段是原计划（保留为历史口径；顺序已被上面取代）：**
 
