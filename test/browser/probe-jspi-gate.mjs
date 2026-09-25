@@ -104,8 +104,10 @@ async function open (init) {
   });
   check(r.rc === 0, '★ **没有 JSPI 的浏览器里产物照样起得来**（单产物策略的关键证据）', `rc=${r.rc} err=${String(r.err).slice(0, 80)}`);
   const msg = await page.evaluate(() => window.__octaveJspiRequire('ginput'));
-  check(typeof msg === 'string' && /JSPI/.test(msg) && /Chrome/.test(msg),
-    '★ 依赖 JSPI 的入口得到**明确一句话**（含支持的浏览器版本），不是 `TypeError`', String(msg).slice(0, 200));
+  // ★ 断言口径 2026-09-25 随第三轮复审翻面：版本号（尤其 Firefox）各方口径不一 ⇒ 文案改为
+  //   "点名浏览器 + 以能力检测为准"，不再硬编码版本号（GPT-REVIEW-3-bridge-reply §7）。
+  check(typeof msg === 'string' && /JSPI/.test(msg) && /Chromium|Chrome|Firefox|Safari/i.test(msg),
+    '★ 依赖 JSPI 的入口得到**明确一句话**（点名支持的浏览器 + 能力检测口径），不是 `TypeError`', String(msg).slice(0, 200));
   const typerr = logs.filter(l => /WebAssembly\.Suspending is not a constructor|is not a function/.test(l));
   check(typerr.length === 0, '★ 全程没有 `WebAssembly.Suspending is not a constructor` 这类裸 TypeError', typerr.slice(0, 1).join(' ') || '(无)');
 }

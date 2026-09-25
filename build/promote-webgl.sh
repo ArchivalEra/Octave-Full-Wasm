@@ -49,6 +49,16 @@ fi
 if [ "$GL_OUT" = "$SRC_OUT" ]; then
   echo "   GL_OUT == SRC_OUT（M2 车道）：跳过拷贝（同路径 cp 会失败，且本来也不需要）"
 else
+  # ★ 防呆（2026-09-25 真踩过）：GL_OUT ≠ SRC_OUT 时这一步会把 GL_OUT **整个盖到** SRC_OUT 上。
+  #   若 SRC_OUT 是刚链出来的新产物而 GL_OUT 是旧车道（例：SRC_OUT=m2fc-jspb-out、
+  #   GL_OUT=out-webgl 是 9 月的旧件），新产物会被静默换成旧件 —— promote 的 sha/字体
+  #   自检能露馅，但 boot 照样绿，很容易漏。⇒ GL_OUT 比 SRC_OUT 旧就当场拒绝。
+  if sudo docker exec o113 bash -lc \
+      "a=\$(stat -c%Y '$GL_OUT/octave.js' 2>/dev/null || echo 0); b=\$(stat -c%Y '$SRC_OUT/octave.js' 2>/dev/null || echo 0); [ \"\$a\" -lt \"\$b\" ]" ; then
+    echo "FATAL: GL_OUT($GL_OUT) 的 octave.js 比 SRC_OUT($SRC_OUT) 的旧 ⇒ 拷贝会把新产物盖成旧件" >&2
+    echo "       若 SRC_OUT 就是本次要部署的产物：用 M2 车道姿势 GL_OUT=$SRC_OUT 重跑本脚本" >&2
+    exit 3
+  fi
   run "sudo docker exec o113 cp -a '$GL_OUT'/. '$SRC_OUT'/"
 fi
 

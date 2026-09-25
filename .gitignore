@@ -53,6 +53,7 @@
 !build/promote-webgl.sh
 !build/recover-113.sh
 !build/post.js
+!build/webjslib.js
 !build/webshell/*
 !build/webshims/*
 !build/113/probe-jspi/*

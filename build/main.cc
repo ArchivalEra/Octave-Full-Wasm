@@ -326,6 +326,23 @@ int EMSCRIPTEN_KEEPALIVE eval_string(std::string eval_str) {
   return 0;
 }
 
+// ── G1（2026-09-25，B 姿势）：可挂起的解释器入口 ──────────────────────────────
+// **为什么是 extern "C" 而不是 embind async**：`WebAssembly.promising()` 只能包
+// **真 wasm 导出**，而 embind 的 JS 名（eval_async）不是；且实测 5.0.7 里 `-sJSPI`
+// 会让 `dlopen` 无条件变成挂起点（`__dlopen_js.isAsync=true`，NOTES-jspi「A2 最小
+// 实验」），手搓 JSPI（页面钩子包 import + 页面 `promising` 包入口）完全绕开它。
+// ★ 同步的 `eval_string` 一字不改 —— 它被 39 个验收套件 + 页面命令队列同步调用。
+extern "C" int eval_wait (const char *eval_str) {
+  return eval_string (std::string (eval_str));
+}
+
+// G2 的挂起点（本批预埋好，省一次重链）：m 侧 `__web_pause_ms__`（webpause.oct）
+// 经它转发到 JS 库函数 `web_sleep_ms`（build/webjslib.js，返回 Promise）。
+// 页面钩子把 env 里的 `web_sleep_ms` 包成 `WebAssembly.Suspending` ⇒ 在
+// promising 栈上调用它时整个 wasm 栈真挂起、页面事件循环照常跑。
+extern "C" void web_sleep_ms (int ms);
+extern "C" void web_pause_ms (int ms) { web_sleep_ms (ms); }
+
 ////int EMSCRIPTEN_KEEPALIVE execute_cli(std::vector<std::string> args) {
 //int EMSCRIPTEN_KEEPALIVE execute_cli() {
 ////  int argc = args.size()
@@ -496,18 +513,9 @@ EMSCRIPTEN_BINDINGS(my_module) {
   emscripten::function("last_error_message", &last_err_msg);
   emscripten::function("feval", &feval);
   emscripten::function("eval_string", &eval_string);
-  // ── G1（2026-09-24）：**异步入口** `eval_async` ────────────────────────────
-  // 与 `eval_string` 是**同一个 C 函数**，只是走 Embind 的 async 绑定 ⇒ 调用返回 Promise，
-  // 期间 wasm **可以真挂起**（JSPI）。这样"等浏览器"的能力就有了一条不用改同步语义的路。
-  //
-  // ★ **同步的 `eval_string` 一字不改**，这是刻意的：
-  //   · 它被 39 个验收套件 + 页面命令队列**同步**调用，把它改成 async 会让全体调用点变形；
-  //   · 更糟的是会**掩盖 G2 的真风险**（`pause`+EH/SjLj 的挂起组合）—— 那才是要压的东西。
-  //
-  // ⚠️ `emscripten::async()` 要求链接期带 `-sJSPI`（libembind 里写明
-  //    "async bindings are only supported with JSPI"，实测 emsdk 5.0.7 如此），
-  //    旗标在 `build/113/link-web.sh` 的 JSPI_FLAGS（`WITH_JSPI=0` 可关掉，用于对照）。
-#if defined(JSPI_EVAL_ASYNC)
-  emscripten::function("eval_async", &eval_string, emscripten::async());
-#endif
+  // ── G1（2026-09-24 → 2026-09-25 退役）：embind `eval_async` ────────────────
+  // 退役原因：`WebAssembly.promising()` 只能包**真 wasm 导出**，embind 的 JS 名不行
+  //（第一次 G1"失败"的真因之一）；且 `-sJSPI` 在 5.0.7 有 dlopen 连带（见上）。
+  // 替代品 = 上面的 `eval_wait`（extern "C" 薄导出）+ 页面把它 promising 化后仍以
+  // `Module.eval_async` 这个名字暴露 ⇒ 页面级 API 与 G0 门机制**全部不变**。
 }

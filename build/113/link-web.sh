@@ -444,7 +444,7 @@ fi
 echo "== 编 main.cc"
 em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
      ${P5_OBJS:+ $P5_DEF} \
-     "${EXC_FLAGS[@]}" ${JSPI_DEF[@]+"${JSPI_DEF[@]}"} -c "$SRC/main.cc" -o "$SRC/main.o"
+     "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
 cd "$SRC"
@@ -475,40 +475,43 @@ DIAG=()
 #    —— 这个坑本仓在 JSPI 那轮踩过），所以说明一律写在命令**上面**。
 IDBFS_FLAGS=( -lidbfs.js )
 
-# ---- JSPI（G1，2026-09-24）：异步入口 `eval_async` 的运行期基础 -------------------
-# **为什么必须显式加**：libembind 里写明 `async bindings are only supported with JSPI`
-#（实测 emsdk 5.0.7）⇒ `main.cc` 里的 `emscripten::function("eval_async", …, async())`
-# 在**没有** `-sJSPI` 时编得过、链接过，运行时才炸 —— 属于"静默陷阱"那一类。
-#
-# 三条实现要求（全都撞过，见 `build/113/NOTES-jspi.md`）：
-#   ① 每个"可能间接挂起"的 JS 入口都要在 `-sJSPI_EXPORTS` 里（V8 要求**挂起点所在整条入口**
-#      都是 promising；只列最外层的那个不够）；
-#   ② JSPI 边界**不传 JS 字符串**（要 `ccall`/`cwrap`）—— 传了会得到 NULL，
-#      于是 `dlopen(NULL)` 返回主模块句柄、症状极像"没导出符号"；
-#   ③ side module 要**显式导出**符号（不写就是 `-O2` DCE 后的 64 字节空壳）。
-#
-# ★ 产物形状是**单产物 + 运行时能力门**（Gate 0 已实测：把 `WebAssembly.Suspending`/
-#   `promising` 删掉之后，带 `-sJSPI` 的产物**仍然能加载**，只是被包过的导出不存在）
-#   ⇒ 不抬浏览器下限、不维护两条车道。页面侧的门在 `bridge/index.html` 的 `__octaveJspi`。
-# `WITH_JSPI=0` 可以关掉（对照组用；关了 `eval_async` 就不存在，页面会如实报 no-entry）。
-# ⛔ **2026-09-24 起默认关闭**：G1 第一次尝试失败（`RuntimeError: null function`，一调还把页面卡死），
-#    已把产物回退。**在机制没于小复现里证明之前，别把它做成默认** —— 免得谁重链一次就拿到坏产物。
-#    开启时同时给编译期宏 `-DJSPI_EVAL_ASYNC=1`（main.cc 里那个绑定在 `#if` 里；宏不加就编不进去，
-#    这样"关掉"是真的关掉，不是留一个坏绑定在产物里）。
-# ⛔⛔ **2026-09-24 深夜实测抓到的真 bug（HISTORY §5.46）**：`JSPI_FLAGS` 原来**只被赋值、
-#    从来没有被下面那条 `em++` 链接行引用** —— 而 `JSPI_DEF` 是给 `main.cc` 的**编译**行的。
-#    ⇒ `WITH_JSPI=1` 的产物里**宏进了 C++、`-sJSPI` 没进链接**，胶水里连
-#    `WebAssembly.promising` 都没有（判据：`grep -o 'WebAssembly\.promising' "$OUT/octave.js"`）。
-#    后果是 **G1 第一次"失败"测的是一件不存在的东西**。⇒ 现在两件事一起做：
-#    ① 链接行必须引用 `${JSPI_FLAGS[@]}`；② 链完**自检胶水**，旗标没生效就直接失败。
-JSPI_FLAGS=(); JSPI_DEF=()
+# ---- JSPI（G1，2026-09-25 定案 **B 姿势 = 手搓 JSPI，不加 `-sJSPI`**）-----------
+# 历史三阶段（细节在 NOTES-jspi / HISTORY §5.43–§5.47）：
+#   ① 2026-09-24 第一次尝试：`-sJSPI -sJSPI_EXPORTS=eval_async` —— 实测 `JSPI_FLAGS`
+#      没被链接行引用（§5.46），测了个空；
+#   ② 2026-09-25 A2 实验：就算 `-sJSPI` 真传进去，5.0.7 也会经
+#      `__dlopen_js.isAsync=true` 把 **dlopen 无条件变成挂起点**（`-sJSPI_IMPORTS`
+#      收窄管不住）⇒ A2 的隐藏代价 = "一切可能 dlopen 的路径都必须 promising 化"；
+#   ③ **B 对照实验 13/0 全绿**：不加 `-sJSPI` ⇒ `ASYNCIFY` 假 ⇒ `dlopen` 走同步分支；
+#      挂起能力全部来自**页面钩子**（`bridge/index.html` 的 `instantiateWasm`，
+#      只包 `web_sleep_ms` 这一个 import）+ 页面按需 `WebAssembly.promising`。
+# ⇒ 本脚本在 `WITH_JSPI=1` 时**只做三件增量事**（wasm 侧零旗标、胶水零变形）：
+#   a) `--js-library webjslib.js`（`web_sleep_ms`，返回 Promise 的唯一挂起点）；
+#   b) `EXPORTED_FUNCS` 追加 `_eval_wait`（可挂起的解释器入口，extern "C" 薄导出）
+#      与 `_web_pause_ms`（G2 的 `webpause.oct` 要引用的主模块导出，本批预埋）；
+#   c) 自检翻面：胶水里 `Suspending` 必须是 **0** 处（包装只许存在于页面层）。
+# `WITH_JSPI=0`（默认）：**连这三件也不做** ⇒ 与现役产物一致（产物里 eval_wait 都没有）。
+JSPI_FLAGS=()
+JSPI_RT=''
 if [ "${WITH_JSPI:-0}" = "1" ]; then
-  JSPI_FLAGS=( -sJSPI -sJSPI_EXPORTS=eval_async )
-  JSPI_DEF=( -DJSPI_EVAL_ASYNC=1 )
-  echo "⚠⚠ WITH_JSPI=1：**实验车道**。机制层面 v1–v13 已查明（HISTORY §5.45），"
-  echo "     而真产物的第一次尝试测的是个**没带 -sJSPI 的产物**（§5.46）⇒ 这次才是第一次真测。"
+  JSPI_JSLIB=( --js-library "$SRC/webjslib.js" )
+  [ -f "$SRC/webjslib.js" ] || { echo "FATAL: 缺 $SRC/webjslib.js（B 姿势的挂起 import）" >&2; exit 3; }
+  # `_malloc`/`_free`：页面把 eval 代码字符串 marshal 成堆指针（**挂起期间指针必须活着**
+  #  ⇒ 不能用栈分配，见 bridge/index.html 的 eval_async 包装）；`lengthBytesUTF8`/
+  #  `stringToUTF8` 是写串用的运行期助手。
+  JSPI_EXPORT_FUNCS="_eval_wait,_web_pause_ms,_malloc,_free"
+  JSPI_RT=',"lengthBytesUTF8","stringToUTF8"'
+  echo "★ WITH_JSPI=1：**B 姿势**（不加 -sJSPI；页面钩子包 web_sleep_ms + 页面 promising 包 eval_wait）"
 else
-  echo "== JSPI 关闭（默认）：不加 -sJSPI、不编 eval_async ⇒ 与现役产物一致"
+  JSPI_JSLIB=(); JSPI_EXPORT_FUNCS=""
+  echo "== JSPI 关闭（默认）：无 eval_wait/web_pause_ms，与现役产物一致"
+fi
+# WITH_JSPI=1 时把 B 姿势的两个导出追加进 EF_JSON（EF_JSON 在上面组装，此处补尾巴；
+# ⚠️ `_eval_wait`/`_web_pause_ms` 是 **wasm 符号** ⇒ 带前导下划线，与 `emscripten_run_script`
+#    那类 JS 库名（无下划线）写法不同）。
+if [ -n "$JSPI_EXPORT_FUNCS" ]; then
+  EF_JSON="${EF_JSON%]},\"${JSPI_EXPORT_FUNCS//,/\",\"}\"]"
+  echo "== +JSPI(B) 导出：$JSPI_EXPORT_FUNCS ⇒ EF_JSON=$EF_JSON"
 fi
 
 set -x
@@ -527,10 +530,11 @@ em++ --bind \
   ${EID_FLAGS[@]+"${EID_FLAGS[@]}"} \
   ${KEEP_FLAGS[@]+"${KEEP_FLAGS[@]}"} \
   ${LF_FLAGS[@]+"${LF_FLAGS[@]}"} \
-  -s EXPORTED_RUNTIME_METHODS='["FS","MEMFS","IDBFS"]' \
+  -s EXPORTED_RUNTIME_METHODS="[\"FS\",\"MEMFS\",\"IDBFS\"${JSPI_RT}]" \
   -s MODULARIZE=1 -s EXPORT_NAME=OCTAVE -s ENVIRONMENT=web -s EXPORT_ES6=0 \
   "${PRELOAD[@]}" \
   --post-js "$SRC/post.js" \
+  ${JSPI_JSLIB[@]+"${JSPI_JSLIB[@]}"} \
   "${EXC_FLAGS[@]}" -Wl,--allow-multiple-definition \
   "${LIBS[@]}" \
   "${IDBFS_FLAGS[@]}" \
@@ -539,19 +543,27 @@ em++ --bind \
   -o "$OUT/octave.js" "$SRC/main.o" ${P5_OBJS[@]+"${P5_OBJS[@]}"}
 set +x
 
-# ---- 自检：JSPI 旗标到底有没生效（**2026-09-24 深夜加，直接来自 HISTORY §5.46 的假失败**）----
-# 为什么查**胶水**而不是只信命令行：`JSPI_FLAGS` 曾因"赋值了但没被链接行引用"而整条失效 ——
-# 构建、链接、五条自检**全绿**，产物却是个普通非 JSPI 产物，然后浏览器侧把"绑定不异步"当成
-# "JSPI 坏了"，白查一晚。这条自检只要 1 条 `grep`，是这类**静默退化**最便宜的判据。
+# ---- 自检：JSPI 到底有没有按 **B 姿势** 落进产物（2026-09-25 翻面）--------------
+# 历史：2026-09-24 那条自检查"胶水里有没有 promising"（防 `JSPI_FLAGS` 没进链接的假失败，
+# HISTORY §5.46）。**B 姿势下口径反了**：包装只许存在于**页面层**（bridge/index.html 的
+# instantiateWasm 钩子），胶水里 `Suspending` 必须是 **0** 处 —— A2 实测证明胶水一旦自己
+# 包（`-sJSPI`），连 dlopen 都会变成挂起点。两条新判据：
+#   ① `WITH_JSPI=1` ⇒ 胶水 `Suspending` 计数 = 0 且 `eval_wait` 导出在胶水符号表里；
+#   ② `WITH_JSPI=0` ⇒ 连 `eval_wait` 都不许出现（与现役产物一致的硬口径）。
 if [ "${WITH_JSPI:-0}" = "1" ]; then
-  if ! grep -q 'WebAssembly\.promising' "$OUT/octave.js"; then
-    echo "FATAL: WITH_JSPI=1 但 octave.js 里没有 WebAssembly.promising —— -sJSPI 没生效" >&2
-    echo "       （多半是链接行没引用 \${JSPI_FLAGS[@]}；见 HISTORY §5.46）" >&2
+  _n=$(grep -c 'Suspending' "$OUT/octave.js" || true)
+  if [ "$_n" != "0" ]; then
+    echo "FATAL: B 姿势下胶水里出现了 $_n 处 Suspending（包装只许在页面层）" >&2
+    echo "       —— 多半是混进了 -sJSPI 类旗标；见 NOTES-jspi「A2 最小实验」" >&2
     exit 3
   fi
-  echo "== JSPI 自检: octave.js 里有 WebAssembly.promising / Suspending ✓"
-elif grep -q 'WebAssembly\.promising' "$OUT/octave.js"; then
-  echo "⚠ WITH_JSPI 未开，但 octave.js 里出现了 WebAssembly.promising（产物不干净？）" >&2
+  if ! grep -q 'eval_wait' "$OUT/octave.js"; then
+    echo "FATAL: octave.js 里没有 eval_wait —— EXPORTED_FUNCS 没接上？" >&2
+    exit 3
+  fi
+  echo "== JSPI(B) 自检: 胶水 Suspending=0、eval_wait 导出在 ✓"
+elif grep -q 'eval_wait\|Suspending' "$OUT/octave.js"; then
+  echo "⚠ WITH_JSPI 未开，但 octave.js 里出现了 eval_wait/Suspending（产物不干净？）" >&2
 fi
 
 # ---- 自检：预载路径有没有错位 ------------------------------------------------

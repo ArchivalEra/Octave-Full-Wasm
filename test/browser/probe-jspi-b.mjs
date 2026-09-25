@@ -16,7 +16,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const DIR = process.argv[2] || '/mnt/hdd/octave-wasm-build/jspi-probe-b';
+const DIR = (process.argv[2] && !/^http/.test(process.argv[2])) ? process.argv[2] : '/mnt/hdd/octave-wasm-build/jspi-probe-b';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
 const server = createServer(async (req, res) => {
   const p = normalize(join(DIR, decodeURIComponent(req.url.split('?')[0])));

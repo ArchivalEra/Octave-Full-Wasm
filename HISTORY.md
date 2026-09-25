@@ -2259,6 +2259,45 @@ Firefox ≥153 / Safari ≥27），而不是让用户撞上 `TypeError: WebAssem
 
 ---
 
+### 5.48 G1 落地（B 姿势）：可挂起的解释器入口上线 8761（2026-09-25）
+
+**产物**：`octave.wasm` sha `b40a2b14…`（对现役 +297 字节）；8761/8768 两站点一致，D8 开机自检绿。
+**wasm 增量**：`eval_wait(const char*)`（可挂起解释器入口，extern "C" 薄导出，同步 `eval_string`
+一字未改）+ `web_pause_ms(int)`（G2 挂起点预埋，转发 JS 库函数 `web_sleep_ms`）+ `webjslib.js`
+（`addToLibrary`，返回 Promise，记 `Module.__tick` 供验收证伪 busy-loop）。**胶水零变形**
+（不加 `-sJSPI`，B 姿势；`Suspending` 在胶水里 0 处，包装全在页面 `instantiateWasm` 钩子）。
+
+**页面**：钩子只包 `web_sleep_ms` 一个 import（5.0.7 钩子契约=完全接管实例化 ⇒ 自己 fetch+异步
+编译+回调）；`Module.eval_async = promising(eval_wait)`（API 名不变 ⇒ G0 门/探针/D9 全沿用）；
+probe 加"先等 `__octaveReady`"护栏（§5.46 教训的落地）。
+
+**验收（全绿）**：`probe-jspi-eval` 9/0（rc 语义与同步一致、`error('x')` ⇒ rc 2 + last_error_message、
+**plain 栈直调 `_web_pause_ms` 抛 SuspendError 证明钩子生效**、`promising(_web_pause_ms)(120)` ⇒
+真挂起/恢复 tick+1）；`probe-jspi-gate` 12/0（smoke=pass-blocking，等 G2 接 pause 自动变 pass；
+无 JSPI 浏览器降级为 api-missing + 一句人话，无裸 TypeError）；8768 sweep 39 套/1025/0；
+8761 `PROBES=1` 67 套/1125/1（唯一红 = gl4es-smoke，见下）；dist 重打包（包内 wasm 与部署件同 sha）。
+
+**三条新教训（都是当场踩的）**：
+1. **"wasm 边界不传 JS 字符串"在产品层重现**：`promising(eval_wait)("42")` 直传 JS 串 ⇒ 指针 0
+   ⇒ eval 空串、rc=0 装成功（三例全"通过"但全是空 eval）。修法 = 页面 `malloc` 堆指针 +
+   `stringToUTF8` 写串 + settle 后 `free` —— **必须堆分配**（栈分配的指针在挂起期间会被复用）。
+   为此 `EXPORTED_RUNTIME_METHODS` 增补 `lengthBytesUTF8,stringToUTF8`、`EXPORTED_FUNCS` 增补
+   `_malloc,_free`（都在 `WITH_JSPI=1` 才加）。
+2. **promote-webgl.sh 的 GL_OUT 覆盖陷阱**：`GL_OUT ≠ SRC_OUT` 时第 1 步会把 GL_OUT 整个盖到
+   SRC_OUT 上 —— 我只传了 `SRC_OUT=m2fc-jspb-out`，**8761 被短暂换成 out-webgl 的 9月23日 旧件**
+   （boot 照样绿！唯一露馅 = promote 的"无 FreeType 字体预载"自检警告）。已加防呆：
+   GL_OUT 的 octave.js 比 SRC_OUT 旧 ⇒ 当场 FATAL；重链重 promote 后修正。
+   **重链确定性实测**：同命令三次产出 `octave.wasm` sha 逐字节相同。
+3. **探针腐烂三连（PROBES=1 首跑抓的）**：`probe-gl4es-smoke` 被 sweep 传产品 URL（它只测
+   siteGL4ES/8767 独立站）+ 8767 服务断电没拉起 ⇒ 钉死 8767 口径并恢复服务（单跑 16/0）；
+   `probe-jspi`/`probe-jspi-b` 的"产物目录"参数被 sweep 传成 URL ⇒ 契约改为忽略 http 参数；
+   `probe-jspi-a2` **归档**至 `build/113/probe-jspi/runner-a2.mjs`（A2 已是弃用姿势，其
+   SuspendError 陷阱会偶发楔死渲染进程使 harness 挂死；语义锚由 NOTES 表格承担）。
+   顺带：gate 冒烟判定从 `indexOf('43')` 改为 `rc===0`（eval 返回的是返回码 ——
+   那是 G0 时代没真测过的口径）。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

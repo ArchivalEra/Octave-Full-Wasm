@@ -60,6 +60,35 @@
   }
 
   var Module = {
+    // ── JSPI **B 姿势**（2026-09-25 定案）：包装只发生在这一层 ─────────────────
+    // 把唯一的挂起 import `web_sleep_ms` 包成 `WebAssembly.Suspending`，其余 import
+    // **原样透传**；旧产物（WITH_JSPI=0，没有这个 import）走无害空操作。
+    // ⚠️ 5.0.7 的钩子契约 = **完全接管实例化**（preamble.js:835-850，无 fall-through）
+    //    ⇒ 自己 fetch + **异步**编译（29MB 在主线程同步编译会被 Chrome 拒）再回调。
+    //    为什么不走 `instantiateStreaming`：python http.server 不发 application/wasm，
+    //    现役开机本来就在走 arrayBuffer 回退（无回归）。
+    // 为什么坚持 B 姿势（页面包装，不加 `-sJSPI`）：实测 5.0.7 里 `-sJSPI` 经
+    //   `__dlopen_js.isAsync=true` 把 **dlopen 无条件变成挂起点** ⇒ 开机资产装载会
+    //   整批炸（NOTES-jspi「A2 最小实验」）；页面层包装让挂起点只剩 `web_sleep_ms`。
+    instantiateWasm: function (info, receiveInstance) {
+      try {
+        // 没有 JSPI API 的浏览器（Gate 0 单产物策略）⇒ **不包装、不告警**——
+        // "无挂起"是预期降级路径，不是错误；包装失败也不许把裸 TypeError 打到控制台。
+        if (typeof WebAssembly.Suspending === 'function'
+            && info && info.env && typeof info.env.web_sleep_ms === 'function') {
+          info.env.web_sleep_ms = new WebAssembly.Suspending(info.env.web_sleep_ms);
+        }
+      } catch (e) {
+        console.warn('[jspi-b] 挂起包装不可用，已降级为无挂起（其余功能照常）');
+      }
+      fetch('octave.wasm').then(function (r) { return r.arrayBuffer(); })
+        .then(function (b) { return WebAssembly.instantiate(b, info); })
+        .then(function (out) { receiveInstance(out.instance, out.module); })
+        .catch(function (e) {
+          console.error('[jspi-b] instantiate failed: ' + e);
+        });
+      return {};
+    },
     print: function (t) { console.log(t); octaveUiAppend(t + '\n'); },
     printErr: function (t) { console.warn(t); octaveUiAppend(t + '\n'); },
     // stdin：Emscripten 的**官方扩展点**（`/dev/stdin` 的设备回调）。
@@ -150,7 +179,27 @@
       //
       // ⚠️ **现在没有任何功能依赖它**（"等用户动作"一族都是清晰报错）⇒ **这里不弹任何提示**。
       //    只有 `__octaveJspiRequire()` 被调用时才把话说清楚（G3/G5 接上以后才会被调）。
-      var JSPI_SUPPORT = 'Chrome/Chromium ≥137、Firefox ≥153、Safari ≥27';
+      var JSPI_SUPPORT = '支持 JSPI 的浏览器（Chromium 137+ / Safari 27+ 等；**以能力检测为准，别信版本号**）';
+      // ── B 姿势的入口包装（2026-09-25）：`eval_wait`（真 wasm 导出）→ promising ──
+      // 页面级 API 名仍是 `eval_async` ⇒ G0 门机制、探针、D9 接线**全部不变**。
+      // ⚠️ **wasm 边界不传 JS 字符串**（探针教训，实测重现）：`_eval_wait(const char*)`
+      //    直收 JS 串会得到 NULL 指针 ⇒ eval 空串、rc=0 装成功。⇒ 先 malloc 堆指针、
+      //    写串、调用、settle 后 free —— **必须堆分配**（栈分配的指针在挂起期间会被复用）。
+      // ⚠️ 必须**等导出存在**（postRun 里 exports 已就位）；没有 JSPI API 或旧产物
+      //    （无 `_eval_wait`）不包 ⇒ 门如实记 `no-entry`（单产物 + 运行时能力门）。
+      try {
+        if (typeof WebAssembly.promising === 'function' && typeof Module['_eval_wait'] === 'function'
+            && typeof Module.eval_async !== 'function') {
+          var __evalWaitPromised = WebAssembly.promising(Module['_eval_wait']);
+          Module.eval_async = function (code) {
+            var n = Module.lengthBytesUTF8(code) + 1;
+            var p = Module._malloc(n);
+            if (!p) return Promise.reject(new Error('eval_async: malloc 失败'));
+            Module.stringToUTF8(code, p, n);
+            return __evalWaitPromised(p).finally(function () { Module._free(p); });
+          };
+        }
+      } catch (e) { console.warn('[jspi-b] eval_async 包装失败：' + e); }
       window.__octaveJspi = {
         api: (typeof WebAssembly.Suspending === 'function'
               && typeof WebAssembly.promising === 'function'),
@@ -176,11 +225,24 @@
         var guard = new Promise(function (res) {
           setTimeout(function () { res(done('timeout', 'eval_async 在 ' + (timeoutMs || 5000) + 'ms 内没有 settle')); }, timeoutMs || 5000);
         });
-        var real = Promise.resolve().then(function () { return fn('pause(0.2); 43'); }).then(function (v) {
-          // 两条都要：**值对**（43）且**等待期间页面没被堵死**（ticks > 0）。
-          // ticks=0 但值对 ⇒ `pass-blocking`：挂起能力有了，但 `pause` 还没接上（那是 G2 的活）。
-          return done(String(v).indexOf('43') >= 0 ? (ticks > 0 ? 'pass' : 'pass-blocking') : 'fail',
-                      'ticks=' + ticks + ' value=' + v);
+        var real = Promise.resolve().then(function () {
+          // ★ **解释器装配之前不许碰它**（2026-09-24 深夜实测，HISTORY §5.46）：`execute_interp()`
+          //   之前的任何解释器调用 —— `eval_string` 与 `eval_async` **一样** —— 都抛
+          //   `RuntimeError: null function`。直接调会把冒烟**误判成 `fail`**（JSPI 其实没问题，
+          //   只是叫早了）。⇒ 先等 ready；等不到就由下面的 guard 如实记 `timeout`。
+          if (window.__octaveReady === true) return null;
+          return new Promise(function (res) {
+            var t = setInterval(function () {
+              if (window.__octaveReady === true) { clearInterval(t); res(null); }
+            }, 50);
+          });
+        }).then(function () { return fn('pause(0.2); 43'); }).then(function (v) {
+          // 两条都要：**rc=0**（eval 的返回值是**返回码**，'43' 是表达式值不进返回值 ——
+          // 当年写 indexOf('43') 是 G0 时代没真测过的口径，2026-09-25 实测纠正）
+          // 且**等待期间页面没被堵死**（ticks > 0）。
+          // ticks=0 但 rc=0 ⇒ `pass-blocking`：挂起能力有了，但 `pause` 还没接上（G2 的活）。
+          return done(Number(v) === 0 ? (ticks > 0 ? 'pass' : 'pass-blocking') : 'fail',
+                      'ticks=' + ticks + ' rc=' + v);
         }).catch(function (e) { return done('fail', String(e).slice(0, 140)); });
         return Promise.race([real, guard]);
       };

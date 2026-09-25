@@ -19,7 +19,10 @@
 //   · 绿像素占比合理（>10% 且 <70%）⇒ 确实做了光栅化，不是"整屏同色"
 import { chromium } from 'playwright-core';
 
-const URL = process.argv[2] || 'http://127.0.0.1:8767/';
+// ★ 本探针测的是 **siteGL4ES 独立站点（8767）** 上的 standalone smoke，不测产品页 ——
+//   `window.__gl4es_smoke` 只有那个站点会落。sweep 会把被测站 URL 传进来 ⇒ 忽略之，
+//   否则在 sweep 语境下永远超时（2026-09-25 PROBES=1 首跑抓到的腐烂点）。
+const URL = (process.argv[2] && /:8767\//.test(process.argv[2])) ? process.argv[2] : 'http://127.0.0.1:8767/';
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage',
          '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });

@@ -8,7 +8,9 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
-> **最后更新：2026-09-24（深夜）**。现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
+> **最后更新：2026-09-25**。**★ G1 已按 B 姿势落地 8761**（`octave.wasm` `b40a2b14…`，
+> `eval_wait`+`web_pause_ms` 导出 + 页面钩子/promising；全量+探针全绿，见 HISTORY §5.48）。
+> 2026-09-24（深夜）的旧状态：现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
 > **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
 > `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
 > `PLAN-next.md` 的**七件小口子全部收口**（1 件实测翻案 + 6 件真做成，含**重链**做的 IDBFS 持久化
@@ -896,12 +898,10 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      **5.0.7 里 `-sJSPI` 使 `dlopen` 无条件成为挂起点**（`__dlopen_js.isAsync=true`，
      `-sJSPI_IMPORTS` 收窄管不住）⇒ A2 隐藏代价 = "一切可能 dlopen 的入口都必须 promising"；
      **B（手搓、不加 `-sJSPI`）没有这个问题 ⇒ B 升格为"应当先测"**。
-     **★ B 实验已跑完（同日）：13 PASS / 0 FAIL —— 产品姿势定案 = B（手搓 JSPI，不加 `-sJSPI`）**。
-     A2 的隐藏代价实测坐实（`dlopen` 无条件挂起点），B 全绿且胶水零变形。
-     **下一步 = G1 重链按 B 姿势**（改动清单见 `NOTES-jspi.md`「B 方案对照实验」）：
-     main.cc 加 `eval_wait` 薄导出；link-web.sh 去 `-sJSPI*`、旗标自检翻面（B 下胶水里 Suspending=0）；
-     页面上 `instantiateWasm` 钩子 + promising 包装 + probe 改走新入口；
-     8768 验绿后 probe-jspi-eval 三例（42 / 拒绝路径 / 穷举反证）。
+     ✅ **G1 已落地（B 姿势，2026-09-25，HISTORY §5.48）**：`b40a2b14…` 上 8761；
+     probe-jspi-eval 9/0、gate 12/0、两站 sweep 全绿、dist/parity 绿。
+     ▶ **下一步 = 批次 2（G2）**：`webpause.oct` + `webshims/pause.m` 接真 `pause` ⇒
+     冒烟应从 pass-blocking 变 pass；压力矩阵 = T1–T6×6 + 复审 §8 五条（**重入第一优先**）。
      ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
      **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
      → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。
@@ -1011,13 +1011,13 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 
 | 项 | 值 |
 |---|---|
-| `octave.wasm` | 29,463,242 B raw / 7,016,523 B gz | sha256 `4faaa96d583ed978…` |
-| `octave.js` | 461,234 B raw / 89,174 B gz | sha256 `7b114b719ffba355…` |
+| `octave.wasm` | 29,463,539 B raw / 7,016,718 B gz | sha256 `b40a2b141b1c29b0…` |
+| `octave.js` | 461,693 B raw / 89,342 B gz | sha256 `f9fa2cddab38f07b…` |
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
-| 三大件 gzip 合计 | **10,260,744 B** | |
+| 三大件 gzip 合计 | **10,261,107 B** | |
 | 资产条目 | 48 | |
-| 最近一次**全绿**回归 | `20260924-120049` · **39 套 / 1,025 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260924` · tar.zst 27,090,799 B · `232c9e0a067ec471…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260925-040626` · **39 套 / 1,025 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
+| 交付包 | `octave-full-wasm-site-20260925` · tar.zst 27,097,275 B · `eeb23a57ddc31a39…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `main` · HEAD 提交日期 2026-09-25 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

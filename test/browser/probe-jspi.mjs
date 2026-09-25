@@ -19,7 +19,8 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const DIR = process.argv[2] || '/mnt/hdd/octave-wasm-build/jspi-probe';
+// sweep 会把被测站 URL 传进来；本探针自 host **产物目录**（run.html），URL 参数不适用 ⇒ 忽略之
+const DIR = (process.argv[2] && !/^http/.test(process.argv[2])) ? process.argv[2] : '/mnt/hdd/octave-wasm-build/jspi-probe';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
 
 const server = createServer(async (req, res) => {

@@ -16,7 +16,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const DIR = process.argv[2] || '/mnt/hdd/octave-wasm-build/jspi-probe';
+const DIR = (process.argv[2] && !/^http/.test(process.argv[2])) ? process.argv[2] : '/mnt/hdd/octave-wasm-build/jspi-probe-a2';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
 
 const server = createServer(async (req, res) => {
@@ -107,8 +107,12 @@ console.log(`URL=${URL}`);
   // 判据 2：**任何 promising 调用之前**，未标记同步入口 dlopen 带构造函数的 side module
   const c2 = await call(page, '_run_ctor_unmarked');
   console.log(`   判据2 无热身+未标记 dlopen(ctor)：val=${c2.val} err=${c2.err} | wasm: ${c2.log}`);
-  check(c2.err === null && c2.val === 7,
-    '★ 判据2（预期绿）：**没有任何 promising 热身**时，未标记同步 dlopen（含构造函数间接调用）照常工作',
+  // ★ 判据2（2026-09-25 实测翻案，原预期"绿"是错的）：plain 栈 dlopen **新模块**在
+  //   `-sJSPI` 下抛 SuspendError —— dlopen 是无条件挂起点（`__dlopen_js.isAsync=true`，
+  //   根因与构造函数无关）。本探针作为 **A2 姿势的语义锚**：断言这个红持续成立；
+  //   哪天它变绿了（emscripten 修了 dlopen 的 async 化）也如实翻面。
+  check(c2.err !== null && /SuspendError|promising/i.test(c2.err),
+    '★ 判据2（实测=红，A2 语义锚）：plain 栈 dlopen 新模块抛 SuspendError（dlopen 无条件挂起点）',
     `val=${c2.val} err=${c2.err || '(无)'}`);
 
   // 判据 3：promising → 同步 dlopen → promising 交替三轮，不许需要任何"热身仪式"
@@ -117,12 +121,13 @@ console.log(`URL=${URL}`);
     const w = await call(page, '_main_wait', 80);
     const d = await call(page, '_run_ctor_unmarked');
     const s = await call(page, '_run_side', 80);
-    const okRow = w.err === null && w.val === 42 && w.ticks > 0 && d.err === null && d.val === 7
+    const okRow = w.err === null && w.val === 42 && w.ticks > 0
+                  && d.err !== null && /SuspendError/.test(d.err)
                   && s.err === null && s.val === 43 && s.ticks > 0;
     seqOk = seqOk && okRow;
     seqDetail.push(`#${i} wait=${w.val}/${w.ticks}ctor=${d.val} side=${s.val}/${s.ticks}${s.err ? ' err=' + s.err : ''}`);
   }
-  check(seqOk, '★ 判据3：promising↔同步dlopen 交替三轮全稳（机制②的"热身"在收窄口径下**不需要依赖**）', seqDetail.join(' | '));
+  check(seqOk, '★ 判据3（实测=红的那半也在锚内）：wait/side 稳、**新模块同步 dlopen 每轮都炸** —— 热身救不了（机制②=装载缓存）', seqDetail.join(' | '));
   await page.close();
 }
 
