@@ -2423,6 +2423,8 @@ Settings → Pages → Source 选 "GitHub Actions"——留给配 yml 的人）�
 **境外下载一律走 2080 代理**（直连 60KB/s，代理 1.1MB/s，HANDOFF §3.6 的既有结论再次应验）；
 安卓模拟器必须 **setsid 脱离 + `-no-snapshot`** 启动（工具调用取消会连带杀掉子进程模拟器），
 Firefox Android 官方 x86_64 APK 从 archive.mozilla.org 直取。
+**AGENTS 补记**（当时提交信息说了、正文漏写，本轮补上）：部署件 SHA 检查三层、
+M2 车道 `GL_OUT=$SRC_OUT`、测试用例从仓库原路径直跑（勿 cp 到 harness）。
 
 ---
 

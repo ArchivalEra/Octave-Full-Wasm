@@ -14,6 +14,14 @@
 > 两站 PROBES=1 全量 **71 套/1194/0**，见 HISTORY §5.48–§5.51；
 > **架构规则：可能执行到 pause 的命令必须走 `eval_async`**；
 > **部署件 SHA 铁律：跑测试前先跑 `check-deploy-sha.sh` + `probe-artifact-sha.mjs`**）。
+> **★ 仓库已整理成"可直接部署"（HISTORY §5.52）**：分支收窄为**只剩 main**（graphics 三分支
+> 归档至持久盘镜像）；**`site/` 63MB = 8761 的逐字节镜像已入库**，配 `DEPLOY.md` +
+> `.github/workflows/pages-deploy.yml`（手动触发）；**浏览器矩阵实测全绿** ——
+> Chromium 最新 5/0、**Firefox 156 桌面 5/0（第二引擎）**、**Firefox 156 Android 模拟器冒烟
+> pass（Gecko 移动）**、真·无 JSPI 的 Chromium 123（容器）**7/0 优雅降级**——
+> 桌面双引擎 + 移动 Gecko + 老浏览器降级，四格全绿。
+> 剩余用户侧两步：① Pages 上线 = Settings→Pages→Source 选 "GitHub Actions" 后手动 Run
+> `pages-deploy`；② 真手机人工过一遍交互（模拟器已验，真机 GPU/内存未验）。
 > 2026-09-24（深夜）的旧状态：现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
 > **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
 > `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
@@ -912,8 +920,12 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
      ✅ **批次 4 已落地（同日，HISTORY §5.51）**：D6 pkg load 自动装载（pkg.m shim +
      `__web_run_js__` + 轮询）、D7 IDBFS 边界（同 context reload + 全量读回轮询）、
      D5 规则 B 复核收口（162 处全同类、口径有意保留）。
-     ▶ **PLAN-jspi 全部收口**。JSPI 交互线（pause/ginput/Ctrl-C/keyboard）已在 8761 可用；
-     用户侧遗留：`gh` 已通 ⇒ origin 已同步；真机（手机浏览器）实测仍待做。
+     ✅ **PLAN-jspi 全部收口 + 仓库整理 + 浏览器矩阵（HISTORY §5.52，commit 830e4e4/4070194）**。
+     JSPI 交互线（pause/ginput/Ctrl-C/keyboard）已在 8761 可用；origin 已同步且**只剩 main**；
+     `site/` 逐字节镜像入库（DEPLOY.md + pages-deploy.yml 就绪，等 Pages 两步上线）；
+     浏览器矩阵四格全绿（Chromium 最新 / Firefox 156 桌面 / Firefox 156 Android 模拟器 /
+     Chromium 123 无 JSPI 容器降级）。
+     **用户侧遗留（只有这两件）**：① Pages 两步上线；② 真手机人工过一遍交互。
      ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
      **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
      → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。
