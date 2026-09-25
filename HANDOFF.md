@@ -1042,6 +1042,6 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | 资产条目 | 49 | |
 | 最近一次**全绿**回归 | `20260925-061510` · **40 套 / 1,036 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
 | 交付包 | `octave-full-wasm-site-20260925` · tar.zst 27,108,013 B · `6e8afb6eb0a09a05…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `main` · HEAD 提交日期 2026-09-25 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
+| 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-25 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 
