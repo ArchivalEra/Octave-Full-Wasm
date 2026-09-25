@@ -71,6 +71,7 @@ jobs:
           echo "octave.wasm sha256：$sha"
 
       - name: Push site/ to heart deploy/Octave
+        id: push
         env:
           HEART_DEPLOY_KEY: ${{ secrets.HEART_DEPLOY_KEY }}
           WASM_SHA: ${{ steps.artifact.outputs.wasm_sha }}
@@ -124,8 +125,10 @@ jobs:
 
       # 线上校验：EdgeOne 收不收 29MB 的 wasm、MIME 对不对、Range 通不通。
       # 边缘缓存与站点构建有延迟，所以这一步只报告、不拦部署。
+      # 只在真的推成功了才跑 —— 否则 preflight 或 push 失败时它会发一条
+      # 误导性的 sha 不一致告警（什么都没上线）。
       - name: Verify live (informational)
-        if: always()
+        if: steps.push.outcome == 'success'
         continue-on-error: true
         env:
           WASM_SHA: ${{ steps.artifact.outputs.wasm_sha }}
