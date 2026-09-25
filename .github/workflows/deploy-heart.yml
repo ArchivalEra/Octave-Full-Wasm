@@ -7,6 +7,18 @@
 # 触发方式刻意收窄：手动 + 仅当 site/** 变更时。
 # 不在任意 push 上跑，是因为 site/ 只应在批次收尾、8761 验绿之后才变
 # （AGENTS.md「验收底线」：site/ 与 8761 不一致 = 不能宣称验收通过）。
+#
+# ⚠️ 已知阻塞：EdgeOne 有单文件大小上限，site/octave.wasm（28.0MB）推上去会让
+# **整个部署**失败，而且是原子失败 —— 线上继续跑上一次成功的快照，不报任何错，
+# 只表现为 /Octave/* 全部落在 Makers 的「无匹配静态文件 → /index.html」兜底上。
+# 两次判别实验（2026-09-25）：
+#   · 只去掉 octave.wasm，其余不动            → 立刻上线
+#   · 把 28.0MB 拆成 2×14.0MB 加回（总量 166MB、901 文件）→ 正常上线
+#   ⇒ 卡的是单文件，上限落在 14.0MB 与 28.0MB 之间（大概率 25MB）；
+#     部署总量与文件数都不是瓶颈。
+# 所以下面有一条硬性 preflight：一旦出现超限文件就当场红，别让 EdgeOne 静默吞掉。
+# 在 wasm 有外部源站（中间件反代 / 公开仓库 Pages / 压缩+Content-Encoding）之前，
+# 本工作流会稳定地停在 preflight。
 name: deploy-heart
 
 permissions:
@@ -38,6 +50,18 @@ jobs:
           for f in octave.wasm octave.js octave.data index.html VERSION assets/manifest.json; do
             [ -f "site/$f" ] || { echo "::error::site/$f 缺失 —— site/ 不是完整产物"; exit 1; }
           done
+
+          # EdgeOne 单文件上限保护（见文件头）：超限会让整个部署原子失败，
+          # 线上不报错，只表现为 /Octave/* 全落到 404 兜底页。宁可在这里红。
+          MAX_MB=25
+          over=$(find site -type f -size +${MAX_MB}M -printf '%s %p\n' | sort -rn)
+          if [ -n "$over" ]; then
+            echo "::error::site/ 里有文件超过 ${MAX_MB}MB —— EdgeOne 会静默吞掉整个部署"
+            echo "$over" | awk '{printf "  %.1fMB  %s\n", $1/1048576, $2}'
+            echo "处置：给这些文件安排外部源站（中间件反代 / 公开仓库 Pages / 压缩 + Content-Encoding），再从部署副本里排除它们。"
+            exit 1
+          fi
+
           sha=$(sha256sum site/octave.wasm | cut -d' ' -f1)
           {
             echo "wasm_sha=$sha"

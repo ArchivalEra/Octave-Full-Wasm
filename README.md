@@ -217,7 +217,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/pre-push` (755 bytes)
 - `.githooks/update-handoff.py` (4836 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
-- `.github/workflows/deploy-heart.yml` (5696 bytes)
+- `.github/workflows/deploy-heart.yml` (7352 bytes)
 - `.gitignore` (2663 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (8528 bytes)
