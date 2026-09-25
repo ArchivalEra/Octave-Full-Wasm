@@ -24,7 +24,11 @@
 1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**；写不出复跑方式的句子 → 只能放进 HISTORY 当历史。
 2. **口径成组记录**：重配就是 `WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1` **一整组**；
    漏一个会**静默退化**（漏 `WITH_OPENGL=1` ⇒ 默认 toolkit 掉回 `web`，而构建/链接/自检**全绿**）。
-   重链的**唯一权威命令**在 HISTORY §5.26（M2 那条 + `WITH_FONTCONFIG=1`；`WITH_JSPI` 默认**关**）。
+   重链的**唯一权威命令**在 HISTORY §5.26（M2 那条 + `WITH_FONTCONFIG=1`）。
+   **★ 2026-09-25 起口径又加两条**（见 HISTORY §5.54，漏了会**静默退回非 SIMD/少 JSPI 面**）：
+   `WITH_JSPI=1`（B 姿势导出，现役 octave.js 必须有 `eval_wait`）
+   + `EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`（SIMD BLAS，口子在 `LIBS` 之前）。
+   唯一可靠自检：`llvm-objdump -d <wasm> | grep -c v128`（现役应为 **4752**，非 SIMD 那版 = 0）。
 3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）必须**浏览器侧**实测；
    构建成功 + 产物自检绿**不算**功能验收。
 4. **断言要能证伪**：替身不能比真实对象松；新契约至少配一条**反向**断言（该报错的必须报错）。

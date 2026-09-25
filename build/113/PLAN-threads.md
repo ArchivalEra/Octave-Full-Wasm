@@ -38,15 +38,17 @@
 
 **下一步顺序**：
 
-1. **C4 落地决策**：把 SIMD BLAS 打进产品需要一次重链 + 全量回归 + promote（不改任何接口 ⇒ 可回退）。
-   若做，**顺带合并 C6 的 wasm 侧改动**（canvas 契约 + `publish_png` 分派），省一次 29MB 链接。
+1. ~~**C4 落地决策**~~ **→ 已 promote 到 8761（2026-09-25 15:54，`1ed3e528…`）**，
+   但**验证没跑完就被关机叫停**：8768 已 41/1047/0、8761 开机自检 OK、8761 跑到 42 套真 FAIL=0；
+   **待补**：8761 完整 `PROBES=1` 汇总行、`make-dist.sh` + 核 sha、`check-site-parity --strict`、
+   清理 `site-simd`/8771。回退快照 `site-baseline-45d288b1/`。详见 `NOTES-threads.md`「C4 落地」节。
 2. **E4 · C3 真落地**：JSPI×Worker 已证（Q4）⇒ 只剩"worker 侧 dlopen × preload FS"未测；
    第一版必须带**真实 side module + 真实 preload FS**（不带 pthread）。
 3. **E6 · C6 去单例嵌入契约**：页面层（mount/base/实例命名空间/**IDBFS 命名空间**）可独立先做，
    判据 = 同页 2 实例交替 eval 100 次 0 串扰 + 8768 上 41 套 accept 全绿不改。
-4. **E2 · OpenBLAS SIMD 1T**：触发条件（E1 红或提速 <1.5×）**不成立** ⇒ 维持"可选增强"，
-   排在 C4 落地与 C3 之后。
-5. **C2/C8**：pthread BLAS 的前置未知数已清（E3），但仍只在 COI 成立的环境里开
+   若还需要动 wasm 侧（canvas 契约 + `publish_png` 分派），与**下一次重链合并**。
+4. **E2 · OpenBLAS SIMD 1T**：触发条件（E1 红或提速 <1.5×）**不成立** ⇒ 维持"可选增强"。
+5. **C2/C8**：pthread BLAS 前置未知数已清（E3），但仍只在 COI 成立的环境里开
    （第一方自控头，或宿主同意装 coi-serviceworker 的 credentialless 路径）。
 
 ---

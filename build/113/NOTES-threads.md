@@ -185,3 +185,46 @@ sudo docker exec o113 sh -c '/emsdk/upstream/bin/llvm-objdump -d /src/websrc/m2f
 3. **C6（去单例嵌入契约）**：页面层（mount/base/别名）可独立先做；wasm 侧的 canvas 契约改动建议与
    **下一次重链合并**（省一次 29MB 链接）。
 4. **C2（pthread BLAS）**：前置未知数已清（本批 E3），但按判据只在 COI 环境（C8/第一方）里开。
+
+---
+
+## C4 落地（SIMD 打进产品）：2026-09-25 15:54 关机中断点
+
+**状态：已 promote 到 8761，验证未跑完（用户关机叫停）。**
+
+### 已完成（都有产物证据）
+1. `sh build/glue-selftest.sh` → **91/91 全过，badfiles=0**。
+2. **回退快照**（promote 脚本自带那份 `site-prewebgl-bak` 是"最早那份"，不够精确）：
+   `/mnt/hdd/octave-wasm-build/site-baseline-45d288b1/{octave.wasm,octave.js,octave.data}`（= `45d288b1…`）。
+3. **8768 验绿**：siteWebGL 换成 SIMD 三件后 `sweep.sh http://127.0.0.1:8768/` →
+   **41 套 / 1047 PASS / 0 FAIL**（日志 `/mnt/hdd/octave-wasm-build/sweep-logs/20260925-152502`）。
+4. **promote 8761**（`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out EXPECT_FREETYPE=1 sh build/promote-webgl.sh`）：
+   站点 wasm sha 与容器一致 = `1ed3e528…`；gl4es ✓ / FreeType 预载 ✓ / 桥与 webgraphics 资产 ✓ / p5canvas.js ✓；
+   **D8 开机自检 OK（1.7s 就绪，`eval_string("2+2")` rc=0）**。日志 `/tmp/promote-simd.log`。
+5. **仓库 `site/` 已同步**（`rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/`）⇒ 仓库镜像 = 8761 = `1ed3e528`；
+   `git status` 只有 `site/octave.{js,wasm}` 两处改动（`.data` 与 `assets/m/*.js` 逐字节未变 = bundle 确定性 ✓）。
+6. **8761 全量回归（PROBES=1）跑到一半被叫停**（进程已 kill）：
+   **42 套有 PASS/FAIL 行、真 FAIL 行 = 0**；其中 41 套 `accept-*` 全绿（含 `accept-113-libs 17/0`、
+   `accept-slicot 25/0`、`accept-113-ode15 29/0`、`accept-p5-graphics 65/0`），`probe-artifact-sha 2/0`；
+   中断时正在跑 `probe-*` 段（`probe-bridge-svg-out`/`probe-browser-matrix`/`probe-cold-start`，均 rc=0 无 FAIL）。
+   日志已落盘：`/mnt/hdd/octave-wasm-build/sweep-logs/INTERRUPTED-8761-simd-20260925-155420.log`。
+
+### 还没做（下次开工第一件事）
+1. **补跑 `PROBES=1 sh /mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`**（拿完整汇总行：应为 accept 41 + probe/probe 段全绿）。
+2. `sh build/make-dist.sh` + 核对**包内 wasm 与部署件同 sha**。
+3. `sh build/check-site-parity.sh --strict`（两站点现在都是 `1ed3e528`，应通过）。
+4. **六道闸门 + `Slay` 提交**（本次已把 `site/` 同步与文档一起提交，但 dist 与 parity 结果要补记）。
+5. 清理实验车道：`rm -rf /mnt/hdd/octave-wasm-build/site-simd`（63MB 副本）并 kill 8771 的 http.server。
+
+### 回退（精确到本次基线）
+```sh
+cp -a /mnt/hdd/octave-wasm-build/site-baseline-45d288b1/. /mnt/hdd/octave-wasm-build/site/
+rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/          # 仓库镜像跟着回退
+```
+
+### ★ 新的重链口径（**不改这条就会静默退回非 SIMD**）
+现役产物 = 权威口径 **再加两处**：`WITH_JSPI=1`（B 姿势导出，现役 octave.js 里必须有 `eval_wait`）
+与 `EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`（该口子在 `LIBS` 之前 ⇒ 赢搜索顺序）。
+依赖：容器里 `/src/deps/lapack-simd/lib/{librefblas.a,liblapack.a}` 必须存在（由
+`build/113/build-blas-simd.sh` 生成；**`/usr/local/lib` 那份仍是非 SIMD**，别搞混）。完整命令见 HISTORY §5.54。
+自检（唯一可靠）：`llvm-objdump -d <wasm> | grep -c v128` —— 现役 `1ed3e528` 应为 **4752**（非 SIMD 那版 = 0）。

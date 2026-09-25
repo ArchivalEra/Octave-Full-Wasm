@@ -1035,13 +1035,13 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 
 | 项 | 值 |
 |---|---|
-| `octave.wasm` | 29,464,307 B raw / 7,016,904 B gz | sha256 `45d288b1c6c1855e…` |
-| `octave.js` | 462,821 B raw / 89,653 B gz | sha256 `2a5cf3136177c7f4…` |
+| `octave.wasm` | 29,632,229 B raw / 7,083,341 B gz | sha256 `1ed3e528561e4475…` |
+| `octave.js` | 462,821 B raw / 89,652 B gz | sha256 `caac68bf62015859…` |
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
-| 三大件 gzip 合计 | **10,261,604 B** | |
+| 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260925-061510` · **40 套 / 1,036 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
-| 交付包 | `octave-full-wasm-site-20260925` · tar.zst 27,108,013 B · `6e8afb6eb0a09a05…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260925-152502` · **41 套 / 1,047 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
+| 交付包 | `octave-full-wasm-site-20260925` · tar.zst 27,108,013 B · `6e8afb6eb0a09a05…` | 包内 wasm （**与部署件不一致** ✗） |
 | 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-25 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

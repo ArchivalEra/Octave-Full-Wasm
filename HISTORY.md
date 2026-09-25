@@ -2475,6 +2475,24 @@ DGEMM 中位数（3 次，`test/browser/bench-dgemm.mjs`，独立车道 8771 vs 
 C2（pthread BLAS）前置未知数已清但仍属"COI 环境下的可选增强"；C7 否决、C5 不进计划。
 三批的完整数据、复跑命令与判据见 `build/113/NOTES-threads.md`。
 
+### 5.54 C4 落地：SIMD BLAS 上 8761（2026-09-25，branch `Slay`，验证未跑完）
+
+**产物从 `45d288b1…` 换成 `1ed3e528…`**（29,464,307 → 29,632,229 B，v128 指令 0 → 4752）。
+走的是固定收尾动作：`glue-selftest 91/91` → **8768 验绿 41 套 / 1047 PASS / 0 FAIL** →
+`promote-webgl.sh`（`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out EXPECT_FREETYPE=1`）→
+站点 sha 两侧一致 + gl4es/FreeType/桥资产自检 ✓ + **D8 开机自检 OK（1.7s，eval_string rc=0）** →
+仓库 `site/` 已 rsync 同步（`git status` 只有 `octave.js`/`octave.wasm` 两处）。
+**8761 全量 + PROBES=1 跑到 42 套时被用户关机叫停**（真 FAIL = 0；日志已落盘
+`sweep-logs/INTERRUPTED-8761-simd-20260925-155420.log`）⇒ **make-dist / parity / 完整汇总行 待补**。
+精确回退快照：`/mnt/hdd/octave-wasm-build/site-baseline-45d288b1/`。
+
+**★ 新的重链口径（不改就会静默退回非 SIMD）**：权威命令 = HISTORY §5.26 那条 +
+`WITH_JSPI=1`（B 姿势导出：现役 octave.js 必须有 `eval_wait`）+
+`EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`（口子在 `LIBS` 之前 ⇒ 赢搜索顺序；依赖
+`build/113/build-blas-simd.sh` 产出的 `/src/deps/lapack-simd/lib`，`/usr/local/lib` 那份仍是非 SIMD）。
+唯一可靠自检：`llvm-objdump -d <wasm> | grep -c v128`（现役 = 4752）。
+过程与数据见 `build/113/NOTES-threads.md` 的「C4 落地」节。
+
 ---
 
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
