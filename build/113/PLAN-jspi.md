@@ -49,6 +49,14 @@
 3. **只有这一步做完**，v1–v13 的三条机制与 (a)/(b)/(c) 才有资格被讨论 ——
    `-sJSPI_EXPORTS=eval_async` 要不要换成真导出名，属于「真测之后」的问题。
 
+**★ 2026-09-25 更新：G1 重链暂缓** —— 重链姿势先过一轮外部选型：
+第三轮复审需求书已出（`build/113/GPT-REVIEW-3-bridge.md`），核心问题 =
+**"有没有比全量 `-sJSPI` 更小爆炸半径的桥"**，新增两个候选：
+**A2 收窄 `-sJSPI`**（`-sJSPI_IMPORTS=web_pause_ms -sJSPI_EXPORTS=eval_wait`，5.0.7 官方支持窄列）
+与 **B 手搓 JSPI**（`instantiateWasm` 钩子 + 原生 `Suspending`/`promising`，胶水零变形）。
+两个候选的公共形状：**唯一挂起 import（`web_pause_ms`）+ 唯一导出薄入口（`eval_wait`，真导出名）**。
+等回音后按选定姿势做第 1/2 步。
+
 **下面这段是原计划（保留为历史口径；顺序已被上面取代）：**
 
 **按这个顺序做**（前两条都很便宜，先做）：

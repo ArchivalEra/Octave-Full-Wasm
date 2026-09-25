@@ -446,6 +446,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 | 路径 | 作用 |
 |---|---|
 | `build/113/NOTES-jspi.md` | **JSPI 的全部一手记录**：R5 机制探针、G1 复现阶梯 v1–v13（逐档表格）、三条"JSPI 与 dlopen"机制、下一步三候选（(b) 免重链最便宜 / (a) 找真正的导出名 / (c) 要人拍板） |
+| `build/113/GPT-REVIEW-3-bridge.md` | **第三轮外部复审需求书（2026-09-25）**：桥接方案选型（A/A2/B/C/D/E）。**等回音期间 G1 重链暂缓**；回复格式与判据要求写在 §4 |
 | `build/113/PLAN-jspi.md` | **当前唯一工作令**（2026-09-24）：JSPI 接交互 G0–G6 + 收尾债（D1–D8：文档对齐 / probe 纳入定期跑 / sweep 偶发崩重试 / 两站点一致性闸门 / 规则 B 复核 / `pkg load` 自动装载 / IDBFS 边界 / **promote 前开机自检**；另有 D9 门接线）。**接续先读它的 §0.5「现在的状态与下一步顺序」**，别从别处猜 |
 | `build/113/PLAN-next.md` | **上一份工作令（已收口，留档）**：七件小口子全部做完（1 件实测翻案、6 件真做成）；其 §2 的 JSPI 顺序已并入 `PLAN-jspi.md` |
 | `HISTORY.md` | **历史记录（append-only）**：2026-09-24 从 HANDOFF 原样拆出（`§5.x`/`§9`/`§10`）。查"当年为什么这么做、踩过什么"用 `grep -n 关键词 HISTORY.md` |
@@ -890,6 +891,11 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
        **已写好但有意推迟到本批之外** —— 改 `bridge/index.html` 要走完整 promote 周期（否则两站点一致性
        闸门红），而它对现役产物**零影响**（现役无 `eval_async` ⇒ 走 `no-entry` 早退）
        ⇒ **并进 ④ 那一批一起部署**。
+     ⏸ **暂停（2026-09-25）：重链姿势先过第三轮外部选型** —— 需求书
+     `build/113/GPT-REVIEW-3-bridge.md` 已出（方案 A 全量 `-sJSPI` / **A2 收窄 `-sJSPI`** /
+     **B 手搓 JSPI** / C JS 队列 / D Worker+SAB / E 留白），核心问题 =
+     "有没有比全量 `-sJSPI` 更小爆炸半径的桥"。**G1 重链等回音**；
+     A2/B 的公共形状已写死：唯一挂起 import `web_pause_ms` + 唯一 `extern "C"` 导出 `eval_wait`。
      ▶ **④ 下一步只有一条（取代原来的 (a)/(b)/(c) 三选一）**：
      **重链一版真带 `-sJSPI` 的产物 → 先 `grep -o 'WebAssembly\.promising' out/octave.js` 验胶水**
      → 再跑三例（`42` / `pause(0.2); 43`（期间页面 timer 要 tick）/ `error('x')` ⇒ reject）。
