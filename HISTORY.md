@@ -2396,6 +2396,36 @@ probe-idbfs-bounds 3 项收编）。dist/parity/闸门全绿。**PLAN-jspi.md �
 
 ---
 
+### 5.52 仓库整理：分支收窄为 main + 可部署站点入库 + 浏览器矩阵（2026-09-25）
+
+**分支收窄（用户指令）**：origin 与本地现在**只剩 main**。退役的 graphics 三个分支先归档：
+`graphics-osmesa` 已推到**持久盘镜像**（`mirror/graphics-osmesa`，fb5b265）后删除；
+`graphics-osmesa-p5`/`graphics-webgl` 本就只在镜像与本地 ⇒ 本地删除、镜像保留。
+mirror 自己的 `main`（分叉旧线 9b211ae）**不动**（规则②禁 force）；镜像里的
+`main-20260923/24/25` 三个日期 ref 继续作持久盘备份。HISTORY/AGENTS 里凡引用
+"graphics-osmesa 分支"处，现在指**镜像**上的那份。
+
+**可部署站点入库**：`site/`（63MB，110 文件）= 8761 的**逐字节镜像**（wasm `45d288b1…`），
+配 `DEPLOY.md`（部署说明 + 三条自检脚本）与 `.github/workflows/pages-deploy.yml`
+（**workflow_dispatch 手动触发**，不会 push 即部署；前置一次性步骤 = 仓库
+Settings → Pages → Source 选 "GitHub Actions"——留给配 yml 的人）。
+以后每批 promote 后 `rsync -a --delete …/site/ site/` 一并提交（AGENTS 已入流程）。
+
+**浏览器矩阵（用户授权的真浏览器实测，全部真浏览器非模拟）**：
+| 浏览器 | 引擎 | 结果 |
+|---|---|---|
+| Chromium 最新（系统） | Blink/V8 | 5/0 全链（pause 206ms/tick+1、冒烟 pass） |
+| **Firefox 156 桌面**（playwright 托管 `~/.cache`，未碰系统浏览器） | **Gecko** | **5/0 全链**（pause 204ms/tick+1、冒烟 pass）—— 第二引擎确认 |
+| **Firefox 156 Android**（模拟器 Android 15，官方 x86_64 APK） | Gecko 移动 | 29MB 解释器完整启动、**能力门 `pass`**（bilibili 先验浏览器栈完好） |
+| **Chromium 123**（`zenika/alpine-chrome:123` 容器 + CDP，**真·无 JSPI**） | Blink/V8 旧 | **7/0 优雅降级**：同一产物照常实例化/解释器可算/画图照常、门如实 `api-missing`、清晰报错 |
+
+工具与坑：playwright 托管 Firefox 装在 `~/.cache/ms-playwright`（未碰系统浏览器——用户约束）；
+**境外下载一律走 2080 代理**（直连 60KB/s，代理 1.1MB/s，HANDOFF §3.6 的既有结论再次应验）；
+安卓模拟器必须 **setsid 脱离 + `-no-snapshot`** 启动（工具调用取消会连带杀掉子进程模拟器），
+Firefox Android 官方 x86_64 APK 从 archive.mozilla.org 直取。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

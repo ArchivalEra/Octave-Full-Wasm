@@ -1,0 +1,601 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "name": "__delaunayn__",
+      "kind": "oct",
+      "url": "assets/oct/__delaunayn__.oct",
+      "sha256": "64fb5ee7905184d7fa1c74cea8919e4739b431b7d0d9f606090e0362b76b57a2",
+      "mount": "/usr/src/octave/m/oct/__delaunayn__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "批次13：dldfcn 回归官方 dlopen 路径（原为 main.cc 静态注册成内建）"
+    },
+    {
+      "name": "__glpk__",
+      "kind": "oct",
+      "url": "assets/oct/__glpk__.oct",
+      "sha256": "19bb231da34625438ae1f73b03450e3c9bf8f6383963e0cca8b2c360ced6837b",
+      "mount": "/usr/src/octave/m/oct/__glpk__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "批次13：dldfcn 官方装载（glpk 线性规划后端）"
+    },
+    {
+      "name": "__ode15__",
+      "kind": "oct",
+      "url": "assets/oct/__ode15__.oct",
+      "sha256": "1c01b209d42678e0bae7373d3948ade048b4338b084c97bdd687d3fe94740a09",
+      "mount": "/usr/src/octave/m/oct/__ode15__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "R1：SUNDIALS 6.1.1 IDA → ode15s/ode15i（真模块，非桩；自包含 side module，SUNDIALS 静态码全在 .oct 内，主 wasm 零改动）"
+    },
+    {
+      "name": "__voronoi__",
+      "kind": "oct",
+      "url": "assets/oct/__voronoi__.oct",
+      "sha256": "f5738cc904dd721f99454a738eedcdbd6d2515e0b3a7e6793b58afa0074091fc",
+      "mount": "/usr/src/octave/m/oct/__voronoi__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "批次13：dldfcn 官方装载（Voronoi 图后端）"
+    },
+    {
+      "name": "audioread",
+      "kind": "oct",
+      "url": "assets/oct/audioread.oct",
+      "sha256": "e6f5973996a9bee35614a5adf17d392badefeeb7ef3177d4dd635d19809fcefe",
+      "mount": "/usr/src/octave/m/oct/audioread.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "批次13：dldfcn 官方装载——一个模块导出 4 个函数（libsndfile 后端）",
+      "aliases": [
+        "audiowrite",
+        "audioinfo",
+        "audioformats"
+      ]
+    },
+    {
+      "name": "convhulln",
+      "kind": "oct",
+      "url": "assets/oct/convhulln.oct",
+      "sha256": "aaba1066223c311250cc632f0915ffb2e613ebccf90141cd09d3fdbec6b8f4de",
+      "mount": "/usr/src/octave/m/oct/convhulln.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "批次13：dldfcn 官方装载（凸包）——文件名即函数名，无需别名"
+    },
+    {
+      "name": "fftw",
+      "kind": "oct",
+      "url": "assets/oct/fftw.oct",
+      "sha256": "b6b5f2fbcf9c7b34f953d18942e39e7b0ca0b08ec7a22367ac9f59e3616d6466",
+      "mount": "/usr/src/octave/m/oct/fftw.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "note": "批次13：dldfcn 官方装载（fftw() 规划器入口；核心 fft 不受影响）"
+    },
+    {
+      "name": "gzip",
+      "kind": "oct",
+      "url": "assets/oct/gzip.oct",
+      "sha256": "1ed60e049360032db62036bb7eef4e1b5c8a87c2f32d4222ac33464397f2648a",
+      "mount": "/usr/src/octave/m/oct/gzip.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "aliases": [
+        "bzip2"
+      ],
+      "note": "Octave 自带 dldfcn gzip（zlib/bz2 已用 --whole-archive 链进主模块）"
+    },
+    {
+      "name": "webimage-oct",
+      "kind": "oct",
+      "url": "assets/oct/webimage-oct.oct",
+      "sha256": "8673e69541baaf4c52036ef17cf0b69502e655f0b7310d2e14dcb5585f44343e",
+      "mount": "/usr/src/octave/m/oct/webimage-oct.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "aliases": [
+        "__web_imread__",
+        "__web_imwrite__",
+        "__web_imfinfo__"
+      ],
+      "note": "R4 图像 I/O 的进程内实现（stb_image）；注册层是 webimage.js"
+    },
+    {
+      "name": "webio",
+      "kind": "oct",
+      "url": "assets/oct/webio.oct",
+      "sha256": "d6efe9879cb606eca4d3d4e4b68beac214fe6338595302653bfa2450e596c358",
+      "mount": "/usr/src/octave/m/oct/webio.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "aliases": [
+        "__web_zip__",
+        "__web_unzip__",
+        "__web_tar__",
+        "__web_untar__",
+        "__web_gunzip__",
+        "__web_bunzip2__"
+      ],
+      "note": "R6 压缩/归档的进程内实现（无 shell）；由 webshell 的 .m 覆写调用"
+    },
+    {
+      "name": "webnet-oct",
+      "kind": "oct",
+      "url": "assets/oct/webnet-oct.oct",
+      "sha256": "e7f8cd769506b51aa6b3d366b57f53dded42472e07105c761b92471408740a51",
+      "mount": "/usr/src/octave/m/oct/webnet-oct.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "aliases": [
+        "__web_fetch_sync__"
+      ],
+      "note": "R5 网络：进程内实现（同步 XHR），注册层是 webnet.js"
+    },
+    {
+      "name": "control-oct",
+      "kind": "octdir",
+      "base_url": "assets/octdir/control",
+      "files": [
+        "__control_helper_functions__.oct",
+        "__control_slicot_functions__.oct",
+        "is_matrix.oct",
+        "is_real_matrix.oct",
+        "is_real_scalar.oct",
+        "is_real_square_matrix.oct",
+        "is_real_vector.oct",
+        "is_zp_vector.oct",
+        "lti_input_idx.oct"
+      ],
+      "mount_dir": "/usr/src/octave/m/forge/control/oct",
+      "deps": [],
+      "note": "Forge 4.1.3 纯 .m（314 个）+ 9 个编译件（含 __control_slicot_functions__：内嵌 slicotlibrary + PIC LAPACK/BLAS/libf2c，为 48 个 __sl_*__ 建符号链接）。2026-09-23 修好并发布，见 build/113/NOTES-slicot.md",
+      "aliases": [
+        "lti_input_idx",
+        {
+          "file": "__control_slicot_functions__",
+          "names": [
+            "__sl_ab01od__",
+            "__sl_ab04md__",
+            "__sl_ab08nd__",
+            "__sl_ab09hd__",
+            "__sl_ab09id__",
+            "__sl_ab09jd__",
+            "__sl_ab13ad__",
+            "__sl_ab13bd__",
+            "__sl_ab13dd__",
+            "__sl_ag08bd__",
+            "__sl_are__",
+            "__sl_ib01ad__",
+            "__sl_ib01cd__",
+            "__sl_ident__",
+            "__sl_mb05nd__",
+            "__sl_sb01bd__",
+            "__sl_sb02od__",
+            "__sl_sb03md__",
+            "__sl_sb03od__",
+            "__sl_sb04md__",
+            "__sl_sb04qd__",
+            "__sl_sb10ad__",
+            "__sl_sb10dd__",
+            "__sl_sb10ed__",
+            "__sl_sb10fd__",
+            "__sl_sb10hd__",
+            "__sl_sb10id__",
+            "__sl_sb10jd__",
+            "__sl_sb10kd__",
+            "__sl_sb10yd__",
+            "__sl_sb10zd__",
+            "__sl_sb16ad__",
+            "__sl_sb16bd__",
+            "__sl_sb16cd__",
+            "__sl_sg02ad__",
+            "__sl_sg03ad__",
+            "__sl_sg03bd__",
+            "__sl_tb01id__",
+            "__sl_tb01pd__",
+            "__sl_tb01ud__",
+            "__sl_tb04bd__",
+            "__sl_td04ad__",
+            "__sl_tg01ad__",
+            "__sl_tg01fd__",
+            "__sl_tg01hd__",
+            "__sl_tg01id__",
+            "__sl_tg01jd__",
+            "__sl_tg04bx__",
+            "__control_slicot_functions__"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "geometry-oct",
+      "kind": "octdir",
+      "base_url": "assets/octdir/geometry",
+      "files": [
+        "polybool_mrf.oct"
+      ],
+      "mount_dir": "/usr/src/octave/m/forge/geometry/oct",
+      "deps": [
+        "matgeom"
+      ],
+      "note": "Forge 4.1.0（.m + 1 编译件）"
+    },
+    {
+      "name": "miscellaneous-oct",
+      "kind": "octdir",
+      "base_url": "assets/octdir/miscellaneous",
+      "files": [
+        "cell2cell.oct",
+        "partint.oct"
+      ],
+      "mount_dir": "/usr/src/octave/m/forge/miscellaneous/oct",
+      "deps": [],
+      "note": "Forge 1.3.3（.m + cell2cell/partint 编译件）"
+    },
+    {
+      "name": "optim-oct",
+      "kind": "octdir",
+      "base_url": "assets/octdir/optim",
+      "files": [
+        "__bfgsmin.oct",
+        "__disna_optim__.oct",
+        "__max_nargin_optim__.oct",
+        "numgradient.oct",
+        "numhessian.oct"
+      ],
+      "mount_dir": "/usr/src/octave/m/forge/optim/oct",
+      "deps": [
+        "statistics",
+        "struct"
+      ],
+      "note": "Forge 1.6.3"
+    },
+    {
+      "name": "statistics-oct",
+      "kind": "octdir",
+      "base_url": "assets/octdir/statistics",
+      "files": [
+        "editDistance.oct",
+        "fcnnpredict.oct",
+        "fcnntrain.oct",
+        "libsvmread.oct",
+        "libsvmwrite.oct",
+        "svmpredict.oct",
+        "svmtrain.oct"
+      ],
+      "mount_dir": "/usr/src/octave/m/forge/statistics/oct",
+      "deps": [],
+      "note": "Forge 1.7.3（.m + 7 编译件：libsvm/fcnn/editDistance）"
+    },
+    {
+      "name": "struct-oct",
+      "kind": "octdir",
+      "base_url": "assets/octdir/struct",
+      "files": [
+        "cell2fields.oct",
+        "fieldempty.oct",
+        "fields2cell.oct",
+        "structcat.oct"
+      ],
+      "mount_dir": "/usr/src/octave/m/forge/struct/oct",
+      "deps": [],
+      "note": "Forge 1.0.18（.m + 编译件 .oct）"
+    },
+    {
+      "name": "built-in-docstrings",
+      "kind": "file",
+      "url": "assets/data/built-in-docstrings",
+      "sha256": "9e137b12ef6d59e07a4aeb6f7d59d818970134c666d8dfba43fac61c644275d9",
+      "deps": [],
+      "mount": "/src/work/octave-install/share/octave/11.3.0/etc/built-in-docstrings",
+      "note": "T1：11.3.0 的 etc 数据。built-in-docstrings 已由 build/render-docstrings.py 构建期预渲染（去掉 texinfo 标记 → help 走 plain text 分支，不需要运行时 makeinfo）"
+    },
+    {
+      "name": "doc-cache",
+      "kind": "file",
+      "url": "assets/data/doc-cache",
+      "sha256": "e257273cf650bd56d1f9e6299a2b4e8661242e6651f7471d6e31428c9fd84f98",
+      "deps": [],
+      "mount": "/src/work/octave-install/share/octave/11.3.0/etc/doc-cache",
+      "note": "T1：11.3.0 的 etc 数据。built-in-docstrings 已由 build/render-docstrings.py 构建期预渲染（去掉 texinfo 标记 → help 走 plain text 分支，不需要运行时 makeinfo）"
+    },
+    {
+      "name": "macros.texi",
+      "kind": "file",
+      "url": "assets/data/macros.texi",
+      "sha256": "a7307fed9729e10908dc8f44c1a5c5169b9706fb2ba4f74219989e1e25b59055",
+      "deps": [],
+      "mount": "/src/work/octave-install/share/octave/11.3.0/etc/macros.texi",
+      "note": "T1：11.3.0 的 etc 数据。built-in-docstrings 已由 build/render-docstrings.py 构建期预渲染（去掉 texinfo 标记 → help 走 plain text 分支，不需要运行时 makeinfo）"
+    },
+    {
+      "name": "control",
+      "kind": "js",
+      "url": "assets/pkg/control.js",
+      "sha256": "a910009754e957d2955ecda4ec7dba432e731022a6d9ca43831d4caa380cacce",
+      "deps": [
+        "control-oct"
+      ],
+      "note": "Forge 4.1.3 纯 .m（314 个）+ 8 个基础编译件（is_*/lti_input_idx 等）。SLICOT 编译件在 MAIN_MODULE=1 下会崩页面故不发布，见 CLIBS.md 坑 11",
+      "aliases": [
+        "lti_input_idx"
+      ]
+    },
+    {
+      "name": "geometry",
+      "kind": "js",
+      "url": "assets/pkg/geometry.js",
+      "sha256": "2cde5f6e2c25c1e7d54a22c03192cb35e8d11042d2c79ca94fa704cfcbf4b456",
+      "deps": [
+        "matgeom",
+        "geometry-oct"
+      ],
+      "note": "Forge 4.1.0（.m + 1 编译件）"
+    },
+    {
+      "name": "matgeom",
+      "kind": "js",
+      "url": "assets/pkg/matgeom.js",
+      "sha256": "eb436608740496fab5291543efa5b57aff88d93db7f1999a0c1b0a8947336f1b",
+      "deps": [],
+      "note": "Forge 1.2.4（纯 .m）"
+    },
+    {
+      "name": "miscellaneous",
+      "kind": "js",
+      "url": "assets/pkg/miscellaneous.js",
+      "sha256": "9844a9351620ed99cc011e0adbb038a40607a9104106949fd6902a732581ca11",
+      "deps": [
+        "miscellaneous-oct"
+      ],
+      "note": "Forge 1.3.3（.m + cell2cell/partint 编译件）"
+    },
+    {
+      "name": "nan",
+      "kind": "js",
+      "url": "assets/pkg/nan.js",
+      "sha256": "ce74d322c588b14effcdb6422a3cc7f614b20b44f35c277946dc7c3886788a81",
+      "deps": [],
+      "note": "Forge 3.7.2（.m 部分；C 加速件见 2B）"
+    },
+    {
+      "name": "optim",
+      "kind": "js",
+      "url": "assets/pkg/optim.js",
+      "sha256": "5645fc8839233b9fd2c694aa7d04ca410683adcbebdf415dceba730b1a7cceb5",
+      "deps": [
+        "statistics",
+        "struct",
+        "optim-oct"
+      ],
+      "note": "Forge 1.6.3"
+    },
+    {
+      "name": "quaternion",
+      "kind": "js",
+      "url": "assets/pkg/quaternion.js",
+      "sha256": "c53dfd82f6a94081c5825cb3226e1e3223a2fd57c5af9b6eb713939f50cd8ef8",
+      "deps": [],
+      "note": "Forge 2.4.2（纯 .m）"
+    },
+    {
+      "name": "signal",
+      "kind": "js",
+      "url": "assets/pkg/signal.js",
+      "sha256": "346ad4cff2d35435ba61f98b9728322242f79459a508726b91b370f0fe1e4f37",
+      "deps": [
+        "control"
+      ],
+      "note": "Forge 1.4.6 纯 .m 部分（181 个 .m；R2 验收要求的包；依赖 control）"
+    },
+    {
+      "name": "splines",
+      "kind": "js",
+      "url": "assets/pkg/splines.js",
+      "sha256": "07f5deec09d742e5dcbb371c1f5f52c38e8bae8b7bf241ccdc4c6f03383acb47",
+      "deps": [],
+      "note": "Forge 1.3.5（纯 .m）"
+    },
+    {
+      "name": "statistics",
+      "kind": "js",
+      "url": "assets/pkg/statistics.js",
+      "sha256": "2b705b35222f85908dd9a32eb8fce970e4b751ff1ba90ad19c67154d821901fb",
+      "deps": [
+        "statistics-oct"
+      ],
+      "note": "Forge 1.7.3（.m + 7 编译件：libsvm/fcnn/editDistance）"
+    },
+    {
+      "name": "struct",
+      "kind": "js",
+      "url": "assets/pkg/struct.js",
+      "sha256": "d1a555414d7d347034119018843309805888d9f1d388f85033df1e20f26ad64c",
+      "deps": [
+        "struct-oct"
+      ],
+      "note": "Forge 1.0.18（.m + 编译件 .oct）"
+    },
+    {
+      "name": "tsa",
+      "kind": "js",
+      "url": "assets/pkg/tsa.js",
+      "sha256": "f6926d439c8777d70a63030d9266ae88cc5cb46090d23917d9a9b49cb1edc643",
+      "deps": [
+        "nan"
+      ],
+      "note": "Forge 4.6.3"
+    },
+    {
+      "name": "pkgfix",
+      "kind": "js",
+      "url": "assets/m/pkgfix.js",
+      "sha256": "1be5457840af068659047561cb7d08dc1661bf5cd18b6e4cb042990f7a3fc820",
+      "deps": [],
+      "note": "T4：从磁盘现状生成 pkg 数据库（复用官方 get_description，故必须挂在 m/pkg/ 以解析 private 函数）"
+    },
+    {
+      "name": "plotbridge",
+      "kind": "js",
+      "url": "assets/m/plotbridge.js",
+      "sha256": "79cfabbb574e18707969486a6ca9cf76959302be0eba24cf65ba47868ab39270",
+      "deps": [],
+      "note": "R9：plot 翻译桥（纯 .m SVG/状态机）；main.cc 的 phase2 会把 /usr/src/octave/m/plotbridge 加进 path"
+    },
+    {
+      "name": "webaudio",
+      "kind": "js",
+      "url": "assets/m/webaudio.js",
+      "sha256": "aa6c5f9944f27a3999a81818b2230a5ab374151528ea0a2efcc8adc0c2fb67e8",
+      "deps": [],
+      "note": "R8：18 个 __player_* 纯 .m；页面侧 webaudio.js 真开 AudioContext"
+    },
+    {
+      "name": "webfile",
+      "kind": "js",
+      "url": "assets/m/webfile.js",
+      "sha256": "ecf2be96681537ee021796933a331675996615e2b61a081d22140f982195ddae",
+      "deps": [],
+      "note": "T3：copyfile/movefile/ls 的进程内实现（无 shell；浏览器没有 cp/mv/ls）"
+    },
+    {
+      "name": "webimage",
+      "kind": "js",
+      "url": "assets/m/webimage.js",
+      "sha256": "886eb67e9a78e3ab8ca8cedcd12676976421895f1dc75fd665c0d6fd17dc3363",
+      "deps": [
+        "webimage-oct"
+      ],
+      "note": "R4 注册层（imformats(\"add\")）；依赖 webimage-oct 提供 __web_*__"
+    },
+    {
+      "name": "webnet",
+      "kind": "js",
+      "url": "assets/m/webnet.js",
+      "sha256": "6b0a9edf4d0e5b2342a714e94a2716349aef17e5818d9e6e59c018e255b9d9ab",
+      "deps": [
+        "webnet-oct"
+      ],
+      "note": "R5：urlread/urlwrite/webread/websave 的浏览器侧桥"
+    },
+    {
+      "name": "webshell",
+      "kind": "js",
+      "url": "assets/m/webshell.js",
+      "sha256": "a3ff551408b9d44fe4c54d82e36f6c23e4bf00129b3de46e8cfcd08b05f30291",
+      "deps": [
+        "webio"
+      ],
+      "note": "无 shell 的 zip/unzip/tar/untar/gunzip/bunzip2 覆写（配合 webio.oct）"
+    },
+    {
+      "name": "lanetest",
+      "kind": "js",
+      "url": "assets/m/lanetest.js",
+      "sha256": "27a59fe9cfc64a9a8c1e2d8109fb34e7cc057c633a08c906e3ac4bd2a3e1a8a3",
+      "deps": [],
+      "note": "资产车道自检（2026-09-22 换基线准备：7.2 站点有、site113 缺，补上以保持两站点内容对齐）"
+    },
+    {
+      "name": "__init_web__",
+      "kind": "oct",
+      "url": "assets/oct/__init_web__.oct",
+      "sha256": "b81adc94e468ac1e6f7a6171b81d08315b67fcfd2339b1c7422a0555e18da94e",
+      "mount": "/usr/src/octave/m/oct/__init_web__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "deps": [],
+      "aliases": null,
+      "note": "T2/A1：web 图形 toolkit 的装载器（side module；登记+装载，渲染交给 plot 桥）"
+    },
+    {
+      "name": "webgraphics",
+      "kind": "js",
+      "url": "assets/m/webgraphics.js",
+      "sha256": "5ae3f1a7e6089c4f363cecb896e7d1af881d64c79b43d54d5e02bf25b9318c8c",
+      "deps": [
+        "__init_web__"
+      ],
+      "aliases": null,
+      "note": "T2/A1：PKG_ADD 把 web toolkit 登记+装载（addpath 时由 Octave 自动执行）"
+    },
+    {
+      "name": "webaudiorec",
+      "kind": "js",
+      "url": "assets/m/webaudiorec.js",
+      "sha256": "18638a8c3ae361589486004d13623b545da0b6fbd3fa7ff05ca9503a2aa98f5c",
+      "deps": [],
+      "note": "T7/B1：19 个 __recorder_* 纯 .m；页面侧 webaudiorec.js 用 getUserMedia + MediaRecorder 真采集"
+    },
+    {
+      "name": "webdoc",
+      "kind": "js",
+      "url": "assets/m/webdoc.js",
+      "sha256": "57f633d0e2fefdbb3a3069c19a4273d76be0137af2344cd8303ba07596892661",
+      "deps": [],
+      "note": "T6/D2a：doc 的浏览器实现（官方 doc.m 末路是起 info 浏览器进程，本构建无 shell）"
+    },
+    {
+      "name": "__fltk_uigetfile__",
+      "url": "assets/oct/__fltk_uigetfile__.oct",
+      "sha256": "5563df0dbf8cd7a1e01c55d961471dccc53cbed055f7c4c6c65dc3fa0d2e8469",
+      "deps": [],
+      "kind": "oct",
+      "mount": "/usr/src/octave/m/oct/__fltk_uigetfile__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "note": "T8/H2：**我们自己写的**浏览器实现（build/webfilepick.cc），替掉官方那个需要 FLTK 的模块。为什么必须是 .oct：__uigetfile_fltk__.m 开头的门禁是 exist(...)==3（纯 .m 满足不了）。为什么是**两步**：选择框异步、而 Octave 一阻塞页面就停摆 ⇒ 第一次调用弹框并报错提示「选好后再跑一次」，第二次返回结果并把文件字节复制进当前目录。页面侧是 bridge/webfilepick.js。"
+    },
+    {
+      "name": "__init_fltk__",
+      "url": "assets/oct/__init_fltk__.oct",
+      "sha256": "aba765ff582f662bd8945db541466f792617877f7b11b93fc9bc5cbbb1a3fcbb",
+      "deps": [],
+      "kind": "oct",
+      "mount": "/usr/src/octave/m/oct/__init_fltk__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "aliases": [
+        "__fltk_check__"
+      ],
+      "note": "官方 libinterp/dldfcn/__init_fltk__.cc **原样**编成 side module。HAVE_FLTK 未定义 ⇒ FLTK 部分被条件编译掉（模块只有 2545 字节），但 DEFUN 仍存在并报 err_disabled_feature(\"__fltk_check__\", \"OpenGL and FLTK\") —— 这正是上游「没编 FLTK」时的官方行为。"
+    },
+    {
+      "name": "__init_gnuplot__",
+      "url": "assets/oct/__init_gnuplot__.oct",
+      "sha256": "41001344223c769a7c5d9098492276f174e6efcf962a6ad07c56a6bddf8cc365",
+      "deps": [],
+      "kind": "oct",
+      "mount": "/usr/src/octave/m/oct/__init_gnuplot__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "aliases": [
+        "__have_gnuplot__"
+      ],
+      "note": "官方 libinterp/dldfcn/__init_gnuplot__.cc **原样**编成 side module（上游 LIBADD 只有 liboctinterp，零外部依赖）。本构建没有 gnuplot 二进制 ⇒ __have_gnuplot__() 为 false、__init_gnuplot__ 走「没找到 gnuplot」那条路 —— 与桌面没装 gnuplot 时**完全一致**，不是桩。"
+    },
+    {
+      "name": "webshims",
+      "url": "assets/m/webshims.js",
+      "sha256": "78dc3ed33fb54423de7caa18a4f5915039824567b202f8c4bed5abb6dcfb8bb8",
+      "deps": [],
+      "kind": "js"
+    },
+    {
+      "name": "__web_pause_ms__",
+      "url": "assets/oct/__web_pause_ms__.oct",
+      "sha256": "5697571d181324dd1c2c7f479d96aa324e55d0e456386da6757313b08c7be4a5",
+      "deps": [],
+      "kind": "oct",
+      "mount": "/usr/src/octave/m/oct/__web_pause_ms__.oct",
+      "addpath": "/usr/src/octave/m/oct",
+      "aliases": [
+        "__web_suspend_ok__",
+        "__web_ginput_arm__",
+        "__web_ginput_pending__",
+        "__web_ginput_pop__",
+        "__web_run_js__"
+      ]
+    }
+  ]
+}

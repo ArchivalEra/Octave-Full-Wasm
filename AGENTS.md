@@ -32,8 +32,14 @@
 
 ## 批次收尾（固定动作，缺一步等于没做完）
 `sh build/glue-selftest.sh`（宿主秒级）→ **8768 验绿**（`sweep.sh http://127.0.0.1:8768/`）
-→ promote 8761（`build/promote-webgl.sh`；纯资产批用 `assets.py bundle-m` + `sync-js`）
+→ promote 8761（`build/promote-webgl.sh`；纯资产批用 `assets.py bundle-m` + `sync-js`；
+  **M2 车道必须 `GL_OUT=$SRC_OUT`** —— 只传 SRC_OUT 会把 out-webgl 旧件盖上新产物，§5.49）
 → **开机自检** `sh build/check-boot.sh http://127.0.0.1:8761/`（30 秒，**不过就别往下走**）
+→ **部署件 SHA 检查**（★ 用户点名的铁律，2026-09-25；改完程序用老产物跑 = 本会话多次事故）：
+  `sh build/check-deploy-sha.sh <站点目录> <刚构建的wasm sha> <URL>` +
+  `node test/browser/probe-artifact-sha.mjs <URL> <sha>` —— 三层（磁盘/HTTP/页面自证）不全绿就停。
+→ **同步仓库 `site/`**（入库的可部署镜像，部署说明 DEPLOY.md）：
+  `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/` 后一并提交
 → **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
 → `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
 → **两站点一致** `sh build/check-site-parity.sh --strict`
@@ -57,6 +63,11 @@ python3 .githooks/check-whitelist.py         # 白名单覆盖
   **跑验收时别并行干重活**（并发 docker commit / 压缩曾让一个套件假崩）。
 - **测试用例从仓库原路径直跑**（`cd harness && node /mnt/hdd/.../test/browser/x.mjs`）——
   别 `cp` 一份到 harness 再跑：改完仓库用旧副本跑，断言红绿全错位（实测两次，2026-09-25）。
+- ★ **跑测试前先验产物 SHA**：`check-deploy-sha.sh` + `probe-artifact-sha.mjs` 三层
+  （磁盘/HTTP/页面实例化字节）——"改完程序用老产物跑"本会话踩了三次（promote 覆盖、
+  harness 旧副本、清缓存后的站点），都是 SHA 一查就现形。
+- **测试用例从仓库原路径直跑**（`cd harness && node /mnt/hdd/.../test/browser/x.mjs`）——
+  别 `cp` 一份到 harness 再跑：改完仓库用旧副本跑，断言红绿全错位（实测两次）。
 - **容器里的构建脚本是另一份拷贝**：改完仓库的 `configure-113-full.sh` / `link-web.sh` /
   `main.cc` 必须 `docker cp` 进容器（`main.cc` → `/src/websrc/main.cc`，构建脚本 → `/src/bin/`），
   否则跑的是旧的。（`link-web.sh` 自己会编 `main.cc`，不用手动编。）

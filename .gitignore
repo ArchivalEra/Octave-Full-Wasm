@@ -95,3 +95,7 @@
 !build/webdoc/*
 !build/assets-meta.json
 !test/browser/fixtures/*
+
+# ── 可部署站点（8761 的逐字节镜像；DEPLOY.md 有部署说明）────────────────────
+!site/
+!site/**

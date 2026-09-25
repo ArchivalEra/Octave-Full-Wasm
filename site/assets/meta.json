@@ -1,0 +1,208 @@
+{
+  "lanetest": {
+    "note": "资产车道自检"
+  },
+  "struct": {
+    "note": "Forge 1.0.18（.m + 编译件 .oct）",
+    "deps": []
+  },
+  "nan": {
+    "note": "Forge 3.7.2（.m 部分；C 加速件见 2B）",
+    "deps": []
+  },
+  "splines": {
+    "note": "Forge 1.3.5（纯 .m）",
+    "deps": []
+  },
+  "matgeom": {
+    "note": "Forge 1.2.4（纯 .m）",
+    "deps": []
+  },
+  "geometry": {
+    "note": "Forge 4.1.0（.m + 1 编译件）",
+    "deps": [
+      "matgeom"
+    ]
+  },
+  "quaternion": {
+    "note": "Forge 2.4.2（纯 .m）",
+    "deps": []
+  },
+  "miscellaneous": {
+    "note": "Forge 1.3.3（.m + cell2cell/partint 编译件）",
+    "deps": []
+  },
+  "tsa": {
+    "note": "Forge 4.6.3",
+    "deps": [
+      "nan"
+    ]
+  },
+  "optim": {
+    "note": "Forge 1.6.3",
+    "deps": [
+      "statistics",
+      "struct"
+    ]
+  },
+  "statistics": {
+    "note": "Forge 1.7.3（.m + 7 编译件：libsvm/fcnn/editDistance）",
+    "deps": []
+  },
+  "__ode15__": {
+    "note": "R1：SUNDIALS 6.1.1 IDA → ode15s/ode15i（自包含 side module，SUNDIALS 静态码在 .oct 内）",
+    "deps": []
+  },
+  "webshell": {
+    "note": "无 shell 的 zip/unzip/tar/untar/gunzip/bunzip2 覆写（配合 webio.oct）",
+    "deps": [
+      "webio"
+    ]
+  },
+  "webio": {
+    "aliases": [
+      "__web_zip__",
+      "__web_unzip__",
+      "__web_tar__",
+      "__web_untar__",
+      "__web_gunzip__",
+      "__web_bunzip2__"
+    ],
+    "note": "R6 压缩/归档的进程内实现（无 shell）；由 webshell 的 .m 覆写调用"
+  },
+  "webimage-oct": {
+    "aliases": [
+      "__web_imread__",
+      "__web_imwrite__",
+      "__web_imfinfo__"
+    ],
+    "note": "R4 图像 I/O 的进程内实现（stb_image）；注册层是 webimage.js"
+  },
+  "__delaunayn__": {
+    "note": "批次13：dldfcn 回归官方 dlopen 路径（原为 main.cc 静态注册成内建）",
+    "deps": []
+  },
+  "__glpk__": {
+    "note": "批次13：dldfcn 官方装载（glpk 线性规划后端）",
+    "deps": []
+  },
+  "__voronoi__": {
+    "note": "批次13：dldfcn 官方装载（Voronoi 图后端）",
+    "deps": []
+  },
+  "convhulln": {
+    "note": "批次13：dldfcn 官方装载（凸包）——文件名即函数名，无需别名",
+    "deps": []
+  },
+  "fftw": {
+    "note": "批次13：dldfcn 官方装载（fftw() 规划器入口；核心 fft 不受影响）",
+    "deps": []
+  },
+  "audioread": {
+    "note": "批次13：dldfcn 官方装载——一个模块导出 4 个函数（libsndfile 后端）",
+    "deps": [],
+    "aliases": [
+      "audiowrite",
+      "audioinfo",
+      "audioformats"
+    ]
+  },
+  "webaudio": {
+    "note": "R8：18 个 __player_* 纯 .m（+ T6 的 audiodevinfo shim）；页面侧 webaudio.js 真开 AudioContext",
+    "deps": []
+  },
+  "webdoc": {
+    "note": "T6/D2a：doc 的浏览器实现（官方 doc.m 末路是起 info 浏览器进程，本构建无 shell）",
+    "deps": []
+  },
+  "webaudiorec": {
+    "note": "T7/B1：19 个 __recorder_* 纯 .m；页面侧 webaudiorec.js 用 getUserMedia + MediaRecorder 真采集",
+    "deps": []
+  },
+  "__init_gnuplot__": {
+    "aliases": [
+      "__have_gnuplot__"
+    ],
+    "note": "官方 libinterp/dldfcn/__init_gnuplot__.cc **原样**编成 side module（上游 LIBADD 只有 liboctinterp，零外部依赖）。本构建没有 gnuplot 二进制 ⇒ __have_gnuplot__() 为 false、__init_gnuplot__ 走「没找到 gnuplot」那条路 —— 与桌面没装 gnuplot 时**完全一致**，不是桩。",
+    "deps": []
+  },
+  "__init_fltk__": {
+    "aliases": [
+      "__fltk_check__"
+    ],
+    "note": "官方 libinterp/dldfcn/__init_fltk__.cc **原样**编成 side module。HAVE_FLTK 未定义 ⇒ FLTK 部分被条件编译掉（模块只有 2545 字节），但 DEFUN 仍存在并报 err_disabled_feature(\"__fltk_check__\", \"OpenGL and FLTK\") —— 这正是上游「没编 FLTK」时的官方行为。",
+    "deps": []
+  },
+  "__fltk_uigetfile__": {
+    "deps": [],
+    "note": "T8/H2：**我们自己写的**浏览器实现（build/webfilepick.cc），替掉官方那个需要 FLTK 的模块。为什么必须是 .oct：__uigetfile_fltk__.m 开头的门禁是 exist(...)==3（纯 .m 满足不了）。为什么是**两步**：选择框异步、而 Octave 一阻塞页面就停摆 ⇒ 第一次调用弹框并报错提示「选好后再跑一次」，第二次返回结果并把文件字节复制进当前目录。页面侧是 bridge/webfilepick.js。"
+  },
+  "webnet": {
+    "note": "R5：urlread/urlwrite/webread/websave 的浏览器侧桥",
+    "deps": [
+      "webnet-oct"
+    ]
+  },
+  "webnet-oct": {
+    "aliases": [
+      "__web_fetch_sync__"
+    ],
+    "note": "R5 网络：进程内实现（同步 XHR），注册层是 webnet.js"
+  },
+  "doc-cache": {
+    "kind": "file",
+    "mount": "/src/work/octave-install/share/octave/11.3.0/etc/doc-cache",
+    "note": "T1：11.3.0 的 etc 数据。built-in-docstrings 已由 build/render-docstrings.py 构建期预渲染（去掉 texinfo 标记 → help 走 plain text 分支，不需要运行时 makeinfo）"
+  },
+  "built-in-docstrings": {
+    "kind": "file",
+    "mount": "/src/work/octave-install/share/octave/11.3.0/etc/built-in-docstrings",
+    "note": "T1：11.3.0 的 etc 数据。built-in-docstrings 已由 build/render-docstrings.py 构建期预渲染（去掉 texinfo 标记 → help 走 plain text 分支，不需要运行时 makeinfo）"
+  },
+  "control": {
+    "note": "Forge 4.1.3 纯 .m（314 个）+ 8 个基础编译件（is_*/lti_input_idx 等）。SLICOT 编译件在 MAIN_MODULE=1 下会崩页面故不发布，见 CLIBS.md 坑 11",
+    "deps": [],
+    "aliases": [
+      "lti_input_idx"
+    ]
+  },
+  "signal": {
+    "note": "Forge 1.4.6 纯 .m 部分（181 个 .m；R2 验收要求的包；依赖 control）",
+    "deps": [
+      "control"
+    ]
+  },
+  "webfile": {
+    "note": "T3：copyfile/movefile/ls 的进程内实现（无 shell；浏览器没有 cp/mv/ls）",
+    "deps": []
+  },
+  "pkgfix": {
+    "note": "T4：从磁盘现状生成 pkg 数据库（复用官方 get_description，故必须挂在 m/pkg/ 以解析 private 函数）",
+    "deps": []
+  },
+  "installed_packages.m": {
+    "note": "T4：还原 upstream 的 installed_packages.m（fork 把读数据库的 16 行换成 3 行空赋值）",
+    "deps": [],
+    "mount": "/usr/src/octave/m/pkg/private/installed_packages.m"
+  },
+  "gzip": {
+    "aliases": [
+      "bzip2"
+    ],
+    "note": "Octave 自带 dldfcn gzip（zlib/bz2 已用 --whole-archive 链进主模块）"
+  },
+  "macros.texi": {
+    "kind": "file",
+    "mount": "/src/work/octave-install/share/octave/11.3.0/etc/macros.texi",
+    "note": "T1：11.3.0 的 etc 数据。built-in-docstrings 已由 build/render-docstrings.py 构建期预渲染（去掉 texinfo 标记 → help 走 plain text 分支，不需要运行时 makeinfo）"
+  },
+  "webimage": {
+    "deps": [
+      "webimage-oct"
+    ],
+    "note": "R4 注册层（imformats(\"add\")）；依赖 webimage-oct 提供 __web_*__"
+  },
+  "plotbridge": {
+    "note": "R9：plot 翻译桥（纯 .m SVG/状态机）；main.cc 的 phase2 会把 /usr/src/octave/m/plotbridge 加进 path"
+  }
+}
