@@ -59,6 +59,33 @@
     }
   }
 
+  // ── G3 取点：armed 时把点击坐标（画布 CSS px，y 向下）收进队列 ────────────────
+  // 队列由 `__web_ginput_arm__`（webpause.oct → webjslib）清空并置位 ⇒
+  // "第二次点击不得误触发下一次 ginput"由**先 arm 再收**的顺序保证。
+  window.__octaveClicks = [];
+  window.__octaveClicksArmed = false;
+  window.addEventListener('pointerdown', function (e) {
+    if (!window.__octaveClicksArmed) return;
+    var el = e.target;
+    if (!el || (el.tagName !== 'IMG' && el.tagName !== 'CANVAS')) return;
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    window.__octaveClicks.push([e.clientX - r.left, e.clientY - r.top,
+                                r.width, r.height,
+                                e.button === 2 ? 3 : (e.button === 1 ? 2 : 1)]);
+    e.preventDefault();
+  });
+  // ── G4 Ctrl-C：Ctrl+C（Cmd+C 不拦，mac 用户用按钮/函数）→ 置位中断旗标 ──────
+  // ⚠️ 只在解释器**正在跑**时才有意义；CPU 密集循环不经过安全点 ⇒ 不是抢占（如实记）。
+  window.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+      try { if (window.Module && window.Module._web_request_interrupt) window.Module._web_request_interrupt(); } catch (err) {}
+    }
+  });
+  window.__octaveRequestInterrupt = function () {
+    try { if (window.Module && window.Module._web_request_interrupt) window.Module._web_request_interrupt(); } catch (err) {}
+  };
+
   var Module = {
     // ── JSPI **B 姿势**（2026-09-25 定案）：包装只发生在这一层 ─────────────────
     // 把唯一的挂起 import `web_sleep_ms` 包成 `WebAssembly.Suspending`，其余 import
@@ -82,7 +109,20 @@
         console.warn('[jspi-b] 挂起包装不可用，已降级为无挂起（其余功能照常）');
       }
       fetch('octave.wasm').then(function (r) { return r.arrayBuffer(); })
-        .then(function (b) { return WebAssembly.instantiate(b, info); })
+        .then(function (b) {
+          // ★ SHA 自证（2026-09-25）：把**本页实际实例化的 wasm 字节**算成 sha256 暴露出来。
+          //   测试/收尾用它对照"磁盘文件"与"刚构建的产物"——防"改完程序跑旧产物"
+          //   （promote 覆盖事故与 harness 旧副本都是这一类，HISTORY §5.50）。
+          try {
+            if (window.crypto && crypto.subtle) {
+              crypto.subtle.digest('SHA-256', b).then(function (d) {
+                window.__octaveWasmSha = Array.prototype.map.call(new Uint8Array(d),
+                  function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+              }).catch(function () {});
+            }
+          } catch (e) { /* 老浏览器没有 subtle：自证缺席，其余功能不受影响 */ }
+          return WebAssembly.instantiate(b, info);
+        })
         .then(function (out) { receiveInstance(out.instance, out.module); })
         .catch(function (e) {
           console.error('[jspi-b] instantiate failed: ' + e);

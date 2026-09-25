@@ -91,14 +91,16 @@ const clean = (logs) => logs
 
 // ── ② "不许挂死"一族：必须**清晰报错**（不是 TypeError、不是超时、不是静默）──────
 // 每个都点名"为什么不行 + 去哪看"，因为这些名字在桌面版都可用，用户会以为是自己用错了。
+// ★ G3/G5（2026-09-25）翻面：ginput / keyboard（v1 REPL）/ waitforbuttonpress / gtext
+//   **不再是清晰报错** —— 它们已是真交互（等点击/一层 REPL），全链验收在 accept-ginput.mjs。
+//   在本套件的**同步入口**上，触达挂起 import 的命令以 SuspendError 拒绝 —— 那是
+//   "此命令是可挂起命令"的信号（穷举语义，GPT 复审判据①的产品层表现）。
+//   仍是清晰报错的：uisetfont / uiwait / waitfor（还没接）。
 const NOHANG = [
-  ['ginput(1)',            'ginput(1)',                      /ginput: interactive mouse input is not available/],
-  ['keyboard',             'keyboard',                       /keyboard: the nested command prompt is not available/],
   ['uisetfont',            'uisetfont',                      /uisetfont: the font-picker dialog is not available/],
   ['uiwait(gcf())',        'close all; h = figure(); uiwait(h)',  /uiwait: waiting for user interaction is not available/],
   ['waitfor(gcf())',       'close all; h = figure(); waitfor(h)', /waitfor: waiting for an object property or a click is not available/],
-  ['waitforbuttonpress',   'waitforbuttonpress()',           /ginput: interactive mouse input is not available/],
-  ['gtext("label")',       'clf; plot(1:3); gtext("label")', /ginput: interactive mouse input is not available/],
+  ['keyboard（v1 REPL，prompt 无头失败）', 'keyboard',        /input: reading user-input failed/],
 ];
 for (const [label, code, want] of NOHANG) {
   const { page, logs } = await fresh();
@@ -108,13 +110,30 @@ for (const [label, code, want] of NOHANG) {
   await page.close().catch(() => {});
 }
 
+// ── ②b G3 翻面：ginput / waitforbuttonpress / gtext 在同步入口 = SuspendError 信号──
+// （真交互全链在 accept-ginput.mjs；这里钉住"穷举语义"这个可证伪行为。）
+const SUSPEND_SIGNAL = [
+  ['ginput(1)',            'ginput(1)'],
+  ['waitforbuttonpress',   'waitforbuttonpress()'],
+  ['gtext("label")',       'clf; plot(1:3); gtext("label")'],
+];
+for (const [label, code] of SUSPEND_SIGNAL) {
+  const { page, logs } = await fresh();
+  const r = await run(page, logs, code);
+  const ok = (r.rc === 'CRASH' || r.rc === 'HANG' || r.rc === 2) && /SuspendError/.test(r.err + ' ' + r.out);
+  check(ok, `★ ${label}：同步入口 ⇒ SuspendError（= 可挂起命令的信号；真交互走 eval_async）`, r.err || r.out);
+  await page.close().catch(() => {});
+}
+
 // ── ③ 覆写生效的证据：名字解析指向 webshims（而不是核心实现）──────────────────
 {
   const { page, logs } = await fresh();
-  const r = await run(page, logs, 'ns = {"ginput","keyboard","uisetfont","uiwait","waitfor"}; for k=1:numel(ns); fprintf("%s->%s ", ns{k}, which(ns{k})); end; fprintf("\\n")', /waitfor->/);
-  const allWeb = ['ginput', 'keyboard', 'uisetfont', 'uiwait', 'waitfor']
+  const r = await run(page, logs, 'ns = {"keyboard","uisetfont","uiwait","waitfor"}; for k=1:numel(ns); fprintf("%s->%s ", ns{k}, which(ns{k})); end; fprintf("\\n")', /waitfor->/);
+  const allWeb = ['keyboard', 'uisetfont', 'uiwait', 'waitfor']
     .every(n => new RegExp(n + '->[^ ]*webshims/' + n + '\\.m').test(r.out));
-  check(r.rc === 0 && allWeb, '★ 五个名字都解析到 build/webshims 的覆写（R1 的机制：.m 遮得住内建/核心）', r.out);
+  check(r.rc === 0 && allWeb, '★ 四个名字解析到 webshims（ginput 覆写已删，交还核心 ginput.m → __webgl_ginput__）', r.out);
+  const rg = await run(page, logs, 'disp(which("ginput"))', /ginput/);
+  check(rg.rc === 0 && /plot\/util\/ginput\.m/.test(rg.out), '★ ginput 解析回核心 ginput.m（上游委托 __webgl_ginput__）', rg.out);
   const r2 = await run(page, logs, 'disp(sprintf("kb=%d popen=%d", exist("keyboard"), exist("popen")))', /kb=/);
   check(r2.rc === 0 && /kb=2 popen=2/.test(r2.out),
     '交底：覆写后 exist() 从 5（内建）/2 变成 2 —— 名字面如实反映"这是 .m 覆写"', r2.out);

@@ -14,6 +14,16 @@
 ## ⚠️ 依赖 `__web_pause_ms__.oct`（开机资产装载，见 bridge/index.html 的 CORE_DLDFCN）。
 
 function varargout = pause (varargin)
+  ## D9 门槛（批次 3）：没有 JSPI 挂起能力时退回**内建阻塞 pause**（= G2 之前的旧语义：
+  ## 页面在等待期间卡住，但脚本语义正确），而不是静默 no-op —— 否则依赖 pause 节奏的
+  ## 循环（playblocking/movie）会变成 busy-loop 把页面冻死。
+  if (! __web_suspend_ok__ ())
+    if (nargin > 0 && isnumeric (varargin{1}))
+      builtin ('pause', varargin{1});
+    endif
+    return;
+  endif
+
   if (nargin == 0)
     __web_pause_ms__ (0);
     return;

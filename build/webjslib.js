@@ -17,4 +17,29 @@ addToLibrary({
       setTimeout(function () { Module.__tick = (Module.__tick || 0) + 1; resolve(); }, ms);
     });
   },
+  // ── 批次 3：D9 门槛 + G3 取点原语（即返，不挂起）──────────────────────────
+  // ⚠️ 这些 import 只有在 main.cc 引用了对应转发器时才会出现在主模块 import 表里，
+  //    页面钩子才包得到/调得到。pop 写double 经 HEAPF64（jslib 作用域里就有）。
+  web_suspend_ok_impl: function () {
+    return (typeof WebAssembly.Suspending === 'function') ? 1 : 0;
+  },
+  web_ginput_arm_impl: function () {
+    window.__octaveClicks = [];
+    window.__octaveClicksArmed = true;
+    return 0;
+  },
+  web_ginput_pending_impl: function () {
+    return (window.__octaveClicks || []).length;
+  },
+  // v = [x, y, rectW, rectH]（画布 CSS px，y 向下）；返回按键 1/2/3，空 = -1
+  web_ginput_pop_impl: function (ptr) {
+    var q = window.__octaveClicks || [];
+    if (!q.length) return -1;
+    var c = q.shift();
+    HEAPF64[ptr >> 3] = c[0];
+    HEAPF64[(ptr + 8) >> 3] = c[1];
+    HEAPF64[(ptr + 16) >> 3] = c[2];
+    HEAPF64[(ptr + 24) >> 3] = c[3];
+    return c[4] | 0;
+  },
 });

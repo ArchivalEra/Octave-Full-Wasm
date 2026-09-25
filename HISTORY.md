@@ -2324,6 +2324,45 @@ sweep：8768 **40 套/1036/0**（stress 矩阵被收编为第 40 套）、8761 `
 
 ---
 
+### 5.50 批次 3 落地：G3 取点 + G4 Ctrl-C + D9 门槛 + **部署件 SHA 铁律**（2026-09-25）
+
+**wasm**：sha `45d288b1…`（批次 1 的 +450 字节再 +6 字节：ginput 三原语 / web_suspend_ok /
+web_request_interrupt 的导出；main.cc 的 `web_pause_ms` 增加中断投递、`eval_string` 增加
+`interrupt_exception` 捕获 ⇒ rc=3 且**复位旗标**）。8761/8768 同步，D8 绿。
+
+**G3 ginput 全链（accept-ginput 10/0）**：上游 `ginput.m` 委托 `__<toolkit>_ginput__` ⇒
+提供 `__webgl_ginput__.m`（webgraphics 资产）—— arm→轮询（`__web_pause_ms__(50)` 让出）→
+pop→**数据坐标映射**（axes 像素框 + xlim/ylim 线性；y 翻转）。原语链实测：
+`pending=1; size=1x5; v=280 210 562 422 b=1; pending2=0`。验收：反算像素点击 ⇒
+数据 (5,5) 精确；两次 ginput 各收各的点（arm 先收后保证"stale 点击不串场"）；ginput(2) 按序。
+**三个当场坑**：① axes position 默认 **normalized** 单位——不转像素就把所有点当"axes 外"
+丢掉 ⇒ 死循环；② 多函数 .oct 必须按 §4.11 建 **aliases** 符号链接（`__web_suspend_ok__`
+在 `__web_pause_ms__.oct` 里 ⇒ 不建链接就是 undefined）；③ `.oct` 里**不能**定义
+`web_pause_ms`（会引入 `web_sleep_ms`/`octave_interrupt_state` 两个 side module 解析不到的
+符号 ⇒ 整个模块 dlopen 失败）——定义在 main.cc，.oct 只声明。
+
+**G4 Ctrl-C**：`web_request_interrupt` 置位 `octave_interrupt_state`；**投递点 =
+`web_pause_ms`**（resume 后查旗标抛 `interrupt_exception`；`eval_string` 捕获 ⇒ rc=3 且
+复位）。验收：`while(true)`+`pause` 死循环 400ms 后请求 ⇒ **rc=3 收尾**、解释器存活、
+后续命令正常。CPU 密集且不含 pause 的循环打不断（没有安全点）——如实记：不是抢占。
+
+**D9 门槛**：`__web_suspend_ok__`（main.cc → webjslib → 页面）——pause.m 没能力时退回
+`builtin('pause')` 阻塞（G2 前旧语义，防 busy-loop 冻页）；ginput/keyboard 没能力时清晰报错。
+**G5 keyboard v1**：一层 REPL（input 的 prompt + `evalin("caller")`），递归 keyboard 仍是红线。
+
+**★ 部署件 SHA 铁律（用户点名，2026-09-25）**：多次"改完程序用老程序跑"的教训固化成三层判据：
+① 磁盘层 `build/check-deploy-sha.sh <站点> <期望sha> <URL>`（站点 wasm == 刚构建产物）；
+② HTTP 层（URL 吐的字节 == 磁盘）；③ **页面自证** `window.__octaveWasmSha`
+（页面在 instantiateWasm 钩子里对**实际实例化的字节**算 sha）——
+`probe-artifact-sha.mjs` 三层断言全绿。已写进 AGENTS.md 批次收尾。
+
+**accept-interactive 断言翻面（D9 计划内）**：ginput/waitforbuttonpress/gtext **不再是
+清晰报错**——它们是真交互（同步入口给 SuspendError 信号=可挂起命令标记；全链在
+accept-ginput）；keyboard 变 v1 REPL（prompt 无头失败=清晰报错）；ginput 解析回核心
+ginput.m（覆写已删）。sweep：8768 **69 套/1187/0**、8761 `PROBES=1` **69 套/1187/0**。
+
+---
+
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
 
 > **§9 是当时的计划，本节是实际做出来的结果。接续请以本节为准。**

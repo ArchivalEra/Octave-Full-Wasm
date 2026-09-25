@@ -499,7 +499,7 @@ if [ "${WITH_JSPI:-0}" = "1" ]; then
   # `_malloc`/`_free`：页面把 eval 代码字符串 marshal 成堆指针（**挂起期间指针必须活着**
   #  ⇒ 不能用栈分配，见 bridge/index.html 的 eval_async 包装）；`lengthBytesUTF8`/
   #  `stringToUTF8` 是写串用的运行期助手。
-  JSPI_EXPORT_FUNCS="_eval_wait,_web_pause_ms,_malloc,_free"
+  JSPI_EXPORT_FUNCS="_eval_wait,_web_pause_ms,_malloc,_free,_web_suspend_ok,_web_ginput_arm,_web_ginput_pending,_web_ginput_pop,_web_request_interrupt"
   JSPI_RT=',"lengthBytesUTF8","stringToUTF8"'
   echo "★ WITH_JSPI=1：**B 姿势**（不加 -sJSPI；页面钩子包 web_sleep_ms + 页面 promising 包 eval_wait）"
 else
@@ -551,9 +551,11 @@ set +x
 #   ① `WITH_JSPI=1` ⇒ 胶水 `Suspending` 计数 = 0 且 `eval_wait` 导出在胶水符号表里；
 #   ② `WITH_JSPI=0` ⇒ 连 `eval_wait` 都不许出现（与现役产物一致的硬口径）。
 if [ "${WITH_JSPI:-0}" = "1" ]; then
-  _n=$(grep -c 'Suspending' "$OUT/octave.js" || true)
+  # ★ 数的是 **`new WebAssembly.Suspending`（包装行为）**，不是裸词 "Suspending" ——
+  #   webjslib 的能力检测里 `typeof WebAssembly.Suspending` 是合法出现（实测踩过）。
+  _n=$(grep -c 'new WebAssembly\.Suspending' "$OUT/octave.js" || true)
   if [ "$_n" != "0" ]; then
-    echo "FATAL: B 姿势下胶水里出现了 $_n 处 Suspending（包装只许在页面层）" >&2
+    echo "FATAL: B 姿势下胶水里出现了 $_n 处 new WebAssembly.Suspending（包装只许在页面层）" >&2
     echo "       —— 多半是混进了 -sJSPI 类旗标；见 NOTES-jspi「A2 最小实验」" >&2
     exit 3
   fi
@@ -561,9 +563,9 @@ if [ "${WITH_JSPI:-0}" = "1" ]; then
     echo "FATAL: octave.js 里没有 eval_wait —— EXPORTED_FUNCS 没接上？" >&2
     exit 3
   fi
-  echo "== JSPI(B) 自检: 胶水 Suspending=0、eval_wait 导出在 ✓"
-elif grep -q 'eval_wait\|Suspending' "$OUT/octave.js"; then
-  echo "⚠ WITH_JSPI 未开，但 octave.js 里出现了 eval_wait/Suspending（产物不干净？）" >&2
+  echo "== JSPI(B) 自检: 胶水 new-Suspending=0、eval_wait 导出在 ✓"
+elif grep -q 'new WebAssembly\.Suspending' "$OUT/octave.js"; then
+  echo "⚠ WITH_JSPI 未开，但 octave.js 里出现了 JSPI 包装（产物不干净？）" >&2
 fi
 
 # ---- 自检：预载路径有没有错位 ------------------------------------------------

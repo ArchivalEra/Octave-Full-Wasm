@@ -55,6 +55,8 @@ python3 .githooks/check-whitelist.py         # 白名单覆盖
 ## 操作习惯与硬坑（踩过的，别再来一次）
 - **重活用 `setsid nohup … &` + ≤3 分钟的命令轮询**，输出只 `tail -n`/`grep` —— 长前台命令会把 ZCode 弄崩。
   **跑验收时别并行干重活**（并发 docker commit / 压缩曾让一个套件假崩）。
+- **测试用例从仓库原路径直跑**（`cd harness && node /mnt/hdd/.../test/browser/x.mjs`）——
+  别 `cp` 一份到 harness 再跑：改完仓库用旧副本跑，断言红绿全错位（实测两次，2026-09-25）。
 - **容器里的构建脚本是另一份拷贝**：改完仓库的 `configure-113-full.sh` / `link-web.sh` /
   `main.cc` 必须 `docker cp` 进容器（`main.cc` → `/src/websrc/main.cc`，构建脚本 → `/src/bin/`），
   否则跑的是旧的。（`link-web.sh` 自己会编 `main.cc`，不用手动编。）

@@ -10,6 +10,7 @@
 #include <parse.h>
 #include <interpreter.h>
 #include <builtin-defun-decls.h>
+#include <octave/quit.h>   // octave_interrupt_state / interrupt_exception（批次 3 G4）
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
@@ -321,6 +322,13 @@ int EMSCRIPTEN_KEEPALIVE eval_string(std::string eval_str) {
   } catch (const octave::execution_exception& ex) {
     interpreter->handle_exception(ex);
     return 2;
+  } catch (const octave::interrupt_exception&) {
+    // G4 Ctrl-C：web_request_interrupt 置位后，安全点抛 interrupt_exception。
+    // ★ 必须**复位旗标**——否则后面每条命令在第一个安全点继续炸（解释器变砖）。
+    //   rc=3 与执行错误(2)区分；interrupt_exception 不是 execution_exception 的子类，
+    //   不能走 handle_exception（它只收后者）。
+    octave_interrupt_state.store (0);
+    return 3;
   }
 
   return 0;
@@ -341,7 +349,45 @@ extern "C" int eval_wait (const char *eval_str) {
 // 页面钩子把 env 里的 `web_sleep_ms` 包成 `WebAssembly.Suspending` ⇒ 在
 // promising 栈上调用它时整个 wasm 栈真挂起、页面事件循环照常跑。
 extern "C" void web_sleep_ms (int ms);
-extern "C" void web_pause_ms (int ms) { web_sleep_ms (ms); }
+// ★ G4：web_pause_ms 是**可靠的中断投递点**——挂起 resume 之后查中断旗标，
+//   置位就抛 interrupt_exception（-fwasm-exceptions 沿调用栈正常退绕，eval_string
+//   的 interrupt 捕获转 rc=3）。CPU 密集且不含 pause 的循环仍然打不断（没有安全点），
+//   如实记：不是抢占。
+extern "C" void web_pause_ms (int ms) {
+  web_sleep_ms (ms);
+  if (octave_interrupt_state.load () == 1)
+    {
+      octave_interrupt_state.store (0);
+      throw octave::interrupt_exception ();
+    }
+}
+
+// ── 批次 3（2026-09-25）：交互原语（G3 取点 / D9 门槛 / G4 Ctrl-C）────────────
+// 全部是"主模块导出 → JS import（webjslib.js）→ 页面队列/能力"的转发器。
+// ⚠️ ginput 的等待**不**在这里挂起：轮询循环靠 `__web_pause_ms__`（已挂起）让出，
+//    pop/arm/pending 是**即返**原语（B 姿势下不需要每个 import 都可挂起）。
+
+// D9 门槛：页面钩子是否真的包上了 Suspending（无 JSPI API 的浏览器 = 0）。
+// m 侧 shim 用它做**Octave 层的能力门**（pause/ginput/keyboard 先问它）。
+extern "C" int web_suspend_ok_impl (void);
+extern "C" EMSCRIPTEN_KEEPALIVE int web_suspend_ok (void) { return web_suspend_ok_impl (); }
+
+// G3：点击队列。arm = 清空并开始收点；pending = 队列长度；
+// pop = 弹一个点：v[0]=x v[1]=y（画布 CSS px，y 向下）、v[2]=rect宽、v[3]=rect高、
+// 返回按键（1 左 / 2 中 / 3 右），队列空 = -1。坐标→数据的映射在 `__webgl_ginput__.m`。
+extern "C" int web_ginput_arm_impl (void);
+extern "C" EMSCRIPTEN_KEEPALIVE int web_ginput_arm (void) { return web_ginput_arm_impl (); }
+extern "C" int web_ginput_pending_impl (void);
+extern "C" EMSCRIPTEN_KEEPALIVE int web_ginput_pending (void) { return web_ginput_pending_impl (); }
+extern "C" int web_ginput_pop_impl (double *v);
+extern "C" EMSCRIPTEN_KEEPALIVE int web_ginput_pop (double *v) { return web_ginput_pop_impl (v); }
+
+// G4 Ctrl-C：置位中断旗标，解释器在下一个安全点抛 interrupt_exception。
+// ⚠️ CPU 密集循环不经过安全点 ⇒ 只有循环里含 pause/yield 时页面才递得进中断
+//    （如实记：不是抢占）。
+extern "C" EMSCRIPTEN_KEEPALIVE void web_request_interrupt (void) {
+  octave_interrupt_state.store (1);
+}
 
 ////int EMSCRIPTEN_KEEPALIVE execute_cli(std::vector<std::string> args) {
 //int EMSCRIPTEN_KEEPALIVE execute_cli() {
