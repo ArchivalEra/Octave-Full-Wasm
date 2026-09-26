@@ -209,12 +209,13 @@ sudo docker exec o113 sh -c '/emsdk/upstream/bin/llvm-objdump -d /src/websrc/m2f
    中断时正在跑 `probe-*` 段（`probe-bridge-svg-out`/`probe-browser-matrix`/`probe-cold-start`，均 rc=0 无 FAIL）。
    日志已落盘：`/mnt/hdd/octave-wasm-build/sweep-logs/INTERRUPTED-8761-simd-20260925-155420.log`。
 
-### 还没做（下次开工第一件事）
-1. **补跑 `PROBES=1 sh /mnt/hdd/octave-wasm-build/sweep.sh http://127.0.0.1:8761/`**（拿完整汇总行：应为 accept 41 + probe/probe 段全绿）。
-2. `sh build/make-dist.sh` + 核对**包内 wasm 与部署件同 sha**。
-3. `sh build/check-site-parity.sh --strict`（两站点现在都是 `1ed3e528`，应通过）。
-4. **六道闸门 + `Slay` 提交**（本次已把 `site/` 同步与文档一起提交，但 dist 与 parity 结果要补记）。
-5. 清理实验车道：`rm -rf /mnt/hdd/octave-wasm-build/site-simd`（63MB 副本）并 kill 8771 的 http.server。
+### ~~还没做~~ → **全部补完（2026-09-26 新一天）**
+1. ✅ **补跑 `PROBES=1 sweep.sh http://127.0.0.1:8761/`** → **76 套 / 1190 PASS / 0 FAIL**
+   （比上一批多 5 套 = 新增 bench-dgemm / probe-jspi-worker / probe-threads / probe-iframe-coi 等；
+   "有问题的套件"= 自托管/诊断型探针的 NO-SUMMARY，rc=0，与历史口径一致）。
+2. ✅ `make-dist.sh` → `dist/octave-full-wasm-site-20260926/`，包内 wasm sha = 部署件 = `1ed3e528…`。
+3. ✅ `check-site-parity.sh --strict` → **两站点完全一致**（部署件 + 资产包 + 清单，清单 49/49、sha 差异 0）。
+4. ✅ 实验车道清理：`site-simd/`（63MB 副本）已删、8771 已停；8761/8768 重启后开机自检 OK（1.6s）。
 
 ### 回退（精确到本次基线）
 ```sh
