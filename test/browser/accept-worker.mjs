@@ -157,6 +157,80 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
     JSON.stringify(gfx));
   console.log('   图形路径自证：' + JSON.stringify(gfx.d));
 
+  // ══ 以下四条来自外部评审 C 节（Gemini）：真盲区，判据都可证伪 ══
+
+  // ★ C1 重入防护：挂起期间再派一条命令 ⇒ **必须排队**，不许撞
+  //   `RuntimeError: Suspend error: instance is already suspended`
+  const reentry = await page.evaluate(async () => {
+    const p1 = window.OctaveWorker.evalAsync('pause(1.2); 111');   // 挂起中
+    await new Promise(r => setTimeout(r, 150));
+    const p2 = window.OctaveWorker.eval('222');                    // 挂起期间第二条
+    const [a, b] = await Promise.all([p1, p2]);
+    const after = await window.OctaveWorker.eval('333');
+    return { a: a.rc, b: b.rc, after: after.rc, bErr: String(b.err || '').slice(0, 90) };
+  });
+  check(reentry.a === 0 && reentry.b === 0 && reentry.after === 0 && !/Suspend|suspended/i.test(reentry.bErr),
+    '★ C1 重入防护：挂起期间的第二条命令被**排队**（两条都 rc=0，无 Suspend error）',
+    JSON.stringify(reentry));
+
+  // ★ C4a **纯计算**下的主线程自由度（强判据、比例式）：tick 应接近"按 10ms 满额"
+  const pure = await page.evaluate(async () => {
+    let ticks = 0; const iv = setInterval(() => { ticks++; }, 10);
+    const r = await window.OctaveWorker.eval('A=rand(1000); B=rand(1000); C=A*B;');
+    clearInterval(iv);
+    return { rc: r.rc, ticks: ticks, ms: r.ms };
+  });
+  const pureExp = Math.max(1, pure.ms / 10);
+  check(pure.rc === 0 && pure.ticks >= pureExp * 0.7,
+    '★ C4a 纯计算(1000²)期间主线程 tick ≈ 满额（≥0.7×应得）—— 这才是 C3 的核心主张',
+    JSON.stringify(pure) + ` 期望≈${Math.round(pureExp)}`);
+
+  // ★ C4b stdout 洪泛：**不丢字 + 主线程仍活**（对比单页模式的 tick=0）；残存代价如实记
+  const flood = await page.evaluate(async () => {
+    let ticks = 0; const iv = setInterval(() => { ticks++; }, 10);
+    const r = await window.OctaveWorker.eval('for k=1:50000, printf("%d\\n", k); end');
+    clearInterval(iv);
+    const txt = document.getElementById('output').textContent;
+    return { rc: r.rc, ticks: ticks, ms: r.ms, lines: txt.split('\n').length, hasLast: txt.indexOf('50000') >= 0 };
+  });
+  check(flood.rc === 0 && flood.ticks > 0 && flood.hasLast,
+    '★ C4b stdout 洪泛：5 万行不丢字、主线程仍在跑（tick>0；单页模式同负载 tick=0）',
+    JSON.stringify(flood) + `（如实记：输出密集时两线程争 CPU，tick 低于满额）`);
+
+  // ★ C3 terminate 结算：被 terminate 的待办**必须立刻 reject**（不许僵尸 Promise），且能重启
+  const term = await page.evaluate(async () => {
+    const t0 = performance.now();
+    const p = window.OctaveWorker.evalAsync('pause(3); 999');
+    await new Promise(r => setTimeout(r, 200));
+    window.OctaveWorker.terminate();
+    let errName = null, settled = false;
+    try { await p; settled = true; } catch (e) { errName = e && e.name; }
+    return { settled: settled, errName: errName, ms: Math.round(performance.now() - t0) };
+  });
+  check(!term.settled && term.errName === 'AbortError' && term.ms < 1000,
+    '★ C3 terminate 结算：待办在 terminate 后立刻以 AbortError reject（无僵尸 Promise）', JSON.stringify(term));
+  // 重启一个新 worker 并确认可用（换 home，避免与旧实例的 IDBFS 撞）
+  const revived = await page.evaluate(async () => {
+    var d = document.createElement('div'); d.id = 'w2'; document.body.appendChild(d);
+    const w2 = new Worker('octave-worker.js');
+    window.__w2 = w2;
+    var seq = 0, pend = {};
+    w2.onmessage = e => { const m = e.data; if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id]; } };
+    w2.postMessage({ kind: 'opts', base: '', home: '/home/web_user/w2' });
+    const call = (kind, p) => new Promise(res => { const id = ++seq; pend[id] = res; w2.postMessage(Object.assign({ id, kind }, p)); });
+    for (let i = 0; i < 240; i++) { const ok = await call('eval', { code: '1' }).catch(() => null); if (ok && ok.rc === 0) break; await new Promise(r => setTimeout(r, 500)); }
+    const r = await call('eval', { code: '444' });
+    // ⚠️ canvas 是**首次 redraw 时**才创建（#octave-gl-canvas 懒建）⇒ 必须先画一次再 diagnose，
+    //   否则 glCtx 恒为 false（第一版判据就栽在这，是判据 bug 不是产品 bug）
+    await call('eval', { code: 'figure(7); clf; plot(1:5); drawnow();' });
+    await new Promise(res => setTimeout(res, 800));
+    const g = await call('diagnose', {});
+    return { rc: r.rc, tk: g.d && g.d.tk, glCtx: g.d && g.d.glCtx };
+  });
+  check(revived.rc === 0 && revived.tk === 'webgl' && revived.glCtx === true,
+    '★ C3b worker 可重启：新实例照常 eval 且**同样拿到真渲染后端**（tk=webgl + WebGL2 上下文）',
+    JSON.stringify(revived));
+
   if (errs.length) console.log('   ⚠️ 页面报错：' + errs.slice(0, 3).join(' // '));
   await page.close();
 }

@@ -57,8 +57,15 @@
     }
     el.appendChild(document.createTextNode(s));
     // 只在页面真的可滚动时才跟到底部：输出多的时候避免每次写都做一次布局查询。
-    if (document.documentElement.scrollHeight > window.innerHeight) {
-      window.scrollTo(0, document.body.scrollHeight);
+    // ★ 2026-09-26 修：**读 `scrollHeight` 会强制同步布局**，海量输出时每条都读 =
+    //   37 次 ×(300KB 文本的)布局 ≈ 2 秒 ⇒ 主线程照样被卡（外部评审 C-4 的"背压"问题
+    //   真身在这里，不在 worker 的消息条数）。⇒ 按时间**节流**（200ms 一次）。
+    var __now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (__now - (window.__octaveScrollAt || 0) > 200) {
+      window.__octaveScrollAt = __now;
+      if (document.documentElement.scrollHeight > window.innerHeight) {
+        window.scrollTo(0, document.body.scrollHeight);
+      }
     }
   }
 
@@ -564,14 +571,36 @@
   function call(kind, payload) {
     return new Promise(function (resolve, reject) {
       var id = ++seq;
-      pending[id] = function (m) { m.err && m.kind === 'result' && m.rc !== 0 ? resolve(m) : resolve(m); };
+      pending[id] = { resolve: resolve, reject: reject };
       try { w.postMessage(Object.assign({ id: id, kind: kind }, payload)); }
       catch (e) { delete pending[id]; reject(e); }
     });
   }
+  // ★ 结算保证（外部评审 C-3/C-6）：worker 崩溃或被 terminate 时，**不许留下永不 settle
+  //   的僵尸 Promise**（否则 UI 永远卡在 loading）。onerror 与 terminate 都把待办全部 reject。
+  function failAllPending(err) {
+    Object.keys(pending).forEach(function (id) {
+      try { pending[id].reject(err); } catch (e) {}
+      delete pending[id];
+    });
+  }
+  // ★ 上屏**合批**（2026-09-26，外部评审 C-4 的另一半）：worker 已按 8KB 合批，但页面侧
+  //   每条仍做 console.log + DOM 追加 + 布局 ⇒ 5 万行实测主线程被占 ~170ms。改成
+  //   rAF 合批（最多 60fps 一次），并在**结果到达前 flush**（保证测试立即读得到 #output）。
+  var uiBuf = '', uiPending = false;
+  function flushUi() {
+    uiPending = false;
+    if (!uiBuf) return;
+    octaveUiAppend(uiBuf);
+    uiBuf = '';
+  }
+  function queueUi(t) {
+    uiBuf += t + '\n';
+    if (!uiPending) { uiPending = true; (window.requestAnimationFrame || setTimeout)(flushUi); }
+  }
   w.onmessage = function (ev) {
     var m = ev.data || {};
-    if (m.kind === 'out') { console.log(m.text); octaveUiAppend(String(m.text) + '\n'); return; }
+    if (m.kind === 'out') { queueUi(String(m.text)); return; }
     if (m.kind === 'ready') {
       API.ready = true; window.__octaveReady = true;
       console.log('[worker] ready' + (m.warn ? '（有告警：' + m.warn + '）' : ''));
@@ -589,12 +618,25 @@
       return;
     }
     if (m.kind === 'fatal') { console.error('[worker] ' + m.err); return; }
-    if (m.id && pending[m.id]) { var cb = pending[m.id]; delete pending[m.id]; cb(m); }
+    if (m.id && pending[m.id]) { flushUi(); var cb = pending[m.id]; delete pending[m.id]; cb.resolve(m); }
   };
-  w.onerror = function (e) { console.error('[worker] onerror: ' + (e && e.message)); };
+  w.onerror = function (e) {
+    var msg = '[worker] onerror: ' + (e && e.message ? e.message : 'unknown');
+    console.error(msg);
+    API.crashed = msg;
+    failAllPending(new Error('WorkerCrashError: ' + msg));   // ★ 立刻失败，不等超时
+    return true;
+  };
   API.eval = function (code) { return call('eval', { code: code }); };
   API.evalAsync = function (code) { return call('evalAsync', { code: code }); };
   API.loadAssets = function (names) { return call('loadAssets', { names: names }); };
+  // ★ 受控 teardown：拒绝所有待办（AbortError）后 terminate —— 供"崩溃/重启/换实例"用
+  API.terminate = function () {
+    try { failAllPending(new DOMException('Aborted', 'AbortError')); } catch (e) {}
+    try { w.terminate(); } catch (e) {}
+    API.terminated = true;
+  };
+  API.diagnose = function () { return call('diagnose', {}).then(function (m) { return m.d; }); };
   API.interrupt = function () { API.interrupted++; w.postMessage({ kind: 'interrupt' }); };
   window.OctaveWorker = API;
   // 点击一律转发（worker 侧 `arm` 时会清空队列 ⇒ "第二次点击不误触发下一次 ginput" 仍成立）
@@ -606,7 +648,7 @@
     w.postMessage({ kind: 'click', data: [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
                                           e.button === 2 ? 3 : (e.button === 1 ? 2 : 1)] });
   });
-  w.postMessage({ kind: 'opts', base: base });
+  w.postMessage({ kind: 'opts', base: base, home: params.get('home') || undefined });
 })();
 </script>
 <!--

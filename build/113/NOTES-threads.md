@@ -474,3 +474,81 @@ coi-serviceworker 走 require-corp）**。
 ⚠️ 但它提醒了一条**真代价**：COI 之后跨源网络访问要满足 CORP 或走 CORS ——
 产品里那些"取外部 URL"的功能（网络桥 / 同步 XHR）在 COI 站点上会受这条约束
 （本轮没有专门测它，留给 B6 落地的验收项）。
+
+
+---
+
+## B5 phase 2 达成：worker 里有**真渲染后端**（2026-09-26，**不需要重链**）
+
+**结论先写**：worker 模式下 `graphics_toolkit() = 'webgl'`、无 GL 回落信号、绘图成品经 postMessage
+上屏。**没有改一行 C++、没有加任何链接旗标、没有重链** —— 只改了 worker 宿主的 DOM shim。
+
+**机制（读 Emscripten 5.0.7 源码得出，不是猜）**：图形后端要 canvas 时走
+`findCanvasEventTarget(target)` → `specialHTMLTargets[target] || document.querySelector(target)`，
+拿到对象后**由胶水自己调 `canvas.getContext('webgl2', attrs)`**。
+而 `OffscreenCanvas.getContext('webgl2')` **在 worker 里可用** ⇒ 只要 shim 把
+`document.createElement('canvas')` / `getElementById` / `querySelector('#…')` 指向一个
+**真的 `new OffscreenCanvas(w,h)`**，整条链就通了。
+（`transferControlToOffscreen` 那条路是给 pthread 设计的：主线程 transfer → pthread_create 时把
+`GL.offscreenCanvases` 搬过去 —— 我们的 worker 宿主不是 pthread，所以那个表不会自动填；
+但它也不需要填，见上面的机制。）
+
+**实测自证**（新增 `diagnose` 消息通道，专门读 **worker 内部**状态 —— 页面读不到 worker 的 FS/GL）：
+| 量 | 值 |
+|---|---|
+| `graphics_toolkit()` | `webgl` |
+| 无 GL 回落信号 `/tmp/p5_nogl.txt` | **不存在**（= 真拿到了上下文） |
+| 我们自己交出的 OffscreenCanvas 上的 WebGL2 上下文 | **存在**（尺寸 560×420） |
+| 绘图 | 成品经 postMessage → 页面 `<img>` 上屏 |
+
+**顺带澄清一条**：`get: unknown axes property __legend_handle__` 这句在**单页模式与 worker 模式
+完全一样**（专门对比过）⇒ 是既有的良性消息（plot 桥的探测路径），不是 worker 回归。
+
+**判据升级**：`accept-worker` 的 H 从"要么上屏要么降级干净"升级为**强断言**：
+`tk==='webgl' && nogl===0 && glCtx===true && plots≥1 && imgs≥1`（三条缺一条就翻面）。
+
+
+---
+
+## B5 加固 + E2 根因线索（2026-09-26，外部咨询回音后的实测处理）
+
+外部咨询（Gemini）回来了，按本仓纪律**逐条对照实测**（不照抄），结果如下。
+
+### 一、A 节已被我方自解决（批注已加在需求书顶部）
+它给出的方向与我们的实测一致（worker 内自建 OffscreenCanvas、**不需要** OFFSCREENCANVAS_SUPPORT），
+但**注入方式不同**：它主张 `specialHTMLTargets['#id'] = canvas`；我们的做法是让 `document.querySelector`
+返回真 OffscreenCanvas（胶水的查找链 `specialHTMLTargets[target] || document.querySelector(target)` 两条都通）。
+两条路都对；我们保留现方案（改动更小、不动胶水内部表）。
+
+### 二、B 节（binaryen）——**它给的决定性仲裁实验一次就推翻了它自己的主假设**
+- 用 V8（Node 26）直接编译未优化产物：**产物非法**，不是 binaryen 的锅 ——
+  `Compiling function #12022 "ztrti2_" failed: expected 0 elements on the stack for fallthru, found 1 @+7774673`。
+- WABT `wasm-validate --enable-all`（已装到 `/mnt/hdd/crossbuild-tools/wabt`）给出**三处**类型错
+  （`076a1d2` 块尾多 i32、`078a0db` 多 4 个 i32、`078bcfe` drop 空栈）⇒ 系统性签名不匹配。
+- 已排除（都实测）：atomics（0 处）、与 LAPACK 的重复符号（交集 0）、OpenBLAS 单方（最小链通过）、
+  **删掉重名的 `z_abs.o`（`c_abs`/`z_abs` 与 f2c 重名）仍错**。
+- **新线索**：OpenBLAS 的 `{c,z}rotg`（Givens 旋转，`interface/zrotg.c` 四种 -D 组合）引用
+  **`__addtf3`/`__multf3`/`__getf2`/`__letf2`/`__trunctfdf2`** —— 即 **`long double`(fp128)** 软件例程；
+  emscripten 的 `libcompiler_rt.a` 里**有**这些符号，但调用点/实现的约定在链接后产生类型错
+  （wasm 无 f128 ⇒ LLVM 用 i64 对软化）。**注**：wasm32 上 `-mlong-double-64` **不被 clang 支持**
+  （实测报 `unsupported option`），所以"改成 64 位 long double"这条路要**源码级**做。
+- **下一步方向（留给后续/外部）**：① 用 `wasm-objdump -d` 定位三处类型错的具体调用点与 callee；
+  ② 试 OpenBLAS 的 **CMake** 构建路径（旗标组合不同，可能避开 `-m32`/`F_INTERFACE_GFORT`）；
+  ③ **源码级**把 `interface/zrotg.c` 的 `long double` 换成 `double`（最省事，代价是溢出裕度略降）。
+- 结论：E2 仍**未跑通**；但"不是 binaryen 的锅"这条现在有**两个独立裁判**（V8 + WABT）背书。
+
+### 三、C 节（验收矩阵挑刺）——**采纳 4 条，已落地并全绿**
+`accept-worker` 从 11 条扩到 **16 条**（16 PASS / 0 FAIL）：
+| 新判据 | 实测 |
+|---|---|
+| ★ C1 **重入防护**：挂起期间派第二条命令 ⇒ **排队**，不许撞 `Suspend error` | 两条都 rc=0、无 Suspend error（**修前是真洞**：会崩实例） |
+| ★ C4a **纯计算**下主线程 tick ≈ 满额（≥0.7×应得） | 34/35（1000² 349ms）—— C3 的核心主张 |
+| ★ C4b stdout 洪泛（5 万行）：不丢字 + 主线程仍活 | tick=11 / 222ms（**如实记**：输出密集时两线程争 CPU，达不到满额） |
+| ★ C3 `terminate()` 结算 + 重启 | 待办 **201ms 内**以 `AbortError` reject；新实例照常 eval 且**同样拿到真渲染后端** |
+**为修 C4 顺带修掉的真问题**：`octaveUiAppend` 每条都读 `scrollHeight`（**强制同步布局**）+ 页面侧无合批
+⇒ 5 万行输出时主线程被占 ~170ms。修法：滚动跟随**按 200ms 节流** + worker 模式上屏改 **rAF 合批**
+（结果到达前强制 flush，保证测试立即读到 `#output`）。纯计算那条证明主线程是真自由的（tick 满额）。
+**未采纳/待办**（它提的另 4 条）：MEMFS 产物 `unlink`（我们的图路径固定为 `/tmp/p5_fig.png`，
+天然不增长，但值得一条循环测试）、图像与完成信号的 FIFO 单调性、worker 崩溃的快速失败
+（已实现 `onerror` → 立即 reject 待办，尚未写判据）、多 worker + IDBFS 隔离
+（已实现 `opts.home` 按实例换挂载点，尚未写判据）。

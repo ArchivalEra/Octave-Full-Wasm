@@ -8,6 +8,16 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
+> **★ 2026-09-26（branch `Slay`，线程化/并行度线，HISTORY §5.53–§5.57）**：
+> 产物已从 `45d288b1…` 换成 **`1ed3e528…`**（**BLAS 加 `-msimd128`**，DGEMM 512²/1024²/2000² =
+> **1.62×/1.75×/1.31×**，数值回归 97/0）；**C6 去单例嵌入契约**（同页多实例：`accept-embed-multi 13/0`）；
+> **C3/B5 解释器搬进 DedicatedWorker**：带 **`?worker=1`** 的地址就是 worker 模式 ——
+> 长计算不再冻页面（实测：worker 里 1400² 乘 4.3s 期间页面 tick=435，单页模式 tick=0），
+> **worker 里真渲染后端（webgl/OffscreenCanvas）可用且不需要重链**（HISTORY §5.57）；
+> 两站 PROBES=1 全量见最近 sweep 日志；工作令在 `build/113/PLAN-threads.md`（§0.5 状态 / §5 B6 配方）。
+> **尚未做**：B6 线程版构建（需翻闸门③"不引入 COI/SAB"，配方已备好待令）、E2 OpenBLAS 全量链接
+> 卡 binaryen（已记档，外部咨询 B 节）。
+>
 > **最后更新：2026-09-25**。**★ PLAN-jspi 全部收口（批次 1–4）**：`octave.wasm` `45d288b1…`
 > 上 8761 —— eval_wait/pause 挂起/**ginput 取点**（数据坐标）/**Ctrl-C**（rc=3）/D9 门槛/
 > keyboard v1/**D6 pkg load 自动装载**/**D7 IDBFS 边界**/D5 规则 B 复核收口；
@@ -1040,8 +1050,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260926-051710` · **43 套 / 1,071 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
-| 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,254,281 B · `1dd59d97245be0a4…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260926-064900` · **43 套 / 1,076 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
+| 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,260,278 B · `d72a22064968f8df…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-26 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

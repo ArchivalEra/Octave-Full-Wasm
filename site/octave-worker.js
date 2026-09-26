@@ -27,6 +27,7 @@
 // 需要改 webgl_toolkit.cc（canvas 契约 + OffscreenCanvas）并**重链**，属 B5 phase 2。
 
 /* global OCTAVE, createOctaveAssets */
+var HOME = '/home/web_user';        // 由 opts.home 覆盖（多 worker 必须各用各的，否则同源撞同一个库）
 'use strict';
 
 var BASE = '';                      // 由主线程第一条消息里的 opts.base 覆盖（默认同目录）
@@ -36,11 +37,42 @@ var clickQueue = [];
 var armed = false;
 
 function send(m) { self.postMessage(m); }
-function out(t) { send({ kind: 'out', text: String(t) }); }
+// ── stdout **合批**（背压；2026-09-26 补，源自外部评审 C-4）──────────────────
+// 裸发的问题：`for i=1:50000, printf(...)` 会产生 5 万条 postMessage，主线程事件循环被
+// 淹没 ⇒ 页面 tick 再次跌零（worker 不卡 CPU 但卡消息队列）。这里按"16ms 或 8KB"合批；
+// **发 result 之前必须 flush**，否则输出与结果顺序会乱。
+var outBuf = [], outBytes = 0, outTimer = null;
+function flushOut() {
+  if (outTimer) { clearTimeout(outTimer); outTimer = null; }
+  if (!outBuf.length) return;
+  send({ kind: 'out', text: outBuf.join('\n') });
+  outBuf.length = 0; outBytes = 0;
+}
+function out(t) {
+  t = String(t);
+  outBuf.push(t); outBytes += t.length;
+  if (outBytes >= 8192) flushOut();
+  else if (!outTimer) outTimer = setTimeout(flushOut, 16);
+}
 
 // ── ① 最小 DOM shim ────────────────────────────────────────────────────────
 // 只为"让摸 DOM 的代码走到可降级的失败"，**不**假装有真 DOM：
 // createElement('canvas') 给的假 canvas 没有真 getContext ⇒ WebGL 初始化会失败并回落。
+// ★ B5 phase 2 尝试（2026-09-26）：**交出一个真的 OffscreenCanvas** ——
+//   读 Emscripten 5.0.7 的源码得出：胶水只需要一个"能被 getContext('webgl2') 的对象"
+//   （`findCanvasEventTarget` → `specialHTMLTargets[target] || document.querySelector(target)`，
+//    拿到后就自己调 getContext）。而 `OffscreenCanvas.getContext('webgl2')` **在 worker 里可用**
+//   ⇒ 理论上不需要任何重链/新旗标，只要 shim 把 canvas 交给它。
+//   若成立，worker 模式就有**真渲染后端**了（渲染→glReadPixels→PNG→postMessage→页面贴图）。
+//   `style` 用普通可写属性（OffscreenCanvas 是可扩展对象，工具包会写 style）。
+var _glCanvas = null;
+function makeCanvas(id) {
+  var c = new OffscreenCanvas(16, 16);
+  c.id = id || '';
+  c.style = {};                     // 工具包会写 cssText/position 等，给个可写壳
+  _glCanvas = c;                    // EM_ASM 建完会写 c.id ⇒ 之后 getElementById/querySelector 能查到
+  return c;
+}
 var fakeCanvas = { id: '', style: {}, width: 16, height: 16,
                    getContext: function () { return null; },
                    getBoundingClientRect: function () { return { left: 0, top: 0, width: 0, height: 0 }; } };
@@ -51,10 +83,20 @@ var fakeCanvas = { id: '', style: {}, width: 16, height: 16,
 //   连带 pause shim 缺席 ⇒ 中断判据 rc=0）。这条坑记在 NOTES-threads。
 self.__octaveWorker = true;
 self.document = {
-  createElement: function () { return fakeCanvas; },
-  getElementById: function () { return null; },
-  querySelector: function () { return null; },
-  querySelectorAll: function () { return []; },
+  // 真 canvas（OffscreenCanvas）—— 见上面 makeCanvas 的说明
+  createElement: function (tag) {
+    if (String(tag).toLowerCase() === 'canvas') return makeCanvas('');
+    return fakeCanvas;
+  },
+  getElementById: function (id) { return (_glCanvas && _glCanvas.id === id) ? _glCanvas : null; },
+  querySelector: function (sel) {
+    if (typeof sel === 'string' && sel.charAt(0) === '#') {
+      return (_glCanvas && _glCanvas.id === sel.slice(1)) ? _glCanvas : null;
+    }
+    if (sel === 'canvas') return _glCanvas;
+    return null;
+  },
+  querySelectorAll: function () { return _glCanvas ? [_glCanvas] : []; },
   body: { appendChild: function () {}, innerText: '' },
   documentElement: { appendChild: function () {} },
   head: { appendChild: function () {} },
@@ -120,10 +162,22 @@ var Module = {
     return {};
   },
   stdin: function () { return null; },     // worker 里没有 prompt：如实 EOF（与 octave-cli < /dev/null 同）
-  postRun: function () { bootChain(); },
+  postRun: function () { bootChain(); mountHome(); },
 };
 var wasmMemory = null;
 var Assets = null;
+
+// IDBFS 挂载（worker 版）：挂 HOME 并读回一次。**按实例换路径**（评审 C-8）。
+var homeMounted = false;
+function mountHome() {
+  if (homeMounted || !Module.FS || !Module.FS.filesystems || !Module.FS.filesystems.IDBFS) return;
+  try {
+    try { Module.FS.mkdir(HOME); } catch (e) {}
+    Module.FS.mount(Module.FS.filesystems.IDBFS, {}, HOME);
+    Module.FS.syncfs(true, function (err) { if (err) out('[idbfs] 读回失败: ' + err); });
+    homeMounted = true;
+  } catch (e) { out('[idbfs] 挂载失败: ' + e); }
+}
 
 function bootChain() {
   var CORE = ['convhulln', '__delaunayn__', '__voronoi__', '__glpk__', 'fftw', 'gzip', 'audioread',
@@ -155,37 +209,75 @@ function bootChain() {
 importScripts('assets-loader.js', 'octave.js');
 OCTAVE(Module);
 
+// ── 请求队列：同一时刻只跑一个解释器任务（挂起期间也不例外）───────────────────
+var jobQueue = [], jobBusy = false;
+function enqueue(m) { jobQueue.push(m); pumpQueue(); }
+function pumpQueue() {
+  if (jobBusy || !jobQueue.length) return;
+  var m = jobQueue.shift();
+  jobBusy = true;
+  runJob(m, function () { jobBusy = false; pumpQueue(); });
+}
+
 // ── 消息分发 ────────────────────────────────────────────────────────────────
 self.onmessage = function (ev) {
   var m = ev.data || {};
-  if (m.kind === 'opts') { BASE = m.base || ''; return; }
+  if (m.kind === 'opts') { BASE = m.base || ''; if (m.home) HOME = m.home; mountHome(); return; }
   if (m.kind === 'interrupt') {
     try { if (Module._web_request_interrupt) Module._web_request_interrupt(); } catch (e) {}
     return;
   }
   if (m.kind === 'click') { clickQueue.push(m.data); return; }
+  if (m.kind === 'diagnose') {
+    // 自证用：把 worker **内部**的状态读出来（页面读不到 worker 的 FS/GL）
+    //   tk    = graphics_toolkit() 的实际值（经虚拟 FS 取回，不靠 printf 匹配）
+    //   nogl  = 工具包的"无 GL 回落信号文件"是否存在（存在 ⇒ 没拿到 GL 上下文）
+    //   glCtx = 我们自己交出去的那个 OffscreenCanvas 上是否真有 WebGL2 上下文
+    var d = {};
+    try {
+      Module.eval_string('fid=fopen("/tmp/_diag.txt","w"); fprintf(fid,"%s",graphics_toolkit()); fclose(fid);');
+      d.tk = new TextDecoder().decode(Module.FS.readFile('/tmp/_diag.txt'));
+    } catch (e) { d.tk = 'ERR:' + String(e).slice(0, 60); }
+    try { d.nogl = Module.FS.analyzePath('/tmp/p5_nogl.txt').exists ? 1 : 0; } catch (e) { d.nogl = -1; }
+    try { d.glCtx = !!(_glCanvas && _glCanvas.getContext('webgl2')); } catch (e) { d.glCtx = 'ERR'; }
+    d.glSize = _glCanvas ? (_glCanvas.width + 'x' + _glCanvas.height) : '(无)';
+    send({ id: m.id, kind: 'diag', d: d });
+    return;
+  }
   if (m.kind === 'loadAssets') {
     Assets.load(m.names).then(function () { send({ id: m.id, kind: 'loaded', ok: true }); },
                               function (e) { send({ id: m.id, kind: 'loaded', ok: false, err: String(e.message || e) }); });
     return;
   }
   if (m.kind === 'eval' || m.kind === 'evalAsync') {
-    var t0 = performance.now();
-    var done = function (rc, err) {
-      send({ id: m.id, kind: 'result', rc: rc, err: err || (function () {
-        try { return String(Module.last_error_message() || ''); } catch (e) { return ''; }
-      })(), ms: Math.round(performance.now() - t0) });
-    };
-    try {
-      if (m.kind === 'evalAsync') {
-        if (!Module.eval_async) { done(-2, 'no-entry: 本产物没有 eval_wait'); return; }
-        Module.eval_async(m.code).then(function (rc) { done(Number(rc), ''); },
-                                      function (e) { done(-1, String(e).slice(0, 200)); });
-      } else {
-        done(Module.eval_string(m.code), '');
-      }
-    } catch (e) { done(-1, String(e).slice(0, 200)); }
+    // ── ★ 重入防护（外部评审 C-1）：**JSPI 挂起期间严禁再次进入同一个实例** ──
+    // 挂起时 wasm 栈是活的，再调一次入口 V8 会抛
+    //   `RuntimeError: Suspend error: instance is already suspended`
+    // ⇒ 这里一律**排队**（FIFO），不裸调；interrupt/click 是带外消息，不排队。
+    enqueue(m);
     return;
   }
+  if (false) {
+  }
 };
+
+function runJob(m, finished) {
+  var t0 = performance.now();
+  var done = function (rc, err) {
+    flushOut();                       // ★ 先冲输出再发结果（顺序）
+    send({ id: m.id, kind: 'result', rc: rc, err: err || (function () {
+      try { return String(Module.last_error_message() || ''); } catch (e) { return ''; }
+    })(), ms: Math.round(performance.now() - t0) });
+    finished();
+  };
+  try {
+    if (m.kind === 'evalAsync') {
+      if (!Module.eval_async) { done(-2, 'no-entry: 本产物没有 eval_wait'); return; }
+      Module.eval_async(m.code).then(function (rc) { done(Number(rc), ''); },
+                                    function (e) { done(-1, String(e).slice(0, 200)); });
+    } else {
+      done(Module.eval_string(m.code), '');
+    }
+  } catch (e) { done(-1, String(e).slice(0, 200)); }
+}
 send({ kind: 'boot' });

@@ -49,9 +49,11 @@
    - **B5 phase 1 ✅ 已落地**（`?worker=1`，accept-worker **11/0**，8761 全量 **80 套/1216/0**）：
      解释器搬进 DedicatedWorker，主线程只剩 DOM 与转发 —— 判据对：worker 里 1400² 计算期间
      页面 tick=435，而单页模式 tick=0。
-   - **B5 phase 2（未做）**：worker 里**真渲染后端**（现为"只出句柄"的回落后端）。
-     需要改 `webgl_toolkit.cc`（canvas 契约 + OffscreenCanvas 目标）+ 重链；
-     外部咨询已发（`GEMINI-ASK-1-worker-webgl.md` 的 A 节）。
+   - **B5 phase 2 ✅ 已达成（2026-09-26，且不需要重链）**：worker 里**真渲染后端**跑起来了 ——
+     `graphics_toolkit()='webgl'`、无 GL 回落信号、OffscreenCanvas 上确有 WebGL2 上下文、图上屏。
+     做法只是让 worker 的 DOM shim 交出一个**真 `OffscreenCanvas`**（机制：胶水只要一个能
+     `getContext('webgl2')` 的对象）；原计划的"改 `webgl_toolkit.cc` + 重链"**确认不必要**。
+     ⇒ **C3（解释器搬 Worker）在功能上完成**：主线程不冻 + 真渲染 + 交互原语 + 资产 + JSPI 都在。
 3. ✅ **E6 · C6 去单例嵌入契约（页面层）已落地**（2026-09-26）：工厂化 mount/base/实例命名空间/
    IDBFS 命名空间；判据全过（accept-embed-multi **13/0**：同页 2 实例交替 eval 100 次 0 串扰；
    8768 全量 **42 套/1060/0** 41 套 accept **零改动**；8761 全量 **77 套/1205/0**）。
@@ -130,6 +132,11 @@
 > 当年还踩过 gnulib 自造 `pthread.h` 与 sysroot 撞 `typedef redefinition` 的雷（见 patch 脚本头注释）。
 > 加上它要**全量重编**（对象层 atomic/TLS 全变）+ 重链 + 双档产物 ⇒ 是一次数小时、并改变产品形态的动作。
 > 判据、备份、回退都已备好；用户点头即可按下面顺序执行。
+
+### ★ 外部咨询回音已处理（2026-09-26，见 NOTES「B5 加固 + E2 根因线索」）
+- **A 节自解决**（worker 内真 OffscreenCanvas，无需重链）；**B 节**：两个独立裁判（V8 + WABT）证明
+  **产物非法而非 binaryen 的锅**，根因线索指向 OpenBLAS 的 fp128（`long double`）软例程路径；
+- **C 节采纳 4 条**（重入防护 / 背压 / terminate 结算 / 重启），`accept-worker` 16 PASS/0 FAIL。
 
 ### 前提（都已实测，不需要再证）
 - 线程版产物在**无 COI**时硬失败（`DataCloneError: … SharedArrayBuffer transfer requires

@@ -2556,6 +2556,61 @@ NO_LAPACK=1 NO_SHARED=1 CC=emcc FC=emf77`，EXIT=0，`dgemm_` 等符号齐），
 binaryen 报 `parse exception: popping from empty stack`；已排除 atomics（0 处）、与 LAPACK 的
 重复符号（交集 0）、"该库单方问题"（最小链接 wasm-opt 通过）⇒ 记档待二分归档定位。
 
+### 5.57 B5 phase 2：worker 里跑起真渲染后端（**不需要重链**，2026-09-26，branch `Slay`）
+
+**结果**：worker 模式（`?worker=1`）下 `graphics_toolkit()='webgl'`、无 GL 回落信号
+（`/tmp/p5_nogl.txt` 不存在）、我们交出的 `OffscreenCanvas` 上确有 WebGL2 上下文（560×420）、
+绘图成品经 postMessage 上屏。**C3（解释器搬 Worker）在功能上完成**：主线程不冻 + 真渲染 +
+交互原语 + 资产装载 + JSPI 全在 worker 里。
+
+**机制（读 Emscripten 5.0.7 源码得出，不是猜）**：图形后端要 canvas 时走
+`findCanvasEventTarget(target)` → `specialHTMLTargets[target] || document.querySelector(target)`，
+**拿到对象后由胶水自己 `canvas.getContext('webgl2', attrs)`** —— 而 `OffscreenCanvas.getContext`
+在 worker 里可用 ⇒ 只要 worker 宿主的 DOM shim 把 `createElement('canvas')`/`getElementById`/
+`querySelector('#…')` 指向一个**真的 `new OffscreenCanvas(w,h)`**，整条链就通。
+（`transferControlToOffscreen` 那条路是给 pthread 设计的：主线程 transfer →
+`pthread_create` 时把 `GL.offscreenCanvases` 搬过去；我们的 worker 宿主不是 pthread，
+那个表不会自动填，**也不需要填**。）
+⇒ **原计划的"改 `webgl_toolkit.cc`（canvas 契约）+ 重链"确认不必要**，省掉一次 29MB 重链。
+
+**判据升级**：`accept-worker` 的 H 由"要么上屏要么降级干净"升级为强断言
+`tk==='webgl' && nogl===0 && glCtx===true && plots≥1 && imgs≥1`；新增 `diagnose` 消息通道
+专门读 **worker 内部**状态（页面读不到 worker 的 FS/GL）。
+**顺带澄清**：`get: unknown axes property __legend_handle__` 在单页/worker 两模式**完全一致**
+（专门对比）⇒ 既有良性消息，非 worker 回归。
+
+**验收**：8768 全量 **43 套/1071/0** → promote（开机自检 1.7 s）→ 8761 全量 **PROBES=1**
+（见本轮 sweep 日志）→ `make-dist` 核 sha → `check-site-parity --strict` 两站点完全一致。
+**外部咨询同步更新**：给 Gemini 的需求书已加批注 —— A 节（worker 里 OffscreenCanvas）
+**已自解决**，只需回答 B（binaryen 解析失败）与 C（挑刺验收矩阵）。
+
+### 5.58 B5 加固（外部评审挑刺落地）+ E2 根因线索（2026-09-26，branch `Slay`）
+
+**外部咨询（Gemini，去身份化需求书 `build/113/GEMINI-ASK-1-worker-webgl.md`）回音后，逐条实测处理**：
+
+**A 节（worker 里搬 WebGL）**：其方向与我们的实测一致（worker 内自建 OffscreenCanvas、
+**不需要** OFFSCREENCANVAS_SUPPORT），但注入方式不同（它主张直接写 `specialHTMLTargets`;
+我们让 `document.querySelector` 返回真 OffscreenCanvas）—— 胶水的查找链两条都通，保留现方案。
+
+**B 节（binaryen 解析失败）**：它给的决定性仲裁（WABT `wasm-validate`）**一次就推翻了它自己的主假设**：
+- V8（Node 26）编译未优化产物直接报 **产物非法**：函数 `ztrti2_` 块尾栈多 1 个 i32；
+  WABT `wasm-validate --enable-all` 给出**三处**类型错 ⇒ **不是 binaryen 的锅**（两个独立裁判背书）。
+- 已排除：atomics、与 LAPACK 的重复符号（交集 0）、OpenBLAS 单方、删掉与 f2c 重名的 `z_abs.o`。
+- **新线索**：OpenBLAS 的 `{c,z}rotg`（`interface/zrotg.c`）引用 **fp128（`long double`）软例程**
+  `__addtf3`/`__getf2` 等；compiler-rt 里有这些符号但链接后类型不符；
+  **wasm32 上 `-mlong-double-64` 不被 clang 支持**（实测报错）⇒ 要改只能**源码级**。
+- 下一步方向：三处错的调用点定位（WABT 已装 `/mnt/hdd/crossbuild-tools/wabt`）、OpenBLAS 的 CMake 路径、
+  源码级把 `zrotg.c` 的 `long double` 换 `double`。E2 仍**未跑通**（按计划本就是可选增强）。
+
+**C 节（挑刺验收矩阵）**：采纳 4 条并落地 —— `accept-worker` 11 → **16 PASS / 0 FAIL**：
+重入防护（挂起期间第二条命令**排队**；**修前是真洞**会崩实例）、纯计算下主线程 tick≈满额（34/35）、
+stdout 洪泛不丢字 + 主线程仍活（tick=11/222ms，如实记残存争抢）、
+`terminate()` 待办 201ms 内 `AbortError` + 重启后仍拿到真渲染后端。
+**顺带修掉的真问题**：`octaveUiAppend` 每条读 `scrollHeight`（强制同步布局）+ 页面侧无合批
+⇒ 5 万行输出占主线程约 170ms；改为滚动跟随 200ms 节流 + worker 模式上屏 rAF 合批（结果前强制 flush）。
+**待办**：MEMFS 产物 unlink 的循环测试、图像/完成信号 FIFO 单调性、worker 崩溃快速失败判据、
+多 worker × IDBFS 隔离判据（代码已实现 `opts.home`）。
+
 ---
 
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
