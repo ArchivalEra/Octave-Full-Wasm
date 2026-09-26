@@ -68,7 +68,9 @@ for f in octave.js octave.wasm octave.data; do
 done
 # ⚠️ 别用 `cp src/{a,b,c} dst` 这种花括号写法：用 `sh` 跑本脚本时（/bin/sh）花括号
 #    不一定展开（实测踩过：报 `cp: 对 '...{a,b,c}' 调用 stat 失败`）。逐个列出来最稳。
-for f in index.html assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js; do
+# ⚠️ 清单必须跟着"页面会 <script src> / new Worker() 的文件"走：漏一个就是部署后 404。
+#    octave-worker.js 是 C3/B5（2026-09-26）新增的 worker 宿主，`?worker=1` 会 `new Worker` 它。
+for f in index.html assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-worker.js; do
   run "cp '$REPO/bridge/$f' '$SITE/$f'"
 done
 

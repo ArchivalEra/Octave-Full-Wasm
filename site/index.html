@@ -543,8 +543,71 @@
 </script>
 <script type="text/javascript" src="octave.js"></script>
 <script type="text/javascript">
-  window.Module = window.createOctaveHost({ id: 'default' });
-  OCTAVE(window.Module);
+// ── C3/B5（2026-09-26）：两种宿主，**默认路径一字不动** ────────────────────────
+// 缺省（无 `?worker=1`）= 单页模式：解释器在主线程（现役产物行为，77 个验收套件全靠它）。
+// `?worker=1` = **Worker 模式**：wasm + FS + 资产 + JSPI 全在 DedicatedWorker 里，主线程只
+// 做 DOM 与转发 ⇒ 长计算（`A=rand(2000); A*A`）**不再冻页面**。机制前提已实测（Q4/E4）。
+// ⚠️ Worker 模式 phase 1 的已知边界：图形真渲染后端（WebGL toolkit）在 worker 里起不来
+//   （EM_ASM 建 canvas 需要真 DOM）⇒ 走 plotbridge 回落；把 WebGL 搬进 worker 要改
+//   webgl_toolkit.cc 并重链（B5 phase 2）。stdin 在 worker 里如实 EOF（没有 prompt）。
+(function () {
+  var params = new URLSearchParams(location.search);
+  if (params.get('worker') !== '1') {
+    window.Module = window.createOctaveHost({ id: 'default' });
+    OCTAVE(window.Module);
+    return;
+  }
+  var base = params.get('base') || '';
+  var w = new Worker('octave-worker.js');
+  var seq = 0, pending = {};
+  var API = { mode: 'worker', booted: true, ready: false, interrupted: 0, plots: 0 };
+  function call(kind, payload) {
+    return new Promise(function (resolve, reject) {
+      var id = ++seq;
+      pending[id] = function (m) { m.err && m.kind === 'result' && m.rc !== 0 ? resolve(m) : resolve(m); };
+      try { w.postMessage(Object.assign({ id: id, kind: kind }, payload)); }
+      catch (e) { delete pending[id]; reject(e); }
+    });
+  }
+  w.onmessage = function (ev) {
+    var m = ev.data || {};
+    if (m.kind === 'out') { console.log(m.text); octaveUiAppend(String(m.text) + '\n'); return; }
+    if (m.kind === 'ready') {
+      API.ready = true; window.__octaveReady = true;
+      console.log('[worker] ready' + (m.warn ? '（有告警：' + m.warn + '）' : ''));
+      return;
+    }
+    if (m.kind === 'plot') {
+      try {
+        var blob = new Blob([m.ab], { type: m.path.indexOf('.svg') >= 0 ? 'image/svg+xml' : 'image/png' });
+        var img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.style.maxWidth = '100%';
+        document.body.appendChild(img);
+        API.plots++;
+      } catch (e) { console.warn('[worker] 图上屏失败: ' + e); }
+      return;
+    }
+    if (m.kind === 'fatal') { console.error('[worker] ' + m.err); return; }
+    if (m.id && pending[m.id]) { var cb = pending[m.id]; delete pending[m.id]; cb(m); }
+  };
+  w.onerror = function (e) { console.error('[worker] onerror: ' + (e && e.message)); };
+  API.eval = function (code) { return call('eval', { code: code }); };
+  API.evalAsync = function (code) { return call('evalAsync', { code: code }); };
+  API.loadAssets = function (names) { return call('loadAssets', { names: names }); };
+  API.interrupt = function () { API.interrupted++; w.postMessage({ kind: 'interrupt' }); };
+  window.OctaveWorker = API;
+  // 点击一律转发（worker 侧 `arm` 时会清空队列 ⇒ "第二次点击不误触发下一次 ginput" 仍成立）
+  window.addEventListener('pointerdown', function (e) {
+    var el = e.target;
+    if (!el || (el.tagName !== 'IMG' && el.tagName !== 'CANVAS')) return;
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    w.postMessage({ kind: 'click', data: [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
+                                          e.button === 2 ? 3 : (e.button === 1 ? 2 : 1)] });
+  });
+  w.postMessage({ kind: 'opts', base: base });
+})();
 </script>
 <!--
   速度探针（**默认关**，只在带 `?bench=1` 时跑）：量"真渲染后端"的墙钟。
