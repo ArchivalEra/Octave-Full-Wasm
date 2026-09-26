@@ -98,6 +98,17 @@
     }
 
     function loadScript(url) {
+      // ⚠️ C3/B5（2026-09-26）：Forge 包（kind:'js'）在页面上靠 <script> 注入，
+      //    在 DedicatedWorker 里必须改用 importScripts。判定用**显式标记**
+      //    `__octaveWorker`，**不用 `!document`** —— worker 宿主为了 toolkit 的 EM_ASM
+      //    装了 document shim，按 document 判断会误走 <script> 路径（空操作、promise 永不
+      //    settle，实测：plotbridge 静默装不上）。页面路径逐字节不变。
+      if (global.__octaveWorker && typeof global.importScripts === 'function') {
+        return new Promise(function (resolve, reject) {
+          try { global.importScripts(withBase(url)); resolve(); }
+          catch (e) { reject(new Error('importScripts 失败 ' + withBase(url) + '：' + e)); }
+        });
+      }
       return new Promise(function (resolve, reject) {
         var s = global.document.createElement('script');
         s.src = withBase(url);
