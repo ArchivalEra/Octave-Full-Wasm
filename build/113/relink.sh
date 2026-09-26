@@ -50,6 +50,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OCT="${OCT:-/src/work/octave-11.3.0}"
+# ★ F1：`--selfcheck` 要看的那份 link-web.sh **可注入** —— 自证必须在**夹具副本**上跑，
+#   不许为了自证去临时改真文件（本会话真这么干过，改完还得记得还原）。
+LINK_WEB="${LINK_WEB:-$HERE/link-web.sh}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 8)}"
 
 # ── 产物目录默认值：**目录名 == 模式名** ────────────────────────────────────────
@@ -217,7 +220,7 @@ LABEL_VARS="BUILD_MODE BUILD_DECLARED BUILD_MODE_LABEL"
 LOCAL_VARS="P5_OBJS OBJS PRELOAD PRELOAD_AT_STAGED"   # 脚本内数组/局部量，不是环境变量
 cmd_selfcheck() {
   local bad=0 v names
-  names="$(grep -oE '\$\{[A-Za-z0-9_]+:[-+]' "$HERE/link-web.sh" | sed 's/\${//;s/:[-+]//' | sort -u | grep -vE '^[0-9]+$')"
+  names="$(grep -oE '\$\{[A-Za-z0-9_]+:[-+]' "$LINK_WEB" | sed 's/\${//;s/:[-+]//' | sort -u | grep -vE '^[0-9]+$')"
   while read -r v; do
     [ -n "$v" ] || continue
     case " $LABEL_VARS $LOCAL_VARS " in *" $v "*) continue ;; esac
@@ -230,7 +233,7 @@ cmd_selfcheck() {
   #    实测**恒不匹配**（于是这一整条反方向断言变成"永远报错"的假红）。踩过，别改回去。
   while read -r v; do
     [ -n "$v" ] || continue
-    grep -qF -- "\${$v:-" "$HERE/link-web.sh" || grep -qF -- "\${$v:+" "$HERE/link-web.sh" || {
+    grep -qF -- "\${$v:-" "$LINK_WEB" || grep -qF -- "\${$v:+" "$LINK_WEB" || {
       echo "✗ 模式表声明了 \$$v，但 link-web.sh 根本不读它（表在骗人）" >&2; bad=1; }
   done < <(mode_table product | cut -d= -f1)
   # 三个模式的变量集合必须完全一致（否则"换模式"会悄悄多/少一个变量）
@@ -251,8 +254,8 @@ cmd_selfcheck() {
 
 cmd_link() {
   local m="$1" out="$2" diag="$3"
-  [ -f "$HERE/link-web.sh" ] || {
-    echo "FATAL: 找不到 $HERE/link-web.sh" >&2; exit 2; }
+  [ -f "$LINK_WEB" ] || {
+    echo "FATAL: 找不到 "$LINK_WEB"" >&2; exit 2; }
   apply_mode "$m" "$diag"
 
   # 基线是**输入**，先核对它真的在（"基线是哪个产物"要能被查到，不能靠记）
@@ -266,8 +269,8 @@ cmd_link() {
   echo "════ relink.sh link $m ════"
   echo "  产物目录：$out"
   echo "  保活基线：${BASELINE_WASM:-（无 —— M1 不需要）}"
-  echo "  链接脚本：$HERE/link-web.sh"
-  bash "$HERE/link-web.sh" "$out"
+  echo "  链接脚本："$LINK_WEB""
+  bash "$LINK_WEB" "$out"
 
   echo "════ 出厂核对（fail-closed）════"
   python3 "$HERE/check-build-manifest.py" "$out/octave.build.json" --write || {
@@ -322,6 +325,7 @@ case "${1:-}" in
   link|verify|rebuild) SUB="$1"; shift ;;
   explain|--explain)   SUB="explain"; shift ;;
   --selfcheck)         SUB="selfcheck"; shift ;;
+  --selftest)          SUB="selftest"; shift ;;
   --list|-l)           SUB="list"; shift ;;
   -h|--help)           usage; exit 0 ;;
   --*) echo "FATAL: 未知选项 $1" >&2; usage >&2; exit 2 ;;
@@ -343,9 +347,41 @@ for a in "$@"; do
 done
 [ "$OUT" = "__NEXT__" ] && { echo "FATAL: --out 后面要跟目录" >&2; exit 2; }
 
+cmd_selftest() {
+  # ★ F1：自证 —— 三个用例（全部在**夹具副本**上跑，不碰真 link-web.sh）
+  local bad=0 tmp
+  tmp="$(mktemp -d)"
+  cp "$LINK_WEB" "$tmp/link-web.sh"
+  # ① 真仓库：--selfcheck 应当绿
+  if LINK_WEB="$LINK_WEB" bash "$0" --selfcheck >/dev/null 2>&1; then
+    echo "PASS | relink/真实 link-web.sh ⇒ selfcheck 绿"
+  else
+    echo "fail | relink/真实 link-web.sh selfcheck 竟红"; bad=1
+  fi
+  # ② 夹具：加一个"读了但模式表里没有"的变量 ⇒ selfcheck **必须红**
+  printf '\necho "T ${ZZZ_NOT_IN_TABLE:-}"\n' >> "$tmp/link-web.sh"
+  if LINK_WEB="$tmp/link-web.sh" bash "$0" --selfcheck >/dev/null 2>&1; then
+    echo "fail | relink/**未登记变量却没报**（自检失效）"; bad=1
+  else
+    echo "PASS | ★ 未登记变量 ⇒ selfcheck 必须红"
+  fi
+  # ③ 夹具：把模式表里的变量删光 ⇒ 反向方向（"表在骗人"）必须红
+  cp "$LINK_WEB" "$tmp/link-web.sh"; printf '\n' >> "$tmp/link-web.sh"
+  if LINK_WEB="$tmp/link-web.sh" bash "$0" --selfcheck >/dev/null 2>&1; then
+    echo "PASS | 未动的副本 ⇒ 仍绿（自证不是恒红）"
+  else
+    echo "fail | relink/未动的副本竟红"; bad=1
+  fi
+  rm -rf "$tmp"
+  echo ""
+  echo "=== relink 自证：$((3 - bad)) PASS / $bad fail ==="
+  return $bad
+}
+
 case "$SUB" in
   list)      cmd_list; exit 0 ;;
   selfcheck) cmd_selfcheck; exit $? ;;
+  selftest)  cmd_selftest; exit $? ;;
   explain)   [ -n "$MODE" ] || { echo "FATAL: explain 要一个模式名" >&2; exit 2; }
              cmd_explain "$MODE"; exit 0 ;;
 esac

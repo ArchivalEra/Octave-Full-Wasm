@@ -464,3 +464,35 @@ Emscripten 没有的 `struct rlimit`/`raise`/`SIGINT`），再用 `probe-blas-th
 
 **要开工时的前置**：拍板"接受线程档需要 COI（装 SW 或宿主发头）"。
 然后：`relink.sh` 模式表加一行 `threads` + 声明（D1 已让它变便宜）+ 全量重配重编数小时 + 双产物。
+
+---
+
+## F1 · 闸门自证台（事实系统）—— ✅ **已落地 2026-09-26**
+
+**起因**：用户指出"过去两小时又判了好几次错误断言，事实系统需要重构"。侦察（只读扫描）复核成立：
+**约 20 个检查器里只有 1 个能证明自己会红**；~15 个"收集-断言"式闸门**没有零值守卫**；
+关键数字**抄在 3–6 处、无人校验**，其中**四处已自相矛盾**。
+
+**交付**：
+· `build/lib/gate.py` —— 平台本体（薄接口，三件套）：**零值守卫** `require_nonempty()`
+  （空集合不是"通过"，是"没查"）、**根注入** `GATE_REPO`（自证能在夹具树上跑）、
+  `selftest()`（每个闸门的"该红"用例）。
+· **10 个闸门全部接上并自证**（共 **35 条用例**，全绿）：`check-whitelist` 4 /`check-wants` 3 /
+  `check-handoff` 7 /`check-consistency` 2 /`check-site-parity` 3 /`check_m` 4 /
+  `check-build-manifest` 3 /`check-oct-imports` 1 /`check-dylink-signatures` 1 /`relink --selftest` 3。
+· `build/gates-selftest.sh` + **接进 pre-commit**（第七道：闸门不能证明自己会红 ⇒ 提交被拦）。
+· **平台自身的可证伪性实测**：故意撤掉 `check-site-parity` 的零值守卫 ⇒ 跑手报
+  `2 PASS / 1 fail`、rc=1；恢复 ⇒ 全绿。
+
+**顺带修掉的真洞（都是自证当场抓到的）**：
+· `check_m.py` 的正则 `[^\n=]*?` 对最常见的 Octave 写法 `function y = f(x)` **全瞎**
+  （99 个 `.m` 里 0 个被判定多函数）；修好后报 **8 个**真·多函数文件（`__pb_*`/`__svg_*`
+  私有 helper，属有意布局 —— 如实记，不偷偷回退）。
+· `check-site-parity.sh`：三处同时缺文件曾报"完全一致"（现为红）。
+· `check-build-manifest.py`：`declared == {}` 曾判 `verdict:"ok"`（现判拒）。
+· `check-oct-imports.py` / `check-dylink-signatures.py`：垃圾输入曾报"（无）✔ rc=0"（现 FATAL）。
+· `check-handoff.py`：L2 在事实读不到时**静默跳过**（现在两条事实链都读不到 ⇒ 红）。
+· `check-consistency.py`：6 个收集块补零值守卫，且**覆盖数显形**（"12 个包"、"扫了 116 个文件"）。
+· 自证还抓到闸门**读不到文件时直接崩**（`read("build/assets.py")`）⇒ 加 `read_or_none()`。
+
+**回退点**：删 `build/lib/gate.py` + `build/gates-selftest.sh`，撤 pre-commit 那一行。

@@ -42,8 +42,16 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "lib"))
+from gate import Gate, root, selftest          # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(REPO, "test", "browser")
+
+
+def tests_dir():
+    """套件目录**每次现算**（`GATE_REPO` 覆盖时才能指向夹具树 —— 自证的前提）。"""
+    return os.path.join(root(), "test", "browser")
 
 # 带"期望值"位置参数的断言助手（名字与参数位置都不一样，所以只认函数体里的形状）
 HELPERS = ("ev", "evErr", "evOut", "evVal", "evNot")
@@ -171,31 +179,72 @@ def check_file(path):
     return name, hard, soft
 
 
-def main():
-    report = "--report" in sys.argv
-    files = sorted(f for f in os.listdir(TESTS)
-                   if f.startswith("accept-") and f.endswith(".mjs"))
-    nhard, nsoft = 0, 0
-    for f in files:
-        name, hard, soft = check_file(os.path.join(TESTS, f))
+def run(g, paths, report=False):
+    """对给定的套件文件跑规则 A/C/D/B。**文件表注入** ⇒ 能在夹具上自证。"""
+    if not g.require_nonempty(paths, "验收套件（accept-*.mjs）"):
+        return g
+    nhard = nsoft = 0
+    for path in paths:
+        name, hard, soft = check_file(path)
         nsoft += len(soft)
         if hard:
             nhard += len(hard)
-            print(name)
             for ln, rule, why in hard:
-                print("  %s:%d  [%s] %s" % (name, ln, rule, why))
+                g.problem("%s 规则 %s" % (rule, name.split(" ")[0]), "第 %d 行：%s" % (ln, why))
         if report and soft:
-            print(name)
             for ln, rule, why in soft:
-                print("  %s:%d  [%s] %s" % (name, ln, rule, why))
-    if nhard:
-        print("\n%d 处硬问题（规则 A/C/D）。确实要保留就在那一行写 `%s` 并说明理由。"
-              % (nhard, OPT_OUT))
-    else:
-        print("check-wants: 规则 A/C/D 全过（%d 个套件）；规则 B 待人工复核 %d 处%s"
-              % (len(files), nsoft, "" if report else "（--report 可列出）"))
-    return 1 if nhard else 0
+                g.note("%s:%d [%s] %s" % (name, ln, rule, why))
+    if nhard == 0:
+        g.note("规则 A/C/D 全过（%d 个套件）；规则 B 待人工复核 %d 处%s"
+               % (len(paths), nsoft, "" if report else "（--report 可列出）"))
+    return g
+
+
+def main():
+    report = "--report" in sys.argv
+    g = Gate("断言可证伪性", list_mode=report)
+    d = tests_dir()
+    try:
+        names = sorted(f for f in os.listdir(d) if f.startswith("accept-") and f.endswith(".mjs"))
+    except OSError as e:
+        g.problem("读不到套件目录", "%s（%r）" % (d, e))
+        return g.finish()
+    run(g, [os.path.join(d, n) for n in names], report=report)
+    return g.finish()
+
+
+# ── 自证（F1）───────────────────────────────────────────────────────────────
+_BAD = """// 合成套件：断言用裸子串匹配整段捕获窗口（规则 C 该抓它）
+async function ev(expr, want) {
+  const full = logs.join(' ');
+  const ok = r.rc === 0 && (!want || full.includes(want));
+  return ok;
+}
+"""
+_GOOD = """// 合成套件：走 wantHit（数字按边界匹配）—— ⚠️ 必须**自带定义**（规则 D：套件自成一体）
+function wantHit(hay, want) { return hay.includes(want); }
+async function ev(expr, want) {
+  const full = logs.join(' ');
+  const ok = r.rc === 0 && (!want || wantHit(full, want));
+  return ok;
+}
+"""
+def _np(text):
+    from gate import fixture, cleanup
+    d = fixture({"x.mjs": text})
+    try:
+        g2 = Gate("x")
+        run(g2, [os.path.join(d, "x.mjs")])
+        return len(g2.problems)
+    finally:
+        cleanup(d)
+
+CASES = [
+    ("合成套件走 wantHit ⇒ 不报", lambda: _np(_GOOD) == 0),
+    ("合成套件用裸子串 ⇒ 必须报（规则 C）", lambda: _np(_BAD) == 1),
+    ("**空文件表** ⇒ 必须报（零值守卫）", lambda: (lambda g2: (run(g2, []), len(g2.problems))[1])(Gate("y")) == 1),
+]
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(selftest("check-wants", CASES) if "--selftest" in sys.argv else main())

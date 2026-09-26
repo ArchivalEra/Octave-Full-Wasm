@@ -41,6 +41,43 @@ C="${SITE_C:-$REPO/site}"          # 仓库入库镜像（`bridge/` 的下游，
 STRICT=0
 [ "${1:-}" = "--strict" ] && STRICT=1
 
+# ── 自证（F1，2026-09-26）────────────────────────────────────────────────────
+# 判据：① 三处齐全且一致 ⇒ 通过；② **三处都缺 VERSION ⇒ 必须红**（零值守卫）；
+#       ③ 一处不同 ⇒ 必须红。用例用 SITE_A/B/C 指向临时夹具目录，不碰真实站点。
+if [ "${1:-}" = "--selftest" ]; then
+  tmp="$(mktemp -d)"; fails=0
+  mkfix() {
+    mkdir -p "$1/assets"
+    for f in octave.wasm octave.js octave.data index.html assets-loader.js octave.build.json VERSION; do
+      printf 'same-%s' "$f" > "$1/$f"
+    done
+    printf '[]' > "$1/assets/manifest.json"
+  }
+  mkfix "$tmp/a"; mkfix "$tmp/b"; mkfix "$tmp/c"
+  if SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1; then
+    echo "PASS | 三处齐全且一致 ⇒ 通过"
+  else
+    echo "fail | 三处齐全却报红"; fails=$((fails + 1))
+  fi
+  rm -f "$tmp/a/VERSION" "$tmp/b/VERSION" "$tmp/c/VERSION"
+  if SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1; then
+    echo "fail | **三处都缺 VERSION 却报一致**（零值守卫失效）"; fails=$((fails + 1))
+  else
+    echo "PASS | ★ 三处都缺 VERSION ⇒ 必须红"
+  fi
+  printf 'diff' > "$tmp/b/VERSION"
+  if SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1; then
+    echo "fail | 一处内容不同却报一致"; fails=$((fails + 1))
+  else
+    echo "PASS | 一处内容不同 ⇒ 红"
+  fi
+  rm -rf "$tmp"
+  echo ""
+  echo "=== check-site-parity 自证：$((3 - fails)) PASS / $fails fail ==="
+  exit $([ "$fails" = "0" ] && echo 0 || echo 1)
+fi
+
+
 # 部署件清单：三处必须逐字节相同的那批
 DEPLOY="octave.wasm octave.js octave.data octave.build.json index.html assets-loader.js VERSION assets/manifest.json"
 
@@ -58,7 +95,12 @@ say "------------------------------------------------------------"
 say "【部署件】"
 for f in $DEPLOY; do
   a=$(sha "$A/$f"); b=$(sha "$B/$f"); c=$(sha "$C/$f")
-  if [ "$a" = "$b" ] && [ "$b" = "$c" ]; then
+  if [ "$a" = "(缺)" ] && [ "$b" = "(缺)" ] && [ "$c" = "(缺)" ]; then
+    # ★ 零值守卫（F1）：三处都缺**不是"一致"** —— 实测过：把 VERSION 从三处同时删掉，
+    #   旧版会报"三处完全一致"。缺文件是"这份产物不完整"，必须红。
+    printf '  %-20s 三处都缺该文件 ← **不算一致**（闸门空转）\n' "$f"
+    diffcount=$((diffcount + 1))
+  elif [ "$a" = "$b" ] && [ "$b" = "$c" ]; then
     printf '  %-20s %s  三处一致\n' "$f" "$a"
   else
     printf '  %-20s A=%s  B=%s  C=%s  ← **不一致**\n' "$f" "$a" "$b" "$c"
@@ -89,7 +131,10 @@ PY
 )
 for n in $referenced; do
   a=$(sha "$A/assets/m/$n"); b=$(sha "$B/assets/m/$n"); c=$(sha "$C/assets/m/$n")
-  if [ "$a" = "$b" ] && [ "$b" = "$c" ]; then
+  if [ "$a" = "(缺)" ] && [ "$b" = "(缺)" ] && [ "$c" = "(缺)" ]; then
+    printf '  %-20s 三处都缺该资产 ← **不算一致**\n' "$n"
+    diffcount=$((diffcount + 1))
+  elif [ "$a" = "$b" ] && [ "$b" = "$c" ]; then
     printf '  %-20s %s  三处一致\n' "$n" "$a"
   else
     printf '  %-20s A=%s  B=%s  C=%s  ← **不一致**\n' "$n" "$a" "$b" "$c"

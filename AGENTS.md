@@ -60,7 +60,7 @@
 → **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**
 
-## 提交前（六道闸门）
+## 提交前（六道闸门 + 闸门自证）
 ```bash
 python3 .githooks/update-readme.py --check   # README 的 AUTO:FILES 要新鲜
 python3 .githooks/update-handoff.py          # HANDOFF 的 AUTO:STATE 机器块
@@ -68,7 +68,15 @@ python3 .githooks/check-handoff.py           # 活状态断言不得与产物矛
 python3 .githooks/check-consistency.py       # 挂载点/启动清单/车道路径一致
 python3 .githooks/check-wants.py             # 断言可证伪性（裸数字匹配/截断后匹配）
 python3 .githooks/check-whitelist.py         # 白名单覆盖
+sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门必须能证明自己"会红"
 ```
+**★ 闸门自证（F1，2026-09-26）**：前六道查仓库，这第七道查**检查器本身**。
+本仓实测过：~20 个检查器里只有 1 个能证明自己会红，而"收集-断言"式闸门在输入消失时
+**静默变绿**（三处站点同时缺 `VERSION` ⇒ parity 报"完全一致"；`declared == {}` ⇒ `verdict:"ok"`；
+`glue-selftest` `0/0` 算全过）。⇒ 现在**每个闸门必须带 `--selftest`**，且三类用例齐备：
+**正常不报 / 该报的必须报 / 空输入必须报**。平台本体：`build/lib/gate.py`（零值守卫
+`require_nonempty()` + 根注入 `GATE_REPO` + `selftest()`）。新增闸门**必须**在
+`build/gates-selftest.sh` 的名单里登记 —— 名单外的闸门就是没人盯着的闸门。
 ⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件 ⇒ 被 `.gitignore` 忽略且从未
 `git add` 的文件它看不见（曾因此漏掉 4 个承重文件）。新增目录后主动看一眼
 `git status --short --ignored <目录>`。

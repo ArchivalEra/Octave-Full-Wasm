@@ -35,6 +35,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import handoff_facts as F  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "lib"))
+from gate import Gate, selftest          # noqa: E402
 
 DOC = "HANDOFF.md"
 HISTORICAL_SECTIONS = ("5", "9", "10")   # 见文件头：这些是 append-only 的历史记录
@@ -84,58 +86,77 @@ def living_text(text):
     return out
 
 
-def main():
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    text = open(DOC, encoding="utf-8").read()
+def check_living(text, current_shas, sweep):
+    """把**活状态**里与产物矛盾的断言找出来。返回 `(problems, notes)`。
 
-    site = F.site_facts()
-    sweep = F.sweep_facts()
+    ★ 输入全部**注入**（文档文本 + sha 表 + 回归事实）—— 这样自证才能在合成输入上跑，
+    而不是只能对着真仓库跑（F1 的要求：闸门的逻辑必须能在夹具上被证伪）。
+    """
     problems, notes = [], []
-
-    current_shas = {}
-    if site["ok"]:
-        current_shas = {n: f["sha256"] for n, f in site["files"].items()}
-
-    for lineno, line, keep in living_text(text):
-        if not keep or HIST_MARK.search(line):
-            # 跳过两类：① 历史章节（§5/§9/§10）；② 行内标了历史标记的行。
-            # ⚠️ 曾经这里连**引用块（`>` 开头）**整段跳过，那是个洞：头部的状态行
-            #    （"wasm sha …、全量 N 套 M 项"）正是最该被查的地方，而它恰好是引用块。
-            #    改成只认 HIST_MARK 之后，头部那句也进检查了（"之前/历史/退役"仍是出口）。
+    # ⚠️ 只数**非空行**：空文档在 `living_text()` 里仍会产出一行（空行）——
+    #    第一版守卫只判 `if not rows`，于是"空文档"照样通过（自证用例当场抓到）。
+    rows = [r for r in living_text(text) if r[2] and r[1].strip()]
+    if not rows:
+        problems.append((0, "零值守卫", "活状态里**没有一行非空文本** ⇒ 闸门空转",
+                         "文档为空/结构变了？先确认 living_text() 还能认出活状态"))
+        return problems, notes
+    for lineno, line, _ in rows:
+        if HIST_MARK.search(line):
+            # 行内标了历史标记的行是允许的（见文件头那段约定）
             continue
         for tok in SHA_NEAR.findall(line):
             if current_shas and not any(tok.startswith(s[:len(tok)]) or s.startswith(tok)
                                         for s in current_shas.values()):
                 problems.append((lineno, "L1 部署 sha",
-                                 f"`{tok[:16]}` 不是当前任一部署件的 sha", line.strip()[:100]))
+                                 "`%s` 不是当前任一部署件的 sha" % tok[:16], line.strip()[:100]))
             elif not current_shas:
-                notes.append((lineno, "L1 跳过", "读不到部署件，无法核对 sha", line.strip()[:80]))
+                notes.append((lineno, "L1 跳过", "读不到部署件 ⇒ **无法核对 sha**", line.strip()[:80]))
         m = SUITE.search(line)
         if m and sweep.get("ok") and not DATED_RECORD.search(line):
             suites, total = int(m.group(1)), int(m.group(2).replace(",", ""))
             if (suites, total) != (sweep["suites"], sweep["pass"]):
                 problems.append((lineno, "L2 套件数",
-                                 f"写的是 {suites} 套 / {total} 项，最近一次全绿是 "
-                                 f"{sweep['suites']} 套 / {sweep['pass']} 项", line.strip()[:100]))
+                                 "写的是 %d 套 / %d 项，最近一次全绿是 %d 套 / %d 项"
+                                 % (suites, total, sweep["suites"], sweep["pass"]),
+                                 line.strip()[:100]))
+        elif m and not sweep.get("ok"):
+            # ★ F1：以前这里是**静默**跳过（`if m and sweep.get("ok")`）—— 事实读不到时
+            #   整类检查悄悄消失。现在至少要说出来。
+            notes.append((lineno, "L2 跳过", "读不到最近一次全绿回归 ⇒ **无法核对套件数**",
+                          line.strip()[:80]))
         for name in RETIRED:
             if RETIRED_WORD.search(line):
                 problems.append((lineno, "L3 退役名",
-                                 f"活状态里出现 {name}（历史记录请放进 §5/§9/§10）",
+                                 "活状态里出现 %s（历史记录请放进 §5/§9/§10）" % name,
                                  line.strip()[:100]))
         m = PENDING.search(line)
-        if m and site["ok"]:
+        if m and current_shas:
             notes.append((lineno, "L4 待办标记",
-                          f"`{m.group(0)}` —— 若已上线请改掉（机器块里有当前状态）",
+                          "`%s` —— 若已上线请改掉（机器块里有当前状态）" % m.group(0),
                           line.strip()[:100]))
+    # ★ 零值守卫 2（F1）：两条事实链**都**读不到 ⇒ 这个闸门此刻什么也证明不了 ⇒ 红
+    if not current_shas and not sweep.get("ok"):
+        problems.append((0, "闸门空转", "部署件与回归事实**都**读不到 ⇒ 本闸门当前零覆盖",
+                         "先把事实来源接上（或明确说明为什么允许空跑）"))
+    return problems, notes
 
-    show = lambda rows: [print(f"  {l}: [{k}] {msg}\n      {txt}") for l, k, msg, txt in rows]
+
+def main():
+    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    text = open(DOC, encoding="utf-8").read()
+    site = F.site_facts()
+    sweep = F.sweep_facts()
+    current_shas = {n: f["sha256"] for n, f in site["files"].items()} if site["ok"] else {}
+    problems, notes = check_living(text, current_shas, sweep)
+
+    show = lambda rows: [print("  %s: [%s] %s\n      %s" % (l, k, msg, txt)) for l, k, msg, txt in rows]
     if notes:
-        print(f"HANDOFF 提示（{len(notes)} 条，不拦提交）：")
+        print("HANDOFF 提示（%d 条，不拦提交）：" % len(notes))
         show(notes)
     if problems:
-        print(f"HANDOFF 陈旧断言（{len(problems)} 条，**必须改**）：", file=sys.stderr)
+        print("HANDOFF 陈旧断言（%d 条，**必须改**）：" % len(problems), file=sys.stderr)
         for l, k, msg, txt in problems:
-            print(f"  {l}: [{k}] {msg}\n      {txt}", file=sys.stderr)
+            print("  %s: [%s] %s\n      %s" % (l, k, msg, txt), file=sys.stderr)
         print("\n要么把断言改成当前事实（数字可从文中 AUTO:STATE 区块里取），"
               "要么把它移进 HISTORY.md。", file=sys.stderr)
         return 0 if "--list" in sys.argv else 1
@@ -143,5 +164,35 @@ def main():
     return 0
 
 
+# ── 自证（F1）───────────────────────────────────────────────────────────────
+_SHA_A = "a" * 64
+_SHA_B = "b" * 64
+_SWEEP_OK = {"ok": True, "suites": 43, "pass": 1076}
+_HEAD = "# HANDOFF\n\n## 0. 铁律\n\n"
+
+
+def _nprob(text, shas=None, sweep=None):
+    p, _ = check_living(text, shas if shas is not None else {"wasm": _SHA_A},
+                        sweep if sweep is not None else _SWEEP_OK)
+    return len(p)
+
+
+CASES = [
+    ("合成文档 + 一致的 sha/套件数 ⇒ 不报",
+     lambda: _nprob(_HEAD + "wasm sha `%s…`，全量 43 套 / 1076 项全绿\n" % _SHA_A[:16]) == 0),
+    ("陈旧 sha ⇒ 必须报（L1）",
+     lambda: _nprob(_HEAD + "wasm sha `%s…`\n" % _SHA_B[:16]) >= 1),
+    ("陈旧套件数 ⇒ 必须报（L2）",
+     lambda: _nprob(_HEAD + "全量 31 套 / 784 项全绿\n") >= 1),
+    ("退役名 ⇒ 必须报（L3）",
+     lambda: _nprob(_HEAD + "默认后端是 OSMesa\n") >= 1),
+    ("行内标了历史标记 ⇒ 放行（这是约定，不是漏洞）",
+     lambda: _nprob(_HEAD + "本批之前 wasm sha `%s…`\n" % _SHA_B[:16]) == 0),
+    ("**空文档** ⇒ 必须报（零值守卫：闸门空转）", lambda: _nprob("") >= 1),
+    ("**两条事实链都读不到** ⇒ 必须报（零值守卫 2）",
+     lambda: _nprob(_HEAD + "全量 43 套 / 1076 项全绿\n", shas={}, sweep={"ok": False}) >= 1),
+]
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(selftest("check-handoff", CASES) if "--selftest" in sys.argv else main())

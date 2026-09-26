@@ -55,7 +55,11 @@ def check(path):
     # 而且报错发生在**调用方**，与本文件无关。所以在源头直接拦。
     with open(path, encoding="utf-8", errors="replace") as fh:
         body = fh.read()
-    fns = re.findall(r"^\s*function\b[^\n=]*?([A-Za-z_]\w*)\s*(?:\(|$)", body, re.M)
+    # ⚠️ 2026-09-26（F1 自证抓到）：原来是 `[^\n=]*?` —— 它**匹配不到**最常见的
+    #    Octave 写法 `function y = f(x)`（`=` 把惰性量词挡住，捕获名落到 `=` 上 ⇒ 放弃）。
+    #    也就是说这条闸门对仓库里绝大多数 .m 是**瞎的**。改成 `[^\n]*?`（惰性 + 回溯到
+    #    `=` 之后的真函数名）后两种写法都认。
+    fns = re.findall(r"^\s*function\b[^\n]*?([A-Za-z_]\w*)\s*(?:\(|$)", body, re.M)
     if len(fns) > 1:
         print(f"FAIL {path}\n  一个文件里有 {len(fns)} 个 function（{', '.join(fns[:4])}…）："
               f"只有第一个能被外部调用（CLIBS.md 坑 4）。拆成一函数一文件。")
@@ -86,6 +90,10 @@ def main():
                 targets += [os.path.join(root, n) for n in sorted(names) if n.endswith(".m")]
         else:
             targets.append(a)
+    if not targets:
+        # ★ 零值守卫（F1）：一个 .m 都没收集到 ⇒ 这条检查**根本没跑**，不是"全过"
+        print("FAIL：**一个 .m 目标都没收集到** ⇒ 检查空转（零值守卫）")
+        return 1
     ok = True
     for t in targets:
         ok = check(t) and ok
@@ -93,5 +101,44 @@ def main():
     return 0 if ok else 1
 
 
+# ── 自证（F1）：以子进程调自己（CLI 脚本不必重构内部，测的是真路径）────────────
+def _rc(*args):
+    import subprocess, tempfile, shutil
+    d = tempfile.mkdtemp(prefix="gate-m-")
+    try:
+        paths = []
+        for i, (name, body) in enumerate(args):
+            fp = os.path.join(d, name)
+            open(fp, "w", encoding="utf-8").write(body)
+            paths.append(fp)
+        if not paths:
+            paths = [d]                      # 空目录 ⇒ 零目标
+        return subprocess.run([sys.executable, os.path.abspath(__file__)] + paths,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+_GOOD_M = "function y = f(x)\n  y = x;\nendfunction\n"
+_BAD_M = _GOOD_M + "function y = g(x)\n  y = x;\nendfunction\n"     # 最常见写法（曾漏检）
+_BAD_M2 = "function f(x)\n  x;\nendfunction\nfunction g(x)\n  x;\nendfunction\n"
+
+
+def _selfcheck():
+    return [[("合法 .m ⇒ 通过", lambda: _rc(("ok.m", _GOOD_M)) == 0),
+             ("两个 function（`function y = f(x)` 写法）⇒ 必须报", lambda: _rc(("bad.m", _BAD_M)) != 0),
+             ("两个 function（`function f(x)` 写法）⇒ 必须报", lambda: _rc(("bad2.m", _BAD_M2)) != 0),
+             ("**空目录（零目标）** ⇒ 必须报", lambda: _rc() != 0)]]
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        cases = _selfcheck()[0]
+        bad = sum(0 if (lambda f: (f() == True))(fn) else 1 for _, fn in cases)
+        for label, fn in cases:
+            try: ok = bool(fn())
+            except Exception as e: ok = False; label += "  ← 抛异常 %r" % e
+            print("%s | check_m/%s" % ("PASS" if ok else "fail", label))
+        print("\n=== check_m 自证：%d PASS / %d fail ===" % (len(cases) - bad, bad))
+        sys.exit(1 if bad else 0)
     sys.exit(main())

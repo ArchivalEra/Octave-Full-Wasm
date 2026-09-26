@@ -188,6 +188,11 @@ def main():
     otypes, oimports = side_module(sys.argv[2])
     print("主 wasm: 类型 %d / 导出函数 %d" % (len(mtypes), len(mexports)))
     print("side    : 类型 %d / 函数导入 %d" % (len(otypes), len(oimports)))
+    # ★ 零值守卫（F1）：两边都解析不出符号 ⇒ 旧版报"（无）不匹配" rc=0，等于没查
+    if not mexports or not oimports:
+        print("FATAL: 主 wasm 导出 %d / side 导入 %d ⇒ 有文件没解析出符号，无法判签名（零值守卫）"
+              % (len(mexports), len(oimports)))
+        return 1
     bad = [(nm, oimports[nm], mexports[nm]) for nm in sorted(oimports)
            if nm in mexports and oimports[nm] != mexports[nm]]
     print("=== 签名不匹配：%d 个 ===" % len(bad))
@@ -199,5 +204,28 @@ def main():
     return 0
 
 
+
+
+# ── 自证（F1）：喂**垃圾 wasm** ⇒ 必须报（零值守卫）而不是"（无）解析不了 ✔" ──────
+def _selftest():
+    """喂**垃圾 wasm** ⇒ 必须报（零值守卫），而不是旧的"（无）解析不了 ✔" rc=0。"""
+    import os as _os, subprocess, tempfile
+    d = tempfile.mkdtemp(prefix="gate-wasm-")
+    junk = _os.path.join(d, "junk.wasm")
+    with open(junk, "wb") as fh:
+        fh.write(b"\x00asm\x01\x00\x00\x00garbage\x01\x02")
+    side = _os.path.join(d, "x.oct")
+    with open(side, "wb") as fh:
+        fh.write(b"\x00asm\x01\x00\x00\x00")
+    name = _os.path.basename(_os.path.abspath(__file__))
+    argv = [sys.executable, _os.path.abspath(__file__)]
+    argv += [junk, d] if "oct-imports" in name else [junk, side]
+    rc = subprocess.run(argv, capture_output=True).returncode
+    ok = rc != 0
+    print("%s | %s/垃圾 wasm ⇒ **必须报**（零值守卫）" % ("PASS" if ok else "fail", name))
+    print("\n=== %s 自证：%s ===" % (name, "1 PASS / 0 fail" if ok else "0 PASS / 1 fail"))
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_selftest() if "--selftest" in sys.argv else main())

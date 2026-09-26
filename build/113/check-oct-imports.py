@@ -216,6 +216,12 @@ def main():
 
     print("check-oct-imports: 主模块导出 %d 个名字；检查 %d 个 .oct%s"
           % (len(ex), len(octs), "（基线 %s）" % baseline if baseline else ""))
+    # ★ 零值守卫（F1）：差分的前提取不到 ⇒ **这里什么也证明不了**，不许静默通过
+    #   （实测：给两个解析不出来的 wasm，旧版会报"没有新出现的解析不了 ✔" rc=0）
+    if not ex:
+        sys.exit("FATAL: 主模块导出表读出 0 个名字 ⇒ 保活差分无法成立（零值守卫，见 build/lib/gate.py）")
+    if base_ex is not None and not base_ex:
+        sys.exit("FATAL: 基线导出表读出 0 个名字 ⇒ 差分基线无效（零值守卫）")
     bad = 0
     for nm, who in sorted(old.items()):
         print("  [基线也缺，非本批引入] %s  ← %s" % (nm, "、".join(sorted(set(who))[:4])))
@@ -237,5 +243,28 @@ def main():
     return 0
 
 
+
+
+# ── 自证（F1）：喂**垃圾 wasm** ⇒ 必须报（零值守卫）而不是"（无）解析不了 ✔" ──────
+def _selftest():
+    """喂**垃圾 wasm** ⇒ 必须报（零值守卫），而不是旧的"（无）解析不了 ✔" rc=0。"""
+    import os as _os, subprocess, tempfile
+    d = tempfile.mkdtemp(prefix="gate-wasm-")
+    junk = _os.path.join(d, "junk.wasm")
+    with open(junk, "wb") as fh:
+        fh.write(b"\x00asm\x01\x00\x00\x00garbage\x01\x02")
+    side = _os.path.join(d, "x.oct")
+    with open(side, "wb") as fh:
+        fh.write(b"\x00asm\x01\x00\x00\x00")
+    name = _os.path.basename(_os.path.abspath(__file__))
+    argv = [sys.executable, _os.path.abspath(__file__)]
+    argv += [junk, d] if "oct-imports" in name else [junk, side]
+    rc = subprocess.run(argv, capture_output=True).returncode
+    ok = rc != 0
+    print("%s | %s/垃圾 wasm ⇒ **必须报**（零值守卫）" % ("PASS" if ok else "fail", name))
+    print("\n=== %s 自证：%s ===" % (name, "1 PASS / 0 fail" if ok else "0 PASS / 1 fail"))
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_selftest() if "--selftest" in sys.argv else main())

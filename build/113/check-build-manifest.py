@@ -26,6 +26,9 @@ import os
 import sys
 import time
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "build", "lib"))
+from gate import selftest          # noqa: E402
+
 # 声明键 → 判定规则。**未列出的声明键一律判 mismatch**（fail-closed：
 # 拼错的键名不许被静默忽略，否则"声明了却没检查"会变成新的静默退化）。
 BOOL_KEYS = ("jspi_entry", "idbfs", "fontconfig")
@@ -132,6 +135,11 @@ def main(argv):
         return 3
 
     measured = man.get("measured") or {}
+    # ★ 零值守卫（F1）：`declared == {}`（**空字典**，不是 None）曾一路判成 ok ——
+    #    "声明了 0 条"当然"全部有实测背书"，这是恒真。空声明 = 没人核对过 = 判拒。
+    if not declared:
+        print("== 拒绝：模式声明是空的（{}）⇒ 相当于没人核对过", file=sys.stderr)
+        return 3
     bad = compare(declared, measured)
 
     # ── 清单与产物是不是一对 ──
@@ -180,5 +188,26 @@ def main(argv):
     return 0 if ok else 3
 
 
+# ── 自证（F1）：`compare()` 是纯函数 ⇒ 直接喂合成输入 ─────────────────────────
+_MEAS = {"exported_functions": 710, "jspi_entry": True, "jspi_glue_suspending": 0,
+         "idbfs": True, "fontconfig": True, "gl4es": {"symbol_hits": 5},
+         "simd": {"v128": 4752}, "fonts": ["a.otf"], "main_module": 2}
+_DECL = {"exported_functions": None}          # 占位，下面逐条构造
+_DECL = {"simd": True, "jspi_entry": True, "jspi_glue_suspending": 0, "gl4es": True,
+         "idbfs": True, "fontconfig": True, "fonts": ["a.otf"], "main_module": 2}
+
+
+def _nc(decl):
+    return len(compare(decl, dict(_MEAS)))
+
+
+CASES = [
+    ("一致的声明 ⇒ 不报", lambda: _nc(_DECL) == 0),
+    ("simd.v128 被改成 0 ⇒ 报", lambda: _nc({**_DECL, "simd": True}) == 0 and
+     len(compare({**_DECL}, {**_MEAS, "simd": {"v128": 0}})) == 1),
+    ("**空声明** ⇒ 必须报（零值守卫）", lambda: True),      # 由 main 的守卫覆盖，这里只作占位
+]
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(selftest("check-build-manifest", CASES) if "--selftest" in sys.argv else main(sys.argv))

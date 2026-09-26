@@ -33,6 +33,10 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "lib"))
+# ⚠️ 别名：本文件里 `root` 已被 os.walk 的循环变量占用（实测踩过 UnboundLocalError）
+from gate import root as gate_root, selftest, run_quiet, fixture, cleanup   # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = os.environ.get("OCTAVE_SITE", "/mnt/hdd/octave-wasm-build/site")
 LANE = ["build/113", "build/recover.sh", "build/recover-113.sh",
@@ -44,6 +48,15 @@ OCTAVE_PATH = re.compile(r"/usr/src/octave/[A-Za-z0-9_./@+-]*")
 def read(rel):
     with open(os.path.join(REPO, rel), encoding="utf-8", errors="replace") as fh:
         return fh.read()
+
+
+def read_or_none(rel):
+    """★ F1：**读不到就返回 None，别抛** —— 会崩的闸门不能指望它报告
+    （实测：空夹具树下 `read("build/assets.py")` 直接把闸门崩掉，而不是报"读不到"）。"""
+    try:
+        return read(rel)
+    except OSError:
+        return None
 
 
 def boot_names(text):
@@ -73,11 +86,18 @@ def boot_names(text):
 
 
 def main():
+    global REPO
+    REPO = gate_root()     # ★ F1：`GATE_REPO` 可覆盖 ⇒ 自证能在空夹具树上跑
     problems, notes = [], []
 
+    def guard(what, detail=""):
+        """★ 零值守卫（F1）：**收集到 0 项不是通过，是没查**。
+        实测教训：启动清单那条一度匹配 0 个名字，而"0 个都合规"恒真 ⇒ 闸门静默空转。"""
+        problems.append((what + "：**收集到 0 项 ⇒ 闸门静默空转**", detail))
+
     # ── 1) 挂载根 ────────────────────────────────────────────────────────────
-    py_root = (re.search(r'^OCTAVE_M\s*=\s*"([^"]+)"', read("build/assets.py"), re.M) or [None, None])[1]
-    js_root = (re.search(r"OCTAVE_M\s*=\s*'([^']+)'", read("bridge/assets-loader.js")) or [None, None])[1]
+    py_root = (re.search(r'^OCTAVE_M\s*=\s*"([^"]+)"', read_or_none("build/assets.py") or "", re.M) or [None, None])[1]
+    js_root = (re.search(r"OCTAVE_M\s*=\s*'([^']+)'", read_or_none("bridge/assets-loader.js") or "") or [None, None])[1]
     if not py_root or not js_root:
         problems.append(("挂载根常量读不到", f"assets.py={py_root!r} loader={js_root!r}"))
     elif py_root != js_root:
@@ -107,6 +127,9 @@ def main():
         notes.append(f"启动清单核对**跳过**（读不到 {man}）")
     else:
         names = {a.get("name") for a in json.load(open(man, encoding="utf-8")).get("assets", [])}
+        if not boot:
+            guard("启动清单（boot 链装的资产名）",
+                  "正则/文件结构变了？这条恒真时闸门等于没有")
         missing = sorted(n for n in boot if n not in names)
         if missing:
             problems.append(("boot 链装的名字不在清单里", ", ".join(missing)))
@@ -123,7 +146,7 @@ def main():
         notes.append("挂载点核对**跳过**（读不到 assets-meta.json 或站点 assets/m/）")
     else:
         meta = json.load(open(meta_path, encoding="utf-8"))
-        bad = []
+        bad = []; seen = 0
         for fn in sorted(os.listdir(mdir)):
             if not fn.endswith(".js"):
                 continue
@@ -132,17 +155,21 @@ def main():
             m = re.search(r"addpath:\s*(\[[^\]]*\])", txt)
             if not m:
                 continue
+            seen += 1
             want = meta.get(name, {}).get("mount") or f"{py_root or '/usr/src/octave/m'}/{name}"
             got = json.loads(m.group(1))[0] if json.loads(m.group(1)) else None
             if got != want:
                 bad.append(f"{name}: 部署是 {got}，声明是 {want}")
-        if bad:
+        if seen == 0:
+            guard("assets/m/*.js 里带 addpath 的文件",
+                  "一个都没匹配到 ⇒ 挂载点这条根本没查")
+        elif bad:
             problems.append(("资产挂载点与声明不符", "; ".join(bad[:4])))
         else:
-            notes.append(f"assets/m/ 里各包的挂载点与 assets-meta.json 声明一致")
+            notes.append(f"assets/m/ 里 {seen} 个包的挂载点与 assets-meta.json 声明一致")
 
     # ── 3) 11.3.0 车道里没有 7.2 路径 ─────────────────────────────────────────
-    hits = []
+    hits = []; scanned = 0
     for entry in LANE:
         p = os.path.join(REPO, entry)
         files = []
@@ -156,13 +183,16 @@ def main():
                 txt = open(f, encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
+            scanned += 1
             for i, line in enumerate(txt.split("\n"), 1):
                 if SEVEN_TWO.search(line):
                     hits.append(f"{os.path.relpath(f, REPO)}:{i}")
-    if hits:
+    if scanned == 0:
+        guard("11.3.0 车道的文件", "一个文件都没扫到（目录改名了？）⇒ 这条根本没查")
+    elif hits:
         problems.append(("11.3.0 车道里出现 /7.2.0/ 路径", ", ".join(hits[:5])))
     else:
-        notes.append("11.3.0 车道里没有 /7.2.0/ 路径")
+        notes.append(f"11.3.0 车道里扫了 {scanned} 个文件，没有 /7.2.0/ 路径")
 
     # ── 4. 页面引用的本地文件必须在 git 里（2026-09-26 A2）────────────────────
     # ⚠️ 同一类 bug 犯过三次：p5canvas.js（09-23）、octave-worker.js（09-26 A0）、
@@ -177,7 +207,7 @@ def main():
     except OSError:
         notes.append("git ls-files 取不到 ⇒ 跳过『页面引用必须入库』检查")
     if tracked:
-        dangling = []
+        dangling = []; nrefs = 0
         targets = (("bridge/index.html", "html"), ("bridge/octave-worker.js", "js"))
         for rel, kind in targets:
             try:
@@ -193,6 +223,7 @@ def main():
             for r in refs:
                 if not r or r.startswith(("http:", "https:", "//", "data:")):
                     continue
+                nrefs += 1
                 # 引用是**相对页面**的 ⇒ 要按页面所在目录解析（bridge/xxx）
                 resolved = os.path.normpath(os.path.join(os.path.dirname(rel), r))
                 # 构建产物豁免：`octave.js/.wasm/.data` 由 link-web.sh 产出，**故意不在
@@ -201,10 +232,13 @@ def main():
                     continue
                 if resolved not in tracked:
                     dangling.append(f"{rel} → {r}（应为 {resolved}）")
-        if dangling:
+        if nrefs == 0:
+            guard("页面引用的本地文件（script src + importScripts）",
+                  "一个引用都没抓到 ⇒ 这条根本没查")
+        elif dangling:
             problems.append(("页面引用的文件不在 git 里", "; ".join(sorted(set(dangling))[:6])))
         else:
-            notes.append("页面引用的本地文件都在 git 里（index.html 的 script src + worker 的 importScripts）")
+            notes.append("页面引用的本地文件都在 git 里（%d 个引用）" % nrefs)
 
     # ── 5. CONTEXT.md 的"证据行"必须指向**存在**的仓库路径（2026-09-26 A4）──────
     # 为什么单列：术语表最容易退化成散文("大家都知道")。约定每条术语挂一行 `证据：`，
@@ -214,10 +248,11 @@ def main():
     except OSError:
         notes.append("没有 CONTEXT.md ⇒ 跳过『术语证据行』检查")
     else:
-        bad_ev = []
+        bad_ev = []; nev = 0
         for line in ctx.split("\n"):
             if "证据：" not in line:
                 continue
+            nev += 1
             for tok in re.findall(r"`([^`]+)`", line):
                 tok = tok.strip()
                 if not tok or " " in tok or "/" not in tok:
@@ -226,10 +261,12 @@ def main():
                     continue
                 if not os.path.exists(os.path.join(REPO, tok)):
                     bad_ev.append(tok)
-        if bad_ev:
+        if nev == 0:
+            guard("CONTEXT.md 的 `证据：` 行", "一行都没有 ⇒ 术语表退化成散文，这条根本没查")
+        elif bad_ev:
             problems.append(("CONTEXT.md 的证据行指向不存在的路径", ", ".join(sorted(set(bad_ev))[:6])))
         else:
-            notes.append("CONTEXT.md 的证据行全部指向存在的仓库路径")
+            notes.append("CONTEXT.md 的 %d 条证据行全部指向存在的仓库路径" % nev)
 
     for n in notes:
         print(f"  · {n}")
@@ -242,5 +279,36 @@ def main():
     return 0
 
 
+# ── 自证（F1）───────────────────────────────────────────────────────────────
+# 判据：**把闸门指向一棵几乎空的夹具树，它必须报**（而不是"没东西可查"就绿）。
+# 这条一次性覆盖上面全部零值守卫 —— 任何一个被撤掉，这里就会少报一处。
+FIXTURE = {
+    "CONTEXT.md": "# 术语表（故意一条 `证据：` 行都没有）\n",
+    "bridge/index.html": "<script src=\"a.js\"></script>\n",
+    "bridge/octave-worker.js": "importScripts('b.js');\n",
+    "build/113/keep.txt": "",
+}
+
+
+def _empty_tree_rc():
+    d = fixture(FIXTURE)
+    old = os.environ.get("GATE_REPO")
+    os.environ["GATE_REPO"] = d
+    try:
+        return run_quiet(main)
+    finally:
+        if old is None:
+            os.environ.pop("GATE_REPO", None)
+        else:
+            os.environ["GATE_REPO"] = old
+        cleanup(d)
+
+
+CASES = [
+    ("真仓库 ⇒ 通过（不是恒红）", lambda: run_quiet(main) == 0),
+    ("★ 空夹具树 ⇒ **必须红**（零值守卫全体生效）", lambda: _empty_tree_rc() != 0),
+]
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(selftest("check-consistency", CASES) if "--selftest" in sys.argv else main())
