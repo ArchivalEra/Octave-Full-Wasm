@@ -595,6 +595,7 @@
   API.eval = function (code) { return call('eval', { code: code }); };
   API.evalAsync = function (code) { return call('evalAsync', { code: code }); };
   API.loadAssets = function (names) { return call('loadAssets', { names: names }); };
+  API.diagnose = function () { return call('diagnose', {}).then(function (m) { return m.d; }); };
   API.interrupt = function () { API.interrupted++; w.postMessage({ kind: 'interrupt' }); };
   window.OctaveWorker = API;
   // 点击一律转发（worker 侧 `arm` 时会清空队列 ⇒ "第二次点击不误触发下一次 ginput" 仍成立）

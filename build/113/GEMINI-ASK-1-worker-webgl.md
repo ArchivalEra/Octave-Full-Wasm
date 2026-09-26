@@ -1,3 +1,13 @@
+> **★ 2026-09-26 更新（发文后自解决）**：**A 节已被我方自行实测解决，不必再答** ——
+> 读 Emscripten 5.0.7 源码得出关键机制：胶水只要一个"能 `getContext('webgl2')` 的对象"
+> （`findCanvasEventTarget` → `specialHTMLTargets[target] || document.querySelector(target)`），
+> 而 **`OffscreenCanvas` 在 worker 里可用** ⇒ worker 宿主只要把 DOM shim 的
+> `createElement('canvas')`/`getElementById`/`querySelector` 指向一个**真的 OffscreenCanvas**，
+> **无需任何新旗标、无需重链**就拿到真渲染后端。实测自证（worker 内部状态）：
+> `graphics_toolkit()='webgl'`、无 GL 回落信号、`OffscreenCanvas` 上确有 WebGL2 上下文（560×420）、
+> 绘图成品经 postMessage 上屏。
+> ⇒ **请只回答 B 节（binaryen 解析失败）与 C 节（挑刺验收矩阵）**。
+
 # 外部咨询请求 #1：WebAssembly 解释器搬进 DedicatedWorker 的两处硬骨头（+ 挑刺我的验收矩阵）
 
 > 请用中文回答。**每个判定必须配至少一条可证伪判据**（能做成红/绿对照测试的那种）。

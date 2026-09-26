@@ -139,20 +139,23 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
     return { rc: r.rc, err: r.err, plots: window.OctaveWorker.plots - before,
              imgs: document.querySelectorAll('img').length };
   });
-  // H 图形 —— **phase 2 边界，如实记**（不假装绿）：
-  //   worker 里 WebGL toolkit 起不来（EM_ASM 建 canvas 要真 DOM）⇒ 回落 toolkit 不支持
-  //   桥要的 `__legend_handle__` ⇒ 绘图报 Octave 侧清晰错误。这里只断言**降级是否干净**：
-  //   ① 报错是 Octave 侧文字（不是页面崩溃/挂死）；② 之后解释器照常。
-  const plotSurvives = await page.evaluate(async () => {
-    const r = await window.OctaveWorker.eval('1+1');
-    return r.rc;
+  // H ★ worker 里的**真渲染后端**（2026-09-26 实测达成；**不需要重链**）：
+  //   机制：Emscripten 只要一个"能 getContext('webgl2') 的对象"，而 OffscreenCanvas 在 worker
+  //   里可用 ⇒ shim 交出一个真 OffscreenCanvas 即可。判据（三条都要，缺一条就翻面）：
+  //     ① graphics_toolkit() == 'webgl'（真后端，不是只出句柄的 web 后端）
+  //     ② 工具包的"无 GL 回落信号文件"不存在（/tmp/p5_nogl.txt 缺席 = 真拿到了 GL 上下文）
+  //     ③ 我们自己交出的 OffscreenCanvas 上确实有 WebGL2 上下文
+  const gfx = await page.evaluate(async () => {
+    const before = window.OctaveWorker.plots;
+    await window.OctaveWorker.eval('figure(1); clf; plot(1:20); drawnow();');
+    await new Promise(r => setTimeout(r, 1200));
+    const d = await window.OctaveWorker.diagnose();
+    return { plots: window.OctaveWorker.plots - before, imgs: document.querySelectorAll('img').length, d: d };
   });
-  const cleanDegrade = plot.rc === 0 && typeof plot.err === 'string' && plot.err.length > 0 && plotSurvives === 0;
-  check(cleanDegrade || (plot.plots >= 1 && plot.imgs >= 1),
-    '★ H 图形：要么上屏（plots≥1），要么**降级干净**（Octave 侧清晰报错 + 事后解释器存活）—— phase 2 边界如实记',
-    JSON.stringify(plot) + ' / 事后 rc=' + plotSurvives);
-  console.log('   边界说明：worker 模式 phase 1 **无真渲染后端**（WebGL toolkit 需真 DOM）；' +
-              '把 WebGL 搬进 worker = 改 webgl_toolkit.cc（canvas 契约 + OffscreenCanvas）+ 重链，属 B5 phase 2');
+  check(gfx.d.tk === 'webgl' && gfx.d.nogl === 0 && gfx.d.glCtx === true && gfx.plots >= 1 && gfx.imgs >= 1,
+    '★ H worker 里有**真渲染后端**：toolkit=webgl + 无 GL 回落信号 + OffscreenCanvas 上真有 WebGL2 上下文 + 图上屏',
+    JSON.stringify(gfx));
+  console.log('   图形路径自证：' + JSON.stringify(gfx.d));
 
   if (errs.length) console.log('   ⚠️ 页面报错：' + errs.slice(0, 3).join(' // '));
   await page.close();
