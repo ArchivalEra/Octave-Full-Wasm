@@ -44,8 +44,14 @@
    但**验证没跑完就被关机叫停**：8768 已 41/1047/0、8761 开机自检 OK、8761 跑到 42 套真 FAIL=0；
    **待补**：8761 完整 `PROBES=1` 汇总行、`make-dist.sh` + 核 sha、`check-site-parity --strict`、
    清理 `site-simd`/8771。回退快照 `site-baseline-45d288b1/`。详见 `NOTES-threads.md`「C4 落地」节。
-2. **E4 · C3 真落地**：JSPI×Worker 已证（Q4）⇒ 只剩"worker 侧 dlopen × preload FS"未测；
-   第一版必须带**真实 side module + 真实 preload FS**（不带 pthread）。
+2. **E4 探针 ✅ / C3 落地 = B5**：
+   - E4 探针已绿（worker 里 dlopen 两种 FS 来源 + 挂起穿透 dlopen）；
+   - **B5 phase 1 ✅ 已落地**（`?worker=1`，accept-worker **11/0**，8761 全量 **80 套/1216/0**）：
+     解释器搬进 DedicatedWorker，主线程只剩 DOM 与转发 —— 判据对：worker 里 1400² 计算期间
+     页面 tick=435，而单页模式 tick=0。
+   - **B5 phase 2（未做）**：worker 里**真渲染后端**（现为"只出句柄"的回落后端）。
+     需要改 `webgl_toolkit.cc`（canvas 契约 + OffscreenCanvas 目标）+ 重链；
+     外部咨询已发（`GEMINI-ASK-1-worker-webgl.md` 的 A 节）。
 3. ✅ **E6 · C6 去单例嵌入契约（页面层）已落地**（2026-09-26）：工厂化 mount/base/实例命名空间/
    IDBFS 命名空间；判据全过（accept-embed-multi **13/0**：同页 2 实例交替 eval 100 次 0 串扰；
    8768 全量 **42 套/1060/0** 41 套 accept **零改动**；8761 全量 **77 套/1205/0**）。

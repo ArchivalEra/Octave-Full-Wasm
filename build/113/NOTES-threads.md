@@ -375,3 +375,46 @@ README 只给定制示例，**默认值得读源码/实测**：`coi-serviceworke
 ③ 试 OpenBLAS 的 CMake 构建路径（可能与 Makefile 的 codegen 不同）。
 **结论**：E2 按计划本就是"触发条件不成立的可选增强"（C4/SIMD 已给 1.62×/1.75×/1.31×），
 故**时间盒到点即转 B5**（计划主线：C3 Worker 化），把上面的方向留给后续。
+
+
+---
+
+## B5 phase 1 落地：解释器跑进 DedicatedWorker（2026-09-26，产物 wasm 不变）
+
+**做了什么**（分支 `Slay`；产物仍是 `1ed3e528…`，只动页面层）：
+- 新增 `bridge/octave-worker.js`：**worker 宿主**。wasm + 虚拟 FS + 资产装载 + JSPI 全在 worker 里；
+  协议：主→worker `eval` / `evalAsync` / `loadAssets` / `interrupt` / `click`；
+  worker→主 `ready` / `out`（stdout 流式）/ `plot`（图形成品字节）/ `result`。
+- `bridge/index.html`：`?worker=1` 分流 —— **默认单页路径一字不动**（77 个旧套件全靠它）；
+  worker 模式下页面**不创建本地解释器**（`window.Module` 缺席 ⇒ 主线程真的空着）。
+- `bridge/assets-loader.js`：`kind:'js'` 的包（Forge 包）在 worker 里走 `importScripts`。
+- `build/promote-webgl.sh`：拷贝清单补 `octave-worker.js`（**漏了就是部署后 404** —— 正是该脚本
+  当初被写出来要防的那类事故）。
+
+**验收 `accept-worker.mjs`（11 PASS / 0 FAIL）**，关键判据是**有区分力**的那对：
+| 判据 | 实测 |
+|---|---|
+| ★ C 主线程不冻：worker 里跑 1400² 矩阵乘（约 4.3 s）期间页面 `setInterval(10ms)` | **tick=435** |
+| ★ C2 **反向**：同一段计算在**单页模式**下 | **tick=0**（确实冻住） |
+| ★ F worker 里挂起入口真让出 | rc=0、206 ms |
+| ★ G0 反向：worker 里**同步** eval 碰挂起点必须失败 | `SuspendError: trying to suspend without WebAssembly.promising` |
+| ★ G 中断投递（`evalAsync` 的 pause 循环 + interrupt） | rc=3、事后解释器存活 |
+| B2 worker 模式下页面无本地解释器 | `window.Module === undefined` |
+| D/E/H | stdout 上屏 ✓ / dldfcn 资产 ✓ / 图形**降级干净**（见边界） |
+
+**踩到的坑（值得记）**：worker 宿主为让 toolkit 的 EM_ASM 不抛异常，装了 `document` shim；
+而 assets-loader 原来用 `!document` 判断"我在 worker 里" ⇒ **判断失效** ⇒ JS 包走 `<script>`
+注入路径（worker 里 `head.appendChild` 是空操作）⇒ **promise 永不 settle**：
+`plotbridge`/`webshims` 静默装不上（表现为 addpath 找不到目录、`pause` shim 缺席 ⇒
+中断判据假红、ready 永远不来）。修法：用**显式标记** `self.__octaveWorker` 而不是探测 document。
+
+**phase 2 边界（未做，PLAN 留档）**：worker 模式**没有真渲染后端** —— 图形后端初始化要用
+EM_ASM 在 `document` 上建隐藏 canvas，worker 里没有真 DOM ⇒ 回落到"只出句柄"的旧后端，
+绘图报 `get: unknown axes property __legend_handle__`（Octave 侧清晰错误、解释器存活）。
+把 WebGL 搬进 worker 需要改 `webgl_toolkit.cc`（canvas 契约 + OffscreenCanvas 目标）并**重链**。
+外部咨询请求（去身份化）已发出：`build/113/GEMINI-ASK-1-worker-webgl.md`（含这条与 E2 的
+binaryen 阻塞、以及"挑刺验收矩阵"）。
+
+**验收链（全绿）**：`glue-selftest 91/91` → **8768 全量 43 套 / 1071 PASS / 0 FAIL**（含新套件）→
+promote 8761（D8 开机自检 OK 1.5 s）→ **8761 全量 PROBES=1：80 套 / 1216 PASS / 0 FAIL** →
+`make-dist` 包内 wasm = 部署件 = `1ed3e528…` → `check-site-parity --strict` 两站点完全一致。

@@ -2526,6 +2526,36 @@ null 回退 global.Module = 默认实例（资产写错 FS、addpath 串台）�
 机制未知数已全部清零（Q4/E3/E4）；E2（OpenBLAS）触发条件不成立维持可选；
 C8/C2 需要 COI 环境/宿主配合。
 
+### 5.56 B5 phase 1：解释器搬进 DedicatedWorker（2026-09-26，branch `Slay`）
+
+**目标达成一半**：`?worker=1` 下 wasm + 虚拟 FS + 资产 + JSPI 全在 DedicatedWorker 里，
+主线程只剩 DOM 与消息转发 ⇒ **长计算不再冻页面**。产物 wasm 不变（`1ed3e528…`），只动页面层。
+判据成对出现才有区分力：**worker 里跑 1400² 矩阵乘（约 4.3 s）期间页面 tick=435**，
+而**同一段计算在单页模式下 tick=0**。另有：worker 里挂起入口真让出（206 ms）、
+**同步** eval 碰挂起点必须失败（`SuspendError`，反向断言）、中断投递 rc=3、
+worker 模式下页面 `window.Module` 缺席（主线程真的空着）。新套件 `accept-worker` **11/0**。
+
+**验收链**：`glue-selftest 91/91` → 8768 全量 **43 套/1071/0**（含新套件，零回归）→ promote
+（D8 开机自检 OK 1.5 s）→ 8761 全量 **PROBES=1：80 套/1216/0** → `make-dist` 核 sha →
+`check-site-parity --strict` 两站点完全一致。**promote 拷贝清单补了 `octave-worker.js`**
+（漏了就是部署后 404 —— 正是该脚本当初被写出来要防的事故）。
+
+**坑**：worker 宿主为让 toolkit 的 EM_ASM 不抛异常装了 `document` shim，而资产加载器原来用
+`!document` 判断"在 worker 里" ⇒ 判断失效 ⇒ `kind:'js'` 的包走 `<script>` 注入（空操作）⇒
+promise 永不 settle，`plotbridge`/`webshims` 静默装不上（连带 ready 不来、中断判据假红）。
+修法：显式标记 `self.__octaveWorker`。**教训与 §5.46 同族：探测/判定要用显式契约，别靠环境形状。**
+
+**phase 2 边界**：worker 模式**没有真渲染后端**（图形后端要用 EM_ASM 在 `document` 上建 canvas）
+⇒ 绘图报 `get: unknown axes property __legend_handle__`（清晰错误、解释器存活）。
+搬 WebGL 进 worker 需改 `webgl_toolkit.cc` + 重链。去身份化的外部咨询请求已发出
+（`build/113/GEMINI-ASK-1-worker-webgl.md`：A=worker 里 OffscreenCanvas、B=E2 的 binaryen 阻塞、
+C=挑刺验收矩阵）。
+
+**同轮另记**：E2 探针——OpenBLAS **0.3.34** 的 `WASM128_GENERIC` 能编出来（`USE_THREAD=0
+NO_LAPACK=1 NO_SHARED=1 CC=emcc FC=emf77`，EXIT=0，`dgemm_` 等符号齐），但**全量重链**在
+binaryen 报 `parse exception: popping from empty stack`；已排除 atomics（0 处）、与 LAPACK 的
+重复符号（交集 0）、"该库单方问题"（最小链接 wasm-opt 通过）⇒ 记档待二分归档定位。
+
 ---
 
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
