@@ -436,7 +436,7 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `build/forge-fetch.py` | Forge 取包器（按 Octave 版本过滤 + 依赖递归 + sha256 校验） |
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
-| `build/check-site-parity.sh` | **两站点一致性闸门**（D4）：比部署件 + **清单引用到的**资产包 sha；默认只报告（差异**不一定是错**），`--strict` 供 promote 之后跑。未引用的遗留文件单独报出、不算差异 |
+| `build/check-site-parity.sh` | **三处一致性闸门**（D4；★ 第三列 2026-09-26 A0）：比部署件 + **清单引用到的**资产包 sha，覆盖 **8761 / 8768 / 仓库 `site/`**（第三列堵住"重构页面后忘了 rsync 入库镜像、而两站点之间照样 parity 绿"的盲区）。默认只报告（差异**不一定是错**），`--strict` 供 promote 之后跑。未引用的遗留文件与**非部署件的三方内容差异**单独报出、不算差异 |
 | `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
 | `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
 | `build/fftw_threads_stub.c` | FFTW 线程桩（必须） |
@@ -775,20 +775,19 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 回退点：`siteWebGL-preidbfs-bak-20260924/`（IDBFS 之前那份）、`site-m1bridge-bak-20260924/`。
 > **部署件 sha、体积、最近一次全绿回归见文末 `AUTO:STATE` 区块**（别在这里手写）。
 > **▶ 现在的待办（按建议顺序，2026-09-26）**
-> 1. **先修"当场就错"的几处**（半小时级；详情见临时报告 §0）：
->    · ★ `bridge/p5canvas.js` 与 `bridge/octave-worker.js` **补进 git**（承重文件，不在库里 ⇒
->      新克隆必坏；白名单盲区，§0 铁律 5 有说明）；
->    · `DEPLOY.md` / `build/113/PLAN-jspi.md` 里的**旧产物 sha 与"权威重链口径"指针**（照旧话做会
->      做出**不是现役形态**的产物，且自检全绿）；
->    · 本文件下面快回环里的 `glue-selftest` **项数**（实测以脚本输出为准）。
-> 2. **架构债务 D1+D2**（临时报告里的前两名）：把重链做成**一个入口**（模式 + 默认值 + 出厂正面断言）
->    并让产物带**机器可读的构建清单**（`octave.build.json`）；两者互为数据源，一次做完能消灭
->    "静默退化"这一整类事故（本会话已踩三次）。
-> 3. **架构债务 D3**：抽出 `octave-core.js`，让页面宿主与 worker 宿主变成两个**薄适配器**
->    （现在两边各维护一份 Module 配置/JSPI 包装/取点覆写/资产清单，且已经漂了）。
-> 4. **B6 线程版构建**：配方已备好（`build/113/PLAN-threads.md` §5），**等一声令下**
->    （它要翻掉"不引入 COI/SAB"那条机制门 + 全量重编数小时）。
-> 5. **E2 悬案**：OpenBLAS 全量链接时产物非法（`wasm-ld` 点名 76 个 `signature_mismatch:*`）；
+> 1. **架构深化 D1–D6 —— 工作令已冻结在 `build/113/PLAN-arch.md`**（三轮拷问的结论、每批的
+>    红绿判据与回退点、以及每条断言的复跑命令）。顺序**不变量**：
+>    **A0 收尾 + 立三列镜像闸门 → A1（D1+D2：`relink.sh` 一个入口 + `octave.build.json` 身份证，
+>    纯构建侧、不 promote）→ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，★ 带 promote 上 8761）
+>    → A3（D5：`test/browser/manifest.json` + sweep/harness 搬进仓库）→ A4（D6：`CONTEXT.md` 术语表）**。
+>    A1 的验收判据是**逐字节复现现役 `1ed3e528…`** —— 重链可复现这件事已被现有数据证明
+>    （五个同 sha 的 M2 产物目录，见 PLAN-arch §4.10），所以它是一条能证伪"模式表漏变量"的硬判据。
+>    ⚠️ **引用旧报告前先复核**：那份只读扫描报告在 `/tmp`（会消失），且它说的"当场就错 5 条"
+>    经复核**只剩 1 条还活着**（`bridge/index.html` 的开机 demo 错误路径，随 A2 清）——
+>    逐条复核记录见 PLAN-arch §4.1。
+> 2. **B6 线程版构建**：配方已备好（`build/113/PLAN-threads.md` §5），**等一声令下**
+>    （它要翻掉"不引入 COI/SAB"那条机制门 + 全量重编数小时）；D1 落地后它只是模式表多一行 `threads`。
+> 3. **E2 悬案**：OpenBLAS 全量链接时产物非法（`wasm-ld` 点名 76 个 `signature_mismatch:*`）；
 >    阶梯已记在 `build/113/NOTES-threads.md`（不是 binaryen 的锅，两个独立裁判背书）。
 >
 > **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
@@ -799,10 +798,13 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >   `__pb_strip_props__`**（属性对契约，13 项）；
 > · `python3 .githooks/check-consistency.py` —— 路径/挂载点/启动清单一致性；
 > · `python3 .githooks/check-wants.py` —— 断言可证伪性（已接进 pre-commit）。
-> · `sh build/check-site-parity.sh` —— **两站点一致性**（D4，2026-09-24）：比
->   `octave.{wasm,js,data}`/`index.html`/`assets-loader.js`/`VERSION` + **清单引用到的**资产包 sha。
+> · `sh build/check-site-parity.sh` —— **三处一致性**（D4；第三列 2026-09-26 A0）：比
+>   `octave.{wasm,js,data}`/`index.html`/`assets-loader.js`/`VERSION`/`assets/manifest.json` +
+>   **清单引用到的**资产包 sha，覆盖 **8761 / 8768 / 仓库 `site/`**。
 >   默认只报告（差异**不一定是错**：8768 本来就允许先改）；**promote 之后跑 `--strict`，应当是 0 差异**。
->   未引用的遗留文件（实测 8768 上有 `p5osmesa.js`）单独报出、**不算差异**（否则闸门每次都红就没人看了）。
+>   未引用的遗留文件（实测 8768 上有 `p5osmesa.js`、`octave.js.orig`、`wtest.*`）与**非部署件的
+>   三方内容差异**（实测 `matrix-android.html`：8768 那份 41386 B、8761/仓库 33947 B）单独报出、
+>   **不算差异**（否则闸门每次都红就没人看了）。
 > · `PROBES=1 sh /mnt/hdd/octave-wasm-build/sweep.sh <URL>` —— **把 `probe-*` 也跑一遍**（D2）。
 >   默认只跑 `accept-*`（日常快）；**每批 promote 之后该跑一次带 PROBES 的** —— 探针才是"当班实况"
 >   的防腐层，它们不在任何自动跑里时断言会腐烂（本会话抓到 **2 条**）。

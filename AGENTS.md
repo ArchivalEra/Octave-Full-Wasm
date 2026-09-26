@@ -1,6 +1,7 @@
 # AGENTS.md · Octave-Full-Wasm
 
-> **接续先读两份**：`HANDOFF.md`（活状态）+ `build/113/PLAN-jspi.md` 的 **§0.5「现在的状态与下一步顺序」**（当前工作令）。
+> **接续先读两份**：`HANDOFF.md`（活状态）+ `build/113/PLAN-arch.md` 的 **§0.5「现在的状态与下一步顺序」**（当前工作令）。
+> **并行度线**（SIMD/线程/Worker/嵌入契约）在 `build/113/PLAN-threads.md`，与本条并行、共享同一个产物。
 > 历史与旧数字在 **`HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only；正文里单写的这些编号都指它）。
 > 分门别类的坑：C 库配方 `build/CLIBS.md`、图形线 `build/113/NOTES-webgl.md`、JSPI 机制 `build/113/NOTES-jspi.md`。
 
@@ -48,7 +49,7 @@
   `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/` 后一并提交
 → **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
 → `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
-→ **两站点一致** `sh build/check-site-parity.sh --strict`
+→ **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**
 
 ## 提交前（六道闸门）
