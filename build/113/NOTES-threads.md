@@ -750,3 +750,22 @@ wasm-ld: warning: function signature mismatch: ztrsv_
 **实验产物（容器内，均未 promote、站点零改动）**：
 `/src/websrc/e2-one-blas`（单 BLAS：删了 `-lrefblas`）、`/src/websrc/e2-g77`（G77 接口 + 单 BLAS）。
 容器里的 `link-web.sh` 实验期间被临时 sed 过，**已从仓库恢复**（sha 双侧一致 `0eaa1f0e…`）。
+
+### 方案 A 的首次尝试（自动化补丁）—— 失败，原因记档（别再重走）
+
+思路：把 `interface/*.c` 里所有 `void NAME(...)` 改成 `int NAME(...)` 并补 `return 0;`
+（f2c 的调用方按 `int` 返回调用；不补 `return 0;` 的话 clang 会发 `unreachable` ⇒ 运行期 trap）。
+
+两版都编不过（`BUILD_EXIT=2`）：
+1. **第一版把函数原型也当成定义了**：`void NAME(...);` 这种声明也被匹配 ⇒ 花括号配对从声明一路
+   跑到**下一个函数体** ⇒ 括号失衡（报 `expected identifier or '('` / `extraneous closing brace`）。
+2. **第二版修正为"先配对参数表、再看 `)` 到 `{` 之间是否纯空白（原型以 `;` 结束 ⇒ 跳过）"**：
+   73 处真定义都改到了，但**仍有 63 个编译错** ⇒ 原因是**花括号配对会被注释/字符串里的
+   `{`/`}` 骗到**（例：`interface/copy.c` 的裸计数 3 对 2）。
+   ⇒ 要自动化就必须**先剥注释与字符串**再配对，或者用生成器把 `return 0;` 插在函数末尾的
+   明确标记处；否则就得**方案 B**（`SYMBOLPREFIX` 改名 OpenBLAS 的符号 + 生成 78 个 int 返回的
+   薄包装）。两者都是**正经工程**，不是探针。
+
+**本轮到此收手**（如实记）。容器状态已恢复：`interface/` 从干净源取回、`make` 重编 **EXIT=0**、
+`/src/bin/link-web.sh` 与仓库 sha 一致（`0eaa1f0e…`）；站点零改动（8761 部署件仍 `1ed3e528…`，
+三列 parity 绿）。实验产物留在容器：`/src/websrc/e2-{one-blas,g77,ret,ret2}`。
