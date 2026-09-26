@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "note": [
+    "测试契约（A3/D5）。**为什么要有它**：81+ 个套件的'怎么跑'以前只写在各自文件头的注释里，",
+    "而筛选逻辑在**仓库之外**的 sweep.sh 里（默认只跑 accept-*，PROBES=1 时用 * 扫全部）——",
+    "于是'哪些套件会自己起服务器''哪些需要额外引擎''哪些不产汇总行'都靠人读注释猜。",
+    "这份清单让仓库自己说清楚；`build/sweep.sh` 读它决定跑谁。",
+    "★ 类别**从文件名前缀推**（accept- / probe- / bench-），这里只列**例外** —— 加一个新套件",
+    "通常什么都不用改；只有当它不产 `=== N PASS / M FAIL ===` 时才要在这里登记。"
+  ],
+  "categories": {
+    "accept": {
+      "desc": "验收套件：红绿判据，**换基线的正式判据**（每批都跑）",
+      "default": true,
+      "summary": true,
+      "timeout": 420
+    },
+    "probe": {
+      "desc": "探针：当班实况，**会腐烂** ⇒ 每批 promote 之后用 PROBES=1 跑一遍",
+      "default": false,
+      "summary": true,
+      "timeout": 420
+    },
+    "bench": {
+      "desc": "基准：只比数字（不做红绿判据），慢 ⇒ PROBES=1 时也跑，但不要求汇总行",
+      "default": false,
+      "summary": false,
+      "timeout": 900
+    }
+  },
+  "exceptions": {
+    "probe-bridge-cost": { "manual": true, "why": "打印成本拆解表，无汇总行" },
+    "probe-bridge-cost2": { "manual": true, "why": "打印成本拆解表，无汇总行" },
+    "probe-bridge-mirror-cost": { "manual": true, "why": "打印单价表，无汇总行" },
+    "probe-bridge-svg-out": { "manual": true, "why": "产出 SVG 供人看，无汇总行" },
+    "probe-cold-start": { "manual": true, "why": "打印冷启动构成，无汇总行" },
+    "probe-gfx-bench": { "manual": true, "why": "打印图形后端墙钟，无汇总行" },
+    "probe-gfx-e2e-breakdown": { "manual": true, "why": "打印端到端拆解，无汇总行" },
+    "probe-gfx-resolution": { "manual": true, "why": "打印分辨率扫描表，无汇总行" },
+    "probe-gfx-surf-cost": { "manual": true, "why": "打印 surf 成本拆解，无汇总行" },
+    "probe-gpu-backend": { "manual": true, "why": "打印本机 WebGL 后端，无汇总行" },
+    "probe-nogl-flag": { "manual": true, "why": "找旗标用的一次性探针，无汇总行" },
+    "probe-gl4es-smoke": { "manual": true, "why": "**硬编码 8767 端口**的 gl4es 冒烟探针（不接 URL 参数）⇒ 那台服务不在时必然 ERR_CONNECTION_REFUSED" },
+    "probe-coi-sw": {
+      "requires_env": "PLAYWRIGHT_BROWSERS_PATH",
+      "why": "三引擎探针（firefox/webkit 要 playwright 托管，见 /mnt/hdd/crossbuild-tools/pw-browsers）；裸环境启动即失败 ⇒ 跳过并计数，用时先 export 该变量再单独跑"
+    },
+    "probe-p5-run": { "manual": true, "why": "跑 fixtures/*.m 并打印，无汇总行" },
+    "probe-t2-graphics": { "manual": true, "why": "打印图形句柄状态量，无汇总行" },
+    "probe-t2-run": { "manual": true, "why": "跑 fixtures/t2-*.m 并打印，无汇总行" },
+    "probe-toolkit-print": { "manual": true, "why": "打印 toolkit print 路径，无汇总行" }
+  }
+}

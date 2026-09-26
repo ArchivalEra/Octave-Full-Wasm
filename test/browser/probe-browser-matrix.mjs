@@ -67,5 +67,6 @@ if (ready) {
 }
 logs.slice(0, 4).forEach(l => console.log('  ' + l));
 console.log(`\n=== ${KIND}: ${pass} PASS / ${fail} FAIL ===`);
+console.log(`=== ${pass} PASS / ${fail} FAIL ===`);   // A3：规范格式（上面那行带 URL 前缀，扫描认不出）
 await browser.close();
 process.exit(fail ? 1 : 0);

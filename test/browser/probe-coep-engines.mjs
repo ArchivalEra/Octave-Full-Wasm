@@ -81,5 +81,8 @@ for (const e of Object.keys(res)) {
   console.log(`  ${e.padEnd(9)} ${verdict}`);
 }
 console.log(`\n=== ${pass} PASS / ${fail} FAIL${na ? ` / ${na} N/A` : ''} ===`);
+// ★ A3：再打一行**规范格式**（`=== N PASS / M FAIL ===`）—— 仓库外的旧 sweep 只认这一种，
+//   上面那行带 ` / N N/A` 会让它解析不到（实测被记成 NO-SUMMARY）。规范行放最后（扫描取末条）。
+console.log(`=== ${pass} PASS / ${fail} FAIL ===`);
 srv.close(); cdn.close();
 process.exit(fail ? 1 : 0);

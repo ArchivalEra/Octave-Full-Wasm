@@ -188,4 +188,5 @@ check('H3 allow="cross-origin-isolated" 无帮助（顶层未隔离时）', !all
   `same=${R.h3_plain_same_allow.frame.coi} cross=${R.h3_plain_cross_allow.frame.coi}`);
 
 console.log(`\n结果：${pass} PASS / ${fail} FAIL（9 格矩阵见上表）`);
+console.log(`=== ${pass} PASS / ${fail} FAIL ===`);   // A3：规范格式（扫描取末条）
 process.exit(0);

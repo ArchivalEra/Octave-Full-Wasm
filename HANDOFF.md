@@ -443,6 +443,9 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `build/113/relink.sh` | **重链的唯一入口**（D1/A1，2026-09-26）：模式 `product`/`scalar`/`m1` 推出全部 22 个环境变量；子命令 `link`（默认）/`verify`/`rebuild`/`explain`/`--list`/`--selfcheck`；`--diag` 正交修饰。链接末尾调下面两个 py 做 **fail-closed 出厂核对**（`verdict=="ok"` 才可部署） |
 | `build/113/write-build-manifest.py` | 量测产物并写 `octave.build.json`（**只记量到的事实**，不抄旗标）：三件套 sha/字节、`simd.v128`、`jspi_entry`、gl4es 命中、8 个字体、IDBFS、fontconfig、BLAS 归档 sha、基线 sha |
 | `build/113/check-build-manifest.py` | **判定方**：拿模式声明核对实测（未知声明键一律判拒），写 `verdict`/`mismatches`/`checked` |
+| `build/sweep.sh` | **全量验收扫描（A3 起在仓库里）**：类别 / 超时 / 要不要汇总行 / 人工套件 / 缺环境变量，全部**读 `test/browser/manifest.json`**。默认跑 `accept-*`；`PROBES=1` 再把 `probe-*` 与 `bench-*` 跑一遍。仓库外那份是两行兼容 shim |
+| `test/browser/run.sh` | 测试运行器（A3 起在仓库里）：把套件现拷到 harness 再跑（ESM 的 `playwright-core` 按**脚本所在目录**解析）—— **必现拷**，别改成缓存副本 |
+| `test/browser/manifest.json` | 测试契约（A3）：类别从**文件名前缀**推，只列例外（人工套件 / 需要环境变量的 / 不产汇总行的） |
 | `build/113/test-manifest-check.py` | 上面那个判定器的**反向断言套件**（11 条：基准 + 9 条逐规则反证 + 未知键必须拒）。跑法：`python3 build/113/test-manifest-check.py <产物目录>` |
 | `bridge/octave-core.js` | **内核**（A2，2026-09-26）：页面宿主与 Worker 宿主**共用同一份** —— Module 配置 / `instantiateWasm`（B 姿势挂起包装 + 取点覆写 + sha 自证）/ 启动链（`execute_interp` → JSPI 包装 → 资产三组）/ IDBFS + `webSync` / JSPI 能力门 / `Capabilities`。宿主只提供 9 件（`base`/`print`/`printErr`/`note`/`stdinLine`/`clicks`/`doc`/`assets`/`onReady`） |
 | `build/113/gen-matrix-android.py` | `site/matrix-android.html` 的**生成器**（A2）：= 当前 `bridge/index.html` + 尾块（`MATRIX-TAIL-START/END` 定界，幂等）。**改完页面重跑它**，别手改那个页面 |
@@ -789,8 +792,8 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >    红绿判据与回退点、以及每条断言的复跑命令）。顺序**不变量**：
 >    **✅ A0 收尾 + 三列镜像闸门 → ✅ A0b 同步 `matrix-android.html` → ✅ A1（D1+D2：`relink.sh`
 >    一个入口 + `octave.build.json` 身份证）→ ✅ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，
->    已 promote 上 8761）→ A3（D5：`test/browser/manifest.json` + sweep/harness 搬进仓库）
->    → A4（D6：`CONTEXT.md` 术语表）**。
+>    已 promote 上 8761）→ ✅ A3（D5：`build/sweep.sh` + `test/browser/manifest.json` +
+>    `test/browser/run.sh` 搬进仓库）→ ✅ A4（D6：`CONTEXT.md` 术语表）**。
 >    **A1 已落地并实测**：`relink.sh link product` 在 60 秒内**逐字节复现 `1ed3e528…`**
 >    （`octave.wasm` / `octave.data` 完全相同；`octave.js` 只差里面嵌的输出目录名 ——
 >    换回现役目录名后 sha 相等，见 PLAN-arch §2 A1）；判定器反向断言 **11/11**；
@@ -1005,7 +1008,7 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260926-103623` · **43 套 / 1,076 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20260926-112200` · **1 套 / 10 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,262,406 B · `5b3fe9ae55645937…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-26 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

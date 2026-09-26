@@ -373,16 +373,31 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 - **回退点**：`site/` 回 `site-baseline-45d288b1/` 或 `siteWebGL-preidbfs-bak-20260924/`；
   代码 `git revert`；`bridge/octave-core.js` 删掉即可回到"两份各写一遍"的旧形态。
 
-### A3 · D5（测试清单 + 搬迁）
+### A3 · D5（测试清单 + 搬迁）—— ✅ **已落地 2026-09-26**
 
-- **改什么**：新增 `build/sweep.sh`、`test/browser/run.sh`、`test/browser/manifest.json`；
-  仓库外 `sweep.sh` 留两行 shim；`recover.sh:125` 改引用；17 个文件标 `summary:false, manual:true`；
-  `bench-*` 单列一类。
-- **红绿判据（绿）**：仓库版与仓库外版对**同一 URL、同一次默认筛选**跑出来的结果**逐套一致**
-  （同名日志、同样的 PASS/FAIL 计数）。
-- **反向断言（必须红）**：① 请求一个 `manual:true` 的套 ⇒ 必须**明确跳过并计数**，不许静默漏跑；
-  ② 请求一个不存在的套名 ⇒ 必须报错（不是"跑 0 个然后绿"）。
-- **回退点**：shim 保证旧路径仍可用；回退 = 删新增文件。
+- **交付**：`build/sweep.sh`（**读清单**）、`test/browser/run.sh`（runner 进仓库）、
+  `test/browser/manifest.json`（类别 / 超时 / 要不要汇总行 / 人工套件 / 缺环境变量）；
+  仓库外的 `sweep.sh` 与 `harness/run.sh` 变成**两行兼容 shim**（`exec` 仓库那份）；
+  `recover.sh` 不再 printf **生成一份实现**（只补 shim）—— 以前那份实现只在仓库外，仓库没有。
+- ★ **计划里的"17 个不产汇总行"这个数字是错的**（逐条查过）：真实构成是
+  **2 个 bench**（`bench-core`/`bench-dgemm`，本来就不打汇总）+
+  **15 个真·不产汇总的探针**（打表格给人看）+
+  **4 个"有自己的格式"**：`probe-browser-matrix`（`=== <URL>: N PASS / M FAIL ===` 带前缀）、
+  `probe-coep-engines`（`... / N N/A`）、`probe-iframe-coi`（用 `结果：` 前缀）、
+  `probe-coi-sw`（裸环境启动即失败，要 `PLAYWRIGHT_BROWSERS_PATH`）。
+  ⇒ 处理：**前 3 个各补一行规范汇总**（保留它们给人看的那行；扫描取**末条** ⇒ 追加即生效），
+  `probe-coi-sw` 标 `requires_env`（缺变量 ⇒ 跳过并计数，不是静默漏跑），
+  `probe-gl4es-smoke`（**硬编码 8767 端口**）进人工名单。
+- **验收（全部实测）**：
+  · 默认选中 **恰好 43 套** accept（与原仓库外版行为一致，数字对得上）；
+  · `PROBES=1` 选中 **66 套**、跳过 **17 套并逐条列名**（16 人工 + 1 缺环境变量）；
+  · 正向：`sh build/sweep.sh <URL> 'accept-113-boot'` → `10 PASS / 0 FAIL`、**全绿**、rc=0；
+  · 仓库外 shim 同样能跑（同一条命令走 `/mnt/hdd/octave-wasm-build/sweep.sh`）→ 10/0 全绿；
+  · **反向①**：过滤器不匹配任何套件 ⇒ `FATAL ... 没有匹配到任何套件`、**exit 2**
+    （不是"跑 0 个然后绿"）；
+  · **反向②**：过滤器**只**匹配人工套件 ⇒ **明确跳过 + 计数 + 列名**、exit 0。
+- **回退点**：删 `build/sweep.sh` / `test/browser/run.sh` / `test/browser/manifest.json` +
+  恢复仓库外那两个脚本（内容与旧版都在本文件与 HISTORY 的记录里）。
 
 ### A4 · D6（术语表）—— ✅ **已落地 2026-09-26**
 

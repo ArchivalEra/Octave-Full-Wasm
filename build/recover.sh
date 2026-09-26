@@ -123,7 +123,9 @@ if [ ! -d "$HARNESS/node_modules/playwright-core" ]; then
   [ -f package.json ] || echo '{"name":"owasm-harness","private":true,"type":"module"}' > package.json
   npm install --silent playwright-core
 fi
-[ -f "$HARNESS/run.sh" ] || printf '#!/bin/sh\nset -e\nH=/mnt/hdd/octave-wasm-build/harness\ncp "$1" "$H/_run.mjs"\nshift\ncd "$H" && exec node _run.mjs "$@"\n' > "$HARNESS/run.sh"
+# ★ A3（2026-09-26）：runner 已搬进仓库（`test/browser/run.sh`）⇒ 这里**只补兼容 shim**，
+#   不再生成一份实现（两份实现会漂：以前 harness/run.sh 由本行 printf 生成，仓库没有它）。
+[ -f "$HARNESS/run.sh" ] || printf '#!/bin/sh\nexec sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/run.sh "$@"\n' > "$HARNESS/run.sh"
 chmod +x "$HARNESS/run.sh"
 
 echo "== 6) 起静态服务（端口 $PORT）=="
