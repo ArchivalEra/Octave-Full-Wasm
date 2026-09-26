@@ -1342,6 +1342,13 @@ make clean && emmake make -k -j24                    # PATH 必须 export，见�
 
 ## 配方
 
+> ⚠️ **这条配方已过时（2026-09-26 起，批次 A1）**：它漏了 `WITH_FREETYPE=1 WITH_FONTCONFIG=1
+> WITH_JSPI=1` 与 SIMD 的 `EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"` ——
+> **照抄会做出"不是现役形态"的产物，而构建、链接、产物自检全绿**（这三条都是"漏了就静默退化"的）。
+> **现役口径 = `bash build/113/relink.sh link product`**；要看它到底传什么就打
+> `bash build/113/relink.sh explain product`（那是生成物）。下面这段保留，只因为它是
+> **M2 机制的原始记录**（那四个口子的来历仍然值得读）。
+
 ```sh
 # ① 保活清单：扫部署的全部 .oct 的 IMPORT 段（递归，含 octdir/<包>/）
 sh build/113/gen-keep-list.sh /src/octs-site > /src/libwork/keep.txt   # 45 个 .oct → 1267 符号

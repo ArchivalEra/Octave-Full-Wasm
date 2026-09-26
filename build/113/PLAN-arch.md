@@ -285,6 +285,13 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
   ⇒ 推论：①"这份产物是哪个构建"的锚点应当用 **wasm sha**（`check-deploy-sha.sh` 与
   `probe-artifact-sha.mjs` 用的正是它，所以现有闸门不受影响）；② 换目录重建会得到不同的
   js sha，别把它当成"产物变了"。
+- **"能编过 ≠ 能用了"的收口（浏览器侧实测）**：把 A1 产出的三件套覆盖进一份站点副本
+  （同盘硬链接建副本 + 替换三件套，避免 63MB 全量拷贝），在 **8772** 起静态服务后实测：
+  `check-boot.sh` **BOOT OK 0.9s**；`probe-artifact-sha.mjs` **3/3**
+  （页面实例化的字节 = HTTP 层字节 = 期望的 `1ed3e528…`）；
+  两个真套件 **`accept-113-boot` 10 PASS / 0 FAIL**、**`accept-113-libs` 17 PASS / 0 FAIL**。
+  ⇒ 新入口产出的产物不只是"字节相同"，**浏览器里真的能用**。
+  （测试目录已清理、8772 已关；8761/8768 全程未动，收尾复测仍 200。）
 - **反向断言（已实测）**：`test-manifest-check.py` **11 PASS / 0 fail** ——
   基准（原样重判 ⇒ ok）+ 9 条逐规则反证（`jspi_entry`/`gl4es`/`main_module`/`idbfs`/
   `fontconfig`/`fonts`/`simd.v128`/`jspi_glue_suspending`/清单文件 sha 配对）

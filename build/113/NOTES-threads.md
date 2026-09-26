@@ -118,6 +118,9 @@ sudo docker exec o113 sh -c 'export PATH=/src/bin:/usr/src/emsdk:/usr/src/emsdk/
 库体积对比：`librefblas.a` 679,866 vs 556,594（+22%）、`liblapack.a` 9,884,660 vs 9,539,546（+3.6%）。
 
 ### 2) 重链（权威口径 + JSPI + 一个口子）
+> **★ 2026-09-26（批次 A1）起：这条命令已经"搬进代码"了** ——
+> `bash build/113/relink.sh link product` 就是它（模式表逐字对得上；
+> `relink.sh explain product` 可以把 22 个变量打出来对照）。下面这段是当时的原始记录。
 ```sh
 sudo docker exec o113 bash -lc 'export PATH=/src/bin:$PATH; cd /src/bin && \
   M_SRC=/src/work/m-prerendered/m GL_LIBS=1 GL_BACKEND=webgl P5_TOOLKIT=1 \
