@@ -418,3 +418,25 @@ binaryen 阻塞、以及"挑刺验收矩阵"）。
 **验收链（全绿）**：`glue-selftest 91/91` → **8768 全量 43 套 / 1071 PASS / 0 FAIL**（含新套件）→
 promote 8761（D8 开机自检 OK 1.5 s）→ **8761 全量 PROBES=1：80 套 / 1216 PASS / 0 FAIL** →
 `make-dist` 包内 wasm = 部署件 = `1ed3e528…` → `check-site-parity --strict` 两站点完全一致。
+
+
+---
+
+## B6/C1 设计前提实测：线程版产物**硬依赖 COI** ⇒ 必须双档产物（2026-09-26）
+
+**探针 `probe-threads-coi.mjs`（3 PASS / 0 FAIL）**：同一个 `-pthread -sSHARED_MEMORY` 产物，
+用两种服务各发一次（带头 / 不带头）：
+
+| 档 | 结果 |
+|---|---|
+| **带 COI 头** | `crossOriginIsolated=true`、SAB 可用、**线程程序跑通**（100 轮 dlopen + 2 个 pthread，busy=46） |
+| **不带 COI 头** | **实例化硬失败**：`DataCloneError: Failed to execute 'postMessage' on 'Worker': SharedArrayBuffer transfer requires self.crossOriginIsolated.` |
+
+**★ 结论（推翻 C1 的原始设计）**：线程能力**不能**靠"运行时能力门把开关关掉"来降级 ——
+线程版胶水在启动时就要把 SAB 传给 pthread worker，**没有 COI 直接抛异常**。
+⇒ C1 的门必须做**产物选择器**而不是开关：**双档产物**（线程版 / 非线程版）+ 加载期按
+`self.crossOriginIsolated === true && typeof SharedArrayBuffer === 'function'` **二选一**，
+并把上面那句失败文本作为"选错档"时的清晰报错素材。
+**连带**：B6 = 线程版构建（`-pthread -sSHARED_MEMORY`，且 configure 目前是 `--disable-threads`）
++ 自家站开 COI（coi-serviceworker 已在 `build/embed/`，自家资产全同源 ⇒ require-corp 无副作用）
++ 加载期选档。Emscripten 官方也建议 threaded/non-threaded 分开构建（与本实测一致）。

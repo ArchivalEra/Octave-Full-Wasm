@@ -76,7 +76,7 @@
 | **B3** | E2 OpenBLAS SIMD 1T（配方切换） | configure/link 配方 | 数值回归 + 8761 验收 |
 | **B4** | E4/E3 探针（Worker / pthread×dlopen） | 探针车道 | 红绿结论 + 记 HISTORY |
 | **B5** | C3 真落地（Worker 化；图形走 OffscreenCanvas→PNG→postMessage） | bridge/、webgl_toolkit.cc、测试垫片 | 全量回归（72 套件需 Worker RPC 垫片） |
-| **B6** | C8/C2 条件开启（`__webThreadsOk__` 门 + 双档产物/同产物降级）——**已解锁**：一方站开 COI 无 CDN 纠纷（自家资产全同源，require-corp 拦不到东西） | 链接旗标 + 页面 gate + coi-serviceworker（build/embed/） | 两档矩阵实测 |
+| **B6** | C8/C2 条件开启。★ **实测改判（2026-09-26，`probe-threads-coi.mjs` 3/0）**：线程版产物**硬依赖 COI**（无 COI 时 `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`）⇒ **必须双档产物 + 加载期选档**（C1 的门 = **产物选择器**，不是开关） | 线程版构建（configure `--disable-threads` 要改）+ 链接旗标 + coi-serviceworker（build/embed/）+ 加载期选档 | 两档矩阵实测（带/不带 COI 各跑一遍） |
 
 ---
 
