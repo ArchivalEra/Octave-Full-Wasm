@@ -449,6 +449,7 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `build/113/test-manifest-check.py` | 上面那个判定器的**反向断言套件**（11 条：基准 + 9 条逐规则反证 + 未知键必须拒）。跑法：`python3 build/113/test-manifest-check.py <产物目录>` |
 | `bridge/octave-core.js` | **内核**（A2，2026-09-26）：页面宿主与 Worker 宿主**共用同一份** —— Module 配置 / `instantiateWasm`（B 姿势挂起包装 + 取点覆写 + sha 自证）/ 启动链（`execute_interp` → JSPI 包装 → 资产三组）/ IDBFS + `webSync` / JSPI 能力门 / `Capabilities`。宿主只提供 9 件（`base`/`print`/`printErr`/`note`/`stdinLine`/`clicks`/`doc`/`assets`/`onReady`） |
 | `build/113/gen-matrix-android.py` | `site/matrix-android.html` 的**生成器**（A2）：= 当前 `bridge/index.html` + 尾块（`MATRIX-TAIL-START/END` 定界，幂等）。**改完页面重跑它**，别手改那个页面 |
+| `test/browser/probe-engine-parity.mjs` | **双引擎对齐网**（2026-09-26）：chromium 与 firefox 各跑 9 条用户可见的轴（ready / Capabilities / JSPI 真挂起 + 能力门 / 纯计算 / 真渲染 / 字体 / 同步 XHR / Worker 真出图）+ **反证**（无 JSPI ⇒ 照常 ready、`api=false`、`pause` 阻塞回落）。实测 **22/0** |
 | `test/browser/probe-caps.mjs` | `Capabilities`（D4）的探针：`__octaveCaps` 形状 + 身份证读出来的 `verdict/v128/fonts/jspiEntry`；**反证**：把身份证拦成 404 ⇒ 页面照常 ready 且 `artifact=null` |
 | `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
 | `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
@@ -794,6 +795,9 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >    一个入口 + `octave.build.json` 身份证）→ ✅ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，
 >    已 promote 上 8761）→ ✅ A3（D5：`build/sweep.sh` + `test/browser/manifest.json` +
 >    `test/browser/run.sh` 搬进仓库）→ ✅ A4（D6：`CONTEXT.md` 术语表）**。
+>    **另**：用户点名的"多线程要兼顾 Firefox"已实测收口（`build/113/NOTES-threads.md` 末节 +
+>    `test/browser/probe-engine-parity.mjs` **22/0**）：**多线程不歧视 Firefox**（有 COI 时两引擎
+>    跑 pthread 产物完全平齐），并**更正**了此前"线程档在 Pages 上跑不起来"的错误结论。
 >    **A1 已落地并实测**：`relink.sh link product` 在 60 秒内**逐字节复现 `1ed3e528…`**
 >    （`octave.wasm` / `octave.data` 完全相同；`octave.js` 只差里面嵌的输出目录名 ——
 >    换回现役目录名后 sha 相等，见 PLAN-arch §2 A1）；判定器反向断言 **11/11**；
