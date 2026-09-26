@@ -2610,6 +2610,78 @@ stdout 洪泛不丢字 + 主线程仍活（tick=11/222ms，如实记残存争抢
 ⇒ 5 万行输出占主线程约 170ms；改为滚动跟随 200ms 节流 + worker 模式上屏 rAF 合批（结果前强制 flush）。
 **待办**：MEMFS 产物 unlink 的循环测试、图像/完成信号 FIFO 单调性、worker 崩溃快速失败判据、
 多 worker × IDBFS 隔离判据（代码已实现 `opts.home`）。
+```
+（原文见 git 历史中 HANDOFF 于 2026-09-26 之前的那一版；此处保留其要点：）
+- 2026-09-24 做完：R1/R4（§5.30）、R3 fontconfig（§5.31）、R5 探针（§5.32）、
+  小口子 1–7（§5.33–§5.39：属性对契约 / waitbar+挂死族 / 包可见性 / `print -dpng` /
+  **重链做出 IDBFS 持久化与 FreeMono**）。
+- 当时的下一步 = `PLAN-jspi.md` 的 G0→G6 与七条收尾债 D1–D7 —— **该计划已于 2026-09-25 全部收口**
+  （HISTORY §5.48–§5.51），故从 HANDOFF 移除。
+
+#### (6) 迁出：§4.1 的完整核实（7.2 时代 dldfcn 不能 dlopen 的根因）
+
+> 2026-09-26 起 `.oct` 走官方 `dlopen`，本节只是**当时**的核实过程（含容器内实测与 fork 旁证）。
+
+```
+### 4.1 dldfcn 不能 dlopen（A 组根因）—— 2026-09-20 已亲手核实
+`.oct` 模块无法加载 → 很多函数明明库有却 `exist=0`。**结论：`.oct` 确实用不了，但根因不是"wasm 做不到"，是三层叠加，其中第一层是上游 fork 自己挖的。**
+
+1. **上游 fork 掏空了装载代码**（决定性）。`third_party/octave-7.2.0/liboctave/util/oct-shlib.cc` 里
+   `octave_dlopen_shlib` 的**构造函数不调用 `dlopen`**、`search()` **不调用 `dlsym`**（`void *function = nullptr; return function;`）。
+   该文件在 `rwl/octave-wasm` 的 git 里**被跟踪且工作区干净**（commit `e584306c`）→ 是 fork 的既定行为，**不是本项目会话改的**。
+   旁证：fork 里还留着一份 octave-4.4.1，同处代码是**被 `//` 注释掉**的（上游原样），7.2.0 里连注释都删净了；
+   fork 镜像构建日志 `/mnt/hdd/octave-wasm-build/build.log:27635` 有 `oct-shlib.cc:210:9: warning: variable 'flags' set but not used`，印证镜像里就是这个版本。
+   注意：构造函数里 `flags` 算了却没用，就是 dlopen 调用被删掉的直接后果。
+2. **Emscripten 侧本就要求可重定位构建**。`dlopen` 的 JS 实现 `src/library_dylink.js` **整个被 `#if RELOCATABLE` 包住**；
+   `RELOCATABLE` 只由 `MAIN_MODULE`/`SIDE_MODULE` 自动开启（`settings.js:1015`）。非该模式下 dlopen 只有一句
+   `"To use dlopen, you need enable dynamic linking"`。且 `emcc.py:837` 在 `RELOCATABLE` 时**自动追加 `-fPIC`** → 走这条路要**全树重编**。
+3. **dldfcn 从来不在构建里**。`libinterp/dldfcn/Makefile` 不存在（automake 没生成 = 该目录没进构建），容器内 `find / -name "*.oct"` **一个都没有**。
+
+**实测（浏览器，8761 基线，2026-09-20）**：
+- `WebAssembly.Module.customSections(mod,'dylink.0')` → `0`；导入表 85 项、**无任何 dl 符号**；`Module._dlopen` → `undefined`。
+  （wasm 里唯一那处 "dlopen" 字样来自 RTTI 名 `N6octave19octave_dlopen_shlibE`，不是符号。）
+- 往 wasm FS 丢假 `probeoct.oct` 再 addpath：`exist("probeoct")` → **3**（路径**认** `.oct`），调用 `probeoct(1)` →
+  `error: /tmp/probeoct.oct is not a valid shared library`（rc=2）。这正是 `is_open()` 恒 false 后由
+  `libinterp/corefcn/dynamic-ld.cc:171` 抛的那句。探针脚本：`/tmp/opencode/octave-accept/octprobe.mjs`（备份见 §3.4）。
+
+**推论**：`STATIC_DLD_FCNS` 是现基线（8761）架构下的正解。
+
+**但是 —— 2026-09-20 当天已把真 dlopen 做通并实测通过（实验构建在 8763，独立容器 `odld`，基线未动）**：
+`.oct` **能用**。四件事缺一不可，全部配方与实测见 `build/CLIBS.md`「真 .oct 动态装载」节：
+1. 恢复 `oct-shlib.cc`（上游 `release-7-2-0` 同名文件覆盖，diff 只有 3 处 hunk）；
+2. 全树 `-fPIC`：`build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`（只有 glpk/arpack/sndfile/qhull/fftw3+3f 这 5 个库需要，`.so` 系零报错不用动）；
+3. 主链 `-s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1`（另需 `embuilder build --pic zlib bzip2`）；
+4. `.oct` 用 `build/build_oct.sh` 编成 `-sSIDE_MODULE=1` 的 wasm，**不链任何库**。
+
+实测（8763）：自写 `dldprobe.oct` → `dldprobe()`=42；把 `gzip`/`convhulln` 从静态表摘掉后
+只能靠 `.oct` 活，功能正常且**数值与静态注册逐位一致**；回归对照与 8761 无差异。
+
+**代价（决定是否采用的关键）**：gzip 后总交付 6.18MB → **11.05MB（+79%）**
+（wasm 4.94→8.05MB，js 51KB→1.81MB——`MAIN_MODULE=1` 不做 DCE，JS 里那份 29.8MB 的
+dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
+未做的优化：`MAIN_MODULE=2` + 显式导出清单，应能同时压缩两份。
+**采用与否属产品取舍，需人工拍板；未改基线。**
+
+**解**：`main.cc` 顶部 `STATIC_DLD_FCNS(X)` 宏表登记 `{name, G_installer}`，Phase 3 里逐个 `getter(no_shl,false)` → `symtab.install_built_in_function`。
+- 新增模块 = 加一行 + 编 `.o` + 在 `Makefile` 的 `EM_LDFLAGS` 挂 `.o`。
+- 编 `.o` 用 `build/build_dldfcn.sh <name>`（容器内跑；`docker cp` 后要再 `chmod +x`）。
+- installer 符号名 = `G` + 函数名（如 `convhulln`→`Gconvhulln`，`__delaunayn__`→`G__delaunayn__`）。
+
+```
+
+#### (7) 迁出：§4.6 CXSparse "too old" 的根因与一行修法
+
+```
+### 4.6 CXSparse "too old" —— **已解决（批次 1）**，是假失败
+报错文本骗人：库和头都好好的（`cs.h` 里 `CS_VER=3/CS_SUBVER=1`，`libcxsparse.so.3.2.0` 也在）。
+真因：`OCTAVE_CHECK_CXSPARSE_VERSION_OK` 走 **`AC_PREPROC_IFELSE`（纯预处理）**，而它**只吃 `CPPFLAGS`**；
+本仓的 `-I target/include` 一直只写在 `CFLAGS/CXXFLAGS` 里 → 预处理时找不到 `cs.h` → 判成"太老"。
+**修法一行**：configure 时加 `CPPFLAGS="-I$INCDIR"`（已内建在 `build/reconf-pic.sh`），
+并恢复 `--with-cxsparse --with-cxsparse-includedir/-libdir` → `HAVE_CXSPARSE_VERSION_OK=1`。
+两个行为边界（非缺陷，桌面版同）：`qr(s,0)` 经济模式 CXSparse 不支持；`[Q,R,P]=qr(s)` 的 P 为空
+（但 `s=Q*R` 恒等式成立，残差 7e-15——验收用这个判据）。SPQR 本轮未做。
+
+```
 
 ---
 

@@ -75,6 +75,8 @@
 !build/forge-fetch.py
 !build/forge-build.sh
 !test/browser/*.mjs
+!bridge/p5canvas.js
+!bridge/octave-worker.js
 !bridge/webaudio.js
 !bridge/webaudiorec.js
 !bridge/webfilepick.js

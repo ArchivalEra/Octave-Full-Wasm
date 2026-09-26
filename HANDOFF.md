@@ -8,44 +8,20 @@
 >   第四轮换 11.3.0 基线、以及 `§5.23`–`§5.32` 的逐批实况）。里面的数字是"**当时如此**"。
 > · **正文里单写的 `§5.x` / `§9` / `§10` 一律指 `HISTORY.md`**（编号保留，免得历史记录错位）。
 >
-> **★ 2026-09-26（branch `Slay`，线程化/并行度线，HISTORY §5.53–§5.57）**：
-> 产物已从 `45d288b1…` 换成 **`1ed3e528…`**（**BLAS 加 `-msimd128`**，DGEMM 512²/1024²/2000² =
-> **1.62×/1.75×/1.31×**，数值回归 97/0）；**C6 去单例嵌入契约**（同页多实例：`accept-embed-multi 13/0`）；
-> **C3/B5 解释器搬进 DedicatedWorker**：带 **`?worker=1`** 的地址就是 worker 模式 ——
-> 长计算不再冻页面（实测：worker 里 1400² 乘 4.3s 期间页面 tick=435，单页模式 tick=0），
-> **worker 里真渲染后端（webgl/OffscreenCanvas）可用且不需要重链**（HISTORY §5.57）；
-> 两站 PROBES=1 全量见最近 sweep 日志；工作令在 `build/113/PLAN-threads.md`（§0.5 状态 / §5 B6 配方）。
-> **尚未做**：B6 线程版构建（需翻闸门③"不引入 COI/SAB"，配方已备好待令）、E2 OpenBLAS 全量链接
-> 卡 binaryen（已记档，外部咨询 B 节）。
->
-> **最后更新：2026-09-25**。**★ PLAN-jspi 全部收口（批次 1–4）**：`octave.wasm` `45d288b1…`
-> 上 8761 —— eval_wait/pause 挂起/**ginput 取点**（数据坐标）/**Ctrl-C**（rc=3）/D9 门槛/
-> keyboard v1/**D6 pkg load 自动装载**/**D7 IDBFS 边界**/D5 规则 B 复核收口；
-> 两站 PROBES=1 全量 **71 套/1194/0**，见 HISTORY §5.48–§5.51；
-> **架构规则：可能执行到 pause 的命令必须走 `eval_async`**；
-> **部署件 SHA 铁律：跑测试前先跑 `check-deploy-sha.sh` + `probe-artifact-sha.mjs`**）。
-> **★ 仓库已整理成"可直接部署"（HISTORY §5.52）**：分支收窄为**只剩 main**（graphics 三分支
-> 归档至持久盘镜像）；**`site/` 63MB = 8761 的逐字节镜像已入库**，配 `DEPLOY.md` +
-> `.github/workflows/pages-deploy.yml`（手动触发）；**浏览器矩阵实测全绿** ——
-> Chromium 最新 5/0、**Firefox 156 桌面 5/0（第二引擎）**、**Firefox 156 Android 模拟器冒烟
-> pass（Gecko 移动）**、真·无 JSPI 的 Chromium 123（容器）**7/0 优雅降级**——
-> 桌面双引擎 + 移动 Gecko + 老浏览器降级，四格全绿。
-> 剩余用户侧两步：① Pages 上线 = Settings→Pages→Source 选 "GitHub Actions" 后手动 Run
-> `pages-deploy`；② 真手机人工过一遍交互（模拟器已验，真机 GPU/内存未验）。
-> 2026-09-24（深夜）的旧状态：现状一句话：**R1–R10 与 T1–T10 全部落地**；外部审核 R0–R5 里
-> **R1（无 shell 的清晰报错）、R4（`plot(hax,…)`/`voronoi` 单输出）、R3（fontconfig ⇒
-> `fontname` 真生效、`listfonts` 可用）已上线**，**R5 的 JSPI 组合探针已通过**；
-> `PLAN-next.md` 的**七件小口子全部收口**（1 件实测翻案 + 6 件真做成，含**重链**做的 IDBFS 持久化
-> 与 FreeMono）；`PLAN-jspi.md` 的 **G0 能力门 + D1–D8 已完成**。
-> **★ G1 于 2026-09-24 深夜翻案（HISTORY §5.46，两个实测发现）**：① **`WITH_JSPI=1` 从来没有把
-> `-sJSPI` 传给链接** —— 那个"坏产物"的胶水里连 `WebAssembly.promising` 都没有
-> ⇒ **第一次"失败"测的是一件不存在的东西**（`link-web.sh` 已修 + 已加旗标自检）；
-> ② **`RuntimeError: null function` 与 JSPI 无关** —— 它是**「在 `Module.execute_interp()` 之前
-> 碰解释器」**，同步 `eval_string` 与 `eval_async` **炸得一模一样**；事故的真实形状是"开机冒烟
-> 没有 try/catch ⇒ 打断 postRun ⇒ 页面永远到不了 ready"。⇒ **下一步只有一条**：
-> **重链一版真带 `-sJSPI` 的产物、先 `grep WebAssembly.promising` 验胶水**（§0.5 修正段）。
-> **JSPI 车道仍默认关闭**（`WITH_JSPI=0`；关掉时 `JSPI_FLAGS` 是空数组 ⇒ **不影响现役产物**）。
-> 全量与部署 sha **见文末 `AUTO:STATE`**（机器维护，别在这里手写）。
+> **★ 现在是什么（2026-09-26，branch `Slay`）**
+> · **产物**：主模块 M2 + **SIMD BLAS** + FreeType/fontconfig + IDBFS + **页面侧 JSPI 包装**。
+>   两种宿主可选：**默认单页**（解释器在主线程）与 **`?worker=1`**（解释器在 DedicatedWorker ——
+>   长计算不再冻页面，且**真渲染后端可用**、不需要重链）。
+> · **仍生效的架构规则**：① 可能执行到 pause 的命令**必须走 `eval_async`**；
+>   ② 跑任何测试前先验**产物 sha**（`build/check-deploy-sha.sh` + `test/browser/probe-artifact-sha.mjs`）；
+>   ③ 重链的**口径**含 SIMD 的 `-L` 与 `WITH_JSPI=1`（见下面"八条"的第 ① 条）——漏了会**静默退化**。
+> · **工作令**：`build/113/PLAN-threads.md`（§0.5 = 现在的状态与下一步；§5 = B6 线程版配方）。
+> · **架构债务盘点**（"为什么新人看不懂"）：临时报告
+>   `/tmp/architecture-review-20260926-implicit-contracts.html`；**可执行项已摘进 §8 待办**。
+> · **机器维护的数字**（部署件 sha/体积、最近一次全绿回归、交付包、包内 wasm 同 sha）：**见文末
+>   `AUTO:STATE`**，别手写。
+> · **历史**（PLAN-jspi 收口、G1 翻案、仓库整理、浏览器矩阵、SIMD/Worker 落地过程）：
+>   `HISTORY.md` §5.46 / §5.48–§5.58。
 >
 > ⚠️ **动手前必须知道的八条**：
 > ① **构建主树**：opengl-ON + gl2ps-ON + FreeType-ON + fontconfig-ON，GL 头是 gl4es+GLU。
@@ -54,9 +30,15 @@
 >    `GL_GLEXT_PROTOTYPES`/`HAVE_GLBLENDFUNCSEPARATE` 恢复成 1"，省掉它**编得过、链接过、
 >    自检全绿**，但运行时默认 toolkit 静默掉回 `web`（图走 SVG 回落，见 HISTORY §5.31）。
 >    `config.h` 变了必须 `make clean`（§10.3 坑 2）。
-> ② **推送阻塞在人**：`gh` token 失效（`gh auth setup-git` 救不回来）⇒ 要人跑一次
->    `gh auth login` 才能 `git push origin main`；内容一直有落到持久盘镜像
->    `refs/heads/main-20260924`。若 `github.com` 又被拦，照 HISTORY §5.17 走 API。
+>    **★ 链接侧口径（2026-09-26 起；漏任一条都会"构建/链接/自检全绿而功能面缺失"）**：
+>    `WITH_JSPI=1`（产物**必须有**可挂起入口 `eval_wait`）
+>    + `EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`（**SIMD BLAS**）
+>    + `GL_LIBS=1 GL_BACKEND=webgl P5_TOOLKIT=1` + `WITH_FREETYPE=1 WITH_FONTCONFIG=1`。
+>    唯一可靠自检：`llvm-objdump -d <wasm> | grep -c v128`（现役是数千；非 SIMD = 0）
+>    与"胶水里出现 `eval_wait`"；**只信命令行的旗标组不算验收**。
+> ② **推送**：`gh` **已授权**（`gh auth status` 绿）。当前工作分支 **`Slay`** 领先 `origin/main`
+>    一批提交（约定：改动只在分支上做）；要并回主线时再决定推 `main` 还是推这个分支。
+>    持久盘镜像仍在（`refs/heads/main-*`）。若 `github.com` 被拦，照 HISTORY §5.17 走 API。
 > ③ **容器里的构建脚本是另一份拷贝**：改完仓库的 `configure-113-full.sh`/`link-web.sh`
 >    必须 `docker cp` 进容器，否则跑的是旧的（HISTORY §5.20 末为此白跑两个大重建）。
 > ④ `print` 的**矢量**输出依赖 gl2ps + shell 管道 + (gs|svgconvert)，**没有 shell 是有意的**
@@ -73,10 +55,12 @@
 > ⑦ **两个站点现在是"逐字节相同"的**（M2 + FreeType + fontconfig + **IDBFS** + 8 个字体面 +
 >    新桥 + `webshims`；用 `sh build/check-site-parity.sh --strict` 当场核）；回退点见 §3.1。
 >    **验收前提一律以 `sha256sum` 实测为准**，别背旧话。
-> ⑧ **JSPI 车道默认关**（`WITH_JSPI=0`；`main.cc` 的 `eval_async` 绑在
->    `#if defined(JSPI_EVAL_ASYNC)` 里）—— 它还没调通，**别顺手打开**。三条实测机制（`NOTES-jspi.md`）：
->    链里有 dlopen ⇒ 上游整条入口都可能挂起、**不能被同步调**；**顺序即机制**（先过一次 promising
->    入口，之后同步 dlopen 就没事）；**启动路径上碰 dlopen 会直接让页面起不来**。
+> ⑧ **JSPI 是现役口径**（**不再是"默认关"**）：链 `WITH_JSPI=1`，产物**必须有** `eval_wait`
+>    （`build/webjslib.js` 提供唯一挂起 import），且**胶水里 `Suspending` 必须是 0 处**
+>    （包装只许存在于页面/worker 宿主层）。三条实测机制（`build/113/NOTES-jspi.md`，
+>    它们也是"**为什么不用 `-sJSPI`**"的理由）：链里有 dlopen ⇒ 上游整条入口都可能挂起、
+>    不能被同步调；**顺序即机制**（先过一次 promising 入口，之后同步 dlopen 就正常）；
+>    **启动路径上碰 dlopen 会让页面起不来**。
 >
 > **文档约定（`.githooks/check-handoff.py` 按此执行，别违反）**
 > · **活状态 = 头部 + §0–§4 / §6–§8**：那里的断言必须与产物一致，否则 pre-commit 直接拦。
@@ -92,15 +76,18 @@
 
 1. **只在下面这个路径工作**：
    - 仓库：`/mnt/hdd/zcode-projects/Octave-Full-Wasm`（**唯一**可改的 git 仓）
-   - 构建容器：docker `obuild`（源码在容器内 `/usr/src/octave-wasm/`）
+   - 构建容器：docker **`o113`**（11.3.0 车道；`obuild`/`odld`/`obench` 是更早的车道）
    - 第三方源码/产物：`/mnt/hdd/octave-wasm-build/`、`/tmp/opencode/`
 2. **禁止碰课程仓** `/mnt/hdd/zcode-projects/GONGCHENGSHUXUE20260917`——Octave 相关内容已刻意从中移出。课程仓与本体项目无关。
 3. **纯客户端计算**：Octave 解释器恒跑在浏览器 wasm 内。禁止任何服务端执行代码的端点。
 4. **不 force-push、不删 git 对象、不改历史**。
 5. 白名单仓库：新增文件必须同步 `!路径` 到 `.gitignore`，否则 pre-commit 直接拒。
    ⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件 ⇒ **被忽略且从未 `git add`
-   的文件它看不见**。2026-09-24 就这么查出 4 个承重文件（`promote-webgl.sh`、`recover-113.sh`、
-   `post.js`、`build/webshell/*.m`）从来没进过 git（§5.27）。**新增文件后主动看一眼**
+   的文件它看不见**。2026-09-24 这么查出 4 个承重文件（§5.27）；
+   **2026-09-26 又查出 2 个**：`bridge/p5canvas.js` 与 `bridge/octave-worker.js` ——
+   而 `promote-webgl.sh` / `recover.sh` 都要从 `bridge/` 拷它们（缺 `p5canvas.js` 直接 FATAL）
+   ⇒ **新克隆的仓库跑 promote/recover 必失败**。**这两个当天已补进白名单与 git**（留作前车之鉴）。
+   **新增文件后主动看一眼**
    `git status --short --ignored <目录>`，别只信闸门。
 6. 每完成一批：更新本文件 + `build/CLIBS.md` + `README` 状态 → 提交推送。
 
@@ -206,8 +193,9 @@ audioread(+audiowrite/audioinfo/audioformats)`
 **R1–R10 全部落地**；第三轮计划（T1–T10）见 **§5.5**，来源是
 `build/GAPS-2.md`（缺口清单）+ `build/GPT-REVIEW-2.md`（外部审核）。
 已论证不可行/不做：nan 与 tsa 的源是 MEX（需 mex 运行时）、miscellaneous 的
-`sample.cc`/`text_waitbar.cc`、control 的 SLICOT 编译件（崩页面，见 §4.12）、
-`publish`/`keyboard`/`getframe`（审核判定暂缓，见 §5.5）。
+`sample.cc`/`text_waitbar.cc`、`publish`（审核判定暂缓，见 §5.5）。
+**注意一条已过期的旧话**：control 的 SLICOT 编译件当年记的是"崩页面"——那批**现在可用**
+（`accept-slicot` 已实测通过）；当年那个坑的真身见 §4.12。
 
 ### 2.4 资产懒加载车道（**新能力一律走它**）
 站点 `assets/` 下按需 fetch，**主 wasm 只在改 Octave 本体时才重链**：
@@ -305,49 +293,13 @@ sudo docker cp odld:/usr/src/octave-wasm/src/web/octave.js /mnt/hdd/octave-wasm-
 
 ## 4. 血泪坑（照抄，别重踩）
 
-### 4.1 dldfcn 不能 dlopen（A 组根因）—— 2026-09-20 已亲手核实
-`.oct` 模块无法加载 → 很多函数明明库有却 `exist=0`。**结论：`.oct` 确实用不了，但根因不是"wasm 做不到"，是三层叠加，其中第一层是上游 fork 自己挖的。**
+### 4.1 dldfcn 的装载方式（历史根因已迁 HISTORY §5.59）
 
-1. **上游 fork 掏空了装载代码**（决定性）。`third_party/octave-7.2.0/liboctave/util/oct-shlib.cc` 里
-   `octave_dlopen_shlib` 的**构造函数不调用 `dlopen`**、`search()` **不调用 `dlsym`**（`void *function = nullptr; return function;`）。
-   该文件在 `rwl/octave-wasm` 的 git 里**被跟踪且工作区干净**（commit `e584306c`）→ 是 fork 的既定行为，**不是本项目会话改的**。
-   旁证：fork 里还留着一份 octave-4.4.1，同处代码是**被 `//` 注释掉**的（上游原样），7.2.0 里连注释都删净了；
-   fork 镜像构建日志 `/mnt/hdd/octave-wasm-build/build.log:27635` 有 `oct-shlib.cc:210:9: warning: variable 'flags' set but not used`，印证镜像里就是这个版本。
-   注意：构造函数里 `flags` 算了却没用，就是 dlopen 调用被删掉的直接后果。
-2. **Emscripten 侧本就要求可重定位构建**。`dlopen` 的 JS 实现 `src/library_dylink.js` **整个被 `#if RELOCATABLE` 包住**；
-   `RELOCATABLE` 只由 `MAIN_MODULE`/`SIDE_MODULE` 自动开启（`settings.js:1015`）。非该模式下 dlopen 只有一句
-   `"To use dlopen, you need enable dynamic linking"`。且 `emcc.py:837` 在 `RELOCATABLE` 时**自动追加 `-fPIC`** → 走这条路要**全树重编**。
-3. **dldfcn 从来不在构建里**。`libinterp/dldfcn/Makefile` 不存在（automake 没生成 = 该目录没进构建），容器内 `find / -name "*.oct"` **一个都没有**。
-
-**实测（浏览器，8761 基线，2026-09-20）**：
-- `WebAssembly.Module.customSections(mod,'dylink.0')` → `0`；导入表 85 项、**无任何 dl 符号**；`Module._dlopen` → `undefined`。
-  （wasm 里唯一那处 "dlopen" 字样来自 RTTI 名 `N6octave19octave_dlopen_shlibE`，不是符号。）
-- 往 wasm FS 丢假 `probeoct.oct` 再 addpath：`exist("probeoct")` → **3**（路径**认** `.oct`），调用 `probeoct(1)` →
-  `error: /tmp/probeoct.oct is not a valid shared library`（rc=2）。这正是 `is_open()` 恒 false 后由
-  `libinterp/corefcn/dynamic-ld.cc:171` 抛的那句。探针脚本：`/tmp/opencode/octave-accept/octprobe.mjs`（备份见 §3.4）。
-
-**推论**：`STATIC_DLD_FCNS` 是现基线（8761）架构下的正解。
-
-**但是 —— 2026-09-20 当天已把真 dlopen 做通并实测通过（实验构建在 8763，独立容器 `odld`，基线未动）**：
-`.oct` **能用**。四件事缺一不可，全部配方与实测见 `build/CLIBS.md`「真 .oct 动态装载」节：
-1. 恢复 `oct-shlib.cc`（上游 `release-7-2-0` 同名文件覆盖，diff 只有 3 处 hunk）；
-2. 全树 `-fPIC`：`build/reconf-pic.sh` + `build/rebuild-pic-libs.sh`（只有 glpk/arpack/sndfile/qhull/fftw3+3f 这 5 个库需要，`.so` 系零报错不用动）；
-3. 主链 `-s MAIN_MODULE=1 -s ALLOW_TABLE_GROWTH=1`（另需 `embuilder build --pic zlib bzip2`）；
-4. `.oct` 用 `build/build_oct.sh` 编成 `-sSIDE_MODULE=1` 的 wasm，**不链任何库**。
-
-实测（8763）：自写 `dldprobe.oct` → `dldprobe()`=42；把 `gzip`/`convhulln` 从静态表摘掉后
-只能靠 `.oct` 活，功能正常且**数值与静态注册逐位一致**；回归对照与 8761 无差异。
-
-**代价（决定是否采用的关键）**：gzip 后总交付 6.18MB → **11.05MB（+79%）**
-（wasm 4.94→8.05MB，js 51KB→1.81MB——`MAIN_MODULE=1` 不做 DCE，JS 里那份 29.8MB 的
-dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
-未做的优化：`MAIN_MODULE=2` + 显式导出清单，应能同时压缩两份。
-**采用与否属产品取舍，需人工拍板；未改基线。**
-
-**解**：`main.cc` 顶部 `STATIC_DLD_FCNS(X)` 宏表登记 `{name, G_installer}`，Phase 3 里逐个 `getter(no_shl,false)` → `symtab.install_built_in_function`。
-- 新增模块 = 加一行 + 编 `.o` + 在 `Makefile` 的 `EM_LDFLAGS` 挂 `.o`。
-- 编 `.o` 用 `build/build_dldfcn.sh <name>`（容器内跑；`docker cp` 后要再 `chmod +x`）。
-- installer 符号名 = `G` + 函数名（如 `convhulln`→`Gconvhulln`，`__delaunayn__`→`G__delaunayn__`）。
+**现在是什么**：`.oct` 走**官方 `dlopen` 动态装载**（`MAIN_MODULE`/`SIDE_MODULE`，批次 13 起），
+不再用 `STATIC_DLD_FCNS`；`libinterp/dldfcn/*.oct` 由 `build/build_oct.sh` / `build_pkg_oct.sh` 产出，
+经资产清单挂到站点 `assets/oct*`。**7.2 时代**"dldfcn 从来不在构建里"的长篇核实（含容器内实测与
+`oct-shlib.cc` 被 fork 删掉 dlopen 的旁证）已迁 **HISTORY §5.59**；配方与坑在 `build/CLIBS.md`
+「真 `.oct` 动态装载」节。
 
 ### 4.2 ⚠️ dldfcn 的 `.o` 必须在 config.h 反映 feature **之后**编
 先用旧 config.h 编，`#if defined(HAVE_XXX)` 走 else 分支 → 函数装上却报 `... was unavailable or disabled`。改 configure 后**务必重编相关 `.o`**。
@@ -369,14 +321,12 @@ dylink 符号表压完是 1.81MB）；首帧 ready 863ms → 1136ms。
 - zlib/bz2 用 Emscripten ports：`embuilder build zlib bzip2`（头/库进 sysroot），终链补 `-lz -lbz2`。
 - RapidJSON：header-only，解包到 `target/include/rapidjson/`；configure 去掉 `--disable-rapidjson`。
 
-### 4.6 CXSparse "too old" —— **已解决（批次 1）**，是假失败
-报错文本骗人：库和头都好好的（`cs.h` 里 `CS_VER=3/CS_SUBVER=1`，`libcxsparse.so.3.2.0` 也在）。
-真因：`OCTAVE_CHECK_CXSPARSE_VERSION_OK` 走 **`AC_PREPROC_IFELSE`（纯预处理）**，而它**只吃 `CPPFLAGS`**；
-本仓的 `-I target/include` 一直只写在 `CFLAGS/CXXFLAGS` 里 → 预处理时找不到 `cs.h` → 判成"太老"。
-**修法一行**：configure 时加 `CPPFLAGS="-I$INCDIR"`（已内建在 `build/reconf-pic.sh`），
-并恢复 `--with-cxsparse --with-cxsparse-includedir/-libdir` → `HAVE_CXSPARSE_VERSION_OK=1`。
-两个行为边界（非缺陷，桌面版同）：`qr(s,0)` 经济模式 CXSparse 不支持；`[Q,R,P]=qr(s)` 的 P 为空
-（但 `s=Q*R` 恒等式成立，残差 7e-15——验收用这个判据）。SPQR 本轮未做。
+### 4.6 CXSparse（历史误报；只留行为边界）
+
+当年"too old"是**假失败**（根因：`AC_PREPROC_IFELSE` 只吃 `CPPFLAGS`，而 `-I` 一直写在
+`CFLAGS/CXXFLAGS` ⇒ 预处理时找不到 `cs.h`）；修法已内建在 `build/reconf-pic.sh`，原文迁
+**HISTORY §5.59**。**仍然有效的两条行为边界**（非缺陷，桌面版同）：`qr(s,0)` 经济模式
+CXSparse 不支持；`[Q,R,P]=qr(s)` 的 `P` 为空（但 `s=Q*R` 恒等式成立、残差 ~7e-15，验收用这个判据）。
 
 ### 4.7 其它
 - `-lz -lbz2 -lccolamd -lsndfile` 都要手工进 `Makefile` 的 `EM_LDFLAGS`（Octave 自己的链接行不管我们的 web 终链）。
@@ -416,34 +366,16 @@ loader 在挂载后对每个函数名 `FS.symlink` 到该模块。
 （`octdir` 分支也要支持 `aliases` —— control 包的 `lti_input_idx.oct` 导出
 `__lti_input_idx__`，就是靠它才挂上的。）
 
-### 4.12 ~~side module 引用主模块 Fortran 符号时签名不匹配会整页崩~~（批次 12 踩到）
+### 4.12 side module 的**签名不匹配**类问题（原记录已更正，见 HISTORY §5.59）
 
-> #### 🚨 **2026-09-22 探针更正：下面这段的根因写错了，别再照它去修。**
-> 完整实测见 **`build/113/NOTES-slicot.md`**。三条更正：
-> 1. **不是"签名不匹配"，是"那些符号根本不存在"** —— `__control_slicot_functions__.oct`
->    导入 48 个 SLICOT 例程，逐个查主 wasm 的符号表：**定义了 0 个**。
->    所以调用落到空导入 → 整页崩。文档里那句 `signature mismatch: zdotu_` 警告是
->    **另一件事**（libqrupdate vs librefblas），与本项无关。
-> 2. **库能编**：`slicotlibrary.a` **从未编过**，本次编出来了 ——
->    f2c **614/614 成功**、emcc **613/613 成功**（5,019,126 字节），关键符号自检全 T。
-> 3. **真正的卡点是另一个 ABI 分歧，而且 static/side 都会撞**：把库静态打进调度模块时
->    `wasm-ld` 报 `function signature mismatch: dggev_` —— 控制包手写的
->    `F77_FUNC(dggev,DGGEV)`（17 参，LAPACK 原样）与 f2c 生成的（19 参，多两个
->    **CHARACTER 隐藏长度参数**）不一致。原生链接器不查类型所以"能跑"，wasm-ld 查。
->    **⇒ 当年那句"静态注册不受影响"就本项而言不成立**（错误发生在链接期）。
-> 4. **做法**（1–3 天，不是"半小时的小实验"）：按 `patch-odepack-callback-arity.sh`
->    的同型做法，逐个把冲突声明对齐（粗查潜在冲突面 **47 个符号**），逐个重链，
->    最后验 `ss`/`step`/`tf2ss` 的数值。**本轮已探针到此为止并如实记录。**
-
-control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层直接抛
-`TypeError: Cannot read properties of undefined (reading 'apply')`，**整个页面死掉**。
-根因：`.oct` 以 side module 形式链接（本项目既定做法：`-sSIDE_MODULE=1`、不链库），
-它按**自己的声明**编出对主模块 Fortran 符号的导入；而主模块里那些符号
-（`zdotu_` 等）的实际签名不同 —— `wasm-ld` 每次链接都在警告
-`function signature mismatch`。静态注册那条路不受影响，因为 `.o` 进同一次链接、
-签名由链接器统一；**side module 没有这个统一过程**。
-**处置**：那批 `.oct` 不发布（只发纯 `.m` 面）。**将来若要修**：先做最小实验——
-把某个 SLICOT `.oct` 改成静态注册看是否可用。
+**仍然有效的教训（两句话）**：① `.oct` 走 `-sSIDE_MODULE`、不链库，它按**自己的声明**编出对
+主模块符号的导入；`wasm-ld` 会查类型，`F77_FUNC(...)` 手写声明与 f2c 生成声明（多两个
+CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signature mismatch`。
+② **同一类现象还会以另一种面貌出现**：把第三方库塞进主链时，同名不同签名的定义会被
+`-Wl,--allow-multiple-definition` **静默合并**，`wasm-ld` 把符号改名成
+`signature_mismatch:<名字>`，产物**非法**（binaryen 报 `parse exception`、V8/WABT 报类型错）。
+本会话在 OpenBLAS 上撞到 **76 个**这种符号（E2 悬案，见 `NOTES-threads.md`）。
+**原始记录（含 2026-09-22 的三条更正）已迁入 HISTORY §5.59。**
 
 ### 4.13 两条 wasm/JS 互操作的硬约束（批次 9 踩到）
 1. **`EM_ASM` 在 side module 里不可用**（`EM_ASM is not supported in side modules`）——
@@ -823,7 +755,7 @@ control 包的 48 个 SLICOT 编译件一调用 `ss`/`step`/`tf2ss`，wasm 层�
 **`-O2`** 编译（11.3.0 车道的口径；`-O1` 是 7.2 时代的 R10 结论，见 `build/BENCH.md`），
 **dldfcn 走官方 dlopen 装载**。全量**见文末 `AUTO:STATE` 区块**（2026-09-23 收口 + 审计两批后实测；
 构成见 §5.21 与 `dist/DEPLOY.md` 的表），含需求级 `accept-requirements` 与图形线
-`accept-p5-graphics`（**64 项**，8761 上真跑）。
+`accept-p5-graphics`（**65 项**，8761 上真跑）。
 交付包与包内 wasm 的 sha **见文末 `AUTO:STATE` 区块**（那里还自动核对"包内 wasm 与部署件同 sha"
 这条硬证据）；重打命令 `sh build/make-dist.sh`。
 
@@ -842,17 +774,25 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > **8 个字体的预载** + 新桥 + `webshims`）—— 以 `sha256sum octave.wasm` 实测为准，别背旧话。
 > 回退点：`siteWebGL-preidbfs-bak-20260924/`（IDBFS 之前那份）、`site-m1bridge-bak-20260924/`。
 > **部署件 sha、体积、最近一次全绿回归见文末 `AUTO:STATE` 区块**（别在这里手写）。
-> **2026-09-24 这一天做完的**：R1/R4（§5.30）、R3 fontconfig（§5.31）、R5 探针（§5.32）、
-> 小口子 1–7（§5.33–§5.39：属性对契约 / waitbar+挂死族 / 包可见性 / `print -dpng` /
-> **重链做出 IDBFS 持久化与 FreeMono**）。
-> ⇒ **下一步按新工作令干**：[`build/113/PLAN-jspi.md`](build/113/PLAN-jspi.md)
-> （G0 能力门 → G1 `eval_async` → **G2 `pause`+EH/SjLj 压力矩阵（真正的风险点）** →
-> G3 `ginput` → G4 Ctrl-C 协作式中断 → G5 `keyboard`(experimental) → G6 dlopen×挂起压力；
-> **外加七条收尾债 D1–D7 先穿插做**：文档对齐 / probe 纳入定期跑 / sweep 偶发崩重试 /
-> 两站点一致性闸门 / 规则 B 162 处复核 / `pkg load` 自动装载 / IDBFS 边界测量）。
+> **▶ 现在的待办（按建议顺序，2026-09-26）**
+> 1. **先修"当场就错"的几处**（半小时级；详情见临时报告 §0）：
+>    · ★ `bridge/p5canvas.js` 与 `bridge/octave-worker.js` **补进 git**（承重文件，不在库里 ⇒
+>      新克隆必坏；白名单盲区，§0 铁律 5 有说明）；
+>    · `DEPLOY.md` / `build/113/PLAN-jspi.md` 里的**旧产物 sha 与"权威重链口径"指针**（照旧话做会
+>      做出**不是现役形态**的产物，且自检全绿）；
+>    · 本文件下面快回环里的 `glue-selftest` **项数**（实测以脚本输出为准）。
+> 2. **架构债务 D1+D2**（临时报告里的前两名）：把重链做成**一个入口**（模式 + 默认值 + 出厂正面断言）
+>    并让产物带**机器可读的构建清单**（`octave.build.json`）；两者互为数据源，一次做完能消灭
+>    "静默退化"这一整类事故（本会话已踩三次）。
+> 3. **架构债务 D3**：抽出 `octave-core.js`，让页面宿主与 worker 宿主变成两个**薄适配器**
+>    （现在两边各维护一份 Module 配置/JSPI 包装/取点覆写/资产清单，且已经漂了）。
+> 4. **B6 线程版构建**：配方已备好（`build/113/PLAN-threads.md` §5），**等一声令下**
+>    （它要翻掉"不引入 COI/SAB"那条机制门 + 全量重编数小时）。
+> 5. **E2 悬案**：OpenBLAS 全量链接时产物非法（`wasm-ld` 点名 76 个 `signature_mismatch:*`）；
+>    阶梯已记在 `build/113/NOTES-threads.md`（不是 binaryen 的锅，两个独立裁判背书）。
 >
 > **▶ 改胶水层时的三个快回环**（别一上来就跑 29MB 端到端）：
-> · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **82 项**：
+> · `sh build/glue-selftest.sh` —— 宿主秒级，跑胶水层文件自带的 `%!test`（现在 **91 项**：
 >   5 个桥参数纯 helper —— 句柄判定 / 剥首参 / bar 拆分 / 图例拆分 / surf 拆分 —— 含 R4 给
 >   `__pb_axes_arg__`/`__pb_strip_axes__` 补的「0 与 figure 都不是目标 axes」那几条；
 >   2026-09-24「小口子 2」又加了 3 个：**`__pb_is_linespec__` / `__pb_check_parent__` /
