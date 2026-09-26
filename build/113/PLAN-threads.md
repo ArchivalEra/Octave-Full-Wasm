@@ -52,8 +52,12 @@
    **已知边界**：非默认实例无图形上屏 + 四个队列桥/stdin/Ctrl-C 仍是默认实例单例
    ⇒ wasm 侧（canvas 契约 + publish_png 分派 + 队列桥随迁）与**下一次重链**合并。
 4. **E2 · OpenBLAS SIMD 1T**：触发条件（E1 红或提速 <1.5×）**不成立** ⇒ 维持"可选增强"。
-5. **C2/C8**：pthread BLAS 前置未知数已清（E3），但仍只在 COI 成立的环境里开
-   （第一方自控头，或宿主同意装 coi-serviceworker 的 credentialless 路径）。
+5. **C2/C8**（★ 2026-09-26 范围改判，用户拍板）：**目标是一方单页完整 Octave 站**——
+   之前"宿主站不能改头/不能弃 CDN"的约束**作废**（教材嵌入将来走"拆 CLI 定制 UI"的便宜路子，
+   不做宿主站嵌入）。⇒ C8 = **自家站开 COI**：coi-serviceworker（已在 `build/embed/`）+ 我们
+   全部资产同源 ⇒ require-corp **什么都拦不到**，且实测三引擎都拿到 COI
+   （webkit 走 require-corp：`coi=true`，`probe-coi-sw.mjs`/`probe-coep-engines.mjs`）。
+   **外部依赖清零，B6 解锁**；唯一前置 = E3（已绿）+ 线程版构建（OpenBLAS-pthread，见 B6）。
 
 ---
 
@@ -66,7 +70,7 @@
 | **B3** | E2 OpenBLAS SIMD 1T（配方切换） | configure/link 配方 | 数值回归 + 8761 验收 |
 | **B4** | E4/E3 探针（Worker / pthread×dlopen） | 探针车道 | 红绿结论 + 记 HISTORY |
 | **B5** | C3 真落地（Worker 化；图形走 OffscreenCanvas→PNG→postMessage） | bridge/、webgl_toolkit.cc、测试垫片 | 全量回归（72 套件需 Worker RPC 垫片） |
-| **B6** | C8/C2 条件开启（`__webThreadsOk__` 门 + 双档产物/同产物降级） | 链接旗标 + 页面 gate | 两档矩阵实测 |
+| **B6** | C8/C2 条件开启（`__webThreadsOk__` 门 + 双档产物/同产物降级）——**已解锁**：一方站开 COI 无 CDN 纠纷（自家资产全同源，require-corp 拦不到东西） | 链接旗标 + 页面 gate + coi-serviceworker（build/embed/） | 两档矩阵实测 |
 
 ---
 

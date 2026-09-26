@@ -323,3 +323,17 @@ README 只给定制示例，**默认值得读源码/实测**：`coi-serviceworke
 - `coi-serviceworker` v0.1.7（MIT）：**进仓库** `build/embed/{coi-serviceworker.js,coi-serviceworker.min.js}`。
   ⚠️ **它不能放 /mnt/hdd**：SW 必须由**与页面同源**的站点提供（上游 README 明说"不能走 CDN、必须同源"）
   ⇒ 它是**站点资产**，宿主站要把它放到自己站点的根/相应路径。
+
+
+### ★ 范围改判（2026-09-26，用户拍板）：目标是一方单页站，"宿主 CDN"约束作废
+
+上面 C8 一节的分析是按"第三方教材站嵌入、不能改宿主"的约束写的——**那个约束不成立**：
+目标一直是**自家单页完整 Octave 站**（教材那头将来走"拆 CLI 定制 UI"，比做嵌入便宜）。
+改判后的实际影响：
+1. **"CDN 被拦"这个问题对我方站点不存在**：我们全部资产同源自包含，require-corp 拦不到任何东西。
+2. **COI 在三引擎都能拿到**（实测）：chromium/firefox 走 credentialless 或 require-corp 皆可；
+   **webkit 必须走 require-corp**（credentialless 拿不到 COI，但 require-corp `coi=true`）。
+3. **B6（真开线程）外部依赖清零**：coi-serviceworker 已在 `build/embed/`，装到自家站即可；
+   前置只剩 E3（已绿）+ 线程版构建（OpenBLAS-pthread + `-pthread -sSHARED_MEMORY`，即 B6 本体）。
+4. C6 的嵌入能力（工厂化 mount/base）**保留**——它是将来"拆 CLI / 定制 UI"的地基，但不再是
+   被"宿主约束"驱动的工作。
