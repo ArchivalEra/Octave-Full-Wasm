@@ -4,6 +4,7 @@
 > **并行度线**（SIMD/线程/Worker/嵌入契约）在 `build/113/PLAN-threads.md`，与本条并行、共享同一个产物。
 > 历史与旧数字在 **`HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only；正文里单写的这些编号都指它）。
 > 分门别类的坑：C 库配方 `build/CLIBS.md`、图形线 `build/113/NOTES-webgl.md`、JSPI 机制 `build/113/NOTES-jspi.md`。
+> **黑话看不懂就读 `CONTEXT.md`**（术语表：每个词一条权威定义 + 一行可复跑的证据）。
 
 ## 路径铁律
 - 仓库：`/mnt/hdd/zcode-projects/Octave-Full-Wasm`（**唯一**可改的 git 仓）
