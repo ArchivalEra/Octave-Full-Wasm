@@ -33,7 +33,7 @@
 A2 · D3 + D4（页面侧：octave-core.js + Capabilities；★ 带 promote 上 8761）
 A3 · D5（测试清单 + sweep/harness 搬进仓库）
 A4 · D6（CONTEXT.md 术语表 + 证据行）
-B6 · 线程版构建 —— **仍然搁置，等用户一声令下**（不是遗漏，是刻意）
+B6 · 线程版构建 —— ⛔ **本轮明确移出待办**（见 §2 B6：要人拍板翻闸门③，且线程档在 Pages 上跑不起来）
 ```
 
 ---
@@ -417,142 +417,32 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 - **回退点**：删 `CONTEXT.md` + 撤掉 `.gitignore` 里的 `!CONTEXT.md` + 撤掉检查项 5；
   纯文档，不影响站点与产物。
 
-### B6 · 线程版构建（**搁置，等令**）
+### B6 · 线程版构建 —— ⛔ **本轮明确移出待办**（2026-09-26 判定，不是遗漏）
 
-- **不是遗漏**：它会**翻掉一条刻意立过的机制门**（闸门③"不引入 COI/SharedArrayBuffer 需求"），
-  且要全量重编数小时 + 双产物。配方在 `build/113/PLAN-threads.md` §5。
-- **D1 落地后它变便宜**：`threads` 就是模式表里多一行 + 一条声明。
-- **已知硬前提（实测）**：线程版产物**硬依赖 COI** —— 没有 COI 时报
-  `DataCloneError: … SharedArrayBuffer transfer requires self.crossOriginIsolated`
-  ⇒ 它是**产物选择器**，不是可以运行时关掉的开关（**双产物**）。三个引擎里只有
-  **require-corp** 是都支持的 COI 模式（WebKit 不支持 credentialless）。
+**判定**：本轮（架构深化 D1–D6 / A0–A4）**不含** B6。它需要的不是一个批次的活，而是
+**一条产品级取舍**（要不要为了多线程而要求宿主发 COI 响应头），所以它必须由人拍板，
+不能由执行方顺手做掉。
 
----
+**为什么它不是"再加一个模式"那么简单（三条都是实测/固定事实）**：
 
-## §3 明确不做（写下来是为了防"顺手做"）
+1. **线程版产物硬依赖 COI**：没有跨源隔离时报
+   `DataCloneError: … SharedArrayBuffer transfer requires self.crossOriginIsolated`
+   （实测 `test/browser/probe-threads-coi.mjs`）⇒ 它是**产物选择器**，不是运行期开关
+   ⇒ **双产物 + 长期双份维护**。
+2. **它会在你现在的部署路径上失效**：本仓的对外部署是 **GitHub Pages**（`DEPLOY.md` 的
+   Pages 步骤 + `.github/workflows/pages-deploy.yml`），而 Pages 是纯静态托管、**不让你设
+   `Cross-Origin-Opener-Policy`/`Cross-Origin-Embedder-Policy`**（Pages 的固定行为，
+   非本仓实测）。替代方案 `coi-serviceworker` 实测**只有 Chromium 能兼得 COI 与 CDN**
+   （`test/browser/probe-coi-sw.mjs` 7/2；Firefox/WebKit 拿不到）⇒ 线程档等于把站点
+   变成"仅限 Chromium + 需要 SW"。
+3. **它翻掉一条刻意立过的门**：闸门③"不引入 COI/SharedArrayBuffer 需求"
+   （`build/113/GATE3-QUESTION.md`、`build/113/patch-ax-pthread.sh`、`configure-113-full.sh`
+   的 `--disable-threads` 都是为它存在的）。翻门要**显式**，不能默认。
 
-1. **不重写** `link-web.sh` 的六组 grep 自检（它们是带注释的好诊断，重写有翻车风险；
-   新模式级检查是**独立的第二层**）。
-2. **不删**容器里那 45 个带 wasm 的产物目录（里面是 `site-baseline-45d288b1/`、
-   `m2ft-out-bak-prefontec`、`out-nongl-bak` 这类**回退点**）。
-3. **不给** `relink.sh` 留 `KEY=VAL` 逃生门（等于把静默退化请回来）。
-4. **不在代码里改术语名**（`m2fc-simd-out` 这类名字由 D1 的模式名自然取代）。
-5. **不建 ADR 目录**。
-6. **不动 B6 的闸门**（等令）。
-7. **不改写**那 17 个不产汇总行的探针（先标 `manual`）。
-
----
-
-## §4 附录：事实与复跑命令（每条断言旁边就是复跑方式）
-
-### 4.1 §0"当场就错"五条的复核（2026-09-26）
-
-| # | 原判 | 复核结果 |
-|---|---|---|
-| ① | 两个承重文件不在 git | **已修**：`git ls-files bridge/` 现在含 `p5canvas.js` 与 `octave-worker.js` |
-| ② | `DEPLOY.md` 的产物 sha 是旧的 | **已修**（A0）：它**不是孤儿 stub，是一份实质文档**（41 行 / 2270 B：`site/` 目录说明 + 三条部署前自检 + Pages 步骤 + 更新流程），只因白名单没放行而**不在 git 里** —— 又一个"承重文件不在库里"。⇒ 加 `!DEPLOY.md` 进白名单 + 把 sha 改成 `1ed3e528…` |
-| ③ | "权威重链命令"指针过期 | **已修**（A0）：同在那个文件的 `:16`，改成指向 `AGENTS.md`「事实纪律」第 2 条那条**完整口径**（§5.26 + `WITH_FONTCONFIG=1` + `WITH_JSPI=1` + SIMD 的 `EXTRA_LDFLAGS`）。`dist/DEPLOY.md`（真正发出去的那份，20510 B）本来就没有 sha 断言也没有该指针 |
-| ④ | HANDOFF 写 glue-selftest "82 项" | **已修**（现为 91，`HANDOFF.md` §8 快回环段） |
-| ⑤ | 每次开机跑 demo 错误路径 | **仍活着**：`bridge/index.html:429`（随 A2 清除） |
-
-> **纪律教训**：原报告是快照，写完之后仓库又动过。**引用前先复核**。
-
-### 4.2 `link-web.sh` 的 22 个环境变量
-
-```sh
-cd /mnt/hdd/zcode-projects/Octave-Full-Wasm
-grep -oE '\$\{[A-Za-z0-9_]+:[-+]' build/113/link-web.sh | sed 's/\${//;s/:[-+]//' | sort -u
-# → 23 个名字；其中 P5_OBJS 是脚本内数组、$1 是位置参数 ⇒ 环境变量 22 个
-```
-能力轴 7 个：`WITH_JSPI`(496) / `WITH_FREETYPE`(110) / `WITH_FONTCONFIG`(137) / `GL_LIBS`(222) /
-`EXTRA_LDFLAGS`(526) / `MAIN_MODULE_LEVEL`(188) / `P5_TOOLKIT`(425)（括号内为首次出现的行号）。
-
-### 4.3 六组自检全在"开了才查"的分支里
-
-```sh
-grep -nE '^if \[ "\$\{[A-Z_]+:-0\}" = "1" \]|^if \[ "\$MAIN_MODULE_LEVEL" = "2" \]' \
-  build/113/link-web.sh
-# → 553/588/610/632/647/661；只有 :575 的 @ftp 预载检查与 :673 的 ls -la 是无条件的
-```
-
-### 4.4 15 处"猜这是哪个产物"
-
-`link-web.sh` 8 处（`:556`/`:562`/`:567`/`:575`/`:589`/`:593`/`:633`/`:648`）、
-`promote-webgl.sh`（`:107`/`:117`/`:122`）、`check-deploy-sha.sh`（`:22`/`:36`）、
-`check-site-parity.sh`（`:37`）、`.githooks/handoff_facts.py`（`:31`）、
-`bridge/index.html`（`:210-219` 生产 sha）、`test/browser/probe-artifact-sha.mjs`（`:21`/`:28`/`:32`）。
-
-### 4.5 两个宿主的 7 处漂移（D3 的依据）
-
-```sh
-cd /mnt/hdd/zcode-projects/Octave-Full-Wasm && diff <(sed -n '124,549p' bridge/index.html) bridge/octave-worker.js | head -60
-```
-1. `print`/`printErr`：页面双通道（`uiAppend` + `console.warn`）vs worker 合并进 `out`。
-2. `stdin`：页面整段 TTY 模拟 + `window.prompt` 回落 vs worker `return null`（无条件 EOF）。
-3. `instantiateWasm`：页面有 sha 自证（`index.html:216`）与 `inst.mem`；worker 用模块级 `wasmMemory`、**无自证**。
-4. 取点 `pop`：页面 `if (inst.mem)` + 每次 `new Float64Array(inst.mem.buffer)`；worker 无 guard、用全局。
-5. `eval_async` 包装：页面有 `typeof Module.eval_async !== 'function'` 幂等检查 + try/catch；worker 两者都没有。
-6. IDBFS：页面有 `Module.webSync` + 800ms 去抖写回（`syncSoon`）；worker **只有读回**，无从写入。
-7. `pkgfix` 同步那句 eval 字符串两边不同：页面带 `warning(...)` 文案，worker 是 `catch; end`。
-
-### 4.6 17 个不产 sweep 汇总行的文件
-
-```sh
-cd /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser
-for f in *.mjs; do grep -qE 'PASS / .*FAIL|个模块：OK' "$f" || echo "$f"; done
-```
-（63 套产 `${pass} PASS / ${fail} FAIL`，1 套产 `个模块：OK`，其余 17 个 = 2 个 `bench-*` +
-15 个 `probe-*`；`sweep.sh:60-68` 只认这两种格式。）
-
-### 4.7 "闸门"的 6 种含义
-
-```sh
-cd /mnt/hdd/zcode-projects/Octave-Full-Wasm && grep -rn '闸门' --include='*.md' --include='*.sh' --include='*.py' . | grep -v '^./HISTORY.md' | wc -l
-```
-（1）提交前六项检查（`AGENTS.md:54`）；（2）三道机制门（`HISTORY.md:2753`）；（3）机制探针
-（`HISTORY.md:1562`）；（4）两站点一致性（`check-site-parity.sh:2`）；（5）链接期保活
-（`HISTORY.md:1314`）；（6）运行时能力门（`bridge/index.html:320`）。
-
-### 4.8 仓库 `site/` 与 `bridge/` 是手工同步的
-
-```sh
-cd /mnt/hdd/zcode-projects/Octave-Full-Wasm
-sha256sum bridge/index.html site/index.html
-# → 两边都是 d6c1490cf38d54ceb7301565c64fbaf937dffa135b67e3cb9071d49047cfd194（现在恰好一致）
-grep -rn 'site/index.html' --include='*.sh' --include='*.py' . | wc -l   # → 0（没有任何脚本做这件事）
-```
-唯一相关的是 `check-site-parity.sh:37`，它比的是 **8761 vs 8768**，不含仓库。
-
-### 4.9 `matrix-android.html`：三处曾经不一致，**已同步**（2026-09-26 用户拍板）
-
-```sh
-cd /mnt/hdd/zcode-projects/Octave-Full-Wasm
-stat -c '%s %n' site/matrix-android.html /mnt/hdd/octave-wasm-build/site/matrix-android.html \
-              /mnt/hdd/octave-wasm-build/siteWebGL/matrix-android.html
-# 同步前 → 33947 site/…（仓库，旧） / 33947 …/site/…（8761，旧） / 41386 …/siteWebGL/…（8768，新）
-# 同步后 → 三份都是 41386 B，sha 同为 5d2dca7f14623c4c…
-sha256sum site/matrix-android.html /mnt/hdd/octave-wasm-build/site/matrix-android.html \
-          /mnt/hdd/octave-wasm-build/siteWebGL/matrix-android.html
-grep -rn 'matrix-android' --include='*.sh' --include='*.mjs' --include='*.py' . | wc -l
-# 同步前 → 0（无生成器、无测试）；同步后 → 探针 test/browser/probe-matrix-android.mjs 命中
-grep -n 'matrix-android' DEPLOY.md    # → :13 写明用途："浏览器矩阵自测页（…供截图/无头读取）"
-```
-**为什么新那份是"新的"**：旧版 575 行、用全局 `OctaveAssets.load`（C6 之前）；
-新版 700 行、带 `createOctaveHost` / `createOctaveAssets` / `__octaveHosts`（C6 时代）。
-**它并不"坏"**：结尾多出两对 `</body></html>`（手工重拼的痕迹，浏览器忽略），
-结构计数实测单份（1 个 `<html`、1 个 `<body`、1 个 `createOctaveHost` 定义、1 个 `#matrix-result`）。
-
-### 4.10 重链逐字节可复现（A1 判据①的底座）
-
-```sh
-docker exec o113 sha256sum /src/websrc/m2fc-out/octave.wasm /src/websrc/m2fc-idbfs-out/octave.wasm \
-  /src/websrc/m2fc-fonts-out/octave.wasm /src/websrc/m2fc-jspioff-out/octave.wasm
-# → 四个都是 4faaa96d583ed978226c7fa676600b43dc663c5a23a594f3c3be2d8f2e7ad563
-docker exec o113 sha256sum /src/websrc/m2fc-simd-out/octave.wasm   # 现役：1ed3e528…
-docker exec o113 sha256sum /src/websrc/m2fc-jspb-out/octave.wasm   # 去 SIMD 对照：45d288b1…
-```
-SIMD BLAS 归档（模式 `product` 的输入之一，清单要记它的 sha）：
-```sh
-docker exec o113 sha256sum /src/deps/lapack-simd/lib/librefblas.a /src/deps/lapack-simd/lib/liblapack.a
-# → 6160358f…（679,866 B） / 708636e6…（9,884,660 B）
-```
+**要开工时的前置与成本（一句话版）**：
+· 前置：你拍板"接受线程档只在能发 COI 头的宿主上工作"（或"接受仅 Chromium"）；
+· 成本：`relink.sh` 模式表加一行 `threads` + 一条声明（D1 已让它变便宜），
+  **但**要全量重配重编（`-pthread -sSHARED_MEMORY`，数小时）+ 双产物部署与验收；
+· 配方与回退点已备好：`build/113/PLAN-threads.md` §5；机制前提已实测（Q4 / E3 / B6 前置）。
+· **价值仍在**：多线程只对少数重计算有收益，而 SIMD（已落地，1.62×/1.75×/1.31×）
+  是最便宜的那一档收益 —— 这条判断也支持"先不做 B6"。

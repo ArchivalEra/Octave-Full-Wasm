@@ -801,8 +801,13 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >    ⚠️ **引用旧报告前先复核**：那份只读扫描报告在 `/tmp`（会消失），且它说的"当场就错 5 条"
 >    经复核**只剩 1 条还活着**（`bridge/index.html` 的开机 demo 错误路径，随 A2 清）——
 >    逐条复核记录见 PLAN-arch §4.1。
-> 2. **B6 线程版构建**：配方已备好（`build/113/PLAN-threads.md` §5），**等一声令下**
->    （它要翻掉"不引入 COI/SAB"那条机制门 + 全量重编数小时）；D1 落地后它只是模式表多一行 `threads`。
+> 2. **B6 线程版构建 —— ⛔ 本轮明确移出待办**（2026-09-26 判定）：它不是"再加一个模式"，
+>    而是**一条产品取舍**（要不要为了多线程要求宿主发 COI 响应头）。三条硬事实：
+>    ① 线程版产物**硬依赖 COI**（无 COI 报 `DataCloneError`，`probe-threads-coi.mjs` 实测）
+>    ⇒ 双产物；② 本仓的对外部署是 **GitHub Pages**，它**不给设** COOP/COEP，而
+>    `coi-serviceworker` 实测只有 Chromium 能兼得 COI 与 CDN（`probe-coi-sw.mjs` 7/2）
+>    ⇒ 线程档等于"仅 Chromium + 需要 SW"；③ 它要**显式翻掉**闸门③（`GATE3-QUESTION.md`）。
+>    要开工时：模式表加一行 `threads` + 全量重配重编数小时（配方 `PLAN-threads.md` §5）。
 > 3. **E2 悬案**：OpenBLAS 全量链接时产物非法（`wasm-ld` 点名 76 个 `signature_mismatch:*`）；
 >    阶梯已记在 `build/113/NOTES-threads.md`（不是 binaryen 的锅，两个独立裁判背书）。
 >
@@ -1008,7 +1013,7 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260926-112200` · **1 套 / 10 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20260926-112254` · **43 套 / 1,076 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,262,406 B · `5b3fe9ae55645937…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-26 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
