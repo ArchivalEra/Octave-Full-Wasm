@@ -440,3 +440,37 @@ promote 8761（D8 开机自检 OK 1.5 s）→ **8761 全量 PROBES=1：80 套 / 
 **连带**：B6 = 线程版构建（`-pthread -sSHARED_MEMORY`，且 configure 目前是 `--disable-threads`）
 + 自家站开 COI（coi-serviceworker 已在 `build/embed/`，自家资产全同源 ⇒ require-corp 无副作用）
 + 加载期选档。Emscripten 官方也建议 threaded/non-threaded 分开构建（与本实测一致）。
+
+
+---
+
+## 我方站点在 COI 下实测：require-corp 就够，三引擎都能拿 COI（2026-09-26）
+
+**做法**（不装 SW、不动任何 lane）：用一个小服务（`/tmp/coi-server.mjs`）把**真实站点目录**
+带 `COOP: same-origin` + `COEP: require-corp` 发出来（等价于 coi-serviceworker 注头的效果），
+然后跑开机自检 + 代表性套件。
+
+| 检查 | 结果 |
+|---|---|
+| `check-boot.sh` | **BOOT OK：0.9 s 就绪，`eval_string("2+2")` rc=0**（比平常 1.5 s 还快） |
+| `accept-113-boot` | 10 / 0 |
+| `accept-worker`（worker 模式） | 11 / 0 |
+| `accept-idbfs`（持久化） | 9 / 0 |
+| `accept-plotv2`（图形） | 92 / 0 |
+| `accept-embed-multi`（多实例） | 13 / 0 |
+| `accept-net` | 29 / **1**（★ 见下，**非 COI 回归**） |
+
+**★ 结论 1：自家站用 `require-corp` 就够，而且这是三引擎唯一都能拿 COI 的档。**
+自家资产全部同源（无 CDN 依赖）⇒ require-corp "要求子资源带 CORP" 这条**拦不到任何东西**；
+而 `credentialless` 在 WebKit 上拿不到 COI（`probe-coep-engines.mjs` 实测）⇒ **对自家站，
+require-corp 反而比 credentialless 更通用**（三引擎全支持，含 Safari 家族）。
+⇒ C8 从"宿主 + credentialless 的小心翼翼"简化为：**自家站注 require-corp 头（或装
+coi-serviceworker 走 require-corp）**。
+
+**★ 结论 2（诚实标注）：accept-net 那 1 条失败是我的测试服务造成的，不是 COI 回归。**
+失败判据是"服务器不支持 POST 时如实回报 postok=0"，实测 postok=1 —— 因为我这个临时服务对
+**任何方法**都返回 200（不像 `python -m http.server` 会 501）。同一套件在 8761（python 服务）
+上是 30/0。
+⚠️ 但它提醒了一条**真代价**：COI 之后跨源网络访问要满足 CORP 或走 CORS ——
+产品里那些"取外部 URL"的功能（网络桥 / 同步 XHR）在 COI 站点上会受这条约束
+（本轮没有专门测它，留给 B6 落地的验收项）。
