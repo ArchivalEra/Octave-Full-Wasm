@@ -8,6 +8,8 @@
 - 仓库：`/mnt/hdd/zcode-projects/Octave-Full-Wasm`（**唯一**可改的 git 仓）
 - 构建容器：docker `o113`（11.3.0 车道；`obuild`/`odld`/`obench` 是更早的车道）
 - 第三方源码/产物：`/mnt/hdd/octave-wasm-build/`、`/tmp/opencode/`
+- **不常用工具链/一次性浏览器下载**：`/mnt/hdd/crossbuild-tools/`（playwright 浏览器在
+  `pw-browsers/`，用时设 `PLAYWRIGHT_BROWSERS_PATH`；WebKit 的依赖修正见 NOTES-threads.md）
 - **禁止**碰课程仓 `/mnt/hdd/zcode-projects/GONGCHENGSHUXUE20260917`
 
 ## 三条不可违背

@@ -270,3 +270,56 @@ parity --strict 两站点完全一致。
 `window.OctaveP5`，要改 webgl_toolkit.cc 的分派 + canvas 契约）；② 四个队列桥
 （audio/rec/filepick/net）与 stdin 队列、Ctrl-C 仍是默认实例单例；③ worker 化（C3/B5）
 是下一个大车道，机制未知数已全部清零（Q4/E4）。
+
+
+---
+
+## C8 引擎能力底座 + coi-serviceworker 实测（2026-09-26，两个新探针）
+
+**为什么做**：C8（宿主站装 service worker 换 COI）整条路押在两句行为断言上——① SW 注头后**同源**
+iframe 继承 COI（线程可用）；② 用的是 credentialless 还是 require-corp 决定**宿主 CDN 活不活**。
+README 只给定制示例，**默认值得读源码/实测**：`coi-serviceworker.js` 的选项对象里
+`coepCredentialless: () => true`、`coepDegrade: () => true`（**默认就是 credentialless**，并会在
+"受控首访拿不到 COI"时自动降级 require-corp 并重载）。
+
+**探针 1 `probe-coep-engines.mjs`（静态响应头，绕开 SW ⇒ 只量引擎能力）= 6/0**
+
+| 引擎 | require-corp | credentialless |
+|---|---|---|
+| chromium | COI ✓ / CDN ✗ | **COI ✓ / CDN ✓（支持）** |
+| firefox | COI ✓ / CDN ✗ | **COI ✓ / CDN ✓（支持）** |
+| webkit | COI ✓ / CDN ✗ | **COI ✗（拿不到 COI）/ CDN ✓** |
+
+⇒ 引擎层：**Chromium 与 Firefox 都支持 credentialless，只有 WebKit（Safari 家族）不支持**。
+
+**探针 2 `probe-coi-sw.mjs`（真装 v0.1.7 SW，三模式 × 三引擎）= 7/2**
+
+| 引擎 | 不装 SW | 默认（=credentialless） | 显式 credentialless 定制 |
+|---|---|---|---|
+| chromium | COI ✗ / CDN ✓ | **COI ✓ / CDN ✓** | COI ✓ / CDN ✓ |
+| firefox | COI ✗ / CDN ✓ | COI ✓ / **CDN ✗** | COI ✓ / **CDN ✗** |
+| webkit | COI ✗ / CDN ✓ | COI ✓ / **CDN ✗** | COI ✓ / **CDN ✗** |
+
+（三档里 SW 都接管了；`coiCoepHasFailed` / `coiReloadedBySelf=coepdegrade` 旗标**全 false**。）
+
+**★ 结论（比早前写的更严格，早前的措辞要按这张表读）**：
+1. **"COI + CDN 兼得"经 SW 只有 Chromium 成立**；Firefox 与 WebKit 装了 SW 会拿到 COI 但**打掉 CDN**。
+2 引擎层与 SW 层在 **Firefox 上矛盾**（静态头支持 credentialless，走 SW 却拦 CDN）⇒ 这是**开放问题**，
+  不是降级逻辑（旗标 false 排除了它）。待查方向：SW 注入与静态头在**子资源**处理上的差异。
+3. ⇒ C8 当前只能承诺 **Chromium 系**的"线程 + CDN 共存"；Firefox/WebKit 上"要线程就得放弃 CDN"，
+   或退到 C4/C3（SIMD + Worker，不需要 COI）。
+4. WebKit 引擎已装好 ⇒ **E7（真书站验证）可以直接在第三引擎上跑**，不用再靠引文档。
+
+**环境与工具（一次性安装位置，2026-09-26）**：
+- 浏览器（playwright 托管，**不放 ~/.cache**）：`/mnt/hdd/crossbuild-tools/pw-browsers/`
+  （`firefox-1543` 306MB、`webkit-2359` + 依赖修正、`ffmpeg-1011`）。用法：
+  `PLAYWRIGHT_BROWSERS_PATH=/mnt/hdd/crossbuild-tools/pw-browsers <runner>`。
+- **WebKit 依赖修正**（值得记）：playwright 的 webkit 是 Debian 13 构建，要 ICU **76** 与
+  `libxml2.so.2`、`libbacktrace.so.0`，而本机是 Debian **sid**（ICU **78**、`libxml2.so.16`）。
+  做法（**不动系统**）：把 trixie 的 `libicu76`/`libxml2`/`libbacktrace0` 三个 deb 用
+  `dpkg-deb -x` 解到 `/mnt/hdd/crossbuild-tools/pw-browsers/webkit-libs/`，再把缺的 .so
+  **拷进 WebKit 自带的 `minibrowser-*/sys/lib/`**（内层 wrapper **覆盖式**设 `LD_LIBRARY_PATH`
+  ⇒ 光设环境变量没用，第一版就栽在这）。
+- `coi-serviceworker` v0.1.7（MIT）：**进仓库** `build/embed/{coi-serviceworker.js,coi-serviceworker.min.js}`。
+  ⚠️ **它不能放 /mnt/hdd**：SW 必须由**与页面同源**的站点提供（上游 README 明说"不能走 CDN、必须同源"）
+  ⇒ 它是**站点资产**，宿主站要把它放到自己站点的根/相应路径。

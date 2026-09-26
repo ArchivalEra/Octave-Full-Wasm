@@ -15,8 +15,10 @@
    内联 `<script>` 在其后执行；iframe **不带 `allow`/`sandbox`**。
 2. **Q10 实测（6 PASS / 0 FAIL）**：未 COI 的顶层里，iframe 自带 COOP/COEP **无效**（同源跨源皆然），
    `allow="cross-origin-isolated"` 无效 ⇒ **C7 否决**。
-3. **C8 实测**：顶层 `credentialless` ⇒ 同源 iframe 继承 `crossOriginIsolated=true`、SAB 可用；
-   且 credentialless **不拦 CDN**（require-corp 下同一脚本被 `ERR_BLOCKED_BY_RESPONSE` 拦掉）。
+3. **C8 实测**（★ 2026-09-26 用两个新探针扩到三引擎，措辞按实测收窄）：
+   引擎层 credentialless **Chromium ✓ / Firefox ✓ / WebKit ✗**（`probe-coep-engines.mjs` 6/0）；
+   但**经 coi-serviceworker**（`probe-coi-sw.mjs` 7/2）只有 **Chromium** 拿到"COI + CDN 兼得"，
+   Firefox/WebKit 装 SW 后 COI ✓ 而 CDN ✗；Firefox 两层矛盾 = **开放问题**（待查）。
 4. **性能路线（引外部评审，待我方实验证实）**：OpenBLAS 官方 WASM 配置是 `WASM128_GENERIC` + 默认
    SIMD128 + **`USE_THREAD=0`**；Pyodide 历史 DGEMM 2–3×（单线程无 SIMD）；`dynamic linking + pthreads`
    已文档化但仍标 **experimental**（`MAIN_MODULE + -pthread` 有告警）。
@@ -79,6 +81,7 @@
 | E5 | Q10 iframe COI 九格 | ✅ 已跑通 6/0 | 任一格与表不符 |
 | E6 | C6 双实例 | 0 串扰 / 0 404 / 0 全局覆盖 | 任一实例改动另一实例状态 |
 | E7 | C8 宿主 credentialless | 稳定 `crossOriginIsolated=true` + CDN 无失败 | 任一基线持续 reload / 资源被拦 |
+| E8 | coi-serviceworker 真装（三引擎 × 三模式） | ✅ **已跑：7/2**；引擎能力 6/0；**Firefox 的 SW 路径待查** | — |
 | Q4 | JSPI × Worker | ✅ **已做：6/0（100 次挂起恢复）** | — |
 
 **线程分档判据**：`crossOriginIsolated===true && typeof SharedArrayBuffer==='function'` 才启用 pthread；
