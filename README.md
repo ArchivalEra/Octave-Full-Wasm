@@ -254,7 +254,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/NOTES-webgl.md` (59320 bytes)
 - `build/113/PLAN-jspi.md` (21638 bytes)
 - `build/113/PLAN-next.md` (16370 bytes)
-- `build/113/PLAN-threads.md` (9462 bytes)
+- `build/113/PLAN-threads.md` (13095 bytes)
 - `build/113/PROMOTION.md` (6444 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
 - `build/113/STATUS.md` (8407 bytes)

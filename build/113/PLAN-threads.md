@@ -119,3 +119,47 @@
 - **C5**（解释器内部真并行）——无可零共享并发的安全路径（评审与我方一致）。
 - **为了 pthread 去承担 C7 的嵌入复杂度**（评审原话）；**倍数相乘式收益宣称**。
 - Asyncify（与 wasm EH 互斥，已证伪）；JS 注入异常硬取消；全站硬门（沿用 PLAN-jspi 红线）。
+
+
+---
+
+## §5 B6 线程版构建 · kickoff 配方（2026-09-26 备好，**待令执行**）
+
+> 为什么不无人值守直接跑：它会**翻掉一条项目刻意立过的闸门**（闸门③"不引入 COI/SharedArrayBuffer 需求"），
+> 而 `build/113/patch-ax-pthread.sh` 与 `configure-113-full.sh` 的 `--disable-threads` 正是为那条闸门存在的；
+> 当年还踩过 gnulib 自造 `pthread.h` 与 sysroot 撞 `typedef redefinition` 的雷（见 patch 脚本头注释）。
+> 加上它要**全量重编**（对象层 atomic/TLS 全变）+ 重链 + 双档产物 ⇒ 是一次数小时、并改变产品形态的动作。
+> 判据、备份、回退都已备好；用户点头即可按下面顺序执行。
+
+### 前提（都已实测，不需要再证）
+- 线程版产物在**无 COI**时硬失败（`DataCloneError: … SharedArrayBuffer transfer requires
+  self.crossOriginIsolated`）⇒ **双档产物 + 加载期选档**（`probe-threads-coi.mjs` 3/0）。
+- 我方站在 `require-corp` 下开机 OK（0.9 s）+ 5 套代表套件全绿；**require-corp 是三引擎唯一通用档**
+  （WebKit 不支持 credentialless）⇒ 自家站注 require-corp（或 `build/embed/coi-serviceworker*.js` 走 require-corp）。
+- pthread × dlopen 无死锁（E3 6/0）；worker 里 JSPI/dlopen 都成立（Q4/E4）。
+
+### 步骤（每步都有红/绿）
+1. **备份**：容器里 `cp -a /src/work/octave-113.0/config.h /src/libwork/config.h.pre-threads`
+   （项目既有惯例：切配置前备份 config.h）；另记当前 `librefblas.a/liblapack.a` 的 sha。
+2. **配置线程版**：跳过 `patch-ax-pthread.sh`、去掉 `--disable-threads`（用 `--enable-threads`）重新 configure。
+   - 绿：configure 通过且 `grep -c pthread /src/work/octave-113.0/config.h` > 0；
+   - 红（预期可能）：gnulib `pthread.h` `typedef redefinition` ⇒ 参照 patch 脚本头注释的思路
+     （把"有没有 pthread.h"与"要不要线程模型"解耦）再 patch 生成物。
+3. **全量重编**：`setsid nohup make -j12 > /tmp/threads-build.log`（数小时；完成后 tail 汇总）。
+   - 红：任何 `-pthread` 与 f2c 产物/gl4es/toolkit 的 ABI 冲突 ⇒ 逐个记录，别硬改。
+4. **重链**：`link-web.sh` + `-pthread -sSHARED_MEMORY`（经 `EXTRA_LDFLAGS` 注入链接行；
+   注意对象层已带 `-pthread`）→ 独立目录 `/src/websrc/m2fc-threads-out`。
+   - 绿：产物自检全绿 + `llvm-objdump -d | grep -c v128 ≥ 4752` + 胶水里有 pthread worker；
+   - 红：`--check-features` 报特性不兼容、或 binaryen 再报 parse exception（与 E2 同族问题）。
+5. **双档 + 选档**：页面按 `self.crossOriginIsolated === true && typeof SharedArrayBuffer === 'function'`
+   选线程版；否则选现役非线程版；把 `probe-threads-coi` 那句失败文本作为"选错档"的清晰报错。
+6. **验收（两档矩阵）**：
+   - 带头（COI，require-corp）：两站点全量 `PROBES=1` 全绿 + 线程版真跑起来（`__webThreadsOk__` 真值）；
+   - 不带头：线程版**不被选中**、站点照常（非线程档）；
+   - 三个引擎各跑一遍 `probe-browser-matrix` 风格的能力探测。
+7. **回退**：`cp -a /src/libwork/config.h.pre-threads /src/work/octave-113.0/config.h` + 重编回非线程档
+   （或直接丢弃线程产物目录；**8761 在 promote 之前不动**）。
+
+### 明确不做（红线沿用）
+- 不为线程去改宿主的响应头/`allow`（范围改判后我们只服务自家站点）；
+- 不让线程档成为**唯一**产物（必须双档，且默认档保持"在任何静态托管上都能跑"）。
