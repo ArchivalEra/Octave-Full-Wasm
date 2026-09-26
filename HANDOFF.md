@@ -801,12 +801,16 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >    ⚠️ **引用旧报告前先复核**：那份只读扫描报告在 `/tmp`（会消失），且它说的"当场就错 5 条"
 >    经复核**只剩 1 条还活着**（`bridge/index.html` 的开机 demo 错误路径，随 A2 清）——
 >    逐条复核记录见 PLAN-arch §4.1。
-> 2. **B6 线程版构建 —— ⛔ 本轮明确移出待办**（2026-09-26 判定）：它不是"再加一个模式"，
->    而是**一条产品取舍**（要不要为了多线程要求宿主发 COI 响应头）。三条硬事实：
->    ① 线程版产物**硬依赖 COI**（无 COI 报 `DataCloneError`，`probe-threads-coi.mjs` 实测）
->    ⇒ 双产物；② 本仓的对外部署是 **GitHub Pages**，它**不给设** COOP/COEP，而
->    `coi-serviceworker` 实测只有 Chromium 能兼得 COI 与 CDN（`probe-coi-sw.mjs` 7/2）
->    ⇒ 线程档等于"仅 Chromium + 需要 SW"；③ 它要**显式翻掉**闸门③（`GATE3-QUESTION.md`）。
+> 2. **B6 线程版构建 —— ⛔ 本轮不做，但理由已更正（★ 2026-09-26 实测重估）**：
+>    **先更正**：这里曾写"线程档在 Pages 上跑不起来"—— **那句是错的**（被 `coi-serviceworker`
+>    拦掉的是**跨源 CDN 脚本**，不是 COI）。实测三引擎 × 三档：装上 SW 后
+>    **Chromium / Firefox / WebKit 全部拿到 COI + `SharedArrayBuffer`**；本站页面不引任何
+>    第三方 CDN ⇒ 这条限制对我们无影响。
+>    **"多线程 × Firefox"实测（用户点名）**：有 COI 时 Firefox 跑 pthread 产物与 Chromium
+>    **完全平齐**（`ok=100 missing=0`，FF 略快）；无 COI 时两边同样报 `DataCloneError`
+>    ⇒ **多线程本身不歧视 Firefox**，翻闸门③不会造成引擎分裂。
+>    **仍不做**是因为：① 收益有限（SIMD 那档 1.62×/1.75×/1.31× 已到手）而成本是长期的
+>    （双产物 + 要么装 SW、要么要求宿主发头）；② 它是**产品取舍**，要人拍板。
 >    要开工时：模式表加一行 `threads` + 全量重配重编数小时（配方 `PLAN-threads.md` §5）。
 > 3. **E2 悬案**：OpenBLAS 全量链接时产物非法（`wasm-ld` 点名 76 个 `signature_mismatch:*`）；
 >    阶梯已记在 `build/113/NOTES-threads.md`（不是 binaryen 的锅，两个独立裁判背书）。

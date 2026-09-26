@@ -417,32 +417,41 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 - **回退点**：删 `CONTEXT.md` + 撤掉 `.gitignore` 里的 `!CONTEXT.md` + 撤掉检查项 5；
   纯文档，不影响站点与产物。
 
-### B6 · 线程版构建 —— ⛔ **本轮明确移出待办**（2026-09-26 判定，不是遗漏）
+### B6 · 线程版构建 —— ⛔ 本轮仍不做，但**理由已更正**（2026-09-26 实测重估）
 
-**判定**：本轮（架构深化 D1–D6 / A0–A4）**不含** B6。它需要的不是一个批次的活，而是
-**一条产品级取舍**（要不要为了多线程而要求宿主发 COI 响应头），所以它必须由人拍板，
-不能由执行方顺手做掉。
+**先说更正**：本文件与 `HANDOFF.md` 在 2026-09-26 曾写过"线程档在 GitHub Pages 上跑不起来"。
+**那句话是错的**（我误读了旧笔记里"只有 Chromium 能兼得 COI + CDN"的措辞 —— 被拦的是**跨源 CDN
+脚本**，不是 COI 本身）。实测（`test/browser/probe-coi-sw.mjs`，三引擎 × 三档）：
+`coi-serviceworker` 装上之后 **Chromium / Firefox / WebKit 三个引擎全部拿到
+`crossOriginIsolated=true` + `SharedArrayBuffer`**（同源 iframe 也继承 COI）。被拦的只有
+**跨源且无 CORP 的第三方脚本**（chromium 两档都放行，Firefox/WebKit 两档都拦；credentialless
+定制在 Firefox 上也救不回来）。而**本站在页面上不引任何第三方 CDN**（`index.html` 的 script
+全是同源本地文件）⇒ 这条限制对我们**没有影响**。
 
-**为什么它不是"再加一个模式"那么简单（三条都是实测/固定事实）**：
+**"多线程 × Firefox"的实测（2026-09-26，用户点名要兼顾 Firefox）**：
+- 有 COI（require-corp）时，**Firefox 与 Chromium 跑 pthread 产物完全平齐** ——
+  同一个探针产物（`/mnt/hdd/octave-wasm-build/threads-probe/`，pthread + 运行期 dlopen）：
+  chromium `{coi:true, sab:function, ok:100, missing:0, busy:47, runMs:28}`，
+  firefox `{coi:true, sab:function, ok:100, missing:0, busy:42, runMs:23}`。
+  ⇒ **多线程本身不歧视 Firefox**（Firefox 支持 SAB + wasm threads + pthread）。
+- 无 COI 时两个引擎**同样**失败（`DataCloneError`；Firefox 的报错信息甚至更清楚）。
+- Firefox 支持**两种** COI 模式（`require-corp` 与 `credentialless`，实测 `probe-coep-engines` 6/0）；
+  WebKit 只有 `require-corp`。
+- ⇒ **翻闸门③不会造成"Chromium 能用 / Firefox 不能用"的分裂**：两个引擎都要 COI，拿到就都能跑。
+- **已配常驻回归网**：`test/browser/probe-engine-parity.mjs`（**22 项 / 0 FAIL**）——
+  对 **chromium 与 firefox 各跑 9 条用户可见的轴**（ready / Capabilities / JSPI 真挂起 + 能力门 /
+  纯计算 / 真渲染 / 字体 / 同步 XHR / Worker 模式真出图）+ 一条**反证**（删掉 JSPI API ⇒
+  页面照常 ready、门如实 `api=false`、`pause` 仍以阻塞方式完成）。
+  在此之前 **Firefox 只被 5 项矩阵探针扫到**，而 43 套 accept 全在 Chromium 上跑
+  ⇒ "一次改动把 Firefox 弄坏"在日常回归里是**看不见的**；现在这条能看见。
 
-1. **线程版产物硬依赖 COI**：没有跨源隔离时报
-   `DataCloneError: … SharedArrayBuffer transfer requires self.crossOriginIsolated`
-   （实测 `test/browser/probe-threads-coi.mjs`）⇒ 它是**产物选择器**，不是运行期开关
-   ⇒ **双产物 + 长期双份维护**。
-2. **它会在你现在的部署路径上失效**：本仓的对外部署是 **GitHub Pages**（`DEPLOY.md` 的
-   Pages 步骤 + `.github/workflows/pages-deploy.yml`），而 Pages 是纯静态托管、**不让你设
-   `Cross-Origin-Opener-Policy`/`Cross-Origin-Embedder-Policy`**（Pages 的固定行为，
-   非本仓实测）。替代方案 `coi-serviceworker` 实测**只有 Chromium 能兼得 COI 与 CDN**
-   （`test/browser/probe-coi-sw.mjs` 7/2；Firefox/WebKit 拿不到）⇒ 线程档等于把站点
-   变成"仅限 Chromium + 需要 SW"。
-3. **它翻掉一条刻意立过的门**：闸门③"不引入 COI/SharedArrayBuffer 需求"
-   （`build/113/GATE3-QUESTION.md`、`build/113/patch-ax-pthread.sh`、`configure-113-full.sh`
-   的 `--disable-threads` 都是为它存在的）。翻门要**显式**，不能默认。
+**那本轮为什么仍不做**（理由从"Pages 不可用"换成下面两条）：
+1. **收益有限而成本是长期的**：多线程只对少数重计算有用，而 SIMD 已落地
+   （DGEMM 1.62×/1.75×/1.31×）—— 最便宜的那档收益已经拿到了。翻门换来的是
+   **双产物 + 双份验收 + 要么装 service worker、要么要求宿主发 COOP/COEP**。
+2. **它是产品取舍，不是技术障碍**：装 SW（三引擎都能 COI，但与"页面引跨源 CDN 资源"互斥）、
+   还是要求宿主发头（更干净但要宿主配合）—— 这要人拍板，不该由执行方顺手定。
+   配方与回退点已备好：`build/113/PLAN-threads.md` §5。
 
-**要开工时的前置与成本（一句话版）**：
-· 前置：你拍板"接受线程档只在能发 COI 头的宿主上工作"（或"接受仅 Chromium"）；
-· 成本：`relink.sh` 模式表加一行 `threads` + 一条声明（D1 已让它变便宜），
-  **但**要全量重配重编（`-pthread -sSHARED_MEMORY`，数小时）+ 双产物部署与验收；
-· 配方与回退点已备好：`build/113/PLAN-threads.md` §5；机制前提已实测（Q4 / E3 / B6 前置）。
-· **价值仍在**：多线程只对少数重计算有收益，而 SIMD（已落地，1.62×/1.75×/1.31×）
-  是最便宜的那一档收益 —— 这条判断也支持"先不做 B6"。
+**要开工时的前置**：拍板"接受线程档需要 COI（装 SW 或宿主发头）"。
+然后：`relink.sh` 模式表加一行 `threads` + 声明（D1 已让它变便宜）+ 全量重配重编数小时 + 双产物。

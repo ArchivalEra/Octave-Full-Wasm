@@ -596,3 +596,59 @@ coi-serviceworker 走 require-corp）**。
    `signature_mismatch:*` 是否归零、产物是否变合法（`wasm-validate --enable-all` / V8）。
 5. 只要产物合法，后续就回到常规：DGEMM 基准（`test/browser/bench-dgemm.mjs`，与现役
    SIMD 版比）+ 5 套数值回归（boot/libs/hdf5/slicot/ode15）+ 独立车道 877x 上跑。
+
+---
+
+## ★ Firefox × 多线程：实测重估（2026-09-26，用户点名"要兼顾 Firefox 的体验"）
+
+**起因**：用户在"多线程这一块"上要求兼顾 Firefox。先把事实量清楚，不猜。
+
+### 1) 线程产物 × Firefox（决定性对照）
+用现成的 E3 探针产物（`/mnt/hdd/octave-wasm-build/threads-probe/`：pthread + 运行期 dlopen），
+同一个 runner 分别喂 Chromium 与 Firefox（**顶层页** + 注入 `COOP: same-origin` /
+`COEP: require-corp`）：
+
+| 引擎 | pre | ok（期望 100） | missing（期望 0） | busy | runMs |
+|---|---|---|---|---|---|
+| chromium 152 | `{coi:true, sab:function, sabNew:ok}` | 100 | 0 | 47 | 28 |
+| **firefox 155** | `{coi:true, sab:function, sabNew:ok}` | **100** | **0** | 42 | **23** |
+
+⇒ **Firefox 跑 pthread 产物与 Chromium 完全平齐**（这一格甚至略快）。
+对照：**无 COI** 时两个引擎**同样**失败 —— chromium `DataCloneError: … SharedArrayBuffer
+transfer requires self.crossOriginIsolated`；firefox `DataCloneError: The WebAssembly.Memory
+object cannot be serialized. The Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy…`
+（Firefox 的报错信息更清楚，还直接点名了那两个头）。
+
+### 2) coi-serviceworker（"宿主设不了响应头"时唯一的路）× 三引擎
+`probe-coi-sw.mjs`（三引擎 × 三档，**7 PASS / 2 FAIL**，2026-09-26 复跑）：
+
+| 引擎 | off | default（require-corp） | credless 定制 |
+|---|---|---|---|
+| chromium | 无 COI，CDN ✓ | **coi=true, sab=function**，CDN ✓ | **coi=true**，CDN ✓ |
+| firefox | 无 COI，CDN ✓ | **coi=true, sab=function**，CDN ✗被拦 | **coi=true**，CDN ✗被拦 |
+| webkit | 无 COI，CDN ✓ | **coi=true, sab=function**，CDN ✗被拦 | **coi=true**，CDN ✗被拦 |
+
+⇒ **三个引擎装上 SW 后都能拿到 `crossOriginIsolated` + `SharedArrayBuffer`**（同源 iframe 也继承）。
+被拦的**只有跨源且无 CORP 的第三方脚本（CDN）**；credentialless 定制在 Firefox/WebKit 上
+救不回 CDN（那两条 C 断言 fail 就是记录这件事）。
+
+### 3) 由这两条得出的结论（并更正一处旧判断）
+- **多线程本身不歧视 Firefox**：两个引擎都要 COI，拿到就都能跑 ⇒ 翻闸门③**不会**造成
+  "Chromium 能用 / Firefox 不能用"的分裂。
+- ★ **更正**：`PLAN-arch.md` / `HANDOFF.md` 曾写"线程档在 GitHub Pages 上跑不起来" —— **错**。
+  真实约束是"**装了 SW 之后页面不能引跨源 CDN 资源**"，而本站页面的 script 全是同源本地文件
+  ⇒ 这条对我们无影响。
+- Firefox 的 COI 选项比 WebKit 宽：**require-corp 与 credentialless 都支持**（`probe-coep-engines` 6/0）。
+- B6 仍**不做**，但理由改成"收益有限（SIMD 已到手）+ 双产物是长期成本 + 要不要为多线程要求 COI
+  是产品取舍"，而不是"Firefox/Pages 不支持"。
+
+### 复跑方式
+```sh
+# ① 线程产物 × 两引擎（有/无 COI 对照）：见本次的一次性 runner 形态
+cp /tmp/ff-threads.mjs /mnt/hdd/octave-wasm-build/harness/ && \
+  cd /mnt/hdd/octave-wasm-build/harness && COEP=require-corp sh run.sh /tmp/ff-threads.mjs
+# ② coi-serviceworker × 三引擎 × 三档
+PLAYWRIGHT_BROWSERS_PATH=/mnt/hdd/crossbuild-tools/pw-browsers \
+  sh run.sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/probe-coi-sw.mjs
+# ③ 双引擎对齐（日常回归网）：probe-engine-parity.mjs（A3 起在仓库里）
+```
