@@ -10,6 +10,7 @@
 !HANDOFF.md
 !HISTORY.md
 !AGENTS.md
+!CONTEXT.md
 !DEPLOY.md
 !build/Makefile
 !build/main.cc
@@ -78,6 +79,7 @@
 !test/browser/*.mjs
 !bridge/p5canvas.js
 !bridge/octave-worker.js
+!bridge/octave-core.js
 !bridge/webaudio.js
 !bridge/webaudiorec.js
 !bridge/webfilepick.js

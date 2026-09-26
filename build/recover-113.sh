@@ -58,7 +58,13 @@ else
   sudo docker cp o113:/src/websrc/out/octave.js   "$SITE/"
   sudo docker cp o113:/src/websrc/out/octave.wasm "$SITE/"
   sudo docker cp o113:/src/websrc/out/octave.data "$SITE/"
+  # ⚠️ 这份清单必须覆盖 index.html/octave-worker.js 的**全部** <script src>/importScripts：
+  #    以前缺 queue.js / p5canvas.js / octave-worker.js，2026-09-26（A2）又加了 octave-core.js
+  #    —— 缺任何一个都是 404 + 对应功能静默消失。
   cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" \
+     "$REPO/bridge/octave-core.js" \
+     "$REPO/bridge/queue.js" "$REPO/bridge/p5canvas.js" \
+     "$REPO/bridge/octave-worker.js" \
      "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
      "$REPO/bridge/webfilepick.js" \
      "$REPO/bridge/webnet.js" "$SITE/"

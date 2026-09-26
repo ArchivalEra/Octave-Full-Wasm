@@ -444,6 +444,9 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `build/113/write-build-manifest.py` | 量测产物并写 `octave.build.json`（**只记量到的事实**，不抄旗标）：三件套 sha/字节、`simd.v128`、`jspi_entry`、gl4es 命中、8 个字体、IDBFS、fontconfig、BLAS 归档 sha、基线 sha |
 | `build/113/check-build-manifest.py` | **判定方**：拿模式声明核对实测（未知声明键一律判拒），写 `verdict`/`mismatches`/`checked` |
 | `build/113/test-manifest-check.py` | 上面那个判定器的**反向断言套件**（11 条：基准 + 9 条逐规则反证 + 未知键必须拒）。跑法：`python3 build/113/test-manifest-check.py <产物目录>` |
+| `bridge/octave-core.js` | **内核**（A2，2026-09-26）：页面宿主与 Worker 宿主**共用同一份** —— Module 配置 / `instantiateWasm`（B 姿势挂起包装 + 取点覆写 + sha 自证）/ 启动链（`execute_interp` → JSPI 包装 → 资产三组）/ IDBFS + `webSync` / JSPI 能力门 / `Capabilities`。宿主只提供 9 件（`base`/`print`/`printErr`/`note`/`stdinLine`/`clicks`/`doc`/`assets`/`onReady`） |
+| `build/113/gen-matrix-android.py` | `site/matrix-android.html` 的**生成器**（A2）：= 当前 `bridge/index.html` + 尾块（`MATRIX-TAIL-START/END` 定界，幂等）。**改完页面重跑它**，别手改那个页面 |
+| `test/browser/probe-caps.mjs` | `Capabilities`（D4）的探针：`__octaveCaps` 形状 + 身份证读出来的 `verdict/v128/fonts/jspiEntry`；**反证**：把身份证拦成 404 ⇒ 页面照常 ready 且 `artifact=null` |
 | `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
 | `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
 | `build/fftw_threads_stub.c` | FFTW 线程桩（必须） |
@@ -785,8 +788,8 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > 1. **架构深化 D1–D6 —— 工作令已冻结在 `build/113/PLAN-arch.md`**（三轮拷问的结论、每批的
 >    红绿判据与回退点、以及每条断言的复跑命令）。顺序**不变量**：
 >    **✅ A0 收尾 + 三列镜像闸门 → ✅ A0b 同步 `matrix-android.html` → ✅ A1（D1+D2：`relink.sh`
->    一个入口 + `octave.build.json` 身份证）→ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，
->    ★ 带 promote 上 8761）→ A3（D5：`test/browser/manifest.json` + sweep/harness 搬进仓库）
+>    一个入口 + `octave.build.json` 身份证）→ ✅ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，
+>    已 promote 上 8761）→ A3（D5：`test/browser/manifest.json` + sweep/harness 搬进仓库）
 >    → A4（D6：`CONTEXT.md` 术语表）**。
 >    **A1 已落地并实测**：`relink.sh link product` 在 60 秒内**逐字节复现 `1ed3e528…`**
 >    （`octave.wasm` / `octave.data` 完全相同；`octave.js` 只差里面嵌的输出目录名 ——
@@ -1002,8 +1005,8 @@ sudo docker start obuild odld obench o113 && sh /mnt/hdd/zcode-projects/Octave-F
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260926-064900` · **43 套 / 1,076 PASS / 0 FAIL** | http://127.0.0.1:8768/ |
-| 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,260,278 B · `d72a22064968f8df…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260926-103623` · **43 套 / 1,076 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,262,406 B · `5b3fe9ae55645937…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-26 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
 

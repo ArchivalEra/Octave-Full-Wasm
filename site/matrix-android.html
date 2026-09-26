@@ -39,6 +39,10 @@
      （而 test/browser/accept-net.mjs 的注释以为站点会加载它 —— 于是只有注入脚本的
      测试里它才存在）。这里补上那一行，让"部署的桥"与"加载的桥"一致。 -->
 <script type="text/javascript" src="webnet.js"></script>
+<!-- ★ A2（2026-09-26）：**内核**（页面宿主与 Worker 宿主共用的那一份）。
+     这里只加载、不直接调 —— 页面侧由下面的 createOctaveHost 调 createOctaveCore。
+     必须排在 octave.js **之前**（内核要提供 instantiateWasm / postRun 等配置）。 -->
+<script type="text/javascript" src="octave-core.js"></script>
 <script type="text/javascript">
   // ── 输出落点（T6c）────────────────────────────────────────────────────────
   // 上游骨架只留了一个空的 `<pre id="output">`，而且**没有人往里写东西**：
@@ -57,8 +61,15 @@
     }
     el.appendChild(document.createTextNode(s));
     // 只在页面真的可滚动时才跟到底部：输出多的时候避免每次写都做一次布局查询。
-    if (document.documentElement.scrollHeight > window.innerHeight) {
-      window.scrollTo(0, document.body.scrollHeight);
+    // ★ 2026-09-26 修：**读 `scrollHeight` 会强制同步布局**，海量输出时每条都读 =
+    //   37 次 ×(300KB 文本的)布局 ≈ 2 秒 ⇒ 主线程照样被卡（外部评审 C-4 的"背压"问题
+    //   真身在这里，不在 worker 的消息条数）。⇒ 按时间**节流**（200ms 一次）。
+    var __now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (__now - (window.__octaveScrollAt || 0) > 200) {
+      window.__octaveScrollAt = __now;
+      if (document.documentElement.scrollHeight > window.innerHeight) {
+        window.scrollTo(0, document.body.scrollHeight);
+      }
     }
   }
 
@@ -98,7 +109,7 @@
     try { if (window.Module && window.Module._web_request_interrupt) window.Module._web_request_interrupt(); } catch (err) {}
   };
 
-  // ── C6：实例工厂 ────────────────────────────────────────────────────────────
+  // ── C6：实例工厂（★ A2 起它只是**页面适配器** —— 逻辑全在 bridge/octave-core.js）──────
   // 用法：var mod = createOctaveHost({ base: '', mount: '#host2', home: '/home/web_user/i2', id: 'i2' });
   //       OCTAVE(mod);                       // octave.js 的工厂（MODULARIZE），自己调
   // opts：
@@ -109,11 +120,15 @@
   //   id    实例名（注册表与报错里用）
   // 返回 Module 形态的对象（喂给 OCTAVE()）；**第一个**创建的实例是"默认实例"，
   // 拿走全部 window.* 兼容别名（window.Module / __octaveReady / OctaveAssets / …）——
-  // 65 个验收套件与既有页面读的就是这些名字，语义一字不变。
-  // ⚠️ 已知边界（C6 本批=页面层，产物不变）：图形上屏与四个队列桥（audio/rec/
-  //    filepick/net）仍是默认实例单例；非默认实例的 eval/FS/资产完全独立，
-  //    但 plot 不上屏、音频队列不被 drain —— 分派要动 wasm 侧（webgl_toolkit.cc），
-  //    与下一次重链合并（PLAN-threads §0.5）。
+  // 77 个验收套件与既有页面读的就是这些名字，语义一字不变。
+  // ⚠️ 已知边界（C6=页面层，产物不变）：图形上屏与四个队列桥（audio/rec/filepick/net）
+  //    仍是默认实例单例；非默认实例的 eval/FS/资产完全独立，但 plot 不上屏、
+  //    音频队列不被 drain —— 分派要动 wasm 侧（webgl_toolkit.cc），与下一次重链合并。
+  //
+  // 这一侧只提供"只有页面才知道的"那几件（10 件接口里的页面实现，见 core 文件头）：
+  //   print/printErr（console + 上屏，**两条都要**：套件读 console，人读 DOM）、
+  //   note（诊断走 console.warn）、stdinLine（__octaveStdin 队列 → window.prompt 回落）、
+  //   doc（真 document）、clicks（每实例一个队列）、assets（默认实例复用文件级那份）、onReady。
   window.createOctaveHost = function (opts) {
     opts = opts || {};
     var base = opts.base || '';
@@ -127,424 +142,165 @@
     // ⚠️ 挂点解析放在**注册之前**：挂点不存在必须 throw，且不许在注册表里留下幽灵实例。
     var uiAppend;
     if (opts.mount) {
-      var host = document.querySelector(opts.mount);
-      if (!host) { throw new Error('createOctaveHost: 找不到挂点 ' + opts.mount); }
+      var mountEl = document.querySelector(opts.mount);
+      if (!mountEl) { throw new Error('createOctaveHost: 找不到挂点 ' + opts.mount); }
       var outEl = document.createElement('pre');
-      host.appendChild(outEl);
+      mountEl.appendChild(outEl);
       uiAppend = function (s) { outEl.appendChild(document.createTextNode(s)); };
     } else {
       uiAppend = octaveUiAppend;
     }
-    window.__octaveHosts.push(inst);
+    window.__octaveHosts.push(inst);      // 注册：内核会把 armed/ready/mem 写在这个对象上
 
-    // 资产装载器：**每实例一份**（manifest/loaded/inflight 状态互不可见），
-    // 全部 fetch 走 base 前缀。window.OctaveAssets 是默认实例的别名。
-    // ⚠️ 默认实例直接**复用** window.OctaveAssets（assets-loader.js 文件级创建的那份、
-    //    惰性绑 global.Module）—— 否则默认实例会有两个装载器，测试读的与 boot 链用的
-    //    不是同一份状态。非默认实例在这里创建；它的 Module 对象此刻还没建好，
-    //    所以推迟到工厂末尾（见 Assets 赋值）。
-    var Assets = isDefault ? window.OctaveAssets : null;
-
-    var Module = {
-    // ── JSPI **B 姿势**（2026-09-25 定案）：包装只发生在这一层 ─────────────────
-    // 把唯一的挂起 import `web_sleep_ms` 包成 `WebAssembly.Suspending`，其余 import
-    // **原样透传**；旧产物（WITH_JSPI=0，没有这个 import）走无害空操作。
-    // ⚠️ 5.0.7 的钩子契约 = **完全接管实例化**（preamble.js:835-850，无 fall-through）
-    //    ⇒ 自己 fetch + **异步**编译（29MB 在主线程同步编译会被 Chrome 拒）再回调。
-    //    为什么不走 `instantiateStreaming`：python http.server 不发 application/wasm，
-    //    现役开机本来就在走 arrayBuffer 回退（无回归）。
-    // 为什么坚持 B 姿势（页面包装，不加 `-sJSPI`）：实测 5.0.7 里 `-sJSPI` 经
-    //   `__dlopen_js.isAsync=true` 把 **dlopen 无条件变成挂起点** ⇒ 开机资产装载会
-    //   整批炸（NOTES-jspi「A2 最小实验」）；页面层包装让挂起点只剩 `web_sleep_ms`。
-    instantiateWasm: function (info, receiveInstance) {
-      try {
-        // 没有 JSPI API 的浏览器（Gate 0 单产物策略）⇒ **不包装、不告警**——
-        // "无挂起"是预期降级路径，不是错误；包装失败也不许把裸 TypeError 打到控制台。
-        if (typeof WebAssembly.Suspending === 'function'
-            && info && info.env && typeof info.env.web_sleep_ms === 'function') {
-          info.env.web_sleep_ms = new WebAssembly.Suspending(info.env.web_sleep_ms);
-        }
-      } catch (e) {
-        console.warn('[jspi-b] 挂起包装不可用，已降级为无挂起（其余功能照常）');
-      }
-      // ── C6：G3 取点三原语按**实例**覆写（webjslib 的原始实现读写 window 全局
-      //    队列 ⇒ 同页两实例互踩）。pop 写 double 用**本实例**的 memory
-      //    （receiveInstance 时捕获；每次 pop 现建 Float64Array，天然免掉 growth 失效）。
-      try {
-        if (info && info.env) {
-          var env = info.env;
-          if (typeof env.web_ginput_arm_impl === 'function') {
-            env.web_ginput_arm_impl = function () {
-              inst.clicks = [];
-              inst.armed = true;
-              if (isDefault) window.__octaveClicksArmed = true;   // 兼容别名
-              return 0;
-            };
-          }
-          if (typeof env.web_ginput_pending_impl === 'function') {
-            env.web_ginput_pending_impl = function () { return inst.clicks.length; };
-          }
-          if (typeof env.web_ginput_pop_impl === 'function') {
-            env.web_ginput_pop_impl = function (ptr) {
-              if (!inst.clicks.length) return -1;
-              var c = inst.clicks.shift();
-              if (inst.mem) {
-                var H = new Float64Array(inst.mem.buffer);
-                H[ptr >> 3] = c[0];
-                H[(ptr + 8) >> 3] = c[1];
-                H[(ptr + 16) >> 3] = c[2];
-                H[(ptr + 24) >> 3] = c[3];
-              }
-              return c[4] | 0;
-            };
-          }
-        }
-      } catch (e) { /* 覆写失败 = 退回 webjslib 原始（window 队列）语义，不致命 */ }
-      fetch(base + 'octave.wasm').then(function (r) { return r.arrayBuffer(); })
-        .then(function (b) {
-          // ★ SHA 自证（2026-09-25）：把**本页实际实例化的 wasm 字节**算成 sha256 暴露出来。
-          //   测试/收尾用它对照"磁盘文件"与"刚构建的产物"——防"改完程序跑旧产物"
-          //   （promote 覆盖事故与 harness 旧副本都是这一类，HISTORY §5.50）。
-          try {
-            if (window.crypto && crypto.subtle) {
-              crypto.subtle.digest('SHA-256', b).then(function (d) {
-                window.__octaveWasmSha = Array.prototype.map.call(new Uint8Array(d),
-                  function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-              }).catch(function () {});
-            }
-          } catch (e) { /* 老浏览器没有 subtle：自证缺席，其余功能不受影响 */ }
-          return WebAssembly.instantiate(b, info);
-        })
-        .then(function (out) {
-          inst.mem = out.instance.exports && out.instance.exports.memory ? out.instance.exports.memory : null;
-          receiveInstance(out.instance, out.module);
-        })
-        .catch(function (e) {
-          console.error('[jspi-b] instantiate failed: ' + e);
-        });
-      return {};
-    },
-    // ⚠️ C6：octave.data 一向走胶水的 locateFile（默认文档 base）；有了 base 就统一由它管。
-    locateFile: function (p) { return base + p; },
-    print: function (t) { console.log(t); uiAppend(t + '\n'); },
-    printErr: function (t) { console.warn(t); uiAppend(t + '\n'); },
-    // stdin：Emscripten 的**官方扩展点**（`/dev/stdin` 的设备回调）。
-    //
-    // 必须在**启动前**定义：`library_fs.js` 只在 `FS.init()` 时做
-    //     FS.createDevice('/dev', 'stdin', Module['stdin'])
-    // 启动之后再给 Module.stdin 赋值是**无效的**（已实测：注入后 input() 仍走 TTY）。
-    //
-    // 不定义它也能用：`/dev/stdin` 会软链到 `/dev/tty`，而 TTY 的默认实现是
-    //     result = window.prompt('Input: ')
-    // （见 emscripten/library_tty.js 的 default_tty_ops.get_char）。
-    // 所以 `input()` **本来就能工作**，弹出的就是浏览器原生对话框。
-    //
-    // 这里定义它是为了两件事：
-    //   1. **可测**：playwright 的 dialog 处理是异步的，而 window.prompt 是同步阻塞，
-    //      两者交错会让连续多次 input() 拿到**错位**的答案（实测：答案为上一次的）。
-    //      给宿主一个可注入的队列，验收才能确定性地断言数值。
-    //   2. **可编排**：宿主页可以预先喂输入，不必弹窗。
-    // 空闲时回退到 window.prompt，所以对真人用户的体验与默认行为完全一致。
-    //
-    // 语义与 Emscripten 的 TTY 实现一致：每次调用返回**一个字符码**，行尾给 `\n`，
-    // 无输入时返回 `null` 表示 EOF（Octave 侧表现为 "input: reading user-input failed!"，
-    // 与本机 `octave-cli < /dev/null` 的行为一字不差）。
-    // ⚠️ C6：__octaveStdin 仍是全局队列（accept-input 写它）；按实例分队列是后续批次的事。
-    stdin: (function () {
-      var buf = "";
-      function nextLine() {
-        var q = window.__octaveStdin;
-        if (q && q.length) { return String(q.shift()); }
-        if (typeof window.prompt === "function") {
-          var r = window.prompt("Input: ");
-          return r === null ? null : r;
-        }
-        return null;
-      }
-      return function () {
-        if (!buf) {
-          var line = nextLine();
-          if (line === null || line === undefined) { return null; }
-          buf = line + "\n";
-        }
-        var c = buf.charCodeAt(0);
-        buf = buf.slice(1);
-        return c;
-      };
-    })(),
-    postRun() {
-      // ── 持久化：IDBFS 挂到 HOME（小口子 7，2026-09-24）──────────────────────
-      // 挂载点选 `/home/web_user`：实测 `getenv("HOME")` 就是它 ⇒ `save("x.mat")`、
-      // `cd` 之后不带路径的写法都落在持久区里，学生不必记路径。
-      // ⚠️ **前置条件**：产物必须带 `-lidbfs.js`（`build/113/link-web.sh` 有 IDBFS 自检），
-      //    否则 `FS.filesystems.IDBFS` 是 undefined。**那种情况下不报错、不挂**（页面照常可用），
-      //    只是没有持久化 —— 所以这里先判存在，再挂，再读回。
-      // ⚠️ C6：home 可按实例配（非默认实例必须换路径，否则同源两个实例的
-      //    syncfs 互相覆盖同一批持久键）。
-      var homePath = opts.home || '/home/web_user';
-      try {
-        if (Module.FS.filesystems && Module.FS.filesystems.IDBFS) {
-          try { Module.FS.mkdir(homePath); } catch (e) { /* 已存在 */ }
-          Module.FS.mount(Module.FS.filesystems.IDBFS, {}, homePath);
-          // 开机**读回**：IndexedDB 里的东西灌进 MEMFS（异步，但早于用户第一次敲命令）
-          Module.FS.syncfs(true, function (err) {
-            if (err) console.warn("[idbfs] 读回失败：" + err);
-            else console.log("[idbfs] 已读回 " + homePath + "（IndexedDB）");
-          });
-        } else {
-          console.warn("[idbfs] 这个产物没编入 IDBFS（缺 -lidbfs.js）⇒ 本次会话不持久化");
-        }
-      } catch (e) { console.warn("[idbfs] 挂载失败：" + String(e).slice(0, 140)); }
-
-      // **明确的写回点**：把 MEMFS 的持久区刷进 IndexedDB。
-      //   · 交互用户：由 `ev()` 里的去抖自动写回兜住（800 ms 合并）；
-      //   · 脚本/测试：`await new Promise(r => Module.webSync(r))` 拿确定性（验收就靠它）。
-      Module.webSync = function (cb) {
-        try { Module.FS.syncfs(false, function (err) { if (cb) cb(err || null); }); }
-        catch (e) { if (cb) cb(e); }
-      };
-      var __syncTimer = null;
-      function syncSoon() {
-        if (__syncTimer) return;
-        __syncTimer = setTimeout(function () { __syncTimer = null; Module.webSync(); }, 800);
-      }
-      if (isDefault) window.__octaveSyncSoon = syncSoon;
-
-      // ── JSPI 能力门（G0，2026-09-24）─────────────────────────────────────────
-      // **两个独立 gate**（GPT 复审的要求：只看 `typeof WebAssembly.Suspending` 不够 ——
-      // Pyodide 至今仍有 JSPI 稳定性 issue、还提供"禁用 JSPI"的 workaround）：
-      //   ① API 门：`WebAssembly.Suspending` / `promising` 都是函数；
-      //   ② **Octave 级冒烟**：真的跑一次 suspending 入口（等一小段 + 确认页面定时器在跑）。
-      // 做法是**单产物 + 运行时能力门**（Gate 0 已实测：删掉这两个 API 后 `-sJSPI` 产物照样加载，
-      // 只是被包过的导出不存在）⇒ 不抬浏览器下限、不维护两条车道。
-      //
-      // ⚠️ **现在没有任何功能依赖它**（"等用户动作"一族都是清晰报错）⇒ **这里不弹任何提示**。
-      //    只有 `__octaveJspiRequire()` 被调用时才把话说清楚（G3/G5 接上以后才会被调）。
-      var JSPI_SUPPORT = '支持 JSPI 的浏览器（Chromium 137+ / Safari 27+ 等；**以能力检测为准，别信版本号**）';
-      // ── B 姿势的入口包装（2026-09-25）：`eval_wait`（真 wasm 导出）→ promising ──
-      // 页面级 API 名仍是 `eval_async` ⇒ G0 门机制、探针、D9 接线**全部不变**。
-      // ⚠️ **wasm 边界不传 JS 字符串**（探针教训，实测重现）：`_eval_wait(const char*)`
-      //    直收 JS 串会得到 NULL 指针 ⇒ eval 空串、rc=0 装成功。⇒ 先 malloc 堆指针、
-      //    写串、调用、settle 后 free —— **必须堆分配**（栈分配的指针在挂起期间会被复用）。
-      // ⚠️ 必须**等导出存在**（postRun 里 exports 已就位）；没有 JSPI API 或旧产物
-      //    （无 `_eval_wait`）不包 ⇒ 门如实记 `no-entry`（单产物 + 运行时能力门）。
-      try {
-        if (typeof WebAssembly.promising === 'function' && typeof Module['_eval_wait'] === 'function'
-            && typeof Module.eval_async !== 'function') {
-          var __evalWaitPromised = WebAssembly.promising(Module['_eval_wait']);
-          Module.eval_async = function (code) {
-            var n = Module.lengthBytesUTF8(code) + 1;
-            var p = Module._malloc(n);
-            if (!p) return Promise.reject(new Error('eval_async: malloc 失败'));
-            Module.stringToUTF8(code, p, n);
-            return __evalWaitPromised(p).finally(function () { Module._free(p); });
-          };
-        }
-      } catch (e) { console.warn('[jspi-b] eval_async 包装失败：' + e); }
-      var J = {
-        api: (typeof WebAssembly.Suspending === 'function'
-              && typeof WebAssembly.promising === 'function'),
-        smoke: 'unprobed',      // unprobed | pending | pass | pass-blocking | fail | timeout | no-entry | api-missing
-        entry: null, note: ''
-      };
-      if (isDefault) window.__octaveJspi = J;
-      // ★ 冒烟**不在开机时自动跑**（2026-09-24 事故改的）：G1 第一次把 `eval_async` 链进来时，
-      //   那个绑定是坏的（`RuntimeError: null function`），而开机自检去调它 ⇒ **整个页面卡死**，
-      //   所有浏览器验收一起挂。教训：**"探测一个可能把主线程卡住的东西"不能放在开机路径上**。
-      //   ⇒ 改成按需 `__octaveJspiProbe()`（带超时），开机只如实记 `unprobed`。
-      //   真正依赖 JSPI 的入口（G3/G5）在**第一次被调用时**才问它。
-      var octaveJspiProbe = function (timeoutMs) {
-        if (!J.api) { J.smoke = 'api-missing'; J.note = '页面里没有 WebAssembly.Suspending/promising'; return Promise.resolve(J.smoke); }
-        var fn = (typeof Module.eval_async === 'function') ? Module.eval_async : null;
-        if (!fn) { J.smoke = 'no-entry'; J.note = '本产物没有 suspending 入口（G1 会加 eval_async）'; return Promise.resolve(J.smoke); }
-        J.entry = 'eval_async';
-        J.smoke = 'pending';
-        var ticks = 0;
-        var timer = setInterval(function () { ticks++; }, 20);
-        var done = function (state, note) { clearInterval(timer); J.smoke = state; J.note = note; return state; };
-        // 超时兜底：坏绑定可能**永不 settle**（实测会连页面一起卡住）⇒ 到点如实记 timeout
-        var guard = new Promise(function (res) {
-          setTimeout(function () { res(done('timeout', 'eval_async 在 ' + (timeoutMs || 5000) + 'ms 内没有 settle')); }, timeoutMs || 5000);
-        });
-        var real = Promise.resolve().then(function () {
-          // ★ **解释器装配之前不许碰它**（2026-09-24 深夜实测，HISTORY §5.46）：`execute_interp()`
-          //   之前的任何解释器调用 —— `eval_string` 与 `eval_async` **一样** —— 都抛
-          //   `RuntimeError: null function`。直接调会把冒烟**误判成 `fail`**（JSPI 其实没问题，
-          //   只是叫早了）。⇒ 先等 ready；等不到就由下面的 guard 如实记 `timeout`。
-          //   （C6：等的是**本实例**的 ready —— window.__octaveReady 只是默认实例的别名。）
-          if (inst.ready) return null;
-          return new Promise(function (res) {
-            var t = setInterval(function () {
-              if (inst.ready) { clearInterval(t); res(null); }
-            }, 50);
-          });
-        }).then(function () { return fn('pause(0.2); 43'); }).then(function (v) {
-          // 两条都要：**rc=0**（eval 的返回值是**返回码**，'43' 是表达式值不进返回值 ——
-          // 当年写 indexOf('43') 是 G0 时代没真测过的口径，2026-09-25 实测纠正）
-          // 且**等待期间页面没被堵死**（ticks > 0）。
-          // ticks=0 但 rc=0 ⇒ `pass-blocking`：挂起能力有了，但 `pause` 还没接上（G2 的活）。
-          return done(Number(v) === 0 ? (ticks > 0 ? 'pass' : 'pass-blocking') : 'fail',
-                      'ticks=' + ticks + ' rc=' + v);
-        }).catch(function (e) { return done('fail', String(e).slice(0, 140)); });
-        return Promise.race([real, guard]);
-      };
-      if (isDefault) {
-        window.__octaveJspiProbe = octaveJspiProbe;
-        window.__octaveJspiRequire = function (feature) {
-          var ok = J.api && J.smoke !== 'fail' && J.smoke !== 'timeout' && J.smoke !== 'no-entry';
-          if (ok) return null;
-          return feature + ': 本构建的"等用户动作"需要 JSPI，而当前页面没通过能力门（'
-                 + (J.api ? ('smoke=' + J.smoke) : 'api-missing') + '）。'
-                 + '支持 JSPI 的浏览器：' + JSPI_SUPPORT + '。';
-        };
-      }
-      // 依赖 JSPI 的入口在调用前问它：可用 ⇒ 返回 null；不可用 ⇒ 返回**一句能读懂的话**
-      // （而不是让用户撞上 `TypeError: WebAssembly.Suspending is not a constructor`）。
-      // ⚠️ 还没冒烟过（`unprobed`）**不算失败** —— 依赖项自己会再走一次 `__octaveJspiProbe()`。
-
-
-
-      function chk(rv) {
-        if (rv.err) console.error(rv.err);
-        if (rv.out) console.log(rv.out);
-      }
-      function callModule(method, req) {
-        let s = Module[method](JSON.stringify(req));
-        return JSON.parse(s)
-      }
-      function disp(resp) {
-        document.getElementById("output").innerText = JSON.stringify(resp, null, "  ");
-      }
-
-      Module["execute_interp"]();
-
-      Module["eval_string"]('strcat("foo", "baz")');
-      Module["feval"]("error", ["foo"], 0);
-      // disp(Module["feval"]("strcat", ["foo", "bar"], 1));
-      console.log(Module["last_error_message"]());
-
-      // 资产车道：读清单但不预先加载任何东西（能力资产用到哪个才 fetch 哪个）。
-      // 控制台里：await OctaveAssets.load('ode15s') / OctaveAssets.list()
-      // ⚠️ C6：走**本实例**的装载器（Assets）；window.OctaveAssets 是默认实例的别名。
-      Assets.init().then(function () {
-        console.log('[assets] 可用资产: ' + Assets.list().join(', '));
-        // dldfcn 核心组：convhulln/delaunayn/voronoi/glpk/fftw/gzip/audioread 系列。
-        // 走官方 dlopen 装载（与桌面版同一机制、同一 exist/which 语义）。
-        // 这一组对应"开箱就该能用"的基础几何/压缩/音频，随页面一起装；
-        // 其余资产仍按需懒加载。
-        // 装不上不算致命——页面照常可用，只是这些函数不存在（会清晰报错）。
-        var CORE_DLDFCN = ['convhulln', '__delaunayn__', '__voronoi__',
-                           '__glpk__', 'fftw', 'gzip', 'audioread',
-                           '__web_pause_ms__'];
-        return Assets.load(CORE_DLDFCN).catch(function (e) {
-          console.warn('[assets] dldfcn 核心组装载失败（这些函数将不可用）: ' + e.message);
-          return null;
-        });
-      }).then(function () {
-        // `help` 的数据依赖，同样属于"开箱就该能用"。
-        //   built-in-docstrings：内建函数的 docstring 表。**必须随页面装**——
-        //     没有它，`help sin` 直接报 "failed to open docstrings file"，
-        //     而桌面版从不会有这个失败。它的内容是构建期用真 makeinfo 预渲染的
-        //     纯文本（见 build/render-docstrings.py），所以 help 不需要 makeinfo。
-        //   doc-cache：`lookfor` 和 help 目录列表用的索引。
-        // 两个合计约 2.5MB，相对首包不算小，但换的是"学生第一个命令就能用"。
-        //   plotbridge：plot/print 的纯 .m 桥（渲染走它）。
-        //   webgraphics：**T2/A1 图形句柄**——它的 PKG_ADD 会 register+load 名为
-        //     `web` 的最小 graphics toolkit，使 `figure/gcf/gca/get/set/title` 这些
-        //     **图形对象句柄**真正存在（在此之前 figure 建不出来，gca 一律
-        //     "invalid handle"，只剩 plot 桥能出图）。**必须随页面装**，否则
-        //     用户第一个 `figure` 就撞 "no graphics toolkits are available!"。
-        //   webdoc：**T6/D2a**——`doc` 的浏览器实现（官方 doc.m 末路是起 info
-        //     浏览器进程，本构建无 shell）。它很小，且 `doc` 属于"开箱就该能用"。
-        //   webshims：**R1/R0（2026-09-24）**——无 shell 构建下把 shell 入口的
-        //     **静默失败**变成清晰报错（`popen` 的 `-1`、`st = system(cmd)` 的 `-1`）。
-        //     它必须**随页面装**：覆写要在路径最前面才遮得住内建；等到用户真去调
-        //     `system` 时再装，那句静默 `-1` 已经发生了。
-        return Assets.load(['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc', 'pkgfix'])
-          .catch(function (e) {
-            console.warn('[assets] help 数据装载失败（help/lookfor 将不可用）: ' + e.message);
-            return null;
-          });
-      }).then(function () {
-        // pkg 语义（T4）。**11.3.0 车道只需要 pkgfix 那一半**：
-        //   pkgfix：从**磁盘现状**生成 pkg 数据库。Forge 包是由本加载器直接写进
-        //     FS + addpath 的，从不经过 `pkg install`，所以数据库原本是空的。
-        // ⚠️ **不要**再要求装 `installed_packages.m`：那是 **7.2 车道**的东西 ——
-        //   上游 fork rwl/octave-wasm 把「读 .octave_packages 数据库」的 16 行换成了
-        //   3 行空赋值，故当时要把官方文件放回去（build/pkgrestore/）。**vanilla
-        //   11.3.0 那个文件是完好的**（PROMOTION.md 已核实），不需要还原。
-        //   以前这里挂着它，清单里又没有这个资产 → 每次开页都打一句
-        //   "pkg 支持装载失败（pkg list/load 将不可用）"，而 pkg 其实是好的，
-        //   属**误导性告警**（accept-pkg 在 8761/8762 上都 16/16，已实测）。
-        return Assets.load(['pkgfix', 'webshims'])   // ★ webshims 必须在 pkgfix **之后**装载：两者都 addpath，后装载者排前 —— pkg.m 的 shim 必须排在核心 m/pkg 之前（D6）
-          .then(function () {
-            try {
-              Module.eval_string(
-                "if (exist('__pkgfix_sync_db__')) " +
-                "  try; __pkgfix_sync_db__ (); catch e; " +
-                "    warning('pkg sync failed: %s', e.message); end; endif;");
-            } catch (e) {
-              console.warn('[pkg] 数据库同步失败: ' + e.message);
-            }
-            return null;
-          })
-          .catch(function (e) {
-            console.warn('[assets] pkg 支持装载失败（pkg list/load 将不可用）: ' + e.message);
-            return null;
-          });
-      }).then(function () {
-        inst.ready = true;
-        if (isDefault) window.__octaveReady = true;
-      }).catch(function (e) {
-        console.warn('[assets] 清单未就绪（无 assets/ 目录时属正常）: ' + e.message);
-        inst.ready = true;
-        if (isDefault) window.__octaveReady = true;
-      });
-
-      // 音频：开始轮询播放队列；首次点击解锁 AudioContext（浏览器 autoplay 策略）。
-      // ⚠️ C6 边界：四个队列桥是默认实例单例（window.Octave* 别名绑死默认实例）⇒
-      //    只在默认实例上 init；非默认实例的音频/文件选择是**下一次重链**的活。
-      if (isDefault && window.OctaveAudio) {
-        window.OctaveAudio.init().catch(function (e) {
-          console.warn('[audio] 桥未就绪: ' + e.message);
-        });
-        window.addEventListener('click', function once() {
-          window.OctaveAudio.resume();
-          window.removeEventListener('click', once);
-        });
-      }
-      // 录音桥：只轮询队列。麦克风权限**不在页面加载时要** —— 那会在用户还没
-      // 表达任何意图时弹权限框；真正要权限的时机是第一次 record()。
-      if (isDefault && window.OctaveRec) {
-        window.OctaveRec.init().catch(function (e) {
-          console.warn('[audiorec] 桥未就绪: ' + e.message);
-        });
-      }
-      // 文件选择器桥：只轮询队列，不主动弹任何框（弹框的时机是用户调 uigetfile）。
-      if (isDefault && window.OctaveFilePick) {
-        window.OctaveFilePick.init().catch(function (e) {
-          console.warn('[filepick] 桥未就绪: ' + e.message);
-        });
-      }
-    }
+    // 点击队列：**每实例一个**（旧实现读 window 全局 ⇒ 同页两实例互踩）。
+    // 全局 pointerdown 把命中扇出给所有 armed 的实例（见文件顶部那段）。
+    var clicks = {
+      list: [],
+      length: function () { return clicks.list.length; },
+      push: function (c) { clicks.list.push(c); },
+      shift: function () { return clicks.list.shift(); },
+      clear: function () { clicks.list.length = 0; },
     };
-    inst.mod = Module;
-    // 非默认实例的装载器在这里建（此刻 Module 才存在；绑定它 ⇒ 资产写进**它自己的** FS）
-    if (!Assets) {
-      Assets = window.createOctaveAssets(Module, base, function () { return inst.ready; });
-    }
-    inst.assets = Assets;
-    // 默认实例拿走全部 window.* 兼容别名（65 个验收套件读的就是这些名字）。
+    inst.clicks = clicks.list;            // 兼容：既有断言读 inst.clicks 的长度
+
+    var core = window.createOctaveCore({
+      base: base, mode: 'single', isDefault: isDefault, home: opts.home,
+      state: inst, clicks: clicks,
+      host: {
+        // ⚠️ 仍然照常走 console：验收套件读的就是 console 里的输出，只写 DOM 会把 26 套全打掉。
+        print: function (t) { console.log(t); uiAppend(t + '\n'); },
+        printErr: function (t) { console.warn(t); uiAppend(t + '\n'); },
+        note: function (m) { console.warn(m); },
+        stdinLine: function () {
+          var q = window.__octaveStdin;
+          if (q && q.length) { return String(q.shift()); }
+          if (typeof window.prompt === "function") {
+            var r = window.prompt("Input: ");
+            return r === null ? null : r;
+          }
+          return null;
+        },
+        doc: document,
+        assets: function (mod, b, isReady) {
+          // 默认实例**复用** assets-loader.js 文件级创建的那份（惰性绑 global.Module）——
+          // 否则测试读的（window.OctaveAssets）与 boot 链用的不是同一份状态。
+          if (isDefault && window.OctaveAssets) { return window.OctaveAssets; }
+          return window.createOctaveAssets(mod, b, isReady);
+        },
+        onReady: function () { inst.ready = true; if (isDefault) { window.__octaveReady = true; } },
+      },
+    });
+    inst.mod = core.module;
+    inst.core = core;
     if (isDefault) {
-      window.__octaveClicks = inst.clicks;   // 别名 = 默认实例的队列（webjslib 原始实现读它）
+      window.__octaveClicks = clicks.list;   // 别名 = 默认实例的队列（webjslib 原始实现读它）
+      window.__octaveCaps = core.caps;       // Capabilities（D4）：开机算一次，消费者只读
     }
-    return Module;
+    return core.module;
   };
 </script>
 <script type="text/javascript" src="octave.js"></script>
 <script type="text/javascript">
-  window.Module = window.createOctaveHost({ id: 'default' });
-  OCTAVE(window.Module);
+// ── C3/B5（2026-09-26）：两种宿主，**默认路径一字不动** ────────────────────────
+// 缺省（无 `?worker=1`）= 单页模式：解释器在主线程（现役产物行为，77 个验收套件全靠它）。
+// `?worker=1` = **Worker 模式**：wasm + FS + 资产 + JSPI 全在 DedicatedWorker 里，主线程只
+// 做 DOM 与转发 ⇒ 长计算（`A=rand(2000); A*A`）**不再冻页面**。机制前提已实测（Q4/E4）。
+// ⚠️ Worker 模式 phase 1 的已知边界：图形真渲染后端（WebGL toolkit）在 worker 里起不来
+//   （EM_ASM 建 canvas 需要真 DOM）⇒ 走 plotbridge 回落；把 WebGL 搬进 worker 要改
+//   webgl_toolkit.cc 并重链（B5 phase 2）。stdin 在 worker 里如实 EOF（没有 prompt）。
+(function () {
+  var params = new URLSearchParams(location.search);
+  if (params.get('worker') !== '1') {
+    window.Module = window.createOctaveHost({ id: 'default' });
+    OCTAVE(window.Module);
+    return;
+  }
+  var base = params.get('base') || '';
+  var w = new Worker('octave-worker.js');
+  var seq = 0, pending = {};
+  var API = { mode: 'worker', booted: true, ready: false, interrupted: 0, plots: 0 };
+  function call(kind, payload) {
+    return new Promise(function (resolve, reject) {
+      var id = ++seq;
+      pending[id] = { resolve: resolve, reject: reject };
+      try { w.postMessage(Object.assign({ id: id, kind: kind }, payload)); }
+      catch (e) { delete pending[id]; reject(e); }
+    });
+  }
+  // ★ 结算保证（外部评审 C-3/C-6）：worker 崩溃或被 terminate 时，**不许留下永不 settle
+  //   的僵尸 Promise**（否则 UI 永远卡在 loading）。onerror 与 terminate 都把待办全部 reject。
+  function failAllPending(err) {
+    Object.keys(pending).forEach(function (id) {
+      try { pending[id].reject(err); } catch (e) {}
+      delete pending[id];
+    });
+  }
+  // ★ 上屏**合批**（2026-09-26，外部评审 C-4 的另一半）：worker 已按 8KB 合批，但页面侧
+  //   每条仍做 console.log + DOM 追加 + 布局 ⇒ 5 万行实测主线程被占 ~170ms。改成
+  //   rAF 合批（最多 60fps 一次），并在**结果到达前 flush**（保证测试立即读得到 #output）。
+  var uiBuf = '', uiPending = false;
+  function flushUi() {
+    uiPending = false;
+    if (!uiBuf) return;
+    octaveUiAppend(uiBuf);
+    uiBuf = '';
+  }
+  function queueUi(t) {
+    uiBuf += t + '\n';
+    if (!uiPending) { uiPending = true; (window.requestAnimationFrame || setTimeout)(flushUi); }
+  }
+  w.onmessage = function (ev) {
+    var m = ev.data || {};
+    if (m.kind === 'out') { queueUi(String(m.text)); return; }
+    if (m.kind === 'ready') {
+      API.ready = true; window.__octaveReady = true;
+      console.log('[worker] ready' + (m.warn ? '（有告警：' + m.warn + '）' : ''));
+      return;
+    }
+    if (m.kind === 'plot') {
+      try {
+        var blob = new Blob([m.ab], { type: m.path.indexOf('.svg') >= 0 ? 'image/svg+xml' : 'image/png' });
+        var img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.style.maxWidth = '100%';
+        document.body.appendChild(img);
+        API.plots++;
+      } catch (e) { console.warn('[worker] 图上屏失败: ' + e); }
+      return;
+    }
+    if (m.kind === 'fatal') { console.error('[worker] ' + m.err); return; }
+    if (m.id && pending[m.id]) { flushUi(); var cb = pending[m.id]; delete pending[m.id]; cb.resolve(m); }
+  };
+  w.onerror = function (e) {
+    var msg = '[worker] onerror: ' + (e && e.message ? e.message : 'unknown');
+    console.error(msg);
+    API.crashed = msg;
+    failAllPending(new Error('WorkerCrashError: ' + msg));   // ★ 立刻失败，不等超时
+    return true;
+  };
+  API.eval = function (code) { return call('eval', { code: code }); };
+  API.evalAsync = function (code) { return call('evalAsync', { code: code }); };
+  API.loadAssets = function (names) { return call('loadAssets', { names: names }); };
+  // ★ 受控 teardown：拒绝所有待办（AbortError）后 terminate —— 供"崩溃/重启/换实例"用
+  API.terminate = function () {
+    try { failAllPending(new DOMException('Aborted', 'AbortError')); } catch (e) {}
+    try { w.terminate(); } catch (e) {}
+    API.terminated = true;
+  };
+  API.diagnose = function () { return call('diagnose', {}).then(function (m) { return m.d; }); };
+  API.interrupt = function () { API.interrupted++; w.postMessage({ kind: 'interrupt' }); };
+  window.OctaveWorker = API;
+  // 点击一律转发（worker 侧 `arm` 时会清空队列 ⇒ "第二次点击不误触发下一次 ginput" 仍成立）
+  window.addEventListener('pointerdown', function (e) {
+    var el = e.target;
+    if (!el || (el.tagName !== 'IMG' && el.tagName !== 'CANVAS')) return;
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    w.postMessage({ kind: 'click', data: [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
+                                          e.button === 2 ? 3 : (e.button === 1 ? 2 : 1)] });
+  });
+  w.postMessage({ kind: 'opts', base: base, home: params.get('home') || undefined });
+})();
 </script>
 <!--
   速度探针（**默认关**，只在带 `?bench=1` 时跑）：量"真渲染后端"的墙钟。
@@ -672,6 +428,8 @@
   }
 })();
 </script>
+
+<!-- MATRIX-TAIL-START（本段由 build/113/gen-matrix-android.py 原样搬运；别手改）-->
 <script>
 // ── 浏览器矩阵自动冒烟页（2026-09-25）：ready 后自动跑能力门，结果写进 DOM 供截图读取 ──
 (function () {
@@ -692,9 +450,6 @@
   }, 500);
 })();
 </script>
-</body>
-</html>
-</body>
-</html>
+<!-- MATRIX-TAIL-END -->
 </body>
 </html>

@@ -31,10 +31,16 @@ var HOME = '/home/web_user';        // 由 opts.home 覆盖（多 worker 必须�
 'use strict';
 
 var BASE = '';                      // 由主线程第一条消息里的 opts.base 覆盖（默认同目录）
-var booted = false;
-var ready = false;
-var clickQueue = [];
-var armed = false;
+var booted = false;      // 仅用于记录（就绪由 st.ready 表达）
+// 点击队列**对象**（内核按这个接口用：clear/length/push/shift）；
+// `self.__octaveClicks` 仍指向里面的**数组**（webjslib 原始实现与既有断言读它）。
+var clickQ = {
+  list: [],
+  length: function () { return clickQ.list.length; },
+  push: function (c) { clickQ.list.push(c); },
+  shift: function () { return clickQ.list.shift(); },
+  clear: function () { clickQ.list.length = 0; },
+};
 
 function send(m) { self.postMessage(m); }
 // ── stdout **合批**（背压；2026-09-26 补，源自外部评审 C-4）──────────────────
@@ -117,96 +123,35 @@ var OctaveP5 = {
   status: function () { return { backend: 'worker-none' }; },
 };
 self.OctaveP5 = OctaveP5;
-self.__octaveClicks = clickQueue;
+self.__octaveClicks = clickQ.list;
 self.__octaveClicksArmed = false;
 
-// ── 解释器（与页面同一套 B 姿势：包装只在宿主层）─────────────────────────────
-var Module = {
-  print: function (t) { out(t); },
-  printErr: function (t) { out(t); },
-  locateFile: function (p) { return BASE + p; },
-  instantiateWasm: function (info, receiveInstance) {
-    try {
-      if (typeof WebAssembly.Suspending === 'function'
-          && info && info.env && typeof info.env.web_sleep_ms === 'function') {
-        info.env.web_sleep_ms = new WebAssembly.Suspending(info.env.web_sleep_ms);
-      }
-      // 取点三原语按**本 worker** 覆写（队列在 worker 里，页面点击靠 postMessage 送进来）
-      if (info && info.env) {
-        var env = info.env;
-        if (typeof env.web_ginput_arm_impl === 'function') {
-          env.web_ginput_arm_impl = function () { clickQueue.length = 0; armed = true; return 0; };
-        }
-        if (typeof env.web_ginput_pending_impl === 'function') {
-          env.web_ginput_pending_impl = function () { return clickQueue.length; };
-        }
-        if (typeof env.web_ginput_pop_impl === 'function') {
-          env.web_ginput_pop_impl = function (ptr) {
-            if (!clickQueue.length) return -1;
-            var c = clickQueue.shift();
-            var H = new Float64Array(wasmMemory.buffer);
-            H[ptr >> 3] = c[0]; H[(ptr + 8) >> 3] = c[1];
-            H[(ptr + 16) >> 3] = c[2]; H[(ptr + 24) >> 3] = c[3];
-            return c[4] | 0;
-          };
-        }
-      }
-    } catch (e) { out('[worker] 挂起包装不可用，降级为无挂起: ' + e); }
-    fetch(BASE + 'octave.wasm').then(function (r) { return r.arrayBuffer(); })
-      .then(function (b) { return WebAssembly.instantiate(b, info); })
-      .then(function (res) {
-        wasmMemory = res.instance.exports.memory;
-        receiveInstance(res.instance, res.module);
-      })
-      .catch(function (e) { send({ kind: 'fatal', err: 'instantiate: ' + e }); });
-    return {};
+// ── 内核（★ A2：与页面宿主**共用同一份** bridge/octave-core.js）──────────────────
+// 这一侧只提供"只有 worker 才知道的"那几件（见 core 文件头的 10 件接口）：
+//   print/printErr → out()（合批 postMessage）、note 同上、stdinLine 恒 null（如实 EOF）、
+//   doc = 上面那个 shim、assets = createOctaveAssets、onReady = 发 ready 消息。
+// ⚠️ `importScripts` 必须在 createOctaveCore **之前**（要用 assets-loader 的工厂），
+//    而 OCTAVE(Module) 必须在 createOctaveCore **之后**（内核提供 instantiateWasm/postRun）。
+importScripts('assets-loader.js', 'octave-core.js', 'octave.js');
+
+var st = { armed: false, ready: false, mem: null, mod: null };
+var core = createOctaveCore({
+  // ⚠️ base 传**函数**（活取）：BASE 是 `opts` 消息到达时才设的，晚于这一句。
+  base: function () { return BASE; }, mode: 'worker', isDefault: true, home: HOME, state: st, clicks: clickQ,
+  host: {
+    print: function (t) { out(t); },
+    printErr: function (t) { out(t); },
+    note: function (m) { out(m); },
+    stdinLine: function () { return null; },   // worker 里没有 prompt：如实 EOF（与 octave-cli < /dev/null 同）
+    doc: self.document,                        // 上面那个最小 shim
+    assets: function (mod, b, isReady) { return createOctaveAssets(mod, b, isReady); },
+    onReady: function (e) {
+      st.ready = true; booted = true;
+      send(e ? { kind: 'ready', warn: String(e.message || e) } : { kind: 'ready' });
+    },
   },
-  stdin: function () { return null; },     // worker 里没有 prompt：如实 EOF（与 octave-cli < /dev/null 同）
-  postRun: function () { bootChain(); mountHome(); },
-};
-var wasmMemory = null;
-var Assets = null;
-
-// IDBFS 挂载（worker 版）：挂 HOME 并读回一次。**按实例换路径**（评审 C-8）。
-var homeMounted = false;
-function mountHome() {
-  if (homeMounted || !Module.FS || !Module.FS.filesystems || !Module.FS.filesystems.IDBFS) return;
-  try {
-    try { Module.FS.mkdir(HOME); } catch (e) {}
-    Module.FS.mount(Module.FS.filesystems.IDBFS, {}, HOME);
-    Module.FS.syncfs(true, function (err) { if (err) out('[idbfs] 读回失败: ' + err); });
-    homeMounted = true;
-  } catch (e) { out('[idbfs] 挂载失败: ' + e); }
-}
-
-function bootChain() {
-  var CORE = ['convhulln', '__delaunayn__', '__voronoi__', '__glpk__', 'fftw', 'gzip', 'audioread',
-              '__web_pause_ms__'];
-  var HELP = ['built-in-docstrings', 'doc-cache', 'macros.texi', 'plotbridge', 'webgraphics', 'webdoc', 'pkgfix'];
-  Module.execute_interp();
-  if (typeof WebAssembly.promising === 'function' && typeof Module._eval_wait === 'function') {
-    var p = WebAssembly.promising(Module._eval_wait);
-    Module.eval_async = function (code) {
-      var n = Module.lengthBytesUTF8(code) + 1;
-      var ptr = Module._malloc(n);
-      if (!ptr) return Promise.reject(new Error('eval_async: malloc 失败'));
-      Module.stringToUTF8(code, ptr, n);
-      return p(ptr).finally(function () { Module._free(ptr); });
-    };
-  }
-  Assets = createOctaveAssets(Module, BASE, function () { return ready; });
-  Assets.init().then(function () { return Assets.load(CORE).catch(function (e) { out('[assets] 核心组: ' + e.message); }); })
-    .then(function () { return Assets.load(HELP).catch(function (e) { out('[assets] help 组: ' + e.message); }); })
-    .then(function () { return Assets.load(['pkgfix', 'webshims']).catch(function (e) { out('[assets] pkg: ' + e.message); }); })
-    .then(function () {
-      try { Module.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end"); } catch (e) {}
-      ready = true; booted = true;
-      send({ kind: 'ready' });
-    })
-    .catch(function (e) { ready = true; booted = true; send({ kind: 'ready', warn: String(e.message) }); });
-}
-
-importScripts('assets-loader.js', 'octave.js');
+});
+var Module = core.module;      // 顶层 var ⇒ 顺带挂上 self.Module（OctaveP5.show 读它）
 OCTAVE(Module);
 
 // ── 请求队列：同一时刻只跑一个解释器任务（挂起期间也不例外）───────────────────
@@ -222,12 +167,17 @@ function pumpQueue() {
 // ── 消息分发 ────────────────────────────────────────────────────────────────
 self.onmessage = function (ev) {
   var m = ev.data || {};
-  if (m.kind === 'opts') { BASE = m.base || ''; if (m.home) HOME = m.home; mountHome(); return; }
+  if (m.kind === 'opts') {
+    BASE = m.base || '';
+    if (m.home) HOME = m.home;
+    core.mountHome(m.home);     // ★ A2：挂载在内核里（幂等；只在还没挂过时用新 home）
+    return;
+  }
   if (m.kind === 'interrupt') {
     try { if (Module._web_request_interrupt) Module._web_request_interrupt(); } catch (e) {}
     return;
   }
-  if (m.kind === 'click') { clickQueue.push(m.data); return; }
+  if (m.kind === 'click') { clickQ.push(m.data); return; }
   if (m.kind === 'diagnose') {
     // 自证用：把 worker **内部**的状态读出来（页面读不到 worker 的 FS/GL）
     //   tk    = graphics_toolkit() 的实际值（经虚拟 FS 取回，不靠 printf 匹配）
@@ -241,6 +191,8 @@ self.onmessage = function (ev) {
     try { d.nogl = Module.FS.analyzePath('/tmp/p5_nogl.txt').exists ? 1 : 0; } catch (e) { d.nogl = -1; }
     try { d.glCtx = !!(_glCanvas && _glCanvas.getContext('webgl2')); } catch (e) { d.glCtx = 'ERR'; }
     d.glSize = _glCanvas ? (_glCanvas.width + 'x' + _glCanvas.height) : '(无)';
+    // ★ A2：Capabilities（D4）也一起回 —— worker 里没有 window.*，诊断通道是唯一读得到的地方。
+    try { d.caps = core.caps; } catch (e) { d.caps = 'ERR'; }
     send({ id: m.id, kind: 'diag', d: d });
     return;
   }

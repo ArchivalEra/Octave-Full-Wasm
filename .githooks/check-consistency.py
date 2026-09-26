@@ -28,6 +28,7 @@
   check-consistency.py --list   # 只列不改、永远 exit 0（人工巡检）
 """
 import json
+import subprocess
 import os
 import re
 import sys
@@ -45,19 +46,29 @@ def read(rel):
         return fh.read()
 
 
-def boot_names(html):
-    """index.html 里 *.Assets.load(...) 用到的名字（含 CORE_DLDFCN 那种变量间接）。
-    ⚠️ 2026-09-26 C6 重构后 boot 链走实例变量 `Assets.load(...)`（window.OctaveAssets
-    只是默认实例别名）⇒ 正则放宽为 `*.Assets.load(`，两种形态都抓。"""
+def boot_names(text):
+    """boot 链用到的资产名（含 CORE/HELP/PKG 那种变量间接）。
+    ⚠️ 两次搬迁的痕迹，别改回去：
+      · 2026-09-26 C6：boot 链改走实例变量 `Assets.load(...)`（window.OctaveAssets 只是默认
+        实例别名）⇒ 正则放宽为 `*.Assets.load(`；
+      · 2026-09-26 A2：**清单搬进内核** `bridge/octave-core.js`（CORE_DLDFCN/HELP_ASSETS/
+        PKG_ASSETS 三个数组），页面里再也没有 Assets.load 了 ⇒ 只扫 index.html 会得到
+        **0 个名字**，而"0 个都合规"是**恒真**的 —— 闸门静默空转（实测踩到，本条就是修它）。
+        所以两个文件都扫：内核（现在）+ 页面（万一将来又有人在页面里直接 load）。"""
     names = set()
-    for m in re.finditer(r"(?:[A-Za-z_$][\w$]*\.)*Assets\.load\(\s*(\[[^\]]*\]|\w+)", html):
+    for m in re.finditer(r"(?:[A-Za-z_$][\w$]*\.)*Assets\.load\(\s*(\[[^\]]*\]|\w+)", text):
         arg = m.group(1)
         if arg.startswith("["):
             names.update(re.findall(r"'([^']+)'", arg))
         else:
-            dm = re.search(r"(?:var\s+)?" + re.escape(arg) + r"\s*=\s*\[([^\]]*)\]", html, re.S)
+            dm = re.search(r"(?:var\s+)?" + re.escape(arg) + r"\s*=\s*\[([^\]]*)\]", text, re.S)
             if dm:
                 names.update(re.findall(r"'([^']+)'", dm.group(1)))
+    # 内核里的三个常量数组（A2 之后这里是唯一真相源）
+    for var in ("CORE_DLDFCN", "HELP_ASSETS", "PKG_ASSETS"):
+        dm = re.search(r"var\s+" + var + r"\s*=\s*\[([^\]]*)\]", text, re.S)
+        if dm:
+            names.update(re.findall(r"'([^']+)'", dm.group(1)))
     return {n for n in names if n}
 
 
@@ -85,7 +96,12 @@ def main():
             notes.append(f"main.cc 的 {len(paths)} 条路径都在 {py_root} 下")
 
     # ── 2) 启动清单 ⊆ 清单 ───────────────────────────────────────────────────
-    boot = boot_names(read("bridge/index.html"))
+    boot = set()
+    for _src in ("bridge/octave-core.js", "bridge/index.html"):     # A2：清单在内核里
+        try:
+            boot |= boot_names(read(_src))
+        except OSError:
+            problems.append((f"{_src} 读不到", "boot 链的资产清单没地方核对了"))
     man = os.path.join(SITE, "assets", "manifest.json")
     if not os.path.exists(man):
         notes.append(f"启动清单核对**跳过**（读不到 {man}）")
@@ -93,7 +109,7 @@ def main():
         names = {a.get("name") for a in json.load(open(man, encoding="utf-8")).get("assets", [])}
         missing = sorted(n for n in boot if n not in names)
         if missing:
-            problems.append(("index.html 装的名字不在清单里", ", ".join(missing)))
+            problems.append(("boot 链装的名字不在清单里", ", ".join(missing)))
         else:
             notes.append(f"启动清单 {len(boot)} 个名字都在清单里（清单共 {len(names)} 条）")
 
@@ -147,6 +163,73 @@ def main():
         problems.append(("11.3.0 车道里出现 /7.2.0/ 路径", ", ".join(hits[:5])))
     else:
         notes.append("11.3.0 车道里没有 /7.2.0/ 路径")
+
+    # ── 4. 页面引用的本地文件必须在 git 里（2026-09-26 A2）────────────────────
+    # ⚠️ 同一类 bug 犯过三次：p5canvas.js（09-23）、octave-worker.js（09-26 A0）、
+    #    octave-core.js（A2）—— 都是"磁盘上有、部署能跑、**唯独不在 git 里**"
+    #    ⇒ 新克隆/断电恢复必坏。而 check-whitelist.py 只看**已暂存**的文件，看不见被忽略的。
+    #    这条从"页面依赖"这一侧反查，堵住整类。
+    tracked = set()
+    try:
+        tracked = {l.strip() for l in subprocess.run(
+            ["git", "-C", REPO, "ls-files"], stdout=subprocess.PIPE, text=True,
+            check=False).stdout.splitlines() if l.strip()}
+    except OSError:
+        notes.append("git ls-files 取不到 ⇒ 跳过『页面引用必须入库』检查")
+    if tracked:
+        dangling = []
+        targets = (("bridge/index.html", "html"), ("bridge/octave-worker.js", "js"))
+        for rel, kind in targets:
+            try:
+                txt = read(rel)
+            except OSError:
+                continue
+            refs = []
+            if kind == "html":
+                refs = re.findall(r'<script[^>]+src="([^"]+)"', txt)
+            else:
+                for grp in re.findall(r"importScripts\(([^)]*)\)", txt):
+                    refs += [x.strip().strip("'\"") for x in grp.split(",")]
+            for r in refs:
+                if not r or r.startswith(("http:", "https:", "//", "data:")):
+                    continue
+                # 引用是**相对页面**的 ⇒ 要按页面所在目录解析（bridge/xxx）
+                resolved = os.path.normpath(os.path.join(os.path.dirname(rel), r))
+                # 构建产物豁免：`octave.js/.wasm/.data` 由 link-web.sh 产出，**故意不在
+                # bridge/**（它们住在 site/ 与容器里）—— 本检查只管**手写的**页面依赖。
+                if os.path.basename(resolved) in ("octave.js", "octave.wasm", "octave.data"):
+                    continue
+                if resolved not in tracked:
+                    dangling.append(f"{rel} → {r}（应为 {resolved}）")
+        if dangling:
+            problems.append(("页面引用的文件不在 git 里", "; ".join(sorted(set(dangling))[:6])))
+        else:
+            notes.append("页面引用的本地文件都在 git 里（index.html 的 script src + worker 的 importScripts）")
+
+    # ── 5. CONTEXT.md 的"证据行"必须指向**存在**的仓库路径（2026-09-26 A4）──────
+    # 为什么单列：术语表最容易退化成散文("大家都知道")。约定每条术语挂一行 `证据：`，
+    # 里面写仓库路径/命令；这条检查把"路径存在"变成硬要求（写不出证据的术语 ⇒ 不该在这里）。
+    try:
+        ctx = read("CONTEXT.md")
+    except OSError:
+        notes.append("没有 CONTEXT.md ⇒ 跳过『术语证据行』检查")
+    else:
+        bad_ev = []
+        for line in ctx.split("\n"):
+            if "证据：" not in line:
+                continue
+            for tok in re.findall(r"`([^`]+)`", line):
+                tok = tok.strip()
+                if not tok or " " in tok or "/" not in tok:
+                    continue                      # 命令/单名不算路径
+                if tok.startswith(("http", "-", "!")):
+                    continue
+                if not os.path.exists(os.path.join(REPO, tok)):
+                    bad_ev.append(tok)
+        if bad_ev:
+            problems.append(("CONTEXT.md 的证据行指向不存在的路径", ", ".join(sorted(set(bad_ev))[:6])))
+        else:
+            notes.append("CONTEXT.md 的证据行全部指向存在的仓库路径")
 
     for n in notes:
         print(f"  · {n}")

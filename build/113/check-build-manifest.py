@@ -29,7 +29,7 @@ import time
 # 声明键 → 判定规则。**未列出的声明键一律判 mismatch**（fail-closed：
 # 拼错的键名不许被静默忽略，否则"声明了却没检查"会变成新的静默退化）。
 BOOL_KEYS = ("jspi_entry", "idbfs", "fontconfig")
-INT_KEYS = ("main_module", "jspi_glue_suspending")
+INT_KEYS = ("jspi_glue_suspending",)   # main_module 单独判定：从导出条目数推导（见下）
 
 
 def sha256_file(p, chunk=1 << 20):
@@ -57,9 +57,18 @@ def compare(declared, measured):
             if want != got:
                 add(k, want, got, "整数不一致")
         elif k == "main_module":
-            want, got = declared[k], measured.get("main_module")
-            if want != got:
-                add(k, want, got, "MAIN_MODULE 级别不一致（DCE 与否决定导出面）")
+            # ⚠️ **从产物的导出条目数推导**，不信写入器给的字段（它可能来自环境变量）：
+            #   实测基准：M2（DCE ⇒ 只导出保活集）710 条、M1（导出全部）44987 条 —— 63× 差距，
+            #   所以 5000 是安全分界。导出条目数是 wasm 里**读出来**的，改不了。
+            n = measured.get("exported_functions")
+            if n is None:
+                add(k, declared[k], None, "量不到 wasm 导出条目数 ⇒ 无法核验 M1/M2，判拒")
+            else:
+                lvl = 2 if n < 5000 else 1
+                if declared[k] != lvl:
+                    add(k, declared[k], {"exported_functions": n, "derived": lvl},
+                        "声明 MAIN_MODULE=%s，但产物导出 %d 条（<5000 ⇒ M2，≥5000 ⇒ M1）"
+                        % (declared[k], n))
         elif k == "simd":
             v = (measured.get("simd") or {}).get("v128")
             if v is None:

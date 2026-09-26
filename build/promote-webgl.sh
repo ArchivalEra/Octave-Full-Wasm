@@ -63,14 +63,18 @@ else
 fi
 
 say "2) 三大件 + 桥文件 → $SITE"
-for f in octave.js octave.wasm octave.data; do
+for f in octave.js octave.wasm octave.data octave.build.json; do
+  # ★ A1/A2：`octave.build.json` 是**产物身份证**（页面开机读它填 Capabilities，见
+  #   bridge/octave-core.js）。它必须跟产物一起走 —— 否则站点上就没有"这份产物到底带什么
+  #   能力"的机器可读记录。缺了不致命（内核容忍缺席），但三列 parity 会报出来。
   run "sudo docker cp 'o113:$SRC_OUT/$f' '$SITE/$f'"
 done
 # ⚠️ 别用 `cp src/{a,b,c} dst` 这种花括号写法：用 `sh` 跑本脚本时（/bin/sh）花括号
 #    不一定展开（实测踩过：报 `cp: 对 '...{a,b,c}' 调用 stat 失败`）。逐个列出来最稳。
 # ⚠️ 清单必须跟着"页面会 <script src> / new Worker() 的文件"走：漏一个就是部署后 404。
 #    octave-worker.js 是 C3/B5（2026-09-26）新增的 worker 宿主，`?worker=1` 会 `new Worker` 它。
-for f in index.html assets-loader.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-worker.js; do
+#    octave-core.js 是 A2（2026-09-26）抽出的**内核**：页面与 worker **共用同一份**，两边都 `src` 它。
+for f in index.html assets-loader.js octave-core.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-worker.js; do
   run "cp '$REPO/bridge/$f' '$SITE/$f'"
 done
 
@@ -113,7 +117,10 @@ if [ "$DRY" = "0" ]; then
   grep -q 'loaded_graphics_toolkits' "$SITE/assets/m/webgraphics.js" \
     || { echo "FATAL: 站点 webgraphics 资产还是旧 PKG_ADD" >&2; exit 3; }
   [ -f "$SITE/p5canvas.js" ] || { echo "FATAL: 缺 p5canvas.js（index.html 会 404）" >&2; exit 3; }
-  echo "   桥资产 / webgraphics 资产 / p5canvas.js 都在"
+  # ★ A2（2026-09-26）：octave-core.js 是**内核**（页面与 worker 共用）—— index.html 与
+  #   octave-worker.js 都依赖它，缺了就是 404 + 整页起不来。与 p5canvas.js 同类，必须点名查。
+  [ -f "$SITE/octave-core.js" ] || { echo "FATAL: 缺 octave-core.js（index.html/octave-worker.js 都会 404）" >&2; exit 3; }
+  echo "   桥资产 / webgraphics 资产 / p5canvas.js / octave-core.js 都在"
   grep -qa 'gl4es_gl' "$SITE/octave.wasm" || { echo "FATAL: 站点 wasm 里没有 gl4es（不是带 GL 的那份）" >&2; exit 3; }
   echo "   站点 wasm 带 gl4es ✓"
   # FreeType（批次 D）：`EXPECT_FREETYPE=1` 时要求产物里有字体预载记录。

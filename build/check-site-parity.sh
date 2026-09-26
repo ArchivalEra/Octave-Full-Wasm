@@ -13,7 +13,8 @@
 #   第三列把这个盲区堵上：C = 仓库 `site/`（默认取本脚本所在仓库的 `site/`）。
 #
 # ★ 判据分两类，**别混**：
-#   · `octave.{wasm,js,data}` + `index.html` + `assets-loader.js` + `VERSION` + `assets/manifest.json`
+#   · `octave.{wasm,js,data}` + `octave.build.json`（产物身份证）+ `index.html` +
+#     `assets-loader.js` + `VERSION` + `assets/manifest.json`
 #     —— **部署件**：三处不一致就是"有一处没同步"，要**说清是哪一处**；
 #   · `assets/m/*.js` 与 `assets/manifest.json` 里的 sha
 #     —— **资产**：实验期允许不同（8768 先改），但**必须报出来**。
@@ -41,7 +42,7 @@ STRICT=0
 [ "${1:-}" = "--strict" ] && STRICT=1
 
 # 部署件清单：三处必须逐字节相同的那批
-DEPLOY="octave.wasm octave.js octave.data index.html assets-loader.js VERSION assets/manifest.json"
+DEPLOY="octave.wasm octave.js octave.data octave.build.json index.html assets-loader.js VERSION assets/manifest.json"
 
 diffcount=0
 say() { printf '%s\n' "$*"; }

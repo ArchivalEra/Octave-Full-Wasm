@@ -1,0 +1,108 @@
+{
+ "schema": 1,
+ "tool": {
+  "name": "link-web.sh",
+  "script_sha256": "0eaa1f0e9a66fba96f2f6f3f42bf5d2b80d2e9e30752a8b04bf79f9a472e1b51",
+  "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 5.0.7 (263db4cffa6f9fc2ec514a70abac81362ea41849)",
+  "manifest_writer": {
+   "name": "write-build-manifest.py",
+   "script_sha256": "70a273fe64c20a59dd8f4d5d3a995734321d9c73a8ba9fedaed585946dc9927e"
+  }
+ },
+ "build": {
+  "when": "2026-09-26T10:28:17+0000",
+  "out": "/src/websrc/m2fc-simd-out",
+  "mode": "product"
+ },
+ "declared": {
+  "main_module": 2,
+  "simd": true,
+  "jspi_entry": true,
+  "jspi_glue_suspending": 0,
+  "gl4es": true,
+  "idbfs": true,
+  "fontconfig": true,
+  "fonts": [
+   "FreeSans.otf",
+   "FreeSansBold.otf",
+   "FreeSansOblique.otf",
+   "FreeSansBoldOblique.otf",
+   "FreeMono.otf",
+   "FreeMonoBold.otf",
+   "FreeMonoOblique.otf",
+   "FreeMonoBoldOblique.otf"
+  ]
+ },
+ "measured": {
+  "exported_functions": 710,
+  "simd": {
+   "v128": 4752,
+   "impl": "llvm-objdump"
+  },
+  "jspi_entry": true,
+  "jspi_glue_suspending": 0,
+  "gl4es": {
+   "symbol_hits": 54
+  },
+  "osmessa_residue": 0,
+  "idbfs": true,
+  "fontconfig": true,
+  "fonts": [
+   "FreeMono.otf",
+   "FreeMonoBold.otf",
+   "FreeMonoBoldOblique.otf",
+   "FreeMonoOblique.otf",
+   "FreeSans.otf",
+   "FreeSansBold.otf",
+   "FreeSansBoldOblique.otf",
+   "FreeSansOblique.otf"
+  ],
+  "preload_atftp_misplaced": false,
+  "files": {
+   "octave.wasm": {
+    "sha256": "1ed3e528561e44750200e9a862bb410c381d639e19f8079a94270b38c9fa6b00",
+    "bytes": 29632229
+   },
+   "octave.js": {
+    "sha256": "caac68bf6201585928cdcc39b69ad20f00370bf810770931dd04f5518881154c",
+    "bytes": 462821
+   },
+   "octave.data": {
+    "sha256": "f250530ae5abe37869d08ff214f91de6ee8a6acc72585a281ca2cd8779d61ac3",
+    "bytes": 9712174
+   }
+  }
+ },
+ "inputs": {
+  "link_web_sh": {
+   "path": "/src/bin/link-web.sh",
+   "sha256": "0eaa1f0e9a66fba96f2f6f3f42bf5d2b80d2e9e30752a8b04bf79f9a472e1b51"
+  },
+  "blas": {
+   "resolved_dir": "/usr/local/lib",
+   "search_order": [
+    "/usr/local/lib"
+   ],
+   "librefblas": {
+    "path": "/usr/local/lib/librefblas.a",
+    "sha256": "ac3b9559e8bcfbd5a3b7b2c1a96c0cebdd774d11e34ae202aa9789ddbf527d7c",
+    "bytes": 556594
+   },
+   "liblapack": {
+    "path": "/usr/local/lib/liblapack.a",
+    "sha256": "706c308a91f87642c9835ec38a390c3bf1c866992a3471de11f3621f8b31cdab",
+    "bytes": 9539546
+   }
+  },
+  "keep_list": null,
+  "baseline_wasm": null
+ },
+ "notes": [],
+ "verdict": "ok",
+ "mismatches": [],
+ "checked": {
+  "when": "2026-09-26T10:28:17+0000",
+  "by": "check-build-manifest.py",
+  "script_sha256": "3d633c0f27dd15846684300dcb9930c88ca4772e0bd29b37f02235713406ef0a"
+ }
+}

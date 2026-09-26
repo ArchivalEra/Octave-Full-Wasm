@@ -120,6 +120,12 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 - **行为零变化是硬要求**：`octave-core.js` 是**搬运**不是重写；**任何需要改断言的差异都算行为变化**，
   停下来先报告，不许顺手"修"。
 
+### 1.3/1.4 状态（2026-09-26）
+
+> **✅ A2 已落地**：见 §2 A2 —— 交付 `bridge/octave-core.js`，两个宿主变薄适配器；
+> 逐行核出的漂移是 **10 处**（计划里写 7 处，已更正）、缝是 **9 件**（计划里写 7 件）。
+> 另外 `Capabilities` 有了探针 `test/browser/probe-caps.mjs`（12 项，含"身份证 404 也要降级"的反证）。
+
 ### 1.4 D4 · `Capabilities`（★ 折进 D3，不独立成批）
 
 **问题（实测）**：**20 处**能力探测，同一个问题问 2–3 遍且写法不同（WebGL 三种探法：
@@ -317,28 +323,55 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 - **回退点**：删掉那四个新文件 + `git checkout 98a5293 -- build/113/link-web.sh`；
   产物与两个站点**零改动**（本次只写了一个新目录 `/src/websrc/a1-verify-product`）。
 
-### A2 · D3 + D4 + §0⑤ + matrix-android 三处删除（★ 带 promote）
+### A2 · D3 + D4 + §0⑤（★ 唯一带 promote 的批次）—— 已落地，结果见文末一行
 
-- **改什么**：抽 `bridge/octave-core.js`；`bridge/index.html` 与 `bridge/octave-worker.js`
-  变**薄适配器**；`Capabilities` 由内核返回；删 `bridge/index.html` 的 demo 错误路径
-  （`:428` `eval_string('strcat(...)')`、`:429` `feval("error",["foo"],0)`、`:431`
-  `console.log(last_error_message())`）与三个死函数（`chk`/`callModule`/`disp`）；
-  `matrix-android.html` 从仓库 `site/` 与两个站点删除并撤豁免；仓库 `site/` 与 `bridge/` 同步。
-  > **死函数可删的依据**：全仓 grep 过 —— 没有任何 test/script 依赖这五个标识符
-  > （`grep -rn 'execute_interp' test/ .githooks/` = 0；`'foo'`/`"foo"` 在
-  > `test/browser/*.mjs` = 0；`chk`/`callModule` = 0；JS 那个 `disp` = 0 次调用）。
-  > 要保留的是 `#output` 这个 DOM 元素（`accept-worker.mjs` 等三套在用）。
-- **红绿判据（绿）**：`sh build/glue-selftest.sh`（91 项）→ **8768 全量**
-  （含 `PROBES=1`）→ promote → `sh build/check-boot.sh` → **SHA 三层**
-  （`check-deploy-sha.sh` + `probe-artifact-sha.mjs`）→ 8761 全量 → `check-site-parity.sh --strict` 三列。
-- **反向断言（必须能红）**：① 保留现有 G0 反证 —— 未包 `promising` 的入口碰挂起点必须抛
-  `SuspendError`；② `Capabilities` 在**没有 `eval_wait` 的产物**上必须报 `jspi.entry=false`
-  **而不抛**（降级路径）；③ worker 里把 `OffscreenCanvas` 换成假对象 ⇒ 必须**明确报错或降级**，
-  不许静默出空白图。
-- **行为零变化的证据**：`octave-core.js` 只做**搬运**；**77+ 套断言一行都不改**。
-  任何需要改断言的差异 ⇒ 停下来先报告（这是本批唯一的"翻面"判据）。
+**实际交付**：新增 `bridge/octave-core.js`（内核，440 行）；`bridge/index.html` 782 → 432 行、
+`bridge/octave-worker.js` 283 → 233 行，两者变成薄适配器。`octave-core.js` 进了三处拷贝清单
+（`promote-webgl.sh` 的清单 + **点名校验**、`recover.sh`、`recover-113.sh` —— 顺带把后者一直
+缺的 `queue.js`/`p5canvas.js`/`octave-worker.js` 补齐）。
+
+- ★ **漂移不是 7 处，逐行核出来是 10 处**（我原先写少了 3 处，这里更正）：
+  ① `print/printErr` 落点（页面 console+上屏 / worker 合并）② `instantiateWasm` 里页面有
+  sha 自证、worker 用模块级 `wasmMemory` ③ 取点原语（页面按实例且 guard `inst.mem`，worker
+  ​无 guard）④ `stdin`（TTY 模拟 vs 直接 EOF）⑤ `eval_async` 包装（页面有幂等检查 + try/catch，
+  worker 都没有）⑥ IDBFS（页面有 `webSync` + 800ms 去抖写回，worker 只有读回）⑦ 启动链
+  （页面逐步 `console.warn`；**`pkgfix` 那句 eval 字符串两边不一样**）⑧ **JSPI 能力门 worker
+  完全没有** ⑨ 资产清单（CORE 8 + HELP 7）抄了两份 ⑩ `execute_interp()` 与 JSPI 包装的**顺序相反**。
+- ★ **缝是 9 件**（不是 7 件）：`base` / `print` / `printErr` / `note` / `stdinLine` / `clicks`
+  （队列**对象**，宿主拥有）/ `doc` / `assets`（装载器工厂）/ `onReady`；外加 `state`（宿主自己的
+  实例记录，内核直接写 `armed/ready/mem` —— 页面的 pointerdown 扇出读的就是它）。
+- **搬运时抓到的两个真问题**（都会在浏览器里表现为**静默失效**，与"能编过≠能用了"同族）：
+  ① **`BASE` 必须活取值**：worker 的 `BASE` 由 `opts` 消息在 `createOctaveCore` **之后**才设，
+  捕获成值 ⇒ `?worker=1&base=…` 静默失效。改成传函数（`baseOf()`）+ 把清单读取挪进 `boot()`。
+  ② 我自己写的 `var J`（JSPI 门状态）落在 `boot()` 里 ⇒ 返回对象上的 `jspi()` 读不到
+  （ReferenceError）⇒ 提到外层作用域。
+- **"看着可以顺手改、但我没改"的三处**（行为一字不改的代价）：`[idbfs] 已读回` 保持**无条件**
+  打印（`accept-idbfs.mjs:59` 断言控制台里有它——查过了才敢碰）；`[assets] 可用资产` 同样保持
+  无条件（曾想加 `trace` 开关，查过没有套件读它，但没必要动行为）；默认实例**复用**
+  `window.OctaveAssets` 而不是新建（否则测试读的与 boot 链用的不是同一份状态 —— 原注释记着这条）。
+- **§0⑤ 开机 demo 错误路径**：随工厂整段替换消失（`feval("error",…)`/`chk`/`callModule`/`disp`
+  在 `bridge/index.html` 里 grep 计数全 0）。
+- ★ **matrix-android 的改法比计划好**：不删，**给它配生成器** `build/113/gen-matrix-android.py`
+  —— 尾块用 `MATRIX-TAIL-START/END` 定界，生成物 = **当前 `bridge/index.html` + 尾块**，幂等，
+  自检"生成后 `<script src>` 集合与 index.html 一致"。A0b 记的"无生成器、手工同步"这个**漂移
+  根因**就此消掉（以后改页面只要重跑生成器）。
+- **判据与结果（全部实测）**：
+  · `glue-selftest` **91/91** ✓
+  · 8768 冒烟六套（正对我动过的每一处）：`accept-113-boot 10/0`、`accept-worker 16/0`、
+    `accept-embed-multi 13/0`、`accept-idbfs 9/0`、`accept-input 9/0`、`accept-ginput 10/0` ✓
+  · **8768 全量 43 套 / 1076 PASS / 0 FAIL**（`accept-worker` 恰好排在最后跑，正好覆盖了
+    "给 worker 的 `diagnose` 加 `caps` 字段"那一改）
+  · promote（`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out`）自检绿、**BOOT OK 1.7s**、
+    两侧 wasm sha 一致
+  · **SHA 三层**：磁盘 / HTTP / 页面自证全 = `1ed3e528…` ✓
+  · **8761 全量 43 套 / 1076 PASS / 0 FAIL**（与 8768 同一组数字）✓
+  · **三列 parity `--strict` = 0 差异**（连 promote 里重新打包的 6 个资产都逐字节一致）
+  · 新探针 `probe-caps` **12/0**（含反证：身份证 404 ⇒ 页面照常 ready、`artifact=null`、无报错）
+  · **43 套断言一行没改** ⇒ 行为零变化这条硬要求成立。
+- **回退点（A2 新增一个）**：`/mnt/hdd/octave-wasm-build/site-preA2-bak-20260926/`（promote 前
+  的 8761 逐字节快照）；另有 `site-prewebgl-bak`（脚本自建）与 `site-baseline-45d288b1/`。
 - **回退点**：`site/` 回 `site-baseline-45d288b1/` 或 `siteWebGL-preidbfs-bak-20260924/`；
-  代码 `git revert`。**promote 之前 8761 一动不动。**
+  代码 `git revert`；`bridge/octave-core.js` 删掉即可回到"两份各写一遍"的旧形态。
 
 ### A3 · D5（测试清单 + 搬迁）
 
@@ -351,13 +384,23 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
   ② 请求一个不存在的套名 ⇒ 必须报错（不是"跑 0 个然后绿"）。
 - **回退点**：shim 保证旧路径仍可用；回退 = 删新增文件。
 
-### A4 · D6（术语表）
+### A4 · D6（术语表）—— ✅ **已落地 2026-09-26**
 
-- **改什么**：新增 `CONTEXT.md`（13 条术语 + 证据行，优先读清单字段）；`AGENTS.md` 与
-  `HANDOFF.md` 各加一行指针；`check-consistency.py` 加"证据行路径必须存在"的轻检查。
-- **红绿判据（绿）**：闸门自动查证据行引用的路径全部存在。
-- **反向断言（必须红）**：故意写一个不存在的路径 ⇒ 必须红。
-- **回退点**：纯文档，`git revert`；**不 promote**。
+- **交付 `CONTEXT.md`**：把"我咋听不懂"那句话当验收标准写的术语表 —— **17 个条目**
+  （计划里说 13 条，实际写全了更多）。核心动作是**把多义词拆开**："闸门"在仓库里有 6 种含义，
+  这里拆成五个具名术语（提交前六项检查 / 机制门①②③ / 运行时能力门 / 保活闸门 /
+  三列一致性闸门），旧写法保留为**别名**。
+- **每个术语一行 `证据：`**，**优先指向产物身份证的字段**（`site/octave.build.json` 的
+  `measured.simd.v128` / `measured.jspi_entry` / `measured.exported_functions` / `verdict`），
+  其次 `file:line`。另有"历史遗留名字"一节（`m2fc-simd-out` / `B 姿势` / `P5` / `webshims`…）
+  说明它们**字面上会误导人的地方**。
+- **轻闸门（可证伪）**：`check-consistency.py` 新增检查项 5 —— `CONTEXT.md` 里每个 `证据：`
+  行中的**仓库路径必须存在**（防术语表退化成散文）。
+  **反向实测**：把 `build/check-boot.sh` 改成 `build/check-boot-NOPE.sh` ⇒ 闸门红并点名该 token；
+  还原 ⇒ 绿。
+- **代码零改名** ✓；`AGENTS.md` 首屏加了一行指针（"黑话看不懂就读 `CONTEXT.md`"）。
+- **回退点**：删 `CONTEXT.md` + 撤掉 `.gitignore` 里的 `!CONTEXT.md` + 撤掉检查项 5；
+  纯文档，不影响站点与产物。
 
 ### B6 · 线程版构建（**搁置，等令**）
 

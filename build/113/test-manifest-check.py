@@ -13,8 +13,12 @@
 #
 # 覆盖的用例：
 #   基准   原样重判 ⇒ 必须 ok（否则后面的"拒"没有意义）
-#   反证   9 条：jspi_entry / gl4es / main_module / idbfs / fontconfig / fonts /
-#                simd.v128 / jspi_glue_suspending / 清单里的文件 sha（配对）
+#   反证   11 条：jspi_entry / gl4es / idbfs / fontconfig / fonts / simd.v128 /
+#                jspi_glue_suspending / 清单里的文件 sha（配对）/ 导出条目数（被改成 M1 量级）/
+#                导出条目数（被抹掉）/ 声明里的未知键
+#   ⚠️ 曾经有一条"篡改 measured.main_module"的用例 —— **已删**：判定方现在从产物的
+#      **导出条目数**推导 M1/M2（不再读那个字段），旧用例改的字段没人读 ⇒ 恒绿（假通过）。
+#      这正是"行为变了就翻面"：规则换成了量测，用例也得跟着换。
 #   反证   声明里多一个**未知键** ⇒ 必须拒（拼错键名不许被静默放过）
 import copy
 import json
@@ -71,13 +75,14 @@ def main(argv):
     cases = [
         (["measured", "jspi_entry"], False, "jspi_entry → False"),
         (["measured", "gl4es", "symbol_hits"], 0, "gl4es.symbol_hits → 0"),
-        (["measured", "main_module"], 1, "main_module → 1"),
         (["measured", "idbfs"], False, "idbfs → False"),
         (["measured", "fontconfig"], False, "fontconfig → False"),
         (["measured", "fonts"], ["FreeSans.otf"], "fonts 只留 1 个"),
         (["measured", "simd", "v128"], 0, "simd.v128 → 0"),
         (["measured", "jspi_glue_suspending"], 3, "胶水里出现 3 处 Suspending"),
         (["measured", "files", "octave.wasm", "sha256"], "deadbeef" * 8, "清单里的文件 sha 被改（配对）"),
+        (["measured", "exported_functions"], 44987, "导出条目数被改成 M1 量级（710→44987）"),
+        (["measured", "exported_functions"], None, "导出条目数被抹掉（量不到 ⇒ 判拒）"),
     ]
     for path, val, label in cases:
         allok &= run(taint(path, val), declared, "反证：" + label, 3, out_dir)

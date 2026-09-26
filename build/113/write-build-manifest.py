@@ -87,6 +87,44 @@ def count_bytes(hay, needle):
     return hay.count(needle)
 
 
+def count_wasm_exports(path):
+    """量 wasm **导出段**的条目数 —— 这是 `MAIN_MODULE=1/2` 唯一可测的判据。
+    为什么不能读环境变量 `MAIN_MODULE_LEVEL`：那只是"命令行上传过什么"，
+    漏传/手跑时会**猜**出一个值写进清单（实测踩过：清单写 main_module=1，
+    而产物其实是 M2）。导出段（section 7）在 code 段之前 ⇒ 跳过前面的节即可，很快。
+    实测基准（2026-09-26）：M2 产物 710 条（只导出保活集）、M1 产物 44987 条（导出全部），
+    63× 差距 ⇒ 判定方用 5000 分界。"""
+    def uleb(fh):
+        r = sh = 0
+        while True:
+            b = fh.read(1)
+            if not b:
+                return None
+            b = b[0]
+            r |= (b & 0x7F) << sh
+            if not (b & 0x80):
+                return r
+            sh += 7
+    try:
+        with open(path, "rb") as fh:
+            if fh.read(4) != b"\0asm":
+                return None
+            fh.read(4)
+            while True:
+                h = fh.read(1)
+                if not h:
+                    return None
+                sid = h[0]
+                size = uleb(fh)
+                if size is None:
+                    return None
+                if sid == 7:
+                    return uleb(fh)
+                fh.seek(size, 1)
+    except OSError:
+        return None
+
+
 def blas_resolved(extra_ldflags, js_dir="/usr/local/lib"):
     """**"用的哪个 BLAS"以前没有判据** —— 这里给出来：按链接行的搜索顺序（EXTRA_LDFLAGS 的
     `-L` 先、`/usr/local/lib` 后，见 link-web.sh:526 在 LIBS 之前）取**第一个**含
@@ -135,7 +173,8 @@ def main():
         notes.append("simd.v128: " + v128_note)
 
     measured = {
-        "main_module": int(os.environ.get("MAIN_MODULE_LEVEL", "1") or 1),
+        # ⚠️ **量出来的**，不是读环境变量猜的（曾经的 bug：手跑时清单写死 main_module=1）
+        "exported_functions": count_wasm_exports(os.path.join(OUT, "octave.wasm")),
         "simd": {"v128": v128, "impl": "llvm-objdump|unavailable" if v128 is None else "llvm-objdump"},
         "jspi_entry": b"eval_wait" in js,
         "jspi_glue_suspending": count_bytes(js, b"new WebAssembly.Suspending"),
@@ -202,6 +241,7 @@ def main():
         json.dump(man, fh, indent=1, ensure_ascii=False, sort_keys=False)
         fh.write("\n")
     os.replace(tmp, os.path.join(OUT, "octave.build.json"))
+    log("导出条目 = %s（M2 基准 710 / M1 基准 44987）" % measured["exported_functions"])
     log("已写出 %s（verdict=unverified；等 relink.sh verify 判定）" % os.path.join(OUT, "octave.build.json"))
     if notes:
         log("notes: " + " | ".join(notes))

@@ -77,6 +77,7 @@ else
   # ⚠️ p5canvas.js 必须在列：index.html 会 `<script src="p5canvas.js">`，
   #    少了它就是 404（2026-09-23 补上 —— 此前这份拷贝清单里没有它）。
   cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" \
+     "$REPO/bridge/octave-core.js" \
      "$REPO/bridge/queue.js" \
      "$REPO/bridge/p5canvas.js" \
      "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
