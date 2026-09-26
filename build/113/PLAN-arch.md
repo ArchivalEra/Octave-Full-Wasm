@@ -28,7 +28,8 @@
 ```
 ✅ A0 · 收尾 + 立三列闸门（零风险，不 promote）—— 已落地，反向断言已实测
 ✅ A0b · 同步 matrix-android.html 到三处 + 给它配探针 —— 已落地，8761/8768 各 8/0
-A1 · D1 + D2（构建侧：relink.sh + octave.build.json，不 promote）
+✅ A1 · D1 + D2（构建侧：relink.sh + octave.build.json）—— 已落地，**逐字节复现 1ed3e528**，
+       反向断言 11/11（不 promote，站点零改动）
 A2 · D3 + D4（页面侧：octave-core.js + Capabilities；★ 带 promote 上 8761）
 A3 · D5（测试清单 + sweep/harness 搬进仓库）
 A4 · D6（CONTEXT.md 术语表 + 证据行）
@@ -61,6 +62,11 @@ B6 · 线程版构建 —— **仍然搁置，等用户一声令下**（不是�
 | 文档 | `relink.sh --explain <模式>` 打出 22 个变量 —— **散在 8 份文档里的 12 条配方删掉**（删除测试） |
 | 低层工具 | `link-web.sh` 的 22 个变量**保持原样当内部工具**，六组 grep 自检**不重写**（它们是好诊断） |
 
+> **✅ 实现状态（2026-09-26，A1 已落地）**：见 §2 A1 —— 交付 `relink.sh` +
+> `write-build-manifest.py` + `check-build-manifest.py` + `test-manifest-check.py`，
+> **逐字节复现 `1ed3e528…`**、反向断言 **11/11**、新增 `--selfcheck` 把"22 个变量全覆盖"
+> 变成一条静态可测契约（反向实测能红）。
+
 **为什么"管道变量也不可手设"**：22 个变量里只有 7 个是能力轴（`WITH_JSPI` / `WITH_FREETYPE` /
 `WITH_FONTCONFIG` / `GL_LIBS` / `EXTRA_LDFLAGS` / `MAIN_MODULE_LEVEL` / `P5_TOOLKIT`），
 其余 15 个是管道（`M_SRC` / `PRELOAD_AT` / `FORGE_SRC` / `KEEP_LIST` / `EXPORT_IF_DEFINED` /
@@ -87,6 +93,11 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 | 入库 | **入 `site/`**（它是入库的逐字节镜像）⇒ `site/octave.build.json` 也进 git、进 dist 包 |
 | 硬不变式 | **清单 sha 必须等于产物 sha** —— 所有读者的第一条断言 |
 | 硬不变式 2 | **没有清单的产物 = 不可部署** —— promote / parity / check-boot / worker 自证全部要求清单存在 |
+
+> **✅ 实现状态（2026-09-26，A1 已落地）**：见 §2 A1。两点与设计稿的差异：① 第二类不变式改成
+> "**`verdict == "ok"` 才可部署**"（判不过时**写** `verdict:"rejected"` + mismatches，而不是
+> 不写文件 —— 效果一样但留证据）；② **`octave.js` 的 sha 与输出目录名绑定**（里面嵌了
+> `PACKAGE_NAME="/src/websrc/<OUT>/octave.data"`），所以"这是哪个构建"的锚点用 **wasm** sha。
 
 ### 1.3 D3 · 一内核两适配器 `bridge/octave-core.js`
 
@@ -249,21 +260,55 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
   `cp site/matrix-android.html /mnt/hdd/octave-wasm-build/site/` 让 8761 回到旧版
   （8768 上那份一直是新的，不用动）。
 
-### A1 · D1 + D2（构建侧，不 promote）
+### A1 · D1 + D2（构建侧，不 promote）—— ✅ **已落地 2026-09-26**
 
-- **改什么**：新增 `build/113/relink.sh` + 模式表（`product`/`scalar`/`m1`，`--out`/`--diag`/`--explain`）；
-  `link-web.sh` 尾部（`:671` 之后）加"量测 + 写 `octave.build.json`"。
-- **判据①（绿，最硬的一条）**：`relink.sh link product` 必须**逐字节复现 `1ed3e528…`**。
-  > 为什么这条判据成立：重链**已被证明是逐字节可复现的** —— `m2fc-out` / `m2fc-idbfs-out` /
-  > `m2fc-idbfs2-out` / `m2fc-fonts-out` / `m2fc-jspioff-out` **五个目录 sha 完全相同**
-  > （`4faaa96d…`），`out` / `out-webgl` / `out-webgl4` 同理（复跑见 §4.10）。
-  > ⇒ 只要模式表**漏掉任一个变量**，sha 必变。这一条一次性证明"22 个变量全被包住"。
-- **判据②（反向，必须红）**：让 `product` 的某个声明能力不可能满足（例：把 SIMD 的
-  `-L` 指向一个空目录 ⇒ 实测 `simd.v128=0`）⇒ **必须 exit 非零且不写清单**；
-  **不写清单即不可部署**（1.2 的硬不变式 2）。
-- **判据③**：`--explain product` 打出的 22 个变量与现役重链口径**逐一人工对照**一次
-  （对照之后，它就成了唯一的文档）。
-- **回退点**：删 `relink.sh`、还原 `link-web.sh` 那一处；产物目录与两个站点**零改动**。
+- **实际交付的三个文件**（都在 `build/113/`，`link-web.sh` 只动尾部一处）：
+  · `relink.sh` —— 唯一入口：模式表（product/scalar/m1）推出**全部 22 个变量**；
+    子命令 `link` / `verify` / `rebuild` / `explain` / `--list` / `--selfcheck`；`--diag` 正交修饰。
+  · `write-build-manifest.py` —— 量测并写 `$OUT/octave.build.json`（link-web.sh 尾部自动调）；
+  · `check-build-manifest.py` —— 拿模式声明核对实测，写 `verdict`（fail-closed 的判定方）；
+  · `test-manifest-check.py` —— 上面那个判定器的**反向断言套件**（11 条）。
+- **红绿判据（已实测）**：`relink.sh link product --out /src/websrc/a1-verify-product`
+  在 **60 秒内**跑完，六组自检全绿（JSPI 胶水 Suspending=0 + `eval_wait` 在 / gl4es 54 处 /
+  保活闸门拿 `scalar` 基线查了 45 个 `.oct`、导出 710 个名字 / 字体 8 个 / IDBFS / fontconfig），
+  然后 `verdict=ok`。**三件套复现**：
+  | 文件 | 新产物 | 现役 `m2fc-simd-out` | 结论 |
+  |---|---|---|---|
+  | `octave.wasm` | `1ed3e528561e4475…` | `1ed3e528561e4475…` | **逐字节相同** |
+  | `octave.data` | `f250530ae5abe378…` | `f250530ae5abe378…` | **逐字节相同** |
+  | `octave.js` | `a91e5a47efd10d70…` | `caac68bf62015859…` | 差 12 字节 ⇒ 见下 |
+- **★ 新事实（要记住）：`octave.js` 里嵌了输出目录的绝对路径**
+  （`PACKAGE_NAME="/src/websrc/<OUT>/octave.data"`）。所以 js 的 sha **与产物目录名绑定**，
+  而 `octave.wasm` / `octave.data` **与路径无关**。决定性验证：把新 js 里的
+  `/src/websrc/a1-verify-product` 换成 `/src/websrc/m2fc-simd-out` 之后，
+  sha256 = `caac68bf62015859…`，**与现役逐字节相等** ⇒ 除了那个路径**没有别的差异**。
+  ⇒ 推论：①"这份产物是哪个构建"的锚点应当用 **wasm sha**（`check-deploy-sha.sh` 与
+  `probe-artifact-sha.mjs` 用的正是它，所以现有闸门不受影响）；② 换目录重建会得到不同的
+  js sha，别把它当成"产物变了"。
+- **反向断言（已实测）**：`test-manifest-check.py` **11 PASS / 0 fail** ——
+  基准（原样重判 ⇒ ok）+ 9 条逐规则反证（`jspi_entry`/`gl4es`/`main_module`/`idbfs`/
+  `fontconfig`/`fonts`/`simd.v128`/`jspi_glue_suspending`/清单文件 sha 配对）
+  + 1 条**未知声明键必须拒**（拼错键名不许静默放过）。
+  另有跨模式反证：拿 `scalar` 的声明（`simd:false`）去判一件真 SIMD 产物 ⇒
+  `✗ simd: 声明=false 实测={"v128": 4752}`、`verdict=rejected`、exit 3。
+- **`--selfcheck`（D1 的可测契约，静态、不需容器）**：link-web.sh 读的每个环境变量都必须由
+  模式表推出，且模式表里不许有 link-web.sh 不读的变量，三个模式的变量集合必须一致。
+  正向绿（22 个全覆盖）；反向实测：临时加一个 `${ZZZ_NOT_IN_TABLE:-}` ⇒ 报红、rc=1。
+- **三处对计划的诚实修正**（都记在这儿，防止下次照旧话做）：
+  ① **fail-closed 的落点从"不写清单"改成"写 `verdict:"rejected"` + mismatches"** ——
+     效果一样（读取方只认 `verdict=="ok"`），但**留下证据**，比"文件不见了"好查得多。
+  ② **基线链是"结构优先 + 如实记录"，不是硬引用**：模式表里 `BASELINE_WASM` 是路径
+     （product → `/src/websrc/m2fc-jspb-out/octave.wasm`，即 scalar 的产物；scalar →
+     `/src/websrc/out/octave.wasm`，即 m1 那类产物），`pick_baseline` 会在"下一级模式自己的
+     产物存在"时优先用它。**没做成硬引用**的理由：那会强制先重建 m1（36MB 的 M1 链接）才能
+     链接 product，而 `BASELINE_WASM` **只喂保活闸门、不进链接行**（`grep -n BASELINE_WASM
+     link-web.sh` 只有 `:622` 一处）⇒ 它**不改变产物字节**。但"基线是哪个产物"不再靠记：
+     基线路径与 sha256 都进了清单的 `inputs.baseline_wasm`（本次实测
+     `45d288b1c6c1855e…` —— 正是那个去 SIMD 的基线）。
+  ③ **`rebuild` 的执行路径尚未实测**（要走 configure + `make clean` + 全量 make，数小时）：
+     已实现且打印它将要跑的每一条命令、要 `--yes-rebuild` 确认，第一次真用是 B6。
+- **回退点**：删掉那四个新文件 + `git checkout 98a5293 -- build/113/link-web.sh`；
+  产物与两个站点**零改动**（本次只写了一个新目录 `/src/websrc/a1-verify-product`）。
 
 ### A2 · D3 + D4 + §0⑤ + matrix-android 三处删除（★ 带 promote）
 

@@ -14,10 +14,12 @@
 | `matrix-android.html` | 浏览器矩阵自测页（自动跑能力门并把结果写进 DOM，供截图/无头读取）。⚠️ **手工维护、无生成器**（三处手工同步）⇒ 已配探针 `test/browser/probe-matrix-android.mjs`（`PROBES=1` 时跑，8 项，含一条反证）。2026-09-26 把 8768 的 C6 版同步到三处，三份同 sha `5d2dca7f…`（旧版 `f6eaf0e3…` 见 git 历史） |
 | `dldprobe.oct` / `minioct.oct` | 历史诊断用 side module（保留，不影响运行） |
 
-来源与构建配方：`build/113/link-web.sh`；**权威重链口径见 `AGENTS.md`「事实纪律」第 2 条**
-—— = HISTORY §5.26 那条 **+ `WITH_FONTCONFIG=1` + `WITH_JSPI=1` + SIMD 的
-`EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`**（漏任一条都会**静默**做出非现役形态的产物，
-而构建、链接、产物自检全绿）。产物自检：`llvm-objdump -d octave.wasm | grep -c v128` = **4752**。
+来源与构建配方：**唯一入口 `bash build/113/relink.sh link product`**（2026-09-26 批次 A1 起；
+模式决定全部 22 个环境变量，`relink.sh explain product` 打出来就是口径 —— **别照抄文档拼命令**，
+漏一个变量会**静默**做出非现役形态的产物而构建/链接/自检全绿）。底层是 `build/113/link-web.sh`；
+链接末尾写出 `octave.build.json`（只记量到的事实），**`verdict=="ok"` 才可部署**。
+现役 `octave.wasm` sha `1ed3e528…`、`measured.simd.v128` = **4752**（手查：
+`llvm-objdump -d octave.wasm | grep -c v128`）。
 
 ## 怎么部署（GitHub Pages）
 

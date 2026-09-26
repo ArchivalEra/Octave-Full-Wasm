@@ -25,13 +25,20 @@
 ## 事实纪律（每句"现在如此"都要能被复跑的命令证明）
 **照抄旧话是文档说假话的唯一来源**（一天里抓到过 5 处）。四条：
 1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**；写不出复跑方式的句子 → 只能放进 HISTORY 当历史。
-2. **口径成组记录**：重配就是 `WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1` **一整组**；
-   漏一个会**静默退化**（漏 `WITH_OPENGL=1` ⇒ 默认 toolkit 掉回 `web`，而构建/链接/自检**全绿**）。
-   重链的**唯一权威命令**在 HISTORY §5.26（M2 那条 + `WITH_FONTCONFIG=1`）。
-   **★ 2026-09-25 起口径又加两条**（见 HISTORY §5.54，漏了会**静默退回非 SIMD/少 JSPI 面**）：
-   `WITH_JSPI=1`（B 姿势导出，现役 octave.js 必须有 `eval_wait`）
-   + `EXTRA_LDFLAGS="-L/src/deps/lapack-simd/lib"`（SIMD BLAS，口子在 `LIBS` 之前）。
-   唯一可靠自检：`llvm-objdump -d <wasm> | grep -c v128`（现役应为 **4752**，非 SIMD 那版 = 0）。
+2. **口径搬进代码了（2026-09-26 批次 A1）——别再照抄文档拼命令**：
+   重链的**唯一入口是 `bash build/113/relink.sh link product`**（模式 `product` / `scalar` / `m1`
+   决定**全部 22 个环境变量**，一个都不许手设）。要看口径就打
+   `bash build/113/relink.sh explain product`（**那就是文档，生成物**）；
+   `bash build/113/relink.sh --selfcheck` 是它的可测契约（link-web.sh 读的每个变量都必须被
+   模式表覆盖；反向实测能红）。**重配**仍是一整组
+   `WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`（漏 `WITH_OPENGL=1`
+   ⇒ 默认 toolkit 静默掉回 `web`，而构建/链接/自检**全绿**）。
+   历史口径与踩坑留在 HISTORY §5.26 / §5.38 / §5.54（**当历史读，别当配方**）。
+   产物自证不靠 grep 了：链接时写出 `octave.build.json`（只记**量到的事实**），
+   **`verdict=="ok"` 才可部署**；现役 `octave.wasm` sha `1ed3e528…`、`measured.simd.v128=4752`。
+   ⚠️ 手跑 `link-web.sh` 的产物 `declared` 是 null ⇒ 判拒；补判：
+   `relink.sh verify <模式> --out <目录>`。手查仍可用 `llvm-objdump -d <wasm> | grep -c v128`
+   （现役 4752，非 SIMD 那版 = 0；⚠️ 别用 `grep simd128`，那是**假**判据）。
 3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）必须**浏览器侧**实测；
    构建成功 + 产物自检绿**不算**功能验收。
 4. **断言要能证伪**：替身不能比真实对象松；新契约至少配一条**反向**断言（该报错的必须报错）。

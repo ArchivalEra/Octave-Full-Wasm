@@ -14,7 +14,10 @@
 >   长计算不再冻页面，且**真渲染后端可用**、不需要重链）。
 > · **仍生效的架构规则**：① 可能执行到 pause 的命令**必须走 `eval_async`**；
 >   ② 跑任何测试前先验**产物 sha**（`build/check-deploy-sha.sh` + `test/browser/probe-artifact-sha.mjs`）；
->   ③ 重链的**口径**含 SIMD 的 `-L` 与 `WITH_JSPI=1`（见下面"八条"的第 ① 条）——漏了会**静默退化**。
+>   ③ **重链口径已经搬进代码**（批次 A1，2026-09-26）：`bash build/113/relink.sh link product`
+>   —— 模式决定全部 22 个环境变量（含 SIMD 的 `-L` 与 `WITH_JSPI=1`），
+>   `explain product` 打出来就是口径，链接末尾写 `octave.build.json` 并 `verdict=ok` 才算过；
+>   **别再照抄文档拼命令**（漏一个变量会**静默退化**，而构建/链接/自检全绿）。
 > · **工作令**：`build/113/PLAN-threads.md`（§0.5 = 现在的状态与下一步；§5 = B6 线程版配方）。
 > · **架构债务盘点**（"为什么新人看不懂"）：临时报告
 >   `/tmp/architecture-review-20260926-implicit-contracts.html`；**可执行项已摘进 §8 待办**。
@@ -437,6 +440,10 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `build/forge-build.sh` | Forge 纯 `.m` 车道一键（取包 → 打包 → 出清单） |
 | `build/recover.sh` | **断电后一键恢复**（起容器 → 工具链体检 → 站点 → harness → 8761 → 自动验收） |
 | `build/check-site-parity.sh` | **三处一致性闸门**（D4；★ 第三列 2026-09-26 A0）：比部署件 + **清单引用到的**资产包 sha，覆盖 **8761 / 8768 / 仓库 `site/`**（第三列堵住"重构页面后忘了 rsync 入库镜像、而两站点之间照样 parity 绿"的盲区）。默认只报告（差异**不一定是错**），`--strict` 供 promote 之后跑。未引用的遗留文件与**非部署件的三方内容差异**单独报出、不算差异 |
+| `build/113/relink.sh` | **重链的唯一入口**（D1/A1，2026-09-26）：模式 `product`/`scalar`/`m1` 推出全部 22 个环境变量；子命令 `link`（默认）/`verify`/`rebuild`/`explain`/`--list`/`--selfcheck`；`--diag` 正交修饰。链接末尾调下面两个 py 做 **fail-closed 出厂核对**（`verdict=="ok"` 才可部署） |
+| `build/113/write-build-manifest.py` | 量测产物并写 `octave.build.json`（**只记量到的事实**，不抄旗标）：三件套 sha/字节、`simd.v128`、`jspi_entry`、gl4es 命中、8 个字体、IDBFS、fontconfig、BLAS 归档 sha、基线 sha |
+| `build/113/check-build-manifest.py` | **判定方**：拿模式声明核对实测（未知声明键一律判拒），写 `verdict`/`mismatches`/`checked` |
+| `build/113/test-manifest-check.py` | 上面那个判定器的**反向断言套件**（11 条：基准 + 9 条逐规则反证 + 未知键必须拒）。跑法：`python3 build/113/test-manifest-check.py <产物目录>` |
 | `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
 | `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
 | `build/fftw_threads_stub.c` | FFTW 线程桩（必须） |
@@ -777,11 +784,14 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 > **▶ 现在的待办（按建议顺序，2026-09-26）**
 > 1. **架构深化 D1–D6 —— 工作令已冻结在 `build/113/PLAN-arch.md`**（三轮拷问的结论、每批的
 >    红绿判据与回退点、以及每条断言的复跑命令）。顺序**不变量**：
->    **A0 收尾 + 立三列镜像闸门 → A1（D1+D2：`relink.sh` 一个入口 + `octave.build.json` 身份证，
->    纯构建侧、不 promote）→ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，★ 带 promote 上 8761）
->    → A3（D5：`test/browser/manifest.json` + sweep/harness 搬进仓库）→ A4（D6：`CONTEXT.md` 术语表）**。
->    A1 的验收判据是**逐字节复现现役 `1ed3e528…`** —— 重链可复现这件事已被现有数据证明
->    （五个同 sha 的 M2 产物目录，见 PLAN-arch §4.10），所以它是一条能证伪"模式表漏变量"的硬判据。
+>    **✅ A0 收尾 + 三列镜像闸门 → ✅ A0b 同步 `matrix-android.html` → ✅ A1（D1+D2：`relink.sh`
+>    一个入口 + `octave.build.json` 身份证）→ A2（D3+D4：抽 `octave-core.js`，一内核两适配器，
+>    ★ 带 promote 上 8761）→ A3（D5：`test/browser/manifest.json` + sweep/harness 搬进仓库）
+>    → A4（D6：`CONTEXT.md` 术语表）**。
+>    **A1 已落地并实测**：`relink.sh link product` 在 60 秒内**逐字节复现 `1ed3e528…`**
+>    （`octave.wasm` / `octave.data` 完全相同；`octave.js` 只差里面嵌的输出目录名 ——
+>    换回现役目录名后 sha 相等，见 PLAN-arch §2 A1）；判定器反向断言 **11/11**；
+>    `--selfcheck` 把"22 个变量全覆盖"变成静态可测契约。**站点零改动**。
 >    ⚠️ **引用旧报告前先复核**：那份只读扫描报告在 `/tmp`（会消失），且它说的"当场就错 5 条"
 >    经复核**只剩 1 条还活着**（`bridge/index.html` 的开机 demo 错误路径，随 A2 清）——
 >    逐条复核记录见 PLAN-arch §4.1。

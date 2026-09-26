@@ -670,5 +670,20 @@ if [ -n "$FONTCONFIG_PRELOAD_TAG" ]; then
   fi
 fi
 
+# ---- 产物身份证：octave.build.json（批次 A1 / D2，2026-09-26）---------------------
+# 为什么写在**链接这一层**：这里手上有 $OUT，上面六组自检的信息也都在，量测成本最低；
+# 而且**手跑 link-web.sh 也会产出它**（只是 declared=null ⇒ verdict=unverified ⇒ 不可部署）。
+#
+# ★ 只记**量到的事实**，不记传进来的旗标 —— 旗标转抄一遍就是又一份会漂的拷贝。
+#   历史血债（HISTORY §5.46）：`JSPI_FLAGS` 赋了值却从没被链接行引用 ⇒ 产物少一整个能力面，
+#   而构建/链接/五条自检**全绿**。所以判据只能是"从产物量出来的" vs "模式的承诺"。
+#   判定方是 build/113/check-build-manifest.py（由 relink.sh 调用）。
+#
+# ⚠️ 这一步失败**不致命**（手跑 link-web.sh 仍要可用）：清单缺失/不全会让
+#    `relink.sh verify` 判拒 ⇒ 端到端仍然是 fail-closed。
+echo "== 产物身份证：量测（v128 反汇编约 13 秒）"
+python3 "$HERE/write-build-manifest.py" "$OUT" "$HERE/link-web.sh" "${BUILD_MODE:-}" || {
+  echo "⚠ 写 octave.build.json 失败 —— 这份产物**不可部署**（relink.sh verify 会拒）" >&2; }
+
 echo "== 产物:"
 ls -la "$OUT"
