@@ -44,9 +44,11 @@
    清理 `site-simd`/8771。回退快照 `site-baseline-45d288b1/`。详见 `NOTES-threads.md`「C4 落地」节。
 2. **E4 · C3 真落地**：JSPI×Worker 已证（Q4）⇒ 只剩"worker 侧 dlopen × preload FS"未测；
    第一版必须带**真实 side module + 真实 preload FS**（不带 pthread）。
-3. **E6 · C6 去单例嵌入契约**：页面层（mount/base/实例命名空间/**IDBFS 命名空间**）可独立先做，
-   判据 = 同页 2 实例交替 eval 100 次 0 串扰 + 8768 上 41 套 accept 全绿不改。
-   若还需要动 wasm 侧（canvas 契约 + `publish_png` 分派），与**下一次重链合并**。
+3. ✅ **E6 · C6 去单例嵌入契约（页面层）已落地**（2026-09-26）：工厂化 mount/base/实例命名空间/
+   IDBFS 命名空间；判据全过（accept-embed-multi **13/0**：同页 2 实例交替 eval 100 次 0 串扰；
+   8768 全量 **42 套/1060/0** 41 套 accept **零改动**；8761 全量 **77 套/1205/0**）。
+   **已知边界**：非默认实例无图形上屏 + 四个队列桥/stdin/Ctrl-C 仍是默认实例单例
+   ⇒ wasm 侧（canvas 契约 + publish_png 分派 + 队列桥随迁）与**下一次重链**合并。
 4. **E2 · OpenBLAS SIMD 1T**：触发条件（E1 红或提速 <1.5×）**不成立** ⇒ 维持"可选增强"。
 5. **C2/C8**：pthread BLAS 前置未知数已清（E3），但仍只在 COI 成立的环境里开
    （第一方自控头，或宿主同意装 coi-serviceworker 的 credentialless 路径）。

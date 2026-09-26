@@ -229,3 +229,44 @@ rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/          # 仓库镜像
 依赖：容器里 `/src/deps/lapack-simd/lib/{librefblas.a,liblapack.a}` 必须存在（由
 `build/113/build-blas-simd.sh` 生成；**`/usr/local/lib` 那份仍是非 SIMD**，别搞混）。完整命令见 HISTORY §5.54。
 自检（唯一可靠）：`llvm-objdump -d <wasm> | grep -c v128` —— 现役 `1ed3e528` 应为 **4752**（非 SIMD 那版 = 0）。
+
+
+---
+
+## C6 页面层落地（2026-09-26，产物不变；branch `Slay`）
+
+**做了什么**：宿主层从"页面单例"改成**实例工厂**——
+- `bridge/index.html`：`createOctaveHost(opts)`（opts = `base` 资源前缀 / `mount` 输出挂点 /
+  `home` IDBFS 挂载点 / `id`）。第一个实例是**默认实例**，拿走全部 `window.*` 兼容别名
+  （`window.Module`/`__octaveReady`(布尔 true)/`__octaveJspi*`/`__octaveClicks`/…）——
+  **65 个旧套件一个没改**。G3 取点的 arm/pending/pop 三个 import 按**实例**覆写
+  （pop 用本实例 memory 现建 Float64Array，天然免疫 growth 失效）；全局 pointerdown
+  扇出给所有 armed 实例。IDBFS 按实例挂载（非默认实例必须换 `home`，否则同源
+  两实例的 syncfs 互相覆盖同一批持久键）。
+- `bridge/assets-loader.js`：状态（manifest/loaded/inflight）收进 `createOctaveAssets(module, base, isReady)`
+  工厂；全部 fetch 走 base 前缀；`window.OctaveAssets` = 默认实例别名；
+  `OCTAVE_M` 字面量保留原文（check-consistency.py 逐字比对）。
+- `site/matrix-android.html`：由新 index.html + 尾块重拼（无生成器，手工同步）。
+- 新套件 `test/browser/accept-embed-multi.mjs`（**13/0**）：同页两实例，交替 100 次 eval
+  状态隔离（默认 x=1 / i2 x=2）、FS 互不可见、资产写进**对的**实例（i2 自己的账本含
+  plotbridge、`exist('audioread')`=3）、别名不覆盖、反向断言（坏挂点必须 throw）+
+  已知边界（非默认实例无图形上屏——wasm 侧 publish_png 硬编码 `window.OctaveP5`，
+  分派要与下一次重链合并）。
+
+**修过的三个 bug（都有教训）**：
+1. `loadScript` 里 Promise executor 的 `resolve` 参数**遮蔽**了 `resolve(url)` 助手 ⇒
+   `s.src = undefined` 且 promise 提前 settle ⇒ JS 包"装载成功"但 `__OCT_ASSETS__` 缺席。
+   助手改名 `withBase`。
+2. 资产装载器在 `inst.mod` 赋值**之前**创建 ⇒ i2 拿到 null ⇒ 回退 global.Module =
+   **默认实例**（资产全写进默认 FS、addpath 串台）。⇒ 工厂末尾再建、直接绑 Module。
+3. 坏挂点在 push **之后** throw ⇒ 注册表留幽灵实例（hosts=3）⇒ 挂点解析提前。
+
+**验收**：`glue-selftest 91/91` → **8768 全量 42 套 / 1060 PASS / 0 FAIL（41 旧套零改动）** →
+promote 8761（wasm sha 不变 `1ed3e528…`，页面层更新；D8 开机自检 OK 1.7s）→
+**8761 全量 PROBES=1：77 套 / 1205 PASS / 0 FAIL** → dist 包内 wasm = 部署件 →
+parity --strict 两站点完全一致。
+
+**已知边界（记档，等下次重链）**：① 非默认实例**无图形上屏**（publish_png 硬编码
+`window.OctaveP5`，要改 webgl_toolkit.cc 的分派 + canvas 契约）；② 四个队列桥
+（audio/rec/filepick/net）与 stdin 队列、Ctrl-C 仍是默认实例单例；③ worker 化（C3/B5）
+是下一个大车道，机制未知数已全部清零（Q4/E4）。
