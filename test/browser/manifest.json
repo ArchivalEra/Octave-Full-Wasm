@@ -41,6 +41,10 @@
     "probe-gpu-backend": { "manual": true, "why": "打印本机 WebGL 后端，无汇总行" },
     "probe-nogl-flag": { "manual": true, "why": "找旗标用的一次性探针，无汇总行" },
     "probe-gl4es-smoke": { "manual": true, "why": "**硬编码 8767 端口**的 gl4es 冒烟探针（不接 URL 参数）⇒ 那台服务不在时必然 ERR_CONNECTION_REFUSED" },
+    "probe-blas-threads": {
+      "manual": true,
+      "why": "需要先跑 `bash build/113/probe-blas-threads.sh` 生成线程版 BLAS 探针产物（在仓库外 /mnt/hdd/octave-wasm-build/blas-threads-probe/），且要 COI 头（runner 自注入）"
+    },
     "probe-coi-sw": {
       "requires_env": "PLAYWRIGHT_BROWSERS_PATH",
       "why": "三引擎探针（firefox/webkit 要 playwright 托管，见 /mnt/hdd/crossbuild-tools/pw-browsers）；裸环境启动即失败 ⇒ 跳过并计数，用时先 export 该变量再单独跑"

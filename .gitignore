@@ -65,6 +65,7 @@
 !build/113/probe-jspi/*
 !build/113/probe-jspi-worker/*
 !build/113/probe-threads/*
+!build/113/probe-blas-threads/*
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*

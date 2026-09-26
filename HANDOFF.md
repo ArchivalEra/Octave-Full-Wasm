@@ -450,6 +450,7 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `bridge/octave-core.js` | **内核**（A2，2026-09-26）：页面宿主与 Worker 宿主**共用同一份** —— Module 配置 / `instantiateWasm`（B 姿势挂起包装 + 取点覆写 + sha 自证）/ 启动链（`execute_interp` → JSPI 包装 → 资产三组）/ IDBFS + `webSync` / JSPI 能力门 / `Capabilities`。宿主只提供 9 件（`base`/`print`/`printErr`/`note`/`stdinLine`/`clicks`/`doc`/`assets`/`onReady`） |
 | `build/113/gen-matrix-android.py` | `site/matrix-android.html` 的**生成器**（A2）：= 当前 `bridge/index.html` + 尾块（`MATRIX-TAIL-START/END` 定界，幂等）。**改完页面重跑它**，别手改那个页面 |
 | `test/browser/probe-engine-parity.mjs` | **双引擎对齐网**（2026-09-26）：chromium 与 firefox 各跑 9 条用户可见的轴（ready / Capabilities / JSPI 真挂起 + 能力门 / 纯计算 / 真渲染 / 字体 / 同步 XHR / Worker 真出图）+ **反证**（无 JSPI ⇒ 照常 ready、`api=false`、`pause` 阻塞回落）。实测 **22/0** |
+| `build/113/probe-blas-threads.sh` + `test/browser/probe-blas-threads.mjs` | **线程版 BLAS 缩放探针**（2026-09-26）：`USE_THREAD=1` 编 OpenBLAS（**需先跑 `build/113/patch-openblas-threads.py`**）+ 最小 DGEMM 基准，在 COI 下测 T=1/2/4/8 的缩放。实测 N=2000：**T=8 = 7.2×**，Firefox/Chromium 一致 |
 | `test/browser/probe-caps.mjs` | `Capabilities`（D4）的探针：`__octaveCaps` 形状 + 身份证读出来的 `verdict/v128/fonts/jspiEntry`；**反证**：把身份证拦成 404 ⇒ 页面照常 ready 且 `artifact=null` |
 | `build/webio.cc` | R6 压缩/归档内建（zlib+bz2，zip/tar 自实现） |
 | `build/webimage.cc` | R4 图像内建（stb_image/stb_image_write） |
@@ -813,8 +814,13 @@ T3 文件操作 §5.7；T4 pkg §5.8；T5 `input()` §5.9；**T6 音频设备/�
 >    **"多线程 × Firefox"实测（用户点名）**：有 COI 时 Firefox 跑 pthread 产物与 Chromium
 >    **完全平齐**（`ok=100 missing=0`，FF 略快）；无 COI 时两边同样报 `DataCloneError`
 >    ⇒ **多线程本身不歧视 Firefox**，翻闸门③不会造成引擎分裂。
->    **仍不做**是因为：① 收益有限（SIMD 那档 1.62×/1.75×/1.31× 已到手）而成本是长期的
->    （双产物 + 要么装 SW、要么要求宿主发头）；② 它是**产品取舍**，要人拍板。
+>    **★ 决策数据（2026-09-26 新增实测）**：线程版 BLAS 的收益**真实且大** —— DGEMM 在 N=2000 上
+>    **T=8 = 7.2×**（13.1 → 94.0 GFLOPS）、T=4 ≈ 3.6×、T=2 ≈ 2×，**Firefox 与 Chromium 一致**
+>    （7.18× vs 7.16×）。做法：`USE_THREAD=1` 编 OpenBLAS（**需先打 `build/113/patch-openblas-threads.py`**）
+>    + `test/browser/probe-blas-threads.mjs` 在 COI 下测。**但**这要求"线程运行时 **+** 线程版 BLAS"
+>    两件一起做，而把线程版 BLAS 放进产品还要过 `E2`（链进 Octave，仍卡 76 个 `signature_mismatch`）。
+>    **仍不做**是因为：① 那是一条要连着 `E2` 一起走的长线（双产物 + 要么装 SW、要么要求宿主发头）；
+>    ② 它是**产品取舍**，要人拍板。**现在拍板有数了**（见 `NOTES-threads.md` 末节）。
 >    要开工时：模式表加一行 `threads` + 全量重配重编数小时（配方 `PLAN-threads.md` §5）。
 > 3. **E2 悬案**：OpenBLAS 全量链接时产物非法（`wasm-ld` 点名 76 个 `signature_mismatch:*`）；
 >    阶梯已记在 `build/113/NOTES-threads.md`（不是 binaryen 的锅，两个独立裁判背书）。

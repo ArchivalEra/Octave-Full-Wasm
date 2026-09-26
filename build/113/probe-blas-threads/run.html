@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Octave-Full-Wasm — 线程版 BLAS 缩放探针的宿主页（2026-09-26）
+     Copyright (C) 2026 ArchivalEra · SPDX-License-Identifier: AGPL-3.0-or-later
+     ⚠️ **必须是顶层页 + COI 头**：pthread 需要 SharedArrayBuffer（runner 注入 COOP/COEP）。
+        非 COI 时这份产物**根本起不来**（那正好是 runner 的反证断言）。
+     ⚠️ 非模块化胶水会污染全局（自带 Module/run/…）⇒ 自定义名字一律 blas 前缀。 -->
+<meta charset="utf-8">
+<title>BLAS 线程缩放探针</title>
+<body style="font:12px monospace">
+<pre id="out">booting…</pre>
+<script>
+window.__blasLines = [];
+window.__blasDone = false;
+window.__blasErr = null;
+window.Module = {
+  print: function (s) {
+    window.__blasLines.push(String(s));
+    var el = document.getElementById('out');
+    el.textContent = window.__blasLines.slice(-40).join('\n');
+  },
+  printErr: function (s) { window.__blasLines.push('[err] ' + String(s)); },
+  onRuntimeInitialized: function () { window.__blasReady = true; },
+};
+// 未捕获的错误（含 pthread 池起不来时的 DataCloneError）如实记下 —— runner 的反证要读它
+window.addEventListener('error', function (e) { window.__blasErr = String((e && e.message) || e); });
+</script>
+<script src="main.js"></script>
+</body>

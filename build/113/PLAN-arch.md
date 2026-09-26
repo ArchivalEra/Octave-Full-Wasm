@@ -445,6 +445,15 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
   在此之前 **Firefox 只被 5 项矩阵探针扫到**，而 43 套 accept 全在 Chromium 上跑
   ⇒ "一次改动把 Firefox 弄坏"在日常回归里是**看不见的**；现在这条能看见。
 
+**★ 决策数据（2026-09-26 实测，独立探针）：线程版 BLAS 的收益是真实的、而且很大** ——
+DGEMM 在 N=2000 上：T=2 ≈ 2×、T=4 ≈ 3.6×、**T=8 = 7.2×**（13.1 → 94.0 GFLOPS），
+且 **Firefox 与 Chromium 几乎完全一致**（7.18× vs 7.16×）。做法：干净副本 + `USE_THREAD=1`
+编 OpenBLAS（**需先打一个可移植性补丁** `build/113/patch-openblas-threads.py`：`blas_server.c` 用了
+Emscripten 没有的 `struct rlimit`/`raise`/`SIGINT`），再用 `probe-blas-threads.mjs` 在 COI 下测。
+⛔ **但这不等于"翻门就能变快"**：现役 refblas/lapack 是 f2c 出来的**标量**代码，运行时支持线程
+也**没有并行可给** ⇒ 收益来自"线程运行时 **+** 线程版 BLAS"两件一起做；而把线程版 OpenBLAS
+放进产品还要过 `E2`（链进 Octave 主模块）那一步，悬案仍在（76 个 `signature_mismatch`）。
+
 **那本轮为什么仍不做**（理由从"Pages 不可用"换成下面两条）：
 1. **收益有限而成本是长期的**：多线程只对少数重计算有用，而 SIMD 已落地
    （DGEMM 1.62×/1.75×/1.31×）—— 最便宜的那档收益已经拿到了。翻门换来的是

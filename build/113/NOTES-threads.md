@@ -652,3 +652,51 @@ PLAYWRIGHT_BROWSERS_PATH=/mnt/hdd/crossbuild-tools/pw-browsers \
   sh run.sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/probe-coi-sw.mjs
 # ③ 双引擎对齐（日常回归网）：probe-engine-parity.mjs（A3 起在仓库里）
 ```
+
+---
+
+## ★ 线程版 BLAS 缩放：实测数字（2026-09-26）—— 回答"多线程到底快多少"
+
+**为什么测**：B6 的取舍缺这个数 —— 而 `E2`（OpenBLAS **链进 Octave**）卡在 binaryen 的
+76 个 `signature_mismatch` 悬案上。那是"进主模块"这一步的问题，**与线程 BLAS 本身的性能无关**
+⇒ 立一个**独立探针**绕开它（不碰 Octave、不翻闸门、不动现役产物）。
+
+**怎么来的**（全部可复跑）：
+1. 线程版 OpenBLAS：干净副本 + `USE_THREAD=1`（配方见 `build/113/probe-blas-threads.sh` 头部）
+   —— 产物名带 `p`：`libopenblas_wasm128p-r0.3.34.a`（3.1MB，**408 个 pthread/exec_blas 符号**，
+   非线程版那份是 0）。
+   ⚠️ **必须先打可移植性补丁**：`driver/others/blas_server.c` 用了 `struct rlimit` / `raise` / `SIGINT`
+   ⇒ Emscripten libc 没有（三条编译错，整个库编不出来）。
+   补丁脚本：`build/113/patch-openblas-threads.py`（3 处 `__EMSCRIPTEN__` 守卫，那段只是
+   `pthread_create` 失败后的诊断 ⇒ wasm 里无意义）。
+2. 探针：`build/113/probe-blas-threads/{main.c,run.html}` + `build/113/probe-blas-threads.sh`
+   （`-pthread -sSHARED_MEMORY=1`，池 12）。
+   ⚠️ **第二个坑**：OpenBLAS 的默认线程数是编译期烘进去的 `-DMAX_CPU_NUMBER=<nproc>`（本机 24）
+   ⇒ 它一上来就要 24 个 worker，池不够 ⇒ `pthread_create` 失败 ⇒ 走"起不来"分支 ⇒ **整个程序 exit**
+   （实测：`blas_thread_init: pthread_create failed for thread 13 of 24: Resource temporarily unavailable`）。
+   修法：`main.c` 里 `setenv("OPENBLAS_NUM_THREADS","1",1)` 压默认，再由每个格子显式
+   `openblas_set_num_threads(T)` 拉起。⚠️ 别用 `-sENV=…`：emcc 5.0.7 **没有**这个设置项。
+3. 跑：`test/browser/probe-blas-threads.mjs`（自托管 + 注入 COOP/COEP；chromium 与 firefox 各跑一遍）。
+
+**数字**（DGEMM，列主序 NoTrans，每格 1 次热身 + 3 次取最快；GFLOPS = 2N³/t）：
+
+| N | 引擎 | T=1 | T=2 | T=4 | **T=8** |
+|---|---|---|---|---|---|
+| 512 | chromium | 22ms / 12.1GF | 1.84× | 3.07× | 3.95× (47.9GF) |
+| 512 | firefox | 23ms / 11.8GF | 1.10× | 2.47× | 4.93× (58.1GF) |
+| 1024 | chromium | 179ms / 12.0GF | 2.13× | 3.50× | **6.77×** (81.0GF) |
+| 1024 | firefox | 166ms / 12.9GF | 1.94× | 3.60× | **6.68×** (86.2GF) |
+| 2000 | chromium | 1219ms / 13.1GF | 1.95× | 3.59× | **7.16×** (94.0GF) |
+| 2000 | firefox | 1226ms / 13.1GF | 2.03× | 3.72× | **7.18×** (93.7GF) |
+
+**结论**：
+- ★ **收益是真的、而且很大**：N=2000 上 **T=8 = 7.2×**（13.1 → 94.0 GFLOPS）；
+  T=4 = 3.6×、T=2 ≈ 2×（次线性，正常）。
+- ★ **Firefox 与 Chromium 几乎完全一致**（7.18× vs 7.16×）⇒ 用户点名的"兼顾 Firefox"**成立**。
+- ★ 同时纠正一个容易搞混的说法："翻闸门③就能变快" —— **不对**。现役 refblas/lapack 是 f2c 出来的
+  **标量**代码，运行时支持线程也**没有并行可给**；真正的收益来自**换成线程版 BLAS**（本探针）。
+  两件事要一起做：线程运行时（⇒ COI）+ 线程版 BLAS。
+- ⚠️ **还没链进 Octave**：本探针证明"线程版 OpenBLAS 在 wasm 里能跑、能缩放到 7.2×"，
+  但把它放进产品还要过 `E2`（链进主模块）那一步 —— 悬案仍在（76 个 `signature_mismatch`）。
+- 复跑：`bash build/113/probe-blas-threads.sh` → `cd /mnt/hdd/octave-wasm-build/harness && sh run.sh <repo>/test/browser/probe-blas-threads.mjs`
+  （`NOCOI=1` 那档是反证：不注入 COI ⇒ 起不来，证明线程硬依赖 COI）。
