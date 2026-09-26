@@ -552,3 +552,44 @@ coi-serviceworker 走 require-corp）**。
 天然不增长，但值得一条循环测试）、图像与完成信号的 FIFO 单调性、worker 崩溃的快速失败
 （已实现 `onerror` → 立即 reject 待办，尚未写判据）、多 worker + IDBFS 隔离
 （已实现 `opts.home` 按实例换挂载点，尚未写判据）。
+
+
+---
+
+## E2 悬案（2026-09-26 收手时的完整证据链与下一步阶梯）
+
+**结论**：E2 **未跑通**。但根因从"玄学"推进到"工具链点名的 76 个符号 + 一个反直觉的不变量"。
+
+### 已证（都可复跑）
+1. **不是 binaryen 的锅**（两个独立裁判）：
+   - V8（Node 26）：`WebAssembly.Module(bytes)` 报
+     `Compiling function #12022 "ztrti2_" failed: expected 0 elements on the stack for fallthru, found 1 @+7774673`；
+   - WABT（已装 `/mnt/hdd/crossbuild-tools/wabt`）：`wasm-validate --enable-all` 给三处类型错
+     （`076a1d2` 块尾多 i32、`078a0db` 多 4 个 i32、`078bcfe` drop 空栈）。
+2. **`wasm-ld` 亲口点名了 76 个"同名不同签名"**：反汇编里写着
+   `call 390 <signature_mismatch:lsame_>`；字节 grep 未优化产物得到 76 个
+   `signature_mismatch:*`（`dgemm_`/`daxpy_`/`lsame_`/`ztrsm_` … 清一色 BLAS 符号）。
+   ⇒ 在 `--allow-multiple-definition` 下**同名不同签名被静默合并**成一个非法函数。
+3. `liblapack.a` **不**定义 BLAS 符号（`dgemm_=0`、`lsame_=0`）；BLAS 由 `-lrefblas` 提供。
+4. **已排除**：atomics（构建日志 0 处）、与 LAPACK 的重复符号（交集 0）、
+   "删掉与 f2c 重名的 `z_abs.o`"（删了仍错）、fp128 软例程（源码级改掉 `zrotg.c` 的
+   `long double` 后**偏移一字未变**）、OpenBLAS 的 Fortran 接口 ABI
+   （用 **`F_COMPILER=G77`** 重建——f2c 时代的 ABI——归档 sha/大小确实变了
+   `e316789d`/2,016,902 vs `20d2bf57`/2,001,060，**失败偏移仍是 `0:7912702`**）。
+5. **反直觉的不变量（下一位的关键线索）**：三种**实质不同**的 OpenBLAS 归档
+   （gfortran 接口 / 打了 fp128 补丁 / G77 接口）失败**偏移完全相同** ⇒ 报错点对 OpenBLAS
+   内容不敏感。同时"同一命令**不带** OpenBLAS 就成功"。
+   ⚠️ 附注：改 make **变量**（如 `F_COMPILER`）**不会让旧对象失效** ⇒ 第一次"G77 重建"
+   是空操作（归档 sha 不变），必须**重新解包**才真重编（已踩过）。
+
+### 下一步阶梯（照着做，别再从头猜）
+1. 取**未优化**产物：重链时 `EMCC_DEBUG=1`（中间件留在 `/tmp/emscripten_temp/emcc-0*-*.wasm`；
+   不带该变量则不留）。
+2. 列全部嫌疑符号：`grep -ao "signature_mismatch:[A-Za-z0-9_]*" <unopt.wasm> | sort -u`。
+3. 找**每个符号的第二个定义来自谁**：`emnm` 扫**全部**输入（含 Octave 自己的目标文件、
+   `liboctave`、blas-xtra 等）——我此前只比对了 OpenBLAS × {lapack,f2c,arpack,qrupdate,pcre2}，
+   **没扫 Octave 自身的对象**，而 76 个符号的"另一半"极可能在那里（Octave 自带 BLAS 副本）。
+4. 定向验证：把冲突的那一份从链接里去掉（或让它与另一份**签名一致**），再看
+   `signature_mismatch:*` 是否归零、产物是否变合法（`wasm-validate --enable-all` / V8）。
+5. 只要产物合法，后续就回到常规：DGEMM 基准（`test/browser/bench-dgemm.mjs`，与现役
+   SIMD 版比）+ 5 套数值回归（boot/libs/hdf5/slicot/ode15）+ 独立车道 877x 上跑。
