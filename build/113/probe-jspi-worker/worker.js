@@ -22,6 +22,7 @@ var q4Result = {
   apiSuspending: typeof WebAssembly.Suspending === 'function',
   apiPromising: typeof WebAssembly.promising === 'function',
   n: Q4N, ok: 0, fails: [], ticks: 0, wallMs: 0, ping: null, error: null,
+  rt: null, pre: null, e4Ms: null,
 };
 
 self.Module = {
@@ -79,6 +80,19 @@ async function q4ProbeRun() {
   }
   q4Result.wallMs = Math.round(performance.now() - t0);
   q4Result.ticks = Module.__tick || 0;
+
+  // ── E4：worker 里 dlopen × 两种 FS 来源 ──────────────────────────────
+  // rt  = 运行时 fetch → FS.writeFile（产品资产装载形态）
+  // pre = --preload-file 烘进 main.data（产品 octave.data 形态）
+  // 两个入口都经 side_chain 回调主模块的 worker_wait（挂起 import）⇒ 全链挂起。
+  var sideBuf = await (await fetch('side.wasm')).arrayBuffer();
+  Module.FS.writeFile('/side_rt.wasm', new Uint8Array(sideBuf));
+  var dlopenRt = WebAssembly.promising(Module._worker_dlopen_rt);
+  var dlopenPre = WebAssembly.promising(Module._worker_dlopen_pre);
+  var tE4 = performance.now();
+  q4Result.rt = await dlopenRt(50);     // 期望 52 = 50 +1(worker_wait) +1(side_chain)
+  q4Result.pre = await dlopenPre(50);   // 期望 52
+  q4Result.e4Ms = Math.round(performance.now() - tE4);
 
   // 反向断言（B6 的 worker 版）：**没包 promising** 的直调碰挂起 import 必须炸。
   try {

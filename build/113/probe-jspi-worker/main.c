@@ -38,3 +38,51 @@ worker_ping (int x)
 {
   return x + 7;
 }
+
+/* ── E4（PLAN-threads §0.5 第 2 条）：worker 里 dlopen × 两种 FS 来源 ─────────
+ * C3 的最后未知数：worker 侧 dlopen 看不看得到 FS？两种来源分开测：
+ *   /side_rt.wasm  = worker 运行时 fetch → FS.writeFile 写进来的（产品资产装载形态）
+ *   /side_pre.wasm = --preload-file 烘进 .data 的（产品 octave.data 形态）
+ * side.c 的 side_chain 会**经 dlopen 的模块回调主模块的 worker_wait**（挂起 import）
+ * ⇒ 这正是 C3 的完整机制：worker + dlopen + FS + JSPI 挂起。
+ * 预期：side_chain(50) = worker_wait(50)+1 = 52，等待期间 tick 递增；
+ * 若整条链任何一环不挂起/不可见，这里会抛 SuspendError 或 dlopen 失败。 */
+#include <dlfcn.h>
+
+#define Q4_RT_PATH  "/side_rt.wasm"
+#define Q4_PRE_PATH "/side_pre.wasm"
+
+static int
+q4_dlopen_call (const char *path, int ms)
+{
+  void *h = dlopen (path, RTLD_NOW);
+  if (! h)
+    {
+      printf ("[q4] dlopen(%s) 失败：%s\n", path, dlerror ());
+      return -1;
+    }
+  int (*fn) (int) = (int (*) (int)) dlsym (h, "side_chain");
+  if (! fn)
+    fn = (int (*) (int)) dlsym (h, "_side_chain");   /* 两种符号写法都试 */
+  if (! fn)
+    {
+      printf ("[q4] dlsym(side_chain) 失败：%s\n", dlerror ());
+      dlclose (h);
+      return -2;
+    }
+  int r = fn (ms);
+  dlclose (h);
+  return r;
+}
+
+EMSCRIPTEN_KEEPALIVE int
+worker_dlopen_rt (int ms)
+{
+  return q4_dlopen_call (Q4_RT_PATH, ms);
+}
+
+EMSCRIPTEN_KEEPALIVE int
+worker_dlopen_pre (int ms)
+{
+  return q4_dlopen_call (Q4_PRE_PATH, ms);
+}

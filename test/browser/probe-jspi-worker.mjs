@@ -61,7 +61,8 @@ if (res.e) console.log('   worker onerror：' + res.e);
 const R = res.r || {};
 console.log('   worker 回报：' + JSON.stringify({
   apiSuspending: R.apiSuspending, apiPromising: R.apiPromising, ok: R.ok, fails: (R.fails || []).slice(0, 3),
-  ticks: R.ticks, wallMs: R.wallMs, ping: R.ping, unpromising: R.unpromising, error: R.error,
+  ticks: R.ticks, wallMs: R.wallMs, ping: R.ping, rt: R.rt, pre: R.pre, e4Ms: R.e4Ms,
+  unpromising: R.unpromising, error: R.error,
 }).slice(0, 500));
 
 // W1：api-missing 是"环境无此能力"，如实记录，不计入红
@@ -80,6 +81,9 @@ check(R.ticks > 0, '★ W4 等待期间 worker 的 tick 递增（真让出，不
 check(R.wallMs >= 100, 'W5 墙上时间下界（≥100×1ms）', `wallMs=${R.wallMs}`);
 check(typeof R.unpromising === 'string' && /^throw/.test(R.unpromising) && /Suspend|promising/i.test(R.unpromising),
   '★ W6 反向：未包 promising 的直调在 worker 里同样抛（穷举语义成立）', R.unpromising);
+check(R.rt === 52, '★ W7 E4：worker 里 dlopen **运行时写进 FS** 的 side，且经它回调主模块挂起 import（52=50+1+1）',
+  `rt=${R.rt} e4Ms=${R.e4Ms}`);
+check(R.pre === 52, '★ W8 E4：worker 里 dlopen **--preload-file 烘进 .data** 的 side（52）', `pre=${R.pre}`);
 
 if (errs.length) console.log('   ⚠️ 页面报错：' + errs.slice(0, 3).join(' // '));
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
