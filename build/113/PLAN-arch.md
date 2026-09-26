@@ -27,6 +27,7 @@
 
 ```
 ✅ A0 · 收尾 + 立三列闸门（零风险，不 promote）—— 已落地，反向断言已实测
+✅ A0b · 同步 matrix-android.html 到三处 + 给它配探针 —— 已落地，8761/8768 各 8/0
 A1 · D1 + D2（构建侧：relink.sh + octave.build.json，不 promote）
 A2 · D3 + D4（页面侧：octave-core.js + Capabilities；★ 带 promote 上 8761）
 A3 · D5（测试清单 + sweep/harness 搬进仓库）
@@ -183,8 +184,18 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
    供截图/无头读取）"，即**给手机/无头用的矩阵页**，不是垃圾；
    ② 三处里 **8768 那份是新的**（41386 B，sha `5d2dca7f…`），8761 与仓库是旧的那份
    （33947 B，sha `f6eaf0e3…`）—— 也就是"仓库里的副本落后于实验车道"。
-   ⇒ **不擅自删**（删掉等于替人决定"手机自测页不再需要"）。当前状态：三列闸门把它列在
-   【非部署件的内容差异】里**只报**；要不要同步、要不要退役，**等人拍板**。
+   ⇒ **不擅自删**（删掉等于替人决定"手机自测页不再需要"）。
+   **★ 2026-09-26 用户拍板：同步到 8761 + 仓库**，已执行并实测：
+   ① 先在**它现在的位置**（8768）用新写的探针 `test/browser/probe-matrix-android.mjs` 验
+   **8 PASS / 0 FAIL**（2.8s 跑到终点，能力门报 `smoke=pass`、`eval_async=function`）；
+   ② 再把 8768 那份 `cp` 到 8761 与仓库 ⇒ 三份同 sha `5d2dca7f…`，三列闸门 `--strict` 绿、
+   非部署件那节从"内容不同"变成"（无）"；
+   ③ **在 8761 上重跑同一探针：8 PASS / 0 FAIL**，`check-boot.sh` 绿（1.7s），
+   部署件 `octave.wasm` 仍是 `1ed3e528…`（这次只动了一个静态页，产品三件一个字节没变）。
+   ④ 顺带把这个**以前零覆盖**的页面变成有探针的：它的漂移就是这么发生的。
+   ⚠️ 探针里那条 favicon 噪声**不写死豁免**，而是当场用 Node 侧 `fetch('/favicon.ico')` 测一次 ——
+   实测（差分测试）普通 `index.html` 也产生**完全相同**的那条 404，所以它是浏览器自发请求；
+   站点哪天补上 favicon，豁免自动消失。在页面里 fetch 会把自己的 404 混进被测量窗口（踩过）。
 4. **promote 政策**：A1/A3/A4 **不 promote**（A1 是纯构建侧，站点一个字节都不动；
    A3/A4 是工具与文档）；**只有 A2 带 promote 上 8761**，走完整仪式。
 
@@ -220,6 +231,23 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
   `cp` 还原后 `git diff` 无输出、`--strict` 回到 **exit 0**。
 - **回退点**：`git revert` 这一次提交即可 —— 站点零改动（8761/8768 一个字节没动），
   `DEPLOY.md` 从 git 消失后仍是磁盘上那份（内容已修好）。
+
+### A0b · 同步 `matrix-android.html` 到三处（✅ **已落地 2026-09-26**，用户拍板）
+
+- **为什么**：A0 侦察发现三处不一致（8768 是 C6 版 700 行、8761 与仓库是 C6 前 575 行），
+  而**没有任何测试会因此变红** —— 这个页面零覆盖地漂了一个版本。用户选"同步"（而不是退役），
+  因为 HANDOFF 里"真手机人工过一遍交互"这一步还没做，而它正是给真机/无头读结果用的。
+- **改了什么**：① 新增探针 `test/browser/probe-matrix-android.mjs`（8 项：页面跑到终点 /
+  结果行形状 / `smoke=pass` / `Suspending`·`promising`·`eval_async` 是 function /
+  无未解释错误 / **反证**：不存在的页面必须 404 且不产结果）；
+  ② 8768 那份 `cp` 到 8761 与仓库 `site/`（三份同 sha `5d2dca7f…`）。
+- **红绿判据（绿，已实测）**：8768 上 **8/0** → 同步 → 8761 上 **8/0**；
+  三列闸门 `--strict` 绿且【非部署件的内容差异】变成"（无）"；
+  `check-boot.sh http://127.0.0.1:8761/` **BOOT OK 1.7s**；部署件 `octave.wasm` 仍 `1ed3e528…`。
+- **回退点**：旧版（sha `f6eaf0e3…`，33947 B）在**上一个提交 `98a5293`** 里：
+  `git checkout 98a5293 -- site/matrix-android.html` 取回旧版，再
+  `cp site/matrix-android.html /mnt/hdd/octave-wasm-build/site/` 让 8761 回到旧版
+  （8768 上那份一直是新的，不用动）。
 
 ### A1 · D1 + D2（构建侧，不 promote）
 
@@ -385,20 +413,24 @@ grep -rn 'site/index.html' --include='*.sh' --include='*.py' . | wc -l   # → 0
 ```
 唯一相关的是 `check-site-parity.sh:37`，它比的是 **8761 vs 8768**，不含仓库。
 
-### 4.9 `matrix-android.html` 已经漂了（**不删**，等人拍板）
+### 4.9 `matrix-android.html`：三处曾经不一致，**已同步**（2026-09-26 用户拍板）
 
 ```sh
 cd /mnt/hdd/zcode-projects/Octave-Full-Wasm
 stat -c '%s %n' site/matrix-android.html /mnt/hdd/octave-wasm-build/site/matrix-android.html \
               /mnt/hdd/octave-wasm-build/siteWebGL/matrix-android.html
-# → 33947 site/matrix-android.html
-# → 33947 /mnt/hdd/octave-wasm-build/site/matrix-android.html      （8761，与仓库同 sha f6eaf0e3…）
-# → 41386 /mnt/hdd/octave-wasm-build/siteWebGL/matrix-android.html （8768，更新的那份，5d2dca7f…）
-grep -rn 'matrix-android' --include='*.sh' --include='*.mjs' --include='*.py' . | wc -l   # → 0（无生成器、无测试）
-grep -n 'matrix-android' DEPLOY.md    # → :13 写明了它的用途："浏览器矩阵自测页（…供截图/无头读取）"
+# 同步前 → 33947 site/…（仓库，旧） / 33947 …/site/…（8761，旧） / 41386 …/siteWebGL/…（8768，新）
+# 同步后 → 三份都是 41386 B，sha 同为 5d2dca7f14623c4c…
+sha256sum site/matrix-android.html /mnt/hdd/octave-wasm-build/site/matrix-android.html \
+          /mnt/hdd/octave-wasm-build/siteWebGL/matrix-android.html
+grep -rn 'matrix-android' --include='*.sh' --include='*.mjs' --include='*.py' . | wc -l
+# 同步前 → 0（无生成器、无测试）；同步后 → 探针 test/browser/probe-matrix-android.mjs 命中
+grep -n 'matrix-android' DEPLOY.md    # → :13 写明用途："浏览器矩阵自测页（…供截图/无头读取）"
 ```
-⇒ **它是给手机/无头用的矩阵自测页**，不是垃圾；而仓库/8761 那份**落后于 8768**。
-删或同步都得人定 —— 现在只由三列闸门的【非部署件的内容差异】节**报出来**。
+**为什么新那份是"新的"**：旧版 575 行、用全局 `OctaveAssets.load`（C6 之前）；
+新版 700 行、带 `createOctaveHost` / `createOctaveAssets` / `__octaveHosts`（C6 时代）。
+**它并不"坏"**：结尾多出两对 `</body></html>`（手工重拼的痕迹，浏览器忽略），
+结构计数实测单份（1 个 `<html`、1 个 `<body`、1 个 `createOctaveHost` 定义、1 个 `#matrix-result`）。
 
 ### 4.10 重链逐字节可复现（A1 判据①的底座）
 

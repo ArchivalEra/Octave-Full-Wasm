@@ -11,7 +11,7 @@
 | `octave.wasm` / `octave.js` / `octave.data` | 主产物（Octave 11.3.0 + JSPI 交互线；wasm sha 见 `check-deploy-sha.sh`） |
 | `index.html` + `assets-loader.js` + `queue.js` + `p5canvas.js` + `web*.js` | 页面与桥 |
 | `assets/` | 清单 + 懒加载资产（Forge 包、`.oct`、`.m` bundle、help 数据…） |
-| `matrix-android.html` | 浏览器矩阵自测页（自动跑能力门并把结果写进 DOM，供截图/无头读取）。⚠️ **手工维护、无生成器、无测试**；实测 8768 那份比本目录与 8761 新（41386 B vs 33947 B） ⇒ 同步与否是人的决定（见 `build/113/PLAN-arch.md` §1.7） |
+| `matrix-android.html` | 浏览器矩阵自测页（自动跑能力门并把结果写进 DOM，供截图/无头读取）。⚠️ **手工维护、无生成器**（三处手工同步）⇒ 已配探针 `test/browser/probe-matrix-android.mjs`（`PROBES=1` 时跑，8 项，含一条反证）。2026-09-26 把 8768 的 C6 版同步到三处，三份同 sha `5d2dca7f…`（旧版 `f6eaf0e3…` 见 git 历史） |
 | `dldprobe.oct` / `minioct.oct` | 历史诊断用 side module（保留，不影响运行） |
 
 来源与构建配方：`build/113/link-web.sh`；**权威重链口径见 `AGENTS.md`「事实纪律」第 2 条**
