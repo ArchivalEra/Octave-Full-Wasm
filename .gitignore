@@ -40,6 +40,8 @@
 !build/rebuild-pic-libs.sh
 !build/build_oct.sh
 !build/make-dist.sh
+!build/FACTS.json
+!build/facts.py
 !build/lib/*
 !build/gates-selftest.sh
 !build/sweep.sh
@@ -95,6 +97,7 @@
 !vendor/extra/*
 !.githooks/install.sh
 !.githooks/check-retractions.py
+!.githooks/check-facts.py
 !.githooks/pre-commit
 !.githooks/pre-push
 !.githooks/update-readme.py

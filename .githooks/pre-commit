@@ -16,6 +16,7 @@ python3 "$HOOK_DIR/check-consistency.py"
 python3 "$HOOK_DIR/check-wants.py"
 python3 "$HOOK_DIR/check-whitelist.py"
 python3 "$HOOK_DIR/check-retractions.py"
+python3 "$HOOK_DIR/check-facts.py"
 # ★ F1（2026-09-26）：**闸门自证** —— 闸门不能证明自己会红，就不许提交。
 #   放在最后是有意的：前六道是"查仓库"，这一道是"查检查器本身"。
 sh "$HOOK_DIR/../build/gates-selftest.sh"

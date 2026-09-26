@@ -2960,3 +2960,32 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 
 ---
 
+
+---
+
+### 5.60 HANDOFF 瘦身（1034 → 129 行）+ 事实系统 F1–F3（2026-09-26）
+
+**起因**：用户指出"在过去俩小时又判了好几次错误断言，我认为事实系统需要重构" +
+"赶快落简陋新 handoff，我要压缩上下文"。
+
+**为什么瘦**：活状态文档既太长、又混进了大量历史叙述与参考表 —— 新会话读它要花掉小半个上下文。
+
+**做了什么**（细节见 `build/113/PLAN-arch.md` §2 的 F1 / F3 两节）：
+- **HANDOFF 重写为 129 行**：只留「现在是什么 / 下一步 / 铁律 / 提交前闸门 / 硬坑 / 批次收尾 / AUTO:STATE」。
+  删掉的正文（脚本总表、§7 能力表、§4.x 交接记录等）**全文在 `git show 76176bb:HANDOFF.md`（1034 行）**。
+- **F1 闸门自证台**：`build/lib/gate.py` + `build/gates-selftest.sh` —— 12 个闸门全部能证明自己"会红"
+  （零值守卫 + `GATE_REPO` 根注入 + `--selftest`），接在 pre-commit 上。它当场抓到 6 个真洞
+  （`check_m` 的正则对 `function y = f(x)` 全瞎、三处站点同时缺文件曾报"完全一致"、
+  `declared == {}` 曾判 `verdict:"ok"`、垃圾 wasm 曾报"（无）✔"、`check-handoff` 的 L2 静默跳过、
+  闸门读不到文件时直接崩）。
+- **F2 事实台账**：`build/facts.py` → `build/FACTS.json`（13 条，每条带复跑命令）+
+  `.githooks/check-facts.py`（文档里的数字必须与实测一致）。首跑就抓到 10 处不一致。
+- **F3 翻案台账 + 重现检测**：`build/lib/retractions.json`（8 条在册）+ `.githooks/check-retractions.py`
+  —— 被推翻的断言重新出现且无更正标记 ⇒ 红。它抓到的最硬一条：`PLAN-arch.md` 里一条被推翻的断言
+  与它自己的更正**并存在同一个文件**。
+- 按实测更正的数字：`22 个环境变量` → **23**（六处，A1 加 `BUILD_MODE` 后没人更新）、
+  `probe-fontname` 13 → **19**（两处）、`probe-core-names` 19 → **23**、README 的 `703` → **710**
+  （导出名字数）、矩阵页旧 sha 标注"当时"。
+
+**教训**：写进 `AGENTS.md` 事实纪律第 5 条 —— 活状态只写**实测**；**推断**进 NOTES 并注明结案实验；
+被推翻的断言进**台账**（否则它会以"现状"的身份回来）。

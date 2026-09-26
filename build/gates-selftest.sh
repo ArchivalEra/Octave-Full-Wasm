@@ -28,6 +28,7 @@ cat >"$LIST" <<'EOF'
 .githooks/check-handoff.py --selftest
 .githooks/check-consistency.py --selftest
 .githooks/check-retractions.py --selftest
+.githooks/check-facts.py --selftest
 build/check-site-parity.sh --selftest
 build/check_m.py --selftest
 build/113/check-build-manifest.py --selftest
