@@ -337,3 +337,41 @@ README 只给定制示例，**默认值得读源码/实测**：`coi-serviceworke
    前置只剩 E3（已绿）+ 线程版构建（OpenBLAS-pthread + `-pthread -sSHARED_MEMORY`，即 B6 本体）。
 4. C6 的嵌入能力（工厂化 mount/base）**保留**——它是将来"拆 CLI / 定制 UI"的地基，但不再是
    被"宿主约束"驱动的工作。
+
+---
+
+## E2 探针（OpenBLAS-pthread/SIMD）：构建成功，链接阻塞（2026-09-26，时间盒到点）
+
+**做了**（无人值守，长线丢后台）：
+1. **核实外部事实**：评审说的 `WASM128_GENERIC` **存在**，但在 **OpenBLAS 0.3.34**（`TargetList.txt:159`，
+   README 记为"Optimized SGEMM,DGEMM,DAXPY,SSUM/DSUM,SDOT/DDOT,SROT/DROT"）——**0.3.30 里完全没有 wasm 痕迹**
+   （全树 grep 为空）⇒ 版本要对，评审那条成立。
+2. **构建成功**（容器内，约 1 分钟）：
+   ```sh
+   make TARGET=WASM128_GENERIC USE_THREAD=0 NO_LAPACK=1 NO_SHARED=1 \
+        CC="ccache emcc" FC=/src/bin/emf77 HOSTCC=gcc -j12
+   # → libopenblas_wasm128-r0.3.34.a（2,016,902 B），**EXIT=0**
+   # 符号：dgemm_ / daxpy_ / dtrsm_ / dsyrk_ 都在（gfortran 风格名字 ⇒ 与 Octave 的调用口径一致）
+   # TARGET 自动带 -msimd128；`-m32`（wasm32）也对
+   ```
+   ⚠️ `NOFORTRAN=1` **不能用**：那会砍掉 Fortran 接口层，而我们要的正是 `dgemm_` 这类符号
+   ⇒ 必须用容器里的 `emf77`（f2c 包装）当 `FC`。
+   产物留档：`/mnt/hdd/octave-wasm-build/octave-wasm/third_party/blas-openblas/lib/libopenblas.a`
+   （另存一份同内容的 `librefblas.a` 作"影子替换"，靠 `-L` 顺序抢在 `/usr/local/lib` 之前）。
+3. **链接失败（阻塞点）**：全量重链（权威口径 + `EXTRA_LDFLAGS="-L/…/blas-openblas/lib"`）在
+   **binaryen 那步**炸：
+   ```
+   [parse exception: popping from empty stack (at 0:7912702)]
+   Fatal: error parsing wasm
+   em++: error: wasm-opt --strip-target-features --post-emscripten -O2 … failed (returned 1)
+   ```
+**已排除的假设**（都实测过，别重走）：
+- ✗ atomics：构建日志 0 处 `-pthread/-matomics`，归档里 `atomics` 字符串 0 处。
+- ✗ 与 reference LAPACK 的**重复符号**：两边定义集交集 **0**（1627 vs 1642 个符号）。
+- ✗ OpenBLAS 代码本身 binaryen 不认：最小程序（只调 `daxpy_`）链接时 **wasm-opt EXIT=0**。
+⇒ 阻塞点是"**全量 Octave 链接 × OpenBLAS**"这个组合，**不是** OpenBLAS 单方问题。
+**下一步方向（未做）**：① 二分归档（逐个 `emar d` 移除对象直到能链，定位到具体对象）；
+② 换 binaryen 版本（emsdk 自带的那份；可把新版解到 `/mnt/hdd/crossbuild-tools/` 用 `BINARYEN_ROOT` 指过去）；
+③ 试 OpenBLAS 的 CMake 构建路径（可能与 Makefile 的 codegen 不同）。
+**结论**：E2 按计划本就是"触发条件不成立的可选增强"（C4/SIMD 已给 1.62×/1.75×/1.31×），
+故**时间盒到点即转 B5**（计划主线：C3 Worker 化），把上面的方向留给后续。
