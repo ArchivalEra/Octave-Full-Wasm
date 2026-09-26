@@ -700,3 +700,53 @@ PLAYWRIGHT_BROWSERS_PATH=/mnt/hdd/crossbuild-tools/pw-browsers \
   但把它放进产品还要过 `E2`（链进主模块）那一步 —— 悬案仍在（76 个 `signature_mismatch`）。
 - 复跑：`bash build/113/probe-blas-threads.sh` → `cd /mnt/hdd/octave-wasm-build/harness && sh run.sh <repo>/test/browser/probe-blas-threads.mjs`
   （`NOCOI=1` 那档是反证：不注入 COI ⇒ 起不来，证明线程硬依赖 COI）。
+
+---
+
+## ★ E2 悬案：根因锁定（2026-09-26，**推翻两次旧猜测**）
+
+**旧猜测 1（错）**："重复符号 vs LAPACK，交集 0" ⇒ 据此排除"重复定义"。
+实测：那次查的是 `liblapack.a`（交集确实 0），但**重复的另一半不是它**。
+本轮实测到的真实重复对：`-lrefblas`（`/usr/local/lib` 那份 **f2c** 约定）与
+`/src/work/blas-nof2c/lib/librefblas.a`（**gfortran** 约定）**共享 156 个同名符号**；
+而 E2 的 5 次尝试（`m2fc-ob*`）**每次都有同一个缺陷：只换 BLAS、没删 `-lrefblas`**
+⇒ 它们的失败里混着"两份 BLAS"这个额外变量。
+
+**旧猜测 2（错）**：换 Fortran 接口（G77/GFORT）能解决。
+实测：干净副本 + `F_COMPILER=G77` 重编（构建日志里 `-DF_INTERFACE_G77` 出现 **1689** 次、
+`-DF_INTERFACE_GFORT` **0** 次 ⇒ 接口真的换了），再**删掉 `-lrefblas`** 重链
+⇒ `function signature mismatch` **仍是 78 个，一个不少**。
+
+**★ 真根因（wasm-ld 自己写在警告里）**：**只是返回类型不一致** ——
+
+```
+wasm-ld: warning: function signature mismatch: dswap_
+>>> defined as (i32,i32,i32,i32,i32) -> i32   in /usr/local/lib/liblapack.a(dlaqps.o)
+>>> defined as (i32,i32,i32,i32,i32) -> void  in /openblas.a(dswap.o)
+
+wasm-ld: warning: function signature mismatch: ztrsv_
+>>> defined as (…11 个 i32…) -> i32  in /src/deps/qrupdate/lib/libqrupdate.a(zlup1up.o)
+>>> defined as (…8 个 i32…)  -> void in /openblas.a(ztrsv.o)
+```
+
+**参数一致，差别只在"子程序返回 `int`（f2c 约定）"vs"返回 `void`（OpenBLAS 约定）"。**
+这一条解释了三件事：
+① **为什么"错误点对 OpenBLAS 的内容不敏感"** —— 它只关乎**声明**，不关乎代码；
+② **为什么换 G77/GFORT 接口无效** —— 那两个宏不动返回约定；OpenBLAS 里唯一与 f2c 相关的
+   `NEED_F2CCONV`（`common.h:668`）只改 `FLOATRET`（"函数返回 float 还是 double"），
+   不管 `void` 子程序；
+③ **binaryen 那句 `popping from empty stack`** —— 调用方按"返回 i32"调用一个 `void` 函数，
+   栈上多出一个值（`expected 0 elements on the stack for fallthru, found 1`）。
+
+**下一步（最小改动方向，本轮未做，如实记）**：让两边的返回约定一致。现成开关**没有**，所以：
+· 方案 A：给 OpenBLAS 的 `interface/*.c` 的这 78 个入口加 `int` 返回 ——
+  **必须同时保证 `return 0;`**（只改声明不改函数体会让 clang 发 `unreachable` ⇒ 运行期 trap）；
+· 方案 B：在链接层加一层"int 返回的薄包装"（把 OpenBLAS 的符号改名后由包装层转发）——
+  需要给 OpenBLAS 的 78 个符号做重命名，机械但可行；
+· 方案 C（不改 ABI）：**放弃把 OpenBLAS 链进主模块**，改用"side module 自包含"那条既定架构
+  （像 `__ode15__` 内嵌 SUNDIALS 那样，见 `rebuild-pic-blas.sh` 的注释）—— 但那样多线程 BLAS
+  只能被**走 dlopen 的 .oct** 用到，而 Octave 自己的 `A*B` 走的是主模块里的 BLAS ⇒ 收益不到手。
+
+**实验产物（容器内，均未 promote、站点零改动）**：
+`/src/websrc/e2-one-blas`（单 BLAS：删了 `-lrefblas`）、`/src/websrc/e2-g77`（G77 接口 + 单 BLAS）。
+容器里的 `link-web.sh` 实验期间被临时 sed 过，**已从仓库恢复**（sha 双侧一致 `0eaa1f0e…`）。
