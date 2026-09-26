@@ -15,7 +15,8 @@
 检查项（客观可判，不做风格判断）：
   1. 挂载根：`build/assets.py` 与 `bridge/assets-loader.js` 声明的 OCTAVE_M 必须一致，
      且 `build/main.cc` 里出现的每个 `/usr/src/octave/...` 路径都必须挂在它下面；
-  2. 启动清单：`index.html` 里 `OctaveAssets.load(...)` 用到的每个名字都必须在清单里
+  2. 启动清单：`index.html` 里 `*.Assets.load(...)`（OctaveAssets 或实例变量 Assets）
+     用到的每个名字都必须在清单里
      （站点读不到就**明确跳过**这一项）；
   3. 11.3.0 车道里不许出现 `/7.2.0/` 路径（`build/113/*`、`recover*.sh`、
      `promote-webgl.sh`、`bridge/*`）。**`build/Makefile` 例外**：它是 7.2 车道的上游配方
@@ -45,9 +46,11 @@ def read(rel):
 
 
 def boot_names(html):
-    """index.html 里 OctaveAssets.load(...) 用到的名字（含 CORE_DLDFCN 那种变量间接）。"""
+    """index.html 里 *.Assets.load(...) 用到的名字（含 CORE_DLDFCN 那种变量间接）。
+    ⚠️ 2026-09-26 C6 重构后 boot 链走实例变量 `Assets.load(...)`（window.OctaveAssets
+    只是默认实例别名）⇒ 正则放宽为 `*.Assets.load(`，两种形态都抓。"""
     names = set()
-    for m in re.finditer(r"OctaveAssets\.load\(\s*(\[[^\]]*\]|\w+)", html):
+    for m in re.finditer(r"(?:[A-Za-z_$][\w$]*\.)*Assets\.load\(\s*(\[[^\]]*\]|\w+)", html):
         arg = m.group(1)
         if arg.startswith("["):
             names.update(re.findall(r"'([^']+)'", arg))

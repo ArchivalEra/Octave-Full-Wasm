@@ -206,7 +206,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 ## 目录
 
 <!-- AUTO:FILES -->
-- `.githooks/check-consistency.py` (7950 bytes)
+- `.githooks/check-consistency.py` (8197 bytes)
 - `.githooks/check-handoff.py` (8211 bytes)
 - `.githooks/check-wants.py` (8921 bytes)
 - `.githooks/check-whitelist.py` (1251 bytes)
@@ -222,7 +222,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (8909 bytes)
 - `HANDOFF.md` (99725 bytes)
-- `HISTORY.md` (221624 bytes)
+- `HISTORY.md` (224329 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (18104 bytes)

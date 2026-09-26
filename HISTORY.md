@@ -2493,6 +2493,39 @@ C2（pthread BLAS）前置未知数已清但仍属"COI 环境下的可选增强"
 唯一可靠自检：`llvm-objdump -d <wasm> | grep -c v128`（现役 = 4752）。
 过程与数据见 `build/113/NOTES-threads.md` 的「C4 落地」节。
 
+### 5.55 E4 探针 + C6 页面层落地：同页多实例成立（2026-09-26，branch `Slay`）
+
+**E4（C3 的机制未知数清零）**：`probe-jspi-worker` 扩到 dlopen —— worker 里
+`dlopen` **两种 FS 来源**都通：运行时 `fetch→FS.writeFile`（产品资产装载形态）与
+`--preload-file` 烘进 .data（产品 octave.data 形态）；且 side module **回调主模块的
+worker_wait（挂起 import）** ⇒ 挂起**穿透 dlopen 边界**（rt=52/pre=52，tick=102）。
+判据 **8 PASS / 0 FAIL**。新坑两个：`docker cp` 到**已存在**目录会把源目录嵌套进去
+（side.c "丢失"）；`-Wl,--export=a,b` 逗号列表无效 + `set -e` 管不住管道（emcc 失败被
+`| tail` 吞）⇒ 补"产物存在"硬检查。
+
+**C6 页面层（PLAN-threads B1，产物 wasm 不变 `1ed3e528…`）**：宿主层从"页面单例"
+改成**实例工厂** —— `createOctaveHost({base,mount,home,id})` + 资产装载器
+`createOctaveAssets(module,base,isReady)`；默认实例拿走全部 `window.*` 兼容别名
+（**65 个旧套件一个没改**）；G3 取点三原语按实例覆写；IDBFS 按实例挂载。
+验收：`glue-selftest 91/91` → **8768 全量 42 套/1060/0（41 套 accept 零改动）** →
+promote 8761（D8 开机自检 OK 1.7s）→ **8761 全量 PROBES=1 77 套/1205/0** →
+dist 核 sha → parity --strict。新套件 `accept-embed-multi` **13/0**（同页两实例、
+交替 100 次 eval 状态隔离、FS 互不可见、资产进对实例、别名不覆盖、坏挂点必须 throw）。
+
+**三个新坑**：① `loadScript` 里 Promise executor 的 `resolve` 参数**遮蔽**了
+`resolve(url)` 助手 ⇒ `s.src=undefined` 且 promise 提前 settle ⇒ JS 包"装载成功"但
+`__OCT_ASSETS__` 缺席（助手改名 `withBase`）；② 装载器早于 `inst.mod` 创建 ⇒ i2 拿到
+null 回退 global.Module = 默认实例（资产写错 FS、addpath 串台）⇒ 工厂末尾再建；
+③ 坏挂点在注册表 push **之后** throw ⇒ 幽灵实例（hosts=3）⇒ 挂点解析提前。
+**闸门盲区补强**：check-consistency.py 的启动清单正则只认 `OctaveAssets.load(`，
+重构后抽成 0 个名字**空转通过** ⇒ 放宽为 `*.Assets.load(`，16 个名字重新核对。
+
+**已知边界（记档，等下次重链）**：非默认实例无图形上屏（publish_png 硬编码
+`window.OctaveP5`，canvas 契约同批）；四个队列桥/stdin/Ctrl-C 仍是默认实例单例。
+**下一步车道**：B5（C3 真落地：解释器搬 DedicatedWorker + Worker RPC 测试垫片）——
+机制未知数已全部清零（Q4/E3/E4）；E2（OpenBLAS）触发条件不成立维持可选；
+C8/C2 需要 COI 环境/宿主配合。
+
 ---
 
 ## 10. 第四轮实况：Octave 11.3.0 已落地（2026-09-22）
