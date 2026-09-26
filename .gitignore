@@ -94,6 +94,7 @@
 !vendor/forge/*
 !vendor/extra/*
 !.githooks/install.sh
+!.githooks/check-retractions.py
 !.githooks/pre-commit
 !.githooks/pre-push
 !.githooks/update-readme.py

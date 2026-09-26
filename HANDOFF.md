@@ -469,7 +469,7 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
 | `build/glue-selftest.m` `build/glue-selftest.sh` | **胶水层自带测试的统一驱动**（目标名单单一真源；宿主秒级 / 浏览器 `accept-selftest`） |
 | `build/113/build-fontconfig.sh` | **R3**：静态 `libfontconfig` + `libexpat`（`-fPIC` + `-fwasm-exceptions`）→ `/src/deps/{fontconfig,expat}`；四个坑写在注释里，带符号自检 |
 | `build/113/probe-fontconfig.{c,sh}` | **R3 的机制闸门**（30 秒、不碰 Octave）：静态 fontconfig + MEMFS 配置/字体能不能用；量出两条静默陷阱（宿主 env 进不来 / 默认配置路径是双斜杠 `//fonts/fonts.conf`）|
-| `test/browser/probe-fontname.mjs` | **R3 的验收探针**（13 项）：`listfonts`/`__get_system_fonts__` + **像素级判别**（只改 `fontweight`/`fontangle` ⇒ `getframe` 像素和必须不同）|
+| `test/browser/probe-fontname.mjs` | **R3 的验收探针**（**19 项**，2026-09-26 实测复跑更正：曾写 13）：`listfonts`/`__get_system_fonts__` + **像素级判别**（只改 `fontweight`/`fontangle` ⇒ `getframe` 像素和必须不同）|
 | `bridge/queue.js` | MEMFS 队列的**协议无关部分**（取 fs / 读走清空 / 切分），四个宿主桥共用 |
 | `bridge/assets-loader.js` | **资产懒加载器**（manifest → fetch → 写 FS → addpath；支持 `aliases` 符号链接） |
 | `bridge/index.html` | 站点入口（原版 + loader，只读清单不预加载） |
@@ -561,7 +561,7 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
   只在首次建 axes 时打一次），之后文本能力静默缺失；数值与 plot 桥不受影响。
   ~~**上线后的两条代价**：无 fontconfig ⇒ `fontname` 存得住但渲染时被忽略、`listfonts()` 报
   `structure has no member 'family'`。~~ → **2026-09-24 两条都已修（R3，见 §5.31）**：fontconfig 上线后
-  `fontname`/`fontweight`/`fontangle` **真的改像素**（探针 `probe-fontname.mjs` 13 项钉住），
+  `fontname`/`fontweight`/`fontangle` **真的改像素**（探针 `probe-fontname.mjs` **19 项**钉住），
   `listfonts()` 返回 `FreeSans`、`__get_system_fonts__()` 有 family/angle/weight/suitable（n=4）。
   **仍如实记的边界**：本构建**只有 4 个 FreeSans 面**，所以 `fontname` 填别的家族名（如 `"Courier"`）
   会**落回** FreeSans——这是"没有系统字体目录"的必然，不是 bug（探针里有一条交底断言钉住）。
@@ -751,7 +751,7 @@ CHARACTER 隐藏长度参数）不一致时会**链接期**报 `function signatu
   **不需要**抬浏览器下限、**不需要**维护两条车道。
 - **句柄/对话框一族：大部分已能用**（2026-09-24 实测更正 —— 以前整条记成"未做，归图形分支"）。
   真渲染器（`webgl`）上线后，`accept-p5-graphics` 那套断言之外我又逐条实测了一遍
-  （`test/browser/probe-core-names.mjs`，19 项，8761 全绿）：
+  （`test/browser/probe-core-names.mjs`，**23 项**，2026-09-26 实测复跑更正：曾写 19）：
   ✅ `hgsave`（写出 `.hgs`）、`copyobj`、`uicontrol`/`uimenu`（**建出对象、属性可读写**，
   但**我们的 toolkit 不画控件** ⇒ 没有"看得见的按钮"）、`gcbo`、`waitfor`、`inputname`、
   `menu`（回落成控制台菜单并真的提示，走 `input()`/`window.prompt`）、
