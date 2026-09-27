@@ -3232,3 +3232,48 @@ BLAS 来自车道（`/src/deps-threads/lapack-simd/lib`，判据 `inputs.blas.re
 - **8761 `PROBES=1`**：**69 套 / 1304 PASS / 0 FAIL**（当时实测，日志留档 `sweep-logs/20260927-181413`）
   —— 与 8768 那侧同一组数字（同一份产物、同一条车道），说明**部署态**的探针（含 `probe-lane`
   的选档格、`probe-artifact-sha` 的按档取件、`probe-caps` 的按档断言）也全过。
+
+---
+
+### 5.65 E2 落地：线程版 OpenBLAS 链进主模块（2026-09-27，branch `e2-openblas`）
+
+**目标**（`NOTES-threads.md` 的 E2 节）：把线程版 OpenBLAS 链进主模块，兑现多线程的数学收益。
+
+**根因（早前已锁定，本轮用工具化落地）**：78 条 `function signature mismatch` 只是**返回约定**之差
+（f2c 的 LAPACK 与 Octave 的 `F77_RET_T` 按"子程序返回 `int`"调、OpenBLAS 定义成 `void`）。
+
+**两条路，走通的与记录下来的**：
+· 方案 A（改 `interface/*.c` 的返回类型）：`patch-openblas-f77-ret.py`（C 感知配对 + 分支选择 +
+  逐字节 revert + 13 条自证）能改对 72 处，但**编不过** —— 那些文件是**共享函数体**（两臂共用
+  `#endif` 之后那段体，体里有裸 `return;`），改成 `int` 会打破 CBLAS 那趟 ⇒ 工具留档，路不走。
+· 方案 B（**本轮的交付**）：给 Fortran 入口加 `ob_` 前缀（`patch-openblas-symbol-prefix.py`）+
+  生成薄包装（`gen-f77-wrappers.py`）接回既有 ABI + `patch-openblas-emscripten.py`（`blas_server.c`
+  的 `__EMSCRIPTEN__` 守卫 —— 这段原本是手改没记档的，本轮以 **diff 文件**为记录）。
+
+**"怎么量签名"是这轮的关键方法**：mismatch 报文只报**冲突**的符号；"当时就相符"的那批（加前缀后原名
+没人提供）要从 `undefined symbol` 里捞出来，再用**签名预言机**量（0 参调用逼链接器打印定义侧签名），
+且**两侧各量一次**（车道 = 调用方约定 / OpenBLAS = 自己约定）才能判该走哪条规则。五条规则表见 NOTES。
+
+**三个坑**：`zdotu_` 有约定互斥的两个调用方（按 OpenBLAS 签名透传，那条 mismatch **是既有的**）；
+`c_abs` 交给 libf2c（OpenBLAS 自带的是 f32 且没加前缀 ⇒ 摘成员、不包装）；"内部引用被加前缀、
+定义没有"这类错配要**看存档里有没有这个名字**，别猜。
+
+**判据与结果**：产物 `verdict=ok`；**链接警告与车道基线逐条相同**（undefined 同为 gl4es/cgejsv_/zgejsv_、
+mismatch 同为 `zdotu_`）⇒ **零新增**。闸门自证 22 → **26 个**（四个新工具全带 `--selftest`）。
+
+**实测（同机同模式 A/B，只换站点 `threads/` 三件）**：
+
+| 用例 | 车道基线 | E2 单线程 | E2 线程版 |
+|---|---|---|---|
+| 矩阵乘 500×500 | 0.0400 s | 0.0210 s（**1.9×**） | **0.0060 s（6.7×）** |
+| `lu(800)` | 0.0600 s | 0.0430 s（1.4×） | 0.0200 s（3.0×） |
+| FFT 1e6 | 91.7 s | 91.1 s | 90.2 s（**同基线** ⇒ 那 90 秒是既有特性） |
+| `accept-113-oct` | 8/0（83 s） | **8/0** | **>600 s 未完成**（结案实验①） |
+
+其余数值（E2 单线程）：`accept-113-libs 17/0`、`accept-hdf5 16/0`、`accept-113-ode15 29/0`、
+`accept-slicot 25/0` —— 全绿。
+
+**交付形态定为 `USE_THREAD=0`（单线程 OpenBLAS）**：SIMD 收益 1.4–1.9×、零新增警告、数值全过。
+线程版（小尺寸 6.7×）**在"dlopen 的 `.oct` 里首次 BLAS 调用"这条路上不返回**（600 s 跑满）；
+"为什么"未结案，下一步实验写在 NOTES（`openblas_set_num_threads(1)` 后跑同一路径）。
+**本轮不 promote**：E2 是分支产物（`/src/websrc/e2-ob-s-out`，verdict=ok），8761/8768 一字未动。
