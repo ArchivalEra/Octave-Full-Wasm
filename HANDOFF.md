@@ -13,11 +13,19 @@
 
 ---
 
-## 0. 现在是什么（2026-09-27，**branch `threads`**）
+## 0. 现在是什么（2026-09-27）
 
-- **8761 = 现役「基础档」**：sha / 体积 / 回归数字都在文末 `AUTO:STATE`；其他实测事实在 `AUTO:FACTS`
-  （源 = `build/FACTS.json`，每条带复跑命令）。正文只写**台账的键名**（F2 的规矩，闸门会拦手抄）。
-- **线程档（B6）已建成并通过浏览器实测**（branch `threads`；工作令 = `build/113/PLAN-threads.md` §6）：
+- **8761 = 现役「双档」站点**：根目录基础档 + `threads/` 线程档，**带头服务**（`build/serve-coi.py`）
+  ⇒ 页面按 COI 选**线程档**（实测 `probe-artifact-sha` 2/0：实例化的正是 `threads/octave.wasm`）。
+  sha / 体积 / 回归数字都在文末 `AUTO:STATE`；其他实测事实在 `AUTO:FACTS`（源 = `build/FACTS.json`，
+  每条带复跑命令）。正文只写**台账的键名**（F2 的规矩，闸门会拦手抄）。
+- **B6（双档 + COI）已收尾并上线**（branch `threads` 已合并到主干工作流；工作令 = `PLAN-threads.md` §6）：
+  · **三套矩阵全绿**：线程档（8768 带头 + `PROBES=1`）、基础档（8770 不带头）、**8761 部署态**
+    （带头 ⇒ 页面跑线程档）各跑一遍，逐套日志留档在 `sweep-logs/`；**套件数与 PASS 一律看台账**
+    （`accept_suites` / `accept_pass`，口径 = 最近一次全绿扫描；逐档当时的数字见 `HISTORY` §5.64）；
+  · 首跑暴露的**七条红**逐条查清并修好（真因与判据见 `NOTES-threads.md` 的四段机制 + `PLAN-threads.md`
+    §6 的坑 10–13）：清单只改 URL 不改 sha、车道清单照抄 install 前缀、pthread `.oct` 引用
+    `__cxa_guard_*`、slicot 少链 `common.oct.o`、选档只传给第一个上下文（worker / 第二实例）；
   · 产物：`threads_verdict` / `threads_shared_memory` / `threads_pthread_glue` / `threads_v128` /
     `threads_blas_dir` / `threads_wasm_sha`（都在 `AUTO:FACTS` 里，别背数字）；
   · `.oct` 两档分好：`oct_lane_tls_init` / `oct_lane_files` / `oct_lane_octdir_files`，基础档同条数
@@ -31,9 +39,9 @@
     显式 `?lane=threads&worker=1` 仍选线程档并**硬失败**（不静默降级）。
   · **同页多实例是支持的**（13/0），但**前提是每个实例都拿到页面的选档计划** —— 少传一个就是
     "线程胶水 + 基础产物"的错配（`eval_string` 缺席）。
-- ⚠️ **一条最容易在压缩里丢的细微事实**：线程档现在是 **refblas/lapack 的「SIMD + atomics」版**，
-  **不是 OpenBLAS** ⇒ **多线程运行时已启用，但数学还没并行化**。收益要靠 E2 把线程版 OpenBLAS 链进去；
-  E2 的前置（整条 farm 带 atomics）**本批已完成**。
+- ⚠️ **一条最容易在压缩里丢的细微事实**：**现役**（8761/8768）用的仍是 **refblas/lapack 的
+  「SIMD + atomics」版**（多线程运行时已启用、数学还没并行化）；**E2 那套（OpenBLAS）在分支
+  `e2-openblas` 上，尚未 promote**。别把"E2 已打通"读成"现役已经在用 OpenBLAS"。
 - 现役 farm（`/usr/local`、`/src/deps`）**一字未动**（实测仍 100% 缺 atomics）；车道在
   `/usr/local-threads` + `/src/deps-threads`；两档 prefix 分开是硬要求。
 - 事实系统：`build/FACTS.json`（源）+ `AUTO:FACTS`（渲染）+ 翻案台账 `build/lib/retractions.json`
@@ -41,31 +49,26 @@
 
 ## 1. 下一步（按此顺序）
 
-1. **两档验收矩阵 = 线程档**：`PROBES=1 sh build/sweep.sh http://127.0.0.1:8768/`（带头 = 线程档）。
-   **基础档那侧已全绿**（8770 不带头；套件数与 PASS/FAIL 见文末 `AUTO:STATE`，别在这儿写数字）。
-   线程档首跑暴露的 **七条红已逐条诊断 + 修好 + 单套复跑确认**（每条都有产物侧判据，见
-   `NOTES-threads.md` 的「B6 验收期抓到的机制缺陷」三段 + `PLAN-threads.md` §6 的坑清单）：
-   · `accept-113-oct` / `accept-113-assets`：夹具未分档、全局默认资产实例不认档（已修）；
-   · `accept-archive` 0/20、`accept-dldfcn` 11/60、`accept-full` 9/11（**同一个真因**）：
-     `manifest.threads.json` 只改 URL 不改 `sha256` ⇒ 加载器 fail-closed 拒载 16 条 `.oct`（已修，
-     生成器现在**按磁盘字节重算** sha，判据④）；
-   · `accept-help` 5/7：车道清单照抄了基础档的 **install 前缀**（线程档烤的是
-     `/src/work/octave-install-threads`）⇒ `help` 读不到 docstrings（已修，判据⑤）；
-   · `accept-dldfcn` 的 audio：pthread 编的 `.oct` 引用 `__cxa_guard_*`，而两档主模块都**不提供**
-     ⇒ 车道影子必须带 `-fno-threadsafe-statics`（已修，判据②）；
-   · `accept-forge2` / `accept-slicot`：slicot 调度模块**少链了 `common.oct.o` + PIC 归档**
-     ⇒ `step`/`norm` 首次调用崩（已修，判据③ + 构建侧判据⑨）；
-   · `accept-worker` 4/12、`accept-embed-multi` 13/12：选档只传给了第一个实例 ⇒ **胶水与产物错配**
-     （已修：缺省取页面计划 + worker 宿主自动落基础档；判据在 `probe-lane` 格 5 / `accept-worker`）。
-2. **绿之后走批次收尾**：promote **8761（双档）** → 带头服务（`build/serve-coi.py`）→
-   `check-boot` / 部署件 SHA 三层 → 同步仓库 `site/` → `make-dist` → 三处 parity `--strict` →
-   六道闸门 → 提交 → 推 mirror。**8761 现在是现役基础档、一字未动**。
-   ⚠️ promote 的两条姿势（都别省）：`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out`（现役产物那条车道，
-   裸跑默认会把 9-23 的旧件推上去 ⇒ 脚本 §1b 会 FATAL 拦你）；两条 `octave.data` sha 不同是**已知且
-   正确**的（lane.js 指 `threads/octave.data`，脚本按 lane.js 反查）。
-3. **E2（可选；用户定：另开分支）**：把**线程版 OpenBLAS** 链进主模块 —— 收益真正兑现的一步
-   （探针实测 DGEMM N=2000 的 T=8 = 7.2×）。前置已完成，只剩「OpenBLAS → 主模块」的符号/接口
-   （根因与两条修法见 `build/113/NOTES-threads.md` 末两节）。
+**B6 已收尾上线**（8761 双档 + 带头服务 + 三套矩阵 + 三处 parity `--strict` + dist + 六道闸门，
+提交在 `threads` 分支且已推 mirror）。⇒ 下一步是 **E2**，它在**独立分支 `e2-openblas`**：
+
+1. **E2 现状（已落地，等你拍板"要不要上线"）**：把**线程版 OpenBLAS** 链进主模块这件事**已经打通** ——
+   根因是**返回约定**（f2c/F77_RET_T 按 `int` 调、OpenBLAS 定义 `void`），方案 B（`ob_` 前缀 +
+   生成薄包装）落地；两个产物都 `verdict=ok`（台账键 `e2_single_verdict` / `e2_threaded_verdict`，
+   sha 见 `e2_single_wasm_sha` / `e2_threaded_wasm_sha`）。
+   · **交付形态 = 单线程**（`USE_THREAD=0`）：实测收益 **`e2_matmul500_ratio`（矩阵乘 500²）与
+     `e2_lu800_ratio`（`lu(800)`）**，数值回归 5 套全绿（`accept-113-oct 8/0`、`libs 17/0`、
+     `hdf5 16/0`、`ode15 29/0`、`slicot 25/0`）；
+   · **线程版**：小尺寸非常快（`e2_threaded_matmul500_ratio`），但在"dlopen 的 `.oct` 里首次 BLAS
+     调用"这条路上 **`e2_threaded_oct_rc` = 124（600 s 跑满未完成）** ⇒ 暂不可用；
+     **"为什么"未结案**，结案实验②（页面里先 `openblas_set_num_threads(1)` 再跑同一路径）写在
+     `NOTES-threads.md` 的 E2 节；
+   · 配方（六步）/五条规则表/三个坑/两版 A/B 全在 `NOTES-threads.md` 的 E2 节；过程在 `HISTORY` §5.65。
+2. **若要 E2 上线**：把单线程 E2 当**新的线程档产物** promote（`E2_OPENBLAS=` 口子已进 `relink.sh`
+   的模式表），然后按批次收尾那套走一遍（8768 验绿 → promote → boot/SHA 三层 → 同步 `site/` →
+   dist → parity → 六道闸门）。**这是一次"换产物"**：台账里那批 `threads_*` 会变，`facts.py` 重测
+   就会跟上（掉条守卫会拦住意外）。
+3. **线程版的"为什么"**（独立课题，收益更大：小尺寸已 6×）⇒ 结案实验②后再说。
 
 ## 2. 铁律（违反会被拦或返工）
 
@@ -160,11 +163,27 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-181413 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
+| `e2_lu800_ratio` | **1.4** | `上面两行的比值（车道 / E2）` |
+| `e2_lu800_s` | **0.043** | `同 E2 那一行` |
+| `e2_matmul500_ratio` | **1.9** | `上面两行的比值（车道 / E2）` |
+| `e2_matmul500_s` | **0.021** | `E2 单线程站点跑 bench-core.mjs（见 NOTES 的 A/B 表）` |
+| `e2_single_verdict` | **ok** | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.build.json）` |
+| `e2_single_wasm_bytes` | **29495868** | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm` |
+| `e2_single_wasm_sha` | `e570905ecc8927bf…` | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm` |
+| `e2_threaded_lu800_s` | **0.02** | `同上` |
+| `e2_threaded_matmul500_ratio` | **6.7** | `车道 / 线程版（派生）` |
+| `e2_threaded_matmul500_s` | **0.006** | `E2 线程版站点跑 bench-core.mjs（该轮 300s 超时收尾，只到前几项）` |
+| `e2_threaded_oct_rc` | **124** | `timeout 600 sh test/browser/run.sh ...accept-113-oct.mjs <E2 线程版站点>; echo $?` |
+| `e2_threaded_verdict` | **ok** | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.build.json）` |
+| `e2_threaded_wasm_bytes` | **29908917** | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm` |
+| `e2_threaded_wasm_sha` | `bce7e4cc252d6481…` | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm` |
 | `env_vars` | **27** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
 | `exported_functions` | **710**（M2 保活集大小（M1 约 44987）） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.exported_functions` |
 | `fonts_count` | **8** | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.fonts` |
 | `js_sha` | `caac68bf62015859…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.js` |
 | `jspi_entry` | 是（B 姿势的可挂起入口在不在） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.jspi_entry` |
+| `lane_lu800_s` | **0.06** | `同车道那一行` |
+| `lane_matmul500_s` | **0.04** | `现役车道站点跑同一个 bench-core.mjs` |
 | `matrix_page_sha` | `54a7e1c261a2df2f…` | `sha256sum /mnt/hdd/octave-wasm-build/site/matrix-android.html` |
 | `oct_base_files` | **16**（基础档 `assets/oct/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' \| wc -l` |
 | `oct_lane_files` | **16**（线程档 `assets/oct-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/oct-threads -name '*.oct' \| wc -l` |
@@ -185,7 +204,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-27T18:36:26+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-27T21:56:45+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态

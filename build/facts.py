@@ -359,6 +359,93 @@ def measure():
         except OSError as e:
             print("⚠ 读不到探针日志 %s：%s" % (pl, e), file=sys.stderr)
 
+    # ── E2（branch `e2-openblas`）：线程版 OpenBLAS 链进主模块的实测事实 ─────────────────
+    # 为什么进台账：E2 的**收益**与**否证**都是"数字/结论"，正文里手抄一次就会腐烂（本仓一天
+    # 抓到过 5 处）。产物与日志都落在持久盘（`e2-artifacts/`、`e2-logs/`），本组按它们量。
+    E2A = os.environ.get("E2_ARTIFACTS", os.path.join(os.path.dirname(SITE), "e2-artifacts"))
+    E2L = os.environ.get("E2_LOGS", os.path.join(os.path.dirname(SITE), "e2-logs"))
+
+    def _e2_buildjson(variant):
+        return os.path.join(E2A, variant, "octave.build.json")
+
+    for tag, variant in (("e2_single", "single"), ("e2_threaded", "threaded")):
+        try:
+            bj = json.load(open(_e2_buildjson(variant), encoding="utf-8"))
+            m = (bj.get("measured") or {}).get("files") or {}
+            w = (m.get("octave.wasm") or {})
+            facts[tag + "_verdict"] = fact(bj.get("verdict"),
+                                           "python3 build/facts.py（读 %s）" % _e2_buildjson(variant),
+                                           os.path.basename(_e2_buildjson(variant)))
+            facts[tag + "_wasm_sha"] = fact(w.get("sha256"),
+                                            "sha256sum %s/%s/octave.wasm" % (E2A, variant),
+                                            "octave.wasm")
+            facts[tag + "_wasm_bytes"] = fact(w.get("bytes"),
+                                              "stat -c %%s %s/%s/octave.wasm" % (E2A, variant),
+                                              "octave.wasm")
+        except (OSError, ValueError) as e:
+            print("⚠ 读不到 E2 %s 的身份证：%s" % (variant, e), file=sys.stderr)
+
+    def _bench_median(log, label):
+        """从 bench-core 的日志里取某个用例的中位数（秒）。
+
+        两种日志形状都认（实测都要认）：正常收尾有 `BENCH_JSON{…}` 一行；**被超时收尾**的那种
+        只有打印行（`<用例>           0.0060s  (0.011, 0.005, 0.006)`）⇒ 用正则兜底，
+        否则"线程版那一轮"的数字会被静默丢掉（那就变成"没测过"，比测到更糟）。
+        """
+        path = os.path.join(E2L, log)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            return None
+        for line in text.splitlines():
+            if line.startswith("BENCH_JSON"):
+                try:
+                    r = json.loads(line[len("BENCH_JSON"):]).get("results") or {}
+                except ValueError:
+                    r = {}
+                for k, v in r.items():
+                    if label in k:
+                        return v.get("median")
+        # 标签可能**在行中**（例 `矩阵分解 lu(800)   0.0200s (…)`）⇒ 别要求行首就是标签
+        m = re.search(r"(?m)^[^\n]*?" + re.escape(label) + r"[^\n]*?\s([0-9.]+)s\s*\(", text)
+        return float(m.group(1)) if m else None
+
+    e2_mat = _bench_median("e2-measure-s.log", "矩阵乘")
+    lane_mat = _bench_median("lane-bench.log", "矩阵乘")
+    e2_lu = _bench_median("e2-measure-s.log", "lu(")
+    lane_lu = _bench_median("lane-bench.log", "lu(")
+    for k, v, cmd in (("e2_matmul500_s", e2_mat, "E2 单线程站点跑 bench-core.mjs（见 NOTES 的 A/B 表）"),
+                      ("lane_matmul500_s", lane_mat, "现役车道站点跑同一个 bench-core.mjs"),
+                      ("e2_lu800_s", e2_lu, "同 E2 那一行"),
+                      ("lane_lu800_s", lane_lu, "同车道那一行")):
+        if v is not None:
+            facts[k] = fact(v, cmd, "e2-logs/%s" % ("e2-measure-s.log" if k.startswith("e2_") else "lane-bench.log"))
+    if e2_mat and lane_mat:
+        facts["e2_matmul500_ratio"] = fact(round(lane_mat / e2_mat, 2),
+                                           "上面两行的比值（车道 / E2）", "派生")
+    if e2_lu and lane_lu:
+        facts["e2_lu800_ratio"] = fact(round(lane_lu / e2_lu, 2),
+                                       "上面两行的比值（车道 / E2）", "派生")
+    # 线程版的 bench（注意：它那一轮**超时收尾**，只有前几项有数；后面几项缺 ⇒ 如实缺）
+    t_mat = _bench_median("e2-bench.log", "矩阵乘")
+    t_lu = _bench_median("e2-bench.log", "lu(")
+    if t_mat is not None:
+        facts["e2_threaded_matmul500_s"] = fact(t_mat,
+            "E2 线程版站点跑 bench-core.mjs（该轮 300s 超时收尾，只到前几项）", "e2-logs/e2-bench.log")
+    if t_lu is not None:
+        facts["e2_threaded_lu800_s"] = fact(t_lu, "同上", "e2-logs/e2-bench.log")
+    if t_mat and lane_mat:
+        facts["e2_threaded_matmul500_ratio"] = fact(round(lane_mat / t_mat, 1),
+                                                    "车道 / 线程版（派生）", "派生")
+    try:
+        rc = open(os.path.join(E2L, "e2-oct-threaded.rc"), encoding="utf-8").read().strip()
+        facts["e2_threaded_oct_rc"] = fact(int(rc),
+                                           "timeout 600 sh test/browser/run.sh ...accept-113-oct.mjs <E2 线程版站点>; echo $?",
+                                           "e2-logs/e2-oct-threaded.rc")
+    except (OSError, ValueError):
+        pass
+
     # ★ 零值守卫（2026-09-27 实测踩到）：本脚本**无参数运行就会重写台账**，而某些事实的输入
     #   现在不在（例：8761 站点此刻没有 `threads/` ⇒ 8 条线程档事实测不出来）⇒ 一次手滑就把
     #   台账从 28 条**静默缩成 17 条**（闸门靠"引用键不存在"才抓到）。⇒ 掉条就拒绝，除非显式
