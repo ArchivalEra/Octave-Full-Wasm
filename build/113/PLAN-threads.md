@@ -239,7 +239,21 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 6. **双档上线**（机制已就绪，见 `PLAN-arch.md` §2 B6 的 2026-09-27 节）：8768 先跑 `probe-lane`
    （带头选线程档 / 不带头落基础档 / 选错档硬失败）+ 两档 `PROBES=1` 全量 → 再 promote 8761。
 
-### ★ 已踩到的静默失效：**旗标注入了，但构建系统认为"无事可做"**（2026-09-27 实测）
+### ★ 已踩到的**三个静默陷阱**（2026-09-27 实测；共同点：构建 rc=0、脚本自检也过，产物却是旧的）
+
+**判据只能是产物**：`atomics_scan.py` 逐成员扫字节。构建脚本的符号自检**验不出**"对象带不带 atomics"，
+所以这三个坑每一个都能一路绿到链接期（甚至到"看着像线程档"）。
+
+| # | 陷阱 | 现场 | 修法 |
+|---|---|---|---|
+| 1 | **`make` 认为无事可做** | 影子只改编译器、不改 `Makefile` ⇒ config.status 发现生成的 Makefile 逐字节相同就不重写 ⇒ make 按 mtime 判定目标都是新的 ⇒ **一个对象都不重编**（glpk/qhull/sndfile/suitesparse 重跑后仍 100% 缺） | 车道用**独立 WORK**（`/src/libwork-threads`）⇒ 源码树重新解包、重新 configure |
+| 2 | **显式旗标串绕过影子** | `emcmake`/`emconfigure` 把编译器**钉成绝对路径**（toolchain 文件 / emconfigure 的 `CC`）⇒ 影子的 PATH 包装对脚本自己写的 `CFLAGS=`/`-DCMAKE_C_FLAGS=` 无效（qhull/sndfile/expat/fontconfig 实测） | 给这些脚本的显式旗标串拼 `$LANE_FLAGS`（`build-libs.sh` 7 处 / `build-fontconfig.sh` / `build-sundials.sh`） |
+| 3 | **`if [ ! -s $PREFIX/lib/xxx.a ]` 式跳过** | expat 的构建块在"prefix 里已有产物"时**直接跳过** ⇒ 上一轮非 atomics 那份原样留着（重跑后仍 3/3 缺） | 车道 prefix 在旗标变化后**先清再编**；本轮清掉了 `/src/deps-threads/expat` |
+
+**通用结论**：车道的构建**不许复用任何"已有"状态** —— 源码树、构建目录、输出 prefix 三者都要是车道专属的，
+且每建完一批就用 `atomics_scan` 复核一遍。
+
+### 陷阱 1 的细节（原记录）
 
 影子包装（`lane-shim.sh`）改的是**编译器**，不改任何 `Makefile` ⇒ autotools 的 `config.status`
 发现生成的 `Makefile` 与上次**逐字节相同**就不重写它 ⇒ `make` 看 mtime 判定目标文件都是新的
