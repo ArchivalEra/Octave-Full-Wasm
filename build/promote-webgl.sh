@@ -106,11 +106,21 @@ if sudo docker exec o113 test -s "$THREADS_OUT/octave.wasm" 2>/dev/null; then
   if [ "$a" = "$b" ]; then
     echo "   ℹ️ 两档 octave.data 同 sha（$a）⇒ 可以删掉 $SITE/threads/octave.data 省一份（lane.js 里已指根目录）"
   else
-    echo "   ⚠️ 两档 octave.data **不同** sha（基础 $a / 线程 $b）⇒ 两份都要留，"
-    echo "      并确认 bridge/lane.js 的 FILES.threads.data 是 'threads/octave.data'"
+    # ★ fail-closed（复核时补的洞）：lane.js 的 FILES.threads.data **写死**指向根目录那一份
+    #   ⇒ 两档 data 不同时必须先改 lane.js，否则线程档会**静默取到基础档的数据文件**（最难查的那种）。
+    echo "FATAL: 两档 octave.data 的 sha **不同**（基础 $a / 线程 $b）⇒ 不能就这么上线：" >&2
+    echo "       线程档会按 lane.js 的 FILES.threads.data 去取根目录那份 ⇒ **静默取错内容**。" >&2
+    echo "       修法：把 bridge/lane.js 的 threads.data 改成 'threads/octave.data'，重跑本次 promote。" >&2
+    exit 3
   fi
 else
   echo "   （线程档产物不在 $THREADS_OUT ⇒ 本次只部署基础档；要双档先跑 relink.sh link threads）"
+  # ★ 复核时补的洞：产物缺席时**清掉站点上遗留的 threads/** —— 否则"上一次部署的线程档"
+  #   会继续留在站点上，而 lane.js 只看 COI 就选它 ⇒ 跑的是**旧线程档**（部署态与实际不符）。
+  if [ -d "$SITE/threads" ]; then
+    echo "   ⚠️ 站点上还有遗留的 $SITE/threads/ ⇒ 清掉（本次不部署线程档，留着就是旧件）"
+    run "rm -rf '$SITE/threads'"
+  fi
 fi
 
 say "3) 资产：**源在仓库**的那几个 .m 包重新打包 + 刷新清单摘要"

@@ -3092,3 +3092,9 @@ HEAD 还是旧提交（写进去的必然是昨天的日期），提交完成后
 "跳过 N 个动态引用"的显形输出；`.gitignore` 补 `!bridge/lane.js`、`!build/serve-coi.py`。
 **纪律事故自记**：我在起服务时用了两次 `sleep` 等进程就绪 —— 违反了本轮刚写进 `AGENTS.md` 的禁令，
 后续改用探针那种"轮询就绪"的写法。
+
+**复核 promote 时补的两个洞（同批，都是"静默"类）**：`promote-webgl.sh` 落线程档那一段原先对
+"两档 `octave.data` sha 不同"只**告警** —— 而 `lane.js` 的 `FILES.threads.data` 是**写死**指根目录那份
+⇒ 那种情况下线程档会**静默取到基础档的数据文件**（最难查的一类）。改成 **FATAL + exit 3**（先改
+lane.js 再上线）。另一洞：线程档产物缺席时站点上遗留的 `threads/` 会**留着**，而选档只看 COI
+⇒ 会跑**上一次部署的旧线程档**；现在缺席时 `rm -rf $SITE/threads`（部署态 = 期望态）。
