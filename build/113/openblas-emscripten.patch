@@ -1,0 +1,42 @@
+--- a/driver/others/blas_server.c	2026-09-27 12:48:01.246400402 +0000
++++ b/driver/others/blas_server.c	2026-09-27 12:48:01.247400417 +0000
+@@ -74,7 +74,9 @@
+ #include <dlfcn.h>
+ #include <errno.h>
+ #include <signal.h>
++#ifndef __EMSCRIPTEN__
+ #include <sys/resource.h>
++#endif
+ #include <sys/time.h>
+ #endif
+ 
+@@ -592,11 +594,12 @@
+ 		     &blas_thread_server, (void *)i);
+ #endif
+       if(ret!=0){
+-	struct rlimit rlim;
+         const char *msg = strerror(ret);
+         fprintf(STDERR, "OpenBLAS blas_thread_init: pthread_create failed for thread %ld of %d: %s\n", i+1,blas_num_threads,msg);
+-	fprintf(STDERR, "OpenBLAS blas_thread_init: ensure that your address space and process count limits are big enough (ulimit -a)\n");
+-	fprintf(STDERR, "OpenBLAS blas_thread_init: or set a smaller OPENBLAS_NUM_THREADS to fit into what you have available\n");
++        fprintf(STDERR, "OpenBLAS blas_thread_init: ensure that your address space and process count limits are big enough (ulimit -a)\n");
++        fprintf(STDERR, "OpenBLAS blas_thread_init: or set a smaller OPENBLAS_NUM_THREADS to fit into what you have available\n");
++#ifndef __EMSCRIPTEN__
++        struct rlimit rlim;
+ #ifdef RLIMIT_NPROC
+         if(0 == getrlimit(RLIMIT_NPROC, &rlim)) {
+           fprintf(STDERR, "OpenBLAS blas_thread_init: RLIMIT_NPROC "
+@@ -607,6 +610,13 @@
+           fprintf(STDERR, "OpenBLAS blas_thread_init: calling exit(3)\n");
+           exit(EXIT_FAILURE);
+         }
++#else
++        /* ★ __EMSCRIPTEN__ 补丁（2026-09-26，线程版 BLAS 缩放探针）：Emscripten libc 没有
++           `struct rlimit` / `getrlimit` / `raise` / `SIGINT`（实测三条编译错），而且 wasm 里
++           没有"进程内信号"这套语义 ⇒ 这段**仅供人读的诊断**在 wasm 上无意义。
++           失败路径直接 exit(EXIT_FAILURE)，与上面 raise 失败时的分支一致。 */
++        exit(EXIT_FAILURE);
++#endif
+       }
+     }
+ 

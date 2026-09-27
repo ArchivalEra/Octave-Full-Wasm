@@ -59,6 +59,12 @@ def lane_blas_problem(declared, man):
     rd = ((man.get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
     if not rd:
         return "线程档产物里没有 `inputs.blas.resolved_dir` ⇒ 无法确认 BLAS 来自车道"
+    if declared.get("e2_openblas") is True:
+        # ★ E2（branch e2-openblas）：BLAS 换成**线程版 OpenBLAS** ⇒ 溯源判据换成它。
+        #   为什么还要判：换库之后"混着基础档对象"这个风险不变（E2 的库必须自己带 atomics）。
+        if "openblas" not in rd.lower():
+            return ("声明 e2_openblas=true，但链进去的 BLAS 在 `%s` ⇒ 不是 E2 那份 OpenBLAS" % rd)
+        return None
     if "-threads" not in rd:
         return ("声明 threads=true，但链进去的 BLAS 在 `%s`（**基础档**）"
                 "⇒ 产物里混着基础档对象，口径不一致" % rd)

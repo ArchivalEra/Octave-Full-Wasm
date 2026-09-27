@@ -165,7 +165,16 @@ EOF
       # `-pthread` 自带 SHARED_MEMORY；**池大小必须显式给** —— 否则 Emscripten 只允许
       # "从 worker 里动态起 worker"，主线程 `pthread_create` 直接失败 ⇒ "线程档"名不副实
       # （命令行看着有线程、实际一个都起不来）。4 = 够用且不白占内存（每个 worker 有独立栈）。
-      echo "EXTRA_LDFLAGS=-L/src/deps-threads/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      # ★ E2（branch `e2-openblas`，2026-09-27）：把 BLAS 换成**线程版 OpenBLAS**。
+      #   `E2_OPENBLAS=<目录>` 时该目录**排在最前**（`-lrefblas` 从那里解析）⇒ 主模块的
+      #   `dgemm_` 等走 OpenBLAS；LAPACK 仍是车道那份 f2c 库（`-llapack` 从车道目录解析）。
+      #   为什么排最前就能"换库"：link-web.sh 用的是 `-lrefblas`，而 `-L` 的**顺序**决定
+      #   同名库谁被选中（不写死路径 ⇒ 一个变量就够，见 NOTES-threads 的 E2 节）。
+      if [ -n "${E2_OPENBLAS:-}" ]; then
+        echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-threads/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      else
+        echo "EXTRA_LDFLAGS=-L/src/deps-threads/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      fi
       # 基线 = **现役 product 产物**（导出面要保住）。`/src/websrc/product` 还没链过时，退回
       # A1 那份逐字节复现的 product 产物（sha 与 8761 现役件相同）。
       echo "BASELINE_WASM=$(pick_baseline product /src/websrc/a1-verify-product/octave.wasm)"
@@ -193,9 +202,13 @@ EOF
 EOF
       ;;
     threads)
-      cat <<'EOF'
+      # `E2_OPENBLAS` 有值时多声明一条 `e2_openblas` ⇒ `check-build-manifest.py` 据此换判据
+      # （BLAS 溯源从"必须含 -threads"改成"必须指向 E2 目录"）。
+      _e2=""
+      [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
+      cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true${_e2},
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF

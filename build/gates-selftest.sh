@@ -42,6 +42,10 @@ build/113/stage-oct-by-manifest.py --selftest
 build/113/make-lane-manifest.py --selftest
 build/113/unpatch-ax-pthread.py --selftest
 build/113/lane-shim.sh --selftest
+build/113/patch-openblas-f77-ret.py --selftest
+build/113/patch-openblas-symbol-prefix.py --selftest
+build/113/patch-openblas-emscripten.py --selftest
+build/113/gen-f77-wrappers.py --selftest
 build/113/relink.sh --selftest
 build/facts.py --selftest
 build/lib/sweep_select.py --selftest
