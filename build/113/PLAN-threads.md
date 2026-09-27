@@ -253,6 +253,13 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 **通用结论**：车道的构建**不许复用任何"已有"状态** —— 源码树、构建目录、输出 prefix 三者都要是车道专属的，
 且每建完一批就用 `atomics_scan` 复核一遍。
 
+### ★ 第七个坑：车道 install 缺 `share/`（字体）⇒ 链接第一步就 FATAL
+
+`link-web.sh` 要从 install prefix 取字体（`share/octave/11.3.0/fonts`）与 m 树；
+而车道 install 因为树内 `.oct` 坏目标**只装了 `share/` 的一部分**（实测连 `fonts/` 都没有）。
+处置：把基线 install 的 `share/`（与 `lib/`）并入车道 prefix —— 这些是**与档无关的同一份数据**
+（字体/m 树/pc 文件）。判据：`share/octave/11.3.0/fonts/FreeMono.otf` 等必须存在。
+
 ### ★ 第六个坑：**含空格的多词旗标被当成一个参数**（同一天实测）
 
 车道 SIMD BLAS 第一次跑：`SIMD_FLAG="-msimd128 -pthread"` —— 而脚本把它当 **一个** 参数传下去
