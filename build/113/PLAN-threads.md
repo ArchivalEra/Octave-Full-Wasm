@@ -253,6 +253,31 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 **通用结论**：车道的构建**不许复用任何"已有"状态** —— 源码树、构建目录、输出 prefix 三者都要是车道专属的，
 且每建完一批就用 `atomics_scan` 复核一遍。
 
+### ★ 第四个坑：**依赖库路径写死**（2026-09-27 实测）
+
+`link-web.sh` 与 `configure-113-full.sh` 里有一批**写死的 `/src/deps/...`**（gl2ps、那 9 个 `-L`、
+freetype/fontconfig/expat）。实测：即使 configure 传了 `D=/src/deps-threads`，**树的链接照样去拉
+基础档的 `libfontconfig.a`**（`wasm-ld` 当场拒：`--shared-memory is disallowed by fccache.o`）。
+
+修法：`link-web.sh` 引入 `DEPS_ROOT="${DEPS_ROOT:-/src/deps}"` 并把 21 处写死路径改成它；
+`configure-113-full.sh` 的 freetype/fontconfig/expat 改用已有的 `$D`；`relink.sh` 四个模式都填
+`DEPS_ROOT`（`--selfcheck` 覆盖数 22 → **25** 个变量，自动强制"每个模式都覆盖"）。
+**不必重编树**：头的**内容**与档无关（同版本），只有链接期的**库**路径要紧。
+
+### ★ `make install` 走不通 ⇒ 车道头这样造（2026-09-27 实测）
+
+树内 `.oct` 的坏目标（`/usr/bin/install: omitting directory 'libinterp/dldfcn/.libs/'`）会把整条
+`install` 堵死（`-k` 也过不去；`make -C liboctave install` 更是"没有这个目标"），
+而 `.oct` 车道要的 `include/octave-X/octave/` 正是 install 产的。**基线 install 里其实没有 `config.h`**
+（实测 787 个文件里没有它）⇒ 车道的头 = **基线头树 + 线程档的 `config.h`**：
+
+```sh
+cp -a /src/work/octave-install/include /src/work/octave-install-threads/
+cp /src/work/octave-11.3.0/config.h \
+   /src/work/octave-install-threads/include/octave-11.3.0/octave/config.h
+# 判据：HAVE_PTHREAD / USE_POSIX_THREADS / HAVE_PTHREAD_MUTEX_RECURSIVE = 1、AVOID_ANY_THREADS 是 undef
+```
+
 ### 陷阱 1 的细节（原记录）
 
 影子包装（`lane-shim.sh`）改的是**编译器**，不改任何 `Makefile` ⇒ autotools 的 `config.status`

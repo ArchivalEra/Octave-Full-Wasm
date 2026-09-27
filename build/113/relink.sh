@@ -112,6 +112,7 @@ EXPORTED_FUNCS=_main
 OCT_SCAN_DIRS=
 BASELINE_WASM=
 EXTRA_LDFLAGS=
+DEPS_ROOT=/src/deps
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
 EOF
@@ -125,6 +126,7 @@ LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
 OCT_SCAN_DIRS=/src/octs-site
+DEPS_ROOT=/src/deps
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
 EOF
@@ -153,6 +155,7 @@ LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
 OCT_SCAN_DIRS=/src/octs-site
+DEPS_ROOT=/src/deps-threads
 GL4ES_A=/src/libwork/gl4es-src-threads/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl-threads/lib/libGLU.a
 EOF

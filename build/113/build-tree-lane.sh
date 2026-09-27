@@ -52,12 +52,23 @@ if [ "$CLEAN" = 1 ]; then
 fi
 
 echo "== ④ make -k -j$JOBS（数小时；日志 /tmp/lane-tree-make.log）"
-emmake make -k -j"$JOBS" > /tmp/lane-tree-make.log 2>&1; rc=$?
-echo "make rc=$rc（⚠️ rc≠0 也可能正常：`octave-cli` 因 zgejsv_ 未定义**一贯失败**，web 链接容忍它）"
+# ⚠️ **必须容忍 rc≠0**（实测踩到：第一次跑 `set -e` 在 make 的 rc=2 处直接退出 ⇒ 后面的
+#    `make install` 一步没跑，而 rc=2 在这里是**预期**的：`octave-cli`（zgejsv_ 未定义）与
+#    树内 `.oct` 目标一贯失败，web 链接不用它们）。
+set +e
+emmake make -k -j"$JOBS" > /tmp/lane-tree-make.log 2>&1
+MKR=$?
+set -e
+echo "make rc=$MKR（≠0 正常；失败目标应只有 octave-cli 与树内 .oct）"
+grep -E "^\*\*\* \[" /tmp/lane-tree-make.log | sort -u | head -5
 tail -5 /tmp/lane-tree-make.log
 echo "--- atomics 违规（应为 0）: $(grep -c "shared-memory is disallowed" /tmp/lane-tree-make.log || true)"
 
 echo "== ⑤ make install → $PREFIX（`.oct` 车道要用它的头/库）"
-emmake make install > /tmp/lane-tree-install.log 2>&1; echo "install rc=$?"
+set +e
+emmake make install > /tmp/lane-tree-install.log 2>&1
+IKR=$?
+set -e
+echo "install rc=$IKR（同样容忍：install 也走那些会失败的 .oct/cli 目标）"
 ls -d "$PREFIX/include/octave-"* 2>/dev/null | head -3
 echo "TREE-LANE-DONE"

@@ -187,13 +187,13 @@ fi
 #   pkg-config 搜索路径上 —— configure 的探测是
 #   `PKG_CHECK_MODULES([FT2],[freetype2])` + `$PKG_CONFIG freetype2 --atleast-version=9.03`，
 #   全靠 pkg-config（没有 `--with-freetype=` 那种带路径的写法）。
-#   库由 `build/113/build-freetype.sh` 建到 `/src/deps/freetype`（**-fPIC 是硬要求**：
+#   库由 `build/113/build-freetype.sh` 建到 `$D/freetype`（**-fPIC 是硬要求**：
 #   主链可重定位，混进非 PIC 归档会在 dylink 那层出问题）。
 #   `WITH_FONTCONFIG=1`（2026-09-24，R3）时**同时**开 fontconfig：它是"`fontname` 真的生效 +
 #   `listfonts()` 能用"的唯一正路 —— `ft-text-renderer.cc` 只有在 `HAVE_FONTCONFIG` 时才用
 #   `FcFontMatch()` 去挑字体文件；没有它就走 `oct_fonts_dir()` 下的 `FreeSans*.otf` 回落
 #   （属性存得住、渲染被忽略；`listfonts` 还会报 `structure has no member 'family'`）。
-#   库由 `build/113/build-fontconfig.sh` 建（`/src/deps/fontconfig` + `/src/deps/expat`）。
+#   库由 `build/113/build-fontconfig.sh` 建（`$D/fontconfig` + `$D/expat`）。
 #   ⚠️ **运行期还要两件事**（都在 link-web.sh 与 main.cc 里，缺一不可，实测）：
 #     ① `fonts.conf` 预载到 `/fonts/fonts.conf`，`<dir>` 指向**已预载字体的 octfontsdir**；
 #     ② `setenv("FONTCONFIG_FILE", "/fonts/fonts.conf", 1)` —— `--sysconfdir=/` 编出来的默认
@@ -202,7 +202,7 @@ fi
 FREETYPE_FLAG="${FREETYPE_FLAG:---without-freetype}"
 if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   FREETYPE_FLAG=""
-  PKG_CONFIG_PATH="/src/deps/freetype/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  PKG_CONFIG_PATH="$D/freetype/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
   export PKG_CONFIG_PATH
   # ⚠️ **还必须设 `EM_PKG_CONFIG_PATH`**：`emconfigure` 会把 emscripten sysroot 的
   #    pkgconfig 目录摆到 pkg-config 搜索路径**最前面**，于是 `freetype2` 解析到
@@ -210,13 +210,13 @@ if [ "${WITH_FREETYPE:-0}" = "1" ]; then
   #    实测：只设 PKG_CONFIG_PATH 时 Makefile 里 `FT2_LIBS = -sUSE_FREETYPE`，
   #    于是一串 in-tree 链接（octave-cli 等）报 `undefined symbol: FT_Done_Face`。
   #    `EM_PKG_CONFIG_PATH` 是 emscripten 给的这个口子，优先级高于它自己的 sysroot。
-  EM_PKG_CONFIG_PATH="/src/deps/freetype/lib/pkgconfig:${EM_PKG_CONFIG_PATH:-}"
+  EM_PKG_CONFIG_PATH="$D/freetype/lib/pkgconfig:${EM_PKG_CONFIG_PATH:-}"
   export EM_PKG_CONFIG_PATH
-  CPPFLAGS="${CPPFLAGS:-} -I/src/deps/freetype/include"
-  LDFLAGS="${LDFLAGS:-} -L/src/deps/freetype/lib"
+  CPPFLAGS="${CPPFLAGS:-} -I$D/freetype/include"
+  LDFLAGS="${LDFLAGS:-} -L$D/freetype/lib"
   pkg-config --modversion freetype2 >/dev/null 2>&1 || {
     echo "FATAL: pkg-config 找不到 freetype2（先跑 build/113/build-freetype.sh）" >&2; exit 2; }
-  echo "=== WITH_FREETYPE=1：开 FreeType（/src/deps/freetype，$(pkg-config --libs freetype2)）==="
+  echo "=== WITH_FREETYPE=1：开 FreeType（$D/freetype，$(pkg-config --libs freetype2)）==="
 fi
 
 # ── fontconfig（R3，2026-09-24）：`WITH_FONTCONFIG=1` 时开 ─────────────────────────
@@ -226,13 +226,13 @@ fi
 FONTCONFIG_FLAG="${FONTCONFIG_FLAG:---without-fontconfig}"
 if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
   FONTCONFIG_FLAG=""
-  for d in /src/deps/fontconfig/lib/pkgconfig /src/deps/expat/lib/pkgconfig /src/deps/freetype/lib/pkgconfig; do
+  for d in $D/fontconfig/lib/pkgconfig $D/expat/lib/pkgconfig $D/freetype/lib/pkgconfig; do
     PKG_CONFIG_PATH="$d:${PKG_CONFIG_PATH:-}"
     EM_PKG_CONFIG_PATH="$d:${EM_PKG_CONFIG_PATH:-}"
   done
   export PKG_CONFIG_PATH EM_PKG_CONFIG_PATH
-  CPPFLAGS="${CPPFLAGS:-} -I/src/deps/fontconfig/include -I/src/deps/expat/include"
-  LDFLAGS="${LDFLAGS:-} -L/src/deps/fontconfig/lib -L/src/deps/expat/lib"
+  CPPFLAGS="${CPPFLAGS:-} -I$D/fontconfig/include -I$D/expat/include"
+  LDFLAGS="${LDFLAGS:-} -L$D/fontconfig/lib -L$D/expat/lib"
   pkg-config --modversion fontconfig >/dev/null 2>&1 || {
     echo "FATAL: pkg-config 找不到 fontconfig（先跑 build/113/build-fontconfig.sh）" >&2; exit 2; }
   pkg-config --modversion expat >/dev/null 2>&1 || {
@@ -248,7 +248,7 @@ if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
   #    FcFontList + FcFontMatch 在 wasm/MEMFS 里全通，含反证）；链接期还有 link-web.sh 的
   #    产物自检兜底 ⇒ 这里预置 yes 是**有据的**，不是把红的说成绿的。
   export octave_cv_lib_fontconfig=yes
-  echo "=== WITH_FONTCONFIG=1：开 fontconfig（/src/deps/fontconfig，$(pkg-config --libs fontconfig)）==="
+  echo "=== WITH_FONTCONFIG=1：开 fontconfig（$D/fontconfig，$(pkg-config --libs fontconfig)）==="
   echo "    （octave_cv_lib_fontconfig=yes 预置；理由见本脚本注释与 probe-fontconfig.sh）"
 fi
 

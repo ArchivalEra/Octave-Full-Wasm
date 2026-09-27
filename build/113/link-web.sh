@@ -326,10 +326,10 @@ fi
 # `ERROR_ON_UNDEFINED_SYMBOLS=0` 会被**静默放过**，运行期才炸。
 # 存在就自动加（两条图形线都受益），不存在就是 no-op。
 GL2PS_FLAGS=()
-if [ -f /src/deps/gl2ps/lib/libgl2ps.a ]; then
+if [ -f $DEPS_ROOT/gl2ps/lib/libgl2ps.a ]; then
   # 绝对路径（老规矩：`-l` 会被 emcc 的库解析规则吃掉，见 NOTES-webgl.md §3.6 坑 2）
-  GL2PS_FLAGS=( /src/deps/gl2ps/lib/libgl2ps.a )
-  echo "== gl2ps：链 $(basename /src/deps/gl2ps/lib/libgl2ps.a)（print 的矢量输出）"
+  GL2PS_FLAGS=( $DEPS_ROOT/gl2ps/lib/libgl2ps.a )
+  echo "== gl2ps：链 $(basename $DEPS_ROOT/gl2ps/lib/libgl2ps.a)（print 的矢量输出）"
 fi
 
 LIB_FUNCS="${LIB_FUNCS:-}"
@@ -349,9 +349,9 @@ LIBS=(
   "$OCT/liboctave/.libs/liboctave.a"
   "$OCT/libgnu/.libs/libgnu.a"
   # 各库的独立 prefix（② 建的）
-  -L/src/deps/glpk/lib -L/src/deps/qhull/lib -L/src/deps/fftw/lib
-  -L/src/deps/sndfile/lib -L/src/deps/qrupdate/lib -L/src/deps/hdf5/lib
-  -L/src/deps/zlibbz2/lib -L/src/deps/arpack/lib -L/src/deps/suitesparse/lib
+  -L$DEPS_ROOT/glpk/lib -L$DEPS_ROOT/qhull/lib -L$DEPS_ROOT/fftw/lib
+  -L$DEPS_ROOT/sndfile/lib -L$DEPS_ROOT/qrupdate/lib -L$DEPS_ROOT/hdf5/lib
+  -L$DEPS_ROOT/zlibbz2/lib -L$DEPS_ROOT/arpack/lib -L$DEPS_ROOT/suitesparse/lib
   -L"$DEPS/lib"
   # 早期四个 + Octave 自己报的链接依赖（LIBOCTINTERP_LINK_DEPS / LIBOCTAVE_LINK_DEPS）
   -llapack -lrefblas -lf2c -lpcre2-8
@@ -383,15 +383,15 @@ LIBS=(
 
 # ---- FreeType（WITH_FREETYPE=1）：文字渲染 ------------------------------------
 # `ft-text-renderer.o` 现在会引用 `FT_*`（HAVE_FREETYPE=1），必须链进主模块。
-# 用**我们自己那份 PIC 归档**（`build/113/build-freetype.sh` → /src/deps/freetype），
+# 用**我们自己那份 PIC 归档**（`build/113/build-freetype.sh` → $DEPS_ROOT/freetype），
 # 而不是 emscripten 端口的（那份非 PIC，与 MAIN_MODULE 的可重定位要求不是一路）。
 # 定序：freetype 依赖 zlib（`FT_CONFIG_OPTION_SYSTEM_ZLIB`）⇒ 放在 `-lz -lbz2` **之后**
 # （静态库左到右解析）。
 if [ "${WITH_FREETYPE:-0}" = "1" ]; then
-  [ -f /src/deps/freetype/lib/libfreetype.a ] || {
-    echo "FATAL: 缺 /src/deps/freetype/lib/libfreetype.a（先跑 build/113/build-freetype.sh）" >&2; exit 2; }
-  LIBS+=( -L/src/deps/freetype/lib -lfreetype )
-  echo "== FreeType：链 /src/deps/freetype/lib/libfreetype.a"
+  [ -f $DEPS_ROOT/freetype/lib/libfreetype.a ] || {
+    echo "FATAL: 缺 $DEPS_ROOT/freetype/lib/libfreetype.a（先跑 build/113/build-freetype.sh）" >&2; exit 2; }
+  LIBS+=( -L$DEPS_ROOT/freetype/lib -lfreetype )
+  echo "== FreeType：链 $DEPS_ROOT/freetype/lib/libfreetype.a"
 fi
 
 # ---- fontconfig（WITH_FONTCONFIG=1，R3 2026-09-24）：字体**匹配** ----------------
@@ -400,10 +400,10 @@ fi
 #   -lfontconfig → -lfreetype（fcfreetype.o 用 FT_*）→ -lexpat（fontconfig 的 XML 后端）
 #   → -lz（freetype 用）。freetype 已经在上面那一行，这里只需补前后两段。
 if [ "${WITH_FONTCONFIG:-0}" = "1" ]; then
-  for a in /src/deps/fontconfig/lib/libfontconfig.a /src/deps/expat/lib/libexpat.a; do
+  for a in $DEPS_ROOT/fontconfig/lib/libfontconfig.a $DEPS_ROOT/expat/lib/libexpat.a; do
     [ -f "$a" ] || { echo "FATAL: 缺 $a（先跑 build/113/build-fontconfig.sh）" >&2; exit 2; }
   done
-  LIBS+=( -L/src/deps/fontconfig/lib -lfontconfig -L/src/deps/expat/lib -lexpat )
+  LIBS+=( -L$DEPS_ROOT/fontconfig/lib -lfontconfig -L$DEPS_ROOT/expat/lib -lexpat )
   echo "== fontconfig：链 libfontconfig.a + libexpat.a（字体匹配；运行期配置见下面的预载）"
 fi
 
@@ -521,6 +521,11 @@ if [ -n "$JSPI_EXPORT_FUNCS" ]; then
 fi
 
 set -x
+# ★ 依赖库的根（B6 线程档：`DEPS_ROOT=/src/deps-threads` ⇒ 整套依赖走车道副本）。
+#   ⚠️ 这些路径原先**写死** `/src/deps`：实测 configure 用 `D=/src/deps-threads` 也**管不到它们**
+#   （树里的链接确实拉了基础档的 fontconfig ⇒ shared-memory 链接被 wasm-ld 拒）。
+DEPS_ROOT="${DEPS_ROOT:-/src/deps}"
+
 # EXTRA_LDFLAGS：诊断/定点补救用（空格分隔的链接旗标）。
 #   当前用途：`-Wl,-u,dlsode_` —— 强制把 odepack 的入口从归档里拉进主模块
 #   （`lsode` 整页 trap 的候选根因：dlsode_ 没被链进来，调用落到空导入 → trap；

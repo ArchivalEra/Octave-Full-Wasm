@@ -39,12 +39,18 @@ MARK = b"atomics"
 
 
 def scan_file(path):
-    """单个文件（`.o` / `.wasm` / `.oct`）：返回 (是否 wasm 对象, 是否带 atomics)。"""
+    """单个文件（`.o` / `.wasm` / `.oct`）：返回 (是否 wasm 对象, 是否带 atomics)。
+
+    ⚠️ **必须读全文件**（2026-09-27 实测踩到）：第一版只读前 1MB，而 `target_features` 段在对象
+    **尾部**（代码段之后）—— 树里的 `libarray_la-Array-i.o`（3.3MB）因此被**假报**成"缺 atomics"，
+    差一点让我去查一个不存在的构建问题。语义上：**找到 = 证明有**（哪怕只读了前 1MB 也是证明）；
+    **没找到 = 什么都不能说明**（可能读得太短）⇒ 只有读全文件，"没找到"才等于"真的没有"。
+    """
     with open(path, "rb") as fh:
-        head = fh.read(1 << 20)
-    if head[:4] != b"\0asm":
+        b = fh.read()
+    if b[:4] != b"\0asm":
         return False, None
-    return True, MARK in head
+    return True, MARK in b
 
 
 def scan(path):
@@ -142,7 +148,11 @@ def _cases():
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["ar", "rcs", os.path.join(d, "empty.a"), ], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # 大对象：标记放在 1.5MB 之后（复现"只读前 1MB"的假红）
+    big = _mk(d, "big.o", b"\0" * (1536 * 1024) + b"...atomics...")
     return d, [
+        ("★ 大对象（标记在 1MB 之后）也必须算「有 atomics」（假红回归）",
+         lambda: scan(big)["bad"] == 0),
         ("带 atomics 的成员 ⇒ 缺 0", lambda: scan(good)["bad"] == 0),
         ("★ 不带 atomics ⇒ 必须报 1", lambda: scan(bad)["bad"] == 1),
         ("归档里混着好/坏 ⇒ 只数坏的", lambda: scan(a_bad)["bad"] == 1),
