@@ -26,8 +26,12 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "build", "lib"))
-from gate import selftest          # noqa: E402
+# ⚠️ **不要在模块层 import gate**（2026-09-27 实测踩到）：`build/lib/gate.py` 是**宿主仓**的闸门平台，
+#    而这个脚本要被 `docker cp` 进容器跑（`/src/bin/check-build-manifest.py` ⇒ `../../build/lib`
+#    在容器里不存在）⇒ 模块层 import 会让**容器内每次链接都过不了出厂核对**
+#    （`ModuleNotFoundError: No module named 'gate'`，fail-closed 地拒绝一切产物：
+#     实测把回滚后的产品重链打成 rc=3，而产物本身与部署件**逐字节相同**）。
+#    ⇒ 只在 `--selftest` 分支里 import（那时一定是宿主在跑）。
 
 # 声明键 → 判定规则。**未列出的声明键一律判 mismatch**（fail-closed：
 # 拼错的键名不许被静默忽略，否则"声明了却没检查"会变成新的静默退化）。
@@ -118,7 +122,10 @@ def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     flags = {a for a in argv[1:] if a.startswith("--")}
     if len(args) < 1:
-        print(__doc__.strip().splitlines()[0], file=sys.stderr)
+        # ⚠️ 别用 `__doc__`：本文件开头是 `#` 注释、**没有模块 docstring** ⇒ `__doc__` 是 None，
+        #    无参跑会崩在 `None.strip()`（实测：B6 收尾时无参跑了一次，报 AttributeError）。
+        print("check-build-manifest.py: 拿模式的声明核对产物实测（fail-closed 判定方）",
+              file=sys.stderr)
         print("用法: check-build-manifest.py <octave.build.json> [declared.json] "
               "[--write] [--out-dir DIR]", file=sys.stderr)
         return 2
@@ -235,4 +242,10 @@ CASES = [
 
 
 if __name__ == "__main__":
-    sys.exit(selftest("check-build-manifest", CASES) if "--selftest" in sys.argv else main(sys.argv))
+    if "--selftest" in sys.argv:
+        import os as _os
+        sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                         "..", "..", "build", "lib"))
+        from gate import selftest                      # noqa: E402
+        sys.exit(selftest("check-build-manifest", CASES))
+    sys.exit(main(sys.argv))

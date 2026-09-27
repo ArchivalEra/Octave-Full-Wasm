@@ -3098,3 +3098,18 @@ HEAD 还是旧提交（写进去的必然是昨天的日期），提交完成后
 ⇒ 那种情况下线程档会**静默取到基础档的数据文件**（最难查的一类）。改成 **FATAL + exit 3**（先改
 lane.js 再上线）。另一洞：线程档产物缺席时站点上遗留的 `threads/` 会**留着**，而选档只看 COI
 ⇒ 会跑**上一次部署的旧线程档**；现在缺席时 `rm -rf $SITE/threads`（部署态 = 期望态）。
+
+**B6 顺带抓出的两个"容器侧"真 bug（F1 之后埋着，2026-09-27 才显形）**：
+1. `check-build-manifest.py` 在**模块层** `from gate import selftest` —— 而 `gate.py` 是宿主仓的闸门平台
+   （`build/lib/`），这个脚本却要被 `docker cp` 进容器跑（`/src/bin/...` ⇒ `../../build/lib` 不存在）⇒
+   **F1 之后容器里每一次链接都过不了出厂核对**（`ModuleNotFoundError`，fail-closed 地拒绝一切产物）。
+   实测现场：回滚后的产品重链 rc=3 判"不可部署"，而同一份产物与部署件**逐字节相同**。
+   修法：只在 `--selftest` 分支里 import（那时一定在宿主跑）；`unpatch-ax-pthread.py` 早先已按同一模式修过。
+2. 同一个文件无参跑会崩：它开头是 `#` 注释、**没有模块 docstring** ⇒ `print(__doc__.strip()...)` 抛
+   `AttributeError: 'NoneType' object has no attribute 'strip'`（"用法"分支从来没被跑过）。已改成字面量。
+
+**回滚的最终验证（最硬的一条）**：非线程档重配（`-pthread` 消费点 0、`config.h` 与 `config.h.pre-threads`
+**逐字节相同**）+ `make clean` + `make -k -j12`（0 条 atomics 违规；失败目标只剩既有的 `octave-cli`
+（`zgejsv_` 未定义）与树内 `.oct` 目标 —— 本站 `.oct` 走独立车道，不用树的 Makefile）之后，
+`relink.sh link product` **重链出 `1ed3e528561e4475…`，与部署件逐字节相同**，且
+`relink.sh verify product` 报 **verdict=ok**（9 项声明全有实测背书）⇒ 容器已回到"能产出部署件的那棵树"。
