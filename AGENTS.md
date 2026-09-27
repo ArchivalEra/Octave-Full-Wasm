@@ -54,6 +54,10 @@
    闸门自身也吃这条：每个闸门必须 `--selftest`（`build/gates-selftest.sh`，接在 pre-commit）。
 
 ## 批次收尾（固定动作，缺一步等于没做完）
+★ **8761 只由 `build/promote-webgl.sh` 改**（2026-09-27 真踩到）：为了在 8768 上试页面改动，
+  我顺手把 `bridge/{lane.js,index.html}` 也 `cp` 进了 **8761 站点**，而那里没有 `threads/` 且**带头服务**
+  ⇒ 页面按 COI 选线程档 ⇒ `threads/octave.js` **404**，验收底线当时是坏的（回退三步见
+  `build/113/NOTES-threads.md` 末节）。⇒ 实验只 `cp` 到 `siteWebGL/`；`site/` 那一份交给 promote。
 ★ **服务方式（B6 起，2026-09-27）**：8761/8768 **必须带头**起 —— `python3 build/serve-coi.py
   --dir <站点目录> --port 8761`（它发 `COOP: same-origin` + `COEP: require-corp`）。`python3 -m
   http.server` 发不了这两个头 ⇒ 线程档选不中、页面**静默**落回基础档（不报错，只是没线程）。

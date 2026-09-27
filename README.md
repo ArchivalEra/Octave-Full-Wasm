@@ -228,7 +228,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.github/workflows/deploy-heart.yml` (7557 bytes)
 - `.gitignore` (3090 bytes)
 - `.zcode/config.json` (791 bytes)
-- `AGENTS.md` (13436 bytes)
+- `AGENTS.md` (13905 bytes)
 - `CONTEXT.md` (10001 bytes)
 - `DEPLOY.md` (5595 bytes)
 - `HANDOFF.md` (18393 bytes)
