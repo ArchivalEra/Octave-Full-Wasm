@@ -769,3 +769,59 @@ wasm-ld: warning: function signature mismatch: ztrsv_
 **本轮到此收手**（如实记）。容器状态已恢复：`interface/` 从干净源取回、`make` 重编 **EXIT=0**、
 `/src/bin/link-web.sh` 与仓库 sha 一致（`0eaa1f0e…`）；站点零改动（8761 部署件仍 `1ed3e528…`，
 三列 parity 绿）。实验产物留在容器：`/src/websrc/e2-{one-blas,g77,ret,ret2}`。
+
+---
+
+## B5 · side module（`.oct` 的形态）**必须**带 `-pthread` 吗？（branch `threads` 第一批，2026-09-27）
+
+**为什么先问这个**：它是**整批的规模开关**。`.oct` 车道有 49 条资产（13 个包 + 核心 dldfcn），
+如果"非 atomics 编的 side module 载不进 shared-memory 主模块"成立，这 49 条**全部**要重编；
+而 `probe-threads/side.c` 的注释与 `PLAN-threads.md` 里那句"side 也必须带 `-pthread`"**只有正向证据**
+（E3 两档都带了 `-pthread`）⇒ 这是本批第一个要证伪的断言。
+
+**做法**：`build/113/probe-side-atomic.sh` —— **只变 side 的旗标**，主模块三档共用同一份线程档
+（`-pthread -sSHARED_MEMORY -sMAIN_MODULE=2 -sPTHREAD_POOL_SIZE=2 -sPTHREAD_POOL_SIZE_STRICT=2`）。
+三档：
+
+| 档 | side 的旗标 | 角色 |
+|---|---|---|
+| `threads` | `-pthread -sSHARED_MEMORY` | E3 基线（已知绿） |
+| `plain` | **无** | **现役 `.oct` 资产的编法** ← 要回答的就是它 |
+| `atomics` | 只 `-matomics -mbulk-memory` | 若 `plain` 红，这是最便宜的修补 |
+
+**判据**（每档跑 `test/browser/probe-threads.mjs`，从仓库原路径直跑）：
+```sh
+cd /mnt/hdd/octave-wasm-build/harness && \
+  PROBE_DIR=/mnt/hdd/octave-wasm-build/side-atomic/<档> sh run.sh \
+    /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/probe-threads.mjs
+```
+
+**实测结果（2026-09-27，chromium + COI）**：
+
+| 档 | 结果 | 关键数字 |
+|---|---|---|
+| `threads` | **6 PASS / 0 FAIL** | `ok=100`、`busy=48`、`missing=0` |
+| `plain` | **5 PASS / 1 FAIL** | **`ok=0`** —— dlopen 第一步就失败 |
+| `atomics` | **5 PASS / 1 FAIL** | **`ok=0`** —— 与 `plain` 同 |
+
+失败原文（`plain`，`run.html` 的 wasm 日志）：
+```
+[e3] 第 0 轮 dlopen 失败：could not load dynamic lib: /side.wasm
+TypeError: tlsInitFunc is not a function
+```
+
+**结论（两条，都是"能证伪但没被证伪"）**：
+1. **"side module 必须带 `-pthread`"成立** —— 非线程档的 side module 在 shared-memory 主模块里
+   **连 dlopen 都过不去**：加载器要调 side 的 **TLS 初始化入口**（`tlsInitFunc`），而它只在
+   `-pthread` 编出来的 side module 里存在。
+2. **"只加 `-matomics -mbulk-memory`"不够**（`atomics` 档与 `plain` 同结果）⇒ 最便宜的修补被排除，
+   `.oct` 车道必须按 `-pthread` 整档重编。
+
+**⇒ 对批量的影响**：线程档 = **依赖库 farm + Octave + `.oct` 车道**三者全部重编（不是"重编 Octave"）。
+两档的 prefix 必须分开（现役 farm 一字不动）：`/usr/local-threads`、`/src/deps-threads`。
+
+**踩到的假红（记下来，差点污染结论）**：第一版脚本的源码路径写成
+`SRC="$(dirname $0)/probe-threads"; [ -d "$SRC" ] || SRC=/src/probe-threads` —— 容器里那份
+`/src/probe-threads/run.html` 是 **preload 时代的旧件**（没有 `fetch`/`writeFile`）⇒ 三档**全部**
+因"dlopen 找不到 `/side.wasm`（fetch 根本没发生）"而红，看起来像"三档都不兼容"。
+现在脚本里**找不到正确源码就 FATAL**，并显式检查 `run.html` 里有 `writeFile`。

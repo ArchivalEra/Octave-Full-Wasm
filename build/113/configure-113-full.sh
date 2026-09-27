@@ -21,7 +21,9 @@ set -euo pipefail
 
 SRCDIR="${1:-/src/work/octave-11.3.0}"
 PREFIX="${2:-/src/work/octave-install}"
-DEPS=/usr/local            # 早期建的四个：libf2c/refblas/lapack/pcre2-8
+# ★ 线程档（branch `threads`）要把这两个指向**独立 prefix**（现役 farm 一字不动）：
+#   DEPS=/usr/local-threads D=/src/deps-threads WITH_THREADS=1 bash configure-113-full.sh
+DEPS="${DEPS:-/usr/local}"  # 早期建的四个：libf2c/refblas/lapack/pcre2-8
 D="${D:-/src/deps}"        # ② 建的库，每库独立 prefix
 SKIP="${SKIP:-}"           # 空格分隔的库名，用于二分
 

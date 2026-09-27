@@ -31,6 +31,11 @@ SRC="${SRC:-/src/third_party}"
 WORK="${WORK:-/src/work}"
 JOBS="${JOBS:-$(nproc)}"
 # 让所有 emcc 调用经过 ccache：LAPACK 有 5000+ 个 .f，重跑时省的是整段
+# ★ 车道旗标（branch `threads`，2026-09-27）：默认**空** ⇒ 与现役产物逐字节同口径。
+#   线程档要 `LANE_FLAGS="-pthread"` + **独立 prefix**（`PREFIX=/usr/local-threads`）——
+#   理由（实测）：`-pthread` 给每个对象打上 `atomics` 特征，而 shared-memory 链接**要求链上每个
+#   对象都有它**；同时**绝不能覆盖现役 farm**（8761 那条线要照常能链）。两档 prefix 分开是唯一安全做法。
+LANE_FLAGS="${LANE_FLAGS:-}"
 export EMF77_EMCC="${EMF77_EMCC:-ccache emcc}"
 export F2C_PREFIX="$PREFIX"
 # emf77 在 PATH 里（宿主机/容器都从仓库 build/113 拷进来）
@@ -76,7 +81,8 @@ build_libf2c () {
       pow_qq.c|qbitbits.c|qbitshft.c|ftell64_.c) continue ;;
     esac
     # shellcheck disable=SC2086
-    $EMF77_EMCC -O2 -Wno-implicit-function-declaration -Wno-implicit-int \
+    # shellcheck disable=SC2086
+    $EMF77_EMCC -O2 $LANE_FLAGS -Wno-implicit-function-declaration -Wno-implicit-int \
         -DNON_UNIX_STDIO -I. -c "$c" -o "${c%.c}.o"
     objs+=("${c%.c}.o")
   done
@@ -117,7 +123,7 @@ build_fortran_dir () {
   printf '%s\0' "${files[@]}" \
     | xargs -0 -P "$JOBS" -I{} sh -c '
         f="$1"; o="${f%.f}.o"
-        if ! emf77 -O2 -c "$f" -o "$o" >/dev/null 2>&1; then echo "$f"; fi
+        if ! emf77 -O2 '"$LANE_FLAGS"' -c "$f" -o "$o" >/dev/null 2>&1; then echo "$f"; fi
       ' _ {} > "$WORK/failed-$(basename "$outlib").txt" || true
   failed="$(wc -l < "$WORK/failed-$(basename "$outlib").txt")"
 
@@ -150,7 +156,7 @@ build_lapack () {
   # dlamch/slamch 是机器常数，LAPACK 的 SRC 不含它们（在 INSTALL/ 下）
   local f o=()
   for f in dlamch slamch; do
-    emf77 -O2 -c "$d/INSTALL/$f.f" -o "$d/INSTALL/$f.o"
+    emf77 -O2 $LANE_FLAGS -c "$d/INSTALL/$f.f" -o "$d/INSTALL/$f.o"
     o+=("$d/INSTALL/$f.o")
   done
   emar rcs "$PREFIX/lib/liblapack.a" "$d/INSTALL/dlamch.o" "$d/INSTALL/slamch.o"
@@ -183,7 +189,7 @@ build_pcre2 () {
   emconfigure ./configure \
       --host=wasm32-unknown-emscripten --prefix="$PREFIX" \
       --disable-shared --enable-static --disable-jit --enable-pcre2-8 \
-      CFLAGS="-O2 -fPIC" >/dev/null
+      CFLAGS="-O2 -fPIC $LANE_FLAGS" >/dev/null
   emmake make -j"$JOBS" install >/dev/null
   local s; s="$(emnm "$PREFIX/lib/libpcre2-8.a")"
   grep -q ' pcre2_compile_8$' <<<"$s" || { echo "FATAL: libpcre2-8.a 缺 pcre2_compile_8" >&2; exit 1; }
@@ -195,7 +201,8 @@ case "${1:-all}" in
   lapack) build_lapack ;;
   pcre2)  build_pcre2 ;;
   all)    build_libf2c; build_pcre2; build_lapack ;;
-  *) echo "用法: $0 [libf2c|lapack|pcre2|all]" >&2; exit 2 ;;
+  *) echo "用法: $0 [libf2c|lapack|pcre2|all]" >&2
+     echo "    线程档：LANE_FLAGS=-pthread PREFIX=/usr/local-threads $0 all" >&2; exit 2 ;;
 esac
 
 say "完成。$PREFIX 内容："

@@ -171,3 +171,61 @@
 ### 明确不做（红线沿用）
 - 不为线程去改宿主的响应头/`allow`（范围改判后我们只服务自家站点）；
 - 不让线程档成为**唯一**产物（必须双档，且默认档保持"在任何静态托管上都能跑"）。
+
+---
+
+## §6 依赖链 atomics 重编（branch `threads`，2026-09-27 起）—— **B6 的真正主体**
+
+> **用户拍板**（2026-09-27）："就开新分支做这个吧"。起因是 B6 的实测结论：线程档**不是**"重编 Octave"
+> 就能成的 —— `-pthread` 要求链上**每个对象**都声明 `atomics`，而现役 farm **全部**缺（扫描表见
+> `PLAN-arch.md` §2 B6 的 2026-09-27 节）；并且 `build/113/NOTES-threads.md` 的 B5 实验证明
+> **`.oct` 车道（49 条资产）也必须按 `-pthread` 重编**（非线程档的 side module 连 dlopen 都过不去：
+> `TypeError: tlsInitFunc is not a function`）。
+
+### 车道机制（**唯一口径**，别再手拼旗标）
+
+```sh
+LANE_FLAGS=-pthread            # 编译期：给每个对象打 atomics 特征
+PREFIX=/usr/local-threads      # 数学核（libf2c/refblas/lapack/pcre2-8）
+DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
+```
+**现役 farm（`/usr/local`、`/src/deps`）一字不动** —— 8761 那条线要照常能链、能回归。
+两档 prefix 分开是硬要求，不是风格问题。
+
+### 库 → 脚本 → 车道 prefix（逐个脚本加 `LANE_FLAGS`，都已实测过归属）
+
+| 库 | 脚本 | 车道 prefix |
+|---|---|---|
+| libf2c / refblas / lapack / pcre2-8 | `build/113/build-deps.sh`（**已加** `LANE_FLAGS`，冒烟过） | `/usr/local-threads` |
+| SIMD refblas/lapack | `build/113/build-blas-simd.sh` / `rebuild-pic-blas.sh` | `/src/deps-threads/lapack-simd` |
+| zlibbz2 / glpk / fftw(3,3f) / qhull / sndfile / rapidjson / hdf5 / suitesparse / arpack / qrupdate | `build/113/build-libs.sh` | `/src/deps-threads` |
+| freetype / fontconfig / expat | `build/113/build-freetype.sh` + `build-fontconfig.sh` | `/src/deps-threads` |
+| gl2ps | `build/113/build-gl2ps.sh` | `/src/deps-threads` |
+| gl4es（`libGL.a`）+ GLU | `build/113/build-glu-webgl.sh`（+ `patch-gl4es.sh`） | `/src/deps-threads` |
+| `.oct` 车道：核心 dldfcn + 13 个包 + slicot | `build/113/build-oct.sh` / `build-pkg-oct.sh` / `build_dldfcn.sh` | `/src/libwork/octs-threads` |
+| Octave 本体 | `build/113/configure-113-full.sh`（`WITH_THREADS=1` + `D=`/`DEPS=` 指向车道） | `/src/websrc/m2fc-threads-out` |
+
+### 顺序与判据（**每步都要量**，不许"链过了就算"）
+
+1. **数学核**（`build-deps.sh all`）→ 判据：`atomics_scan.py` 对 4 个 `.a` 报 **0 缺**；
+   符号自检（`dgemm_`/`dgesv_`/`dlamch_`/`pcre2_compile_8`）照旧绿。
+2. **表驱动依赖**（`build-libs.sh`）→ 同判据（逐库原子扫 + 该库自带符号自检）。
+3. **图形/字体**（freetype/fontconfig/expat/gl2ps/gl4es）→ 同判据。
+4. **`.oct` 车道** → 判据：每个 `.oct` **能载入 shared-memory 主模块**（B5 实验的反向：这次应该过），
+   用 `probe-threads.mjs` 的形态先验一条，再用 `accept-113-libs` 等套件验。
+5. **Octave** → `relink.sh link threads`：`verdict=ok`（身份证 `threads` 轴双向判定）+ 导出面与
+   product 基线对齐（保活闸门）+ 六组产物自检。
+6. **双档上线**（机制已就绪，见 `PLAN-arch.md` §2 B6 的 2026-09-27 节）：8768 先跑 `probe-lane`
+   （带头选线程档 / 不带头落基础档 / 选错档硬失败）+ 两档 `PROBES=1` 全量 → 再 promote 8761。
+
+### 红与回退
+
+- 任一步 `atomics_scan` 有残留 ⇒ 该库没真重编（旗标没进某条编译路径）⇒ 修脚本，别绕。
+- 链接期 `--shared-memory is disallowed by X` ⇒ X 所属库还没重编（**这条错误就是路线图**）。
+- 任何一步失败：丢弃该车道 prefix + 丢弃 `/src/websrc/m2fc-threads-out`；**8761 / `site/` 一动不动**。
+
+### 明确不做
+
+- 不动现役 farm 的 prefix（两档并存，不覆盖）。
+- 不为线程档降低产品能力面（若某库实在编不出，先记档再问，别悄悄丢功能 —— 这正是 GLPK/QHULL
+  那次的教训：configure **静默**关掉功能，只有扫描才看得见）。
