@@ -7,7 +7,12 @@
      —— 本包体积的大头全靠这一步，别让服务器现压；
   3. `.oct` 按 `application/octet-stream` 发（浏览器要 fetch 它进 wasm 文件系统）。
 
-用法：python3 serve.py [端口] [目录]
+★ 4（B6 起）：**默认发跨源隔离头** `Cross-Origin-Opener-Policy: same-origin` +
+  `Cross-Origin-Embedder-Policy: require-corp` —— 站点里带**线程档**（`threads/`），页面按这两个头
+  判断"能不能用 SharedArrayBuffer"；**不发**的话页面会**静默**落回基础档（不报错，只是没线程）。
+  想专门测"基础档那一侧"（或本来就打算把这份包当纯静态站点发），用 `--no-coi`。
+
+用法：python3 serve.py [端口] [目录] [--no-coi]
 """
 import gzip
 import os
@@ -27,6 +32,16 @@ MIME = {
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # 默认发跨源隔离头（B6：线程档的物理前提）。`--no-coi` 时关掉 —— 那正是
+    # "宿主不发头 ⇒ 页面落基础档"那条回退路径的**本地复现方式**。
+    NO_COI = False
+
+    def end_headers(self):
+        if not self.NO_COI:
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        super().end_headers()
+
     def guess_type(self, path):
         ext = os.path.splitext(path)[1].lower()
         return MIME.get(ext, super().guess_type(path))
@@ -57,10 +72,15 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    root = sys.argv[2] if len(sys.argv) > 2 else os.path.dirname(os.path.abspath(__file__))
+    args = [a for a in sys.argv[1:] if a != "--no-coi"]
+    no_coi = "--no-coi" in sys.argv[1:]
+    port = int(args[0]) if len(args) > 0 else 8080
+    root = args[1] if len(args) > 1 else os.path.dirname(os.path.abspath(__file__))
+    Handler.NO_COI = no_coi
     handler = partial(Handler, directory=root)
-    print(f"serving {root} on http://127.0.0.1:{port}/  (wasm MIME + gzip_static)")
+    print("serving %s on http://127.0.0.1:%d/  (wasm MIME + gzip_static%s)"
+          % (root, port, "；--no-coi：不发跨源隔离头 ⇒ 页面会落基础档" if no_coi
+             else "；已发 COOP/COEP ⇒ 线程档可用"))
     ThreadingHTTPServer(("127.0.0.1", port), handler).serve_forever()
 
 

@@ -44,9 +44,12 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-- 本地参考实现：`python3 build/serve-coi.py --dir <站点目录> --port 8761`（要测"基础档那一侧"
-  另起一台加 `--no-coi`）。**别用 `python3 -m http.server` 测线程档** —— 它发不了这两个头，
-  页面会**静默**落回基础档（不报错，只是没线程）。
+- 本地参考实现（两条，口径相同）：
+  · 仓库里：`python3 build/serve-coi.py --dir <站点目录> --port 8761`；
+  · **交付包自带**：`python3 serve.py [端口] [目录]` —— B6 起它**默认就发这两个头**，
+    加 `--no-coi` 才是"不发头"的那一侧（那条路径正是"宿主不发 ⇒ 页面落基础档"的本地复现）。
+  **别用 `python3 -m http.server` 测线程档** —— 它发不了这两个头，页面会**静默**落回基础档
+  （不报错，只是没线程）。
 - GitHub Pages **发不了**这两个头 ⇒ 在线版本跑的是基础档（`threads/` 目录在那儿等于闲置，
   不影响任何功能）。要线程档就得用能改响应头的托管（Cloudflare Pages / 自己的 nginx 等）。
 - ⚠️ **线程档的已知边界**：① worker 宿主（`?worker=1` 或手搓 `new Worker('octave-worker.js')`）
