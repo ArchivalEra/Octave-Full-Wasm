@@ -209,14 +209,23 @@ def dist_facts():
 
 
 def git_facts():
+    """区块里放的仓库事实。**只有分支名** —— 见下面这条实测教训。
+
+    ★ 为什么不放 HEAD 的提交日期（2026-09-27 实测，F2 收尾）：
+    `git log -1 --format=%cs` 在**同一个提交里**永远自相矛盾 —— pre-commit 重算时 HEAD 还是
+    旧提交（写进去的是昨天的日期），提交完成后日期变了 ⇒ `pre-push` 的 `--check` 必然报
+    "已过期"。那就只剩两条路：每个跨日期边界的提交都补一个"机器块刷新"提交，
+    或者 `--no-verify`（本仓**禁用**）。所以日期这个字段是**机制上不可满足**的输入，删掉。
+    区块里改用一句"以 `git log -1` 为准"，读者照样拿得到，而且不再逼人做假动作。
+    同一条纪律在文件头写着：**不引入会自己在变的输入**（墙上时钟、HEAD 的 sha）——
+    从 HEAD 派生的日期属于同一类。"""
     def g(*a):
         try:
             return subprocess.run(["git", *a], cwd=REPO, capture_output=True, text=True,
                                   check=True).stdout.strip()
         except Exception:
             return ""
-    return {"branch": g("rev-parse", "--abbrev-ref", "HEAD"),
-            "head_date": g("log", "-1", "--format=%cs")}
+    return {"branch": g("rev-parse", "--abbrev-ref", "HEAD")}
 
 
 def parse_prev_block(text):

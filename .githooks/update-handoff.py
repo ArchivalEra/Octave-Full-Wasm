@@ -95,8 +95,11 @@ def render(prev):
     else:
         L.append(f"| 交付包 | **读不到**（{dist.get('why', '?')}） | |")
 
-    L.append(f"| 仓库 | 分支 `{git['branch'] or '?'}` · HEAD 提交日期 {git['head_date'] or '?'} "
-             f"（**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |")
+    # ⚠️ 只写分支名：日期与 sha 从 HEAD 派生 ⇒ **在同一个提交里不可满足**（写进去的时候
+    #    HEAD 还是旧提交，提交完就"过期" ⇒ 逼出第二个"刷新机器块"提交，或 `--no-verify`）。
+    #    详见 `.githooks/handoff_facts.py::git_facts()` 的实测记录。
+    L.append(f"| 仓库 | 分支 `{git['branch'] or '?'}`"
+             f"（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |")
     L.append(END)
     return "\n".join(L)
 

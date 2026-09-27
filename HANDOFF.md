@@ -176,5 +176,5 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | 资产条目 | 49 | |
 | 最近一次**全绿**回归 | `20260927-092416` · **43 套 / 1,076 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 23 套 / 210 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,262,406 B · `5b3fe9ae55645937…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `Slay` · HEAD 提交日期 2026-09-26 （**HEAD 的 sha 以 `git log -1` 为准，不写死在这里**） | |
+| 仓库 | 分支 `Slay`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
