@@ -53,6 +53,30 @@ echo "== ④ Forge 包（含 control 的 slicot 调度模块）→ $OUT_PKG"
 OUTROOT="$OUT_PKG" PREFIX="$OCT_INSTALL" bash /src/bin/build-pkg-oct.sh all > /tmp/oct-lane-pkg.log 2>&1 \
   || { echo "FATAL: 包车道失败（见 /tmp/oct-lane-pkg.log）" >&2; tail -20 /tmp/oct-lane-pkg.log >&2; exit 1; }
 
+echo "== ④b slicot 调度模块（唯一需要**静态链库**的那个 .oct）"
+# 为什么单列：`build-pkg-oct.sh` 明确**不建** slicot（见它的注释），调度模块是独立一步
+# （`build/113/NOTES-slicot.md` 有配方）。而它 `OCT_LIBS=` 静态链 slicot ⇒ **slicot 库也得是车道版**
+# （否则模块里混着非 atomics 对象；本轮判据①先抓到"整块缺失"，判据②会抓"对象不干净"）。
+SLICOT_C_SRC="${SLICOT_C_SRC:-/src/libwork/f2c-probe}"     # 已由 f2c 翻译好的 .c（613 个）
+SLICOT_OBJ="${SLICOT_OBJ:-/src/libwork-threads/slicot-obj}"
+SLICOT_LIB="${SLICOT_LIB:-/src/libwork-threads/slicotlibrary.a}"
+CTRL_SRC="${CTRL_SRC:-/src/libwork/forge/control-4.1.3/src}"
+if [ -d "$SLICOT_C_SRC" ] && [ ! -s "$SLICOT_LIB" ]; then
+  mkdir -p "$SLICOT_OBJ"
+  ls "$SLICOT_C_SRC"/*.c | xargs -P "$(nproc)" -I{} sh -c '
+    f="$1"; o="'"$SLICOT_OBJ"'/$(basename "${f%.c}").o"
+    [ -s "$o" ] || emcc -O1 -fPIC -fwasm-exceptions -I/usr/local/include -w -c "$f" -o "$o"
+  ' _ {}
+  emar rcs "$SLICOT_LIB" "$SLICOT_OBJ"/*.o
+  echo "   ✅ 车道 slicotlibrary.a（$(stat -c%s "$SLICOT_LIB") 字节）"
+fi
+if [ -s "$SLICOT_LIB" ]; then
+  OUT="$OUT_CORE" OCT_INCS="-I$CTRL_SRC" OCT_LIBS="$SLICOT_LIB" \
+    CC_SRCS="__control_slicot_functions__:$CTRL_SRC/__control_slicot_functions__.cc" \
+    bash /src/bin/build-oct.sh --cc || { echo "FATAL: slicot 调度模块构建失败" >&2; exit 1; }
+  echo "   ✅ __control_slicot_functions__.oct"
+fi
+
 echo "== ⑤ 判据①：文件名清单 vs 现役站点 manifest 的 kind:oct 条目"
 python3 - "$SITE_MANIFEST" "$OUT_CORE" "$OUT_PKG" <<'PY'
 import json, os, sys
@@ -73,7 +97,14 @@ print("   现役 %d 个 / 车道 %d 个；缺 %s；多 %s"
 sys.exit(1 if miss else 0)
 PY
 
-echo "== 判据②：每个 .oct 都要带 atomics（side module 的字节里就有特征段）"
-python3 /tmp/atomics_scan.py $(find "$OUT_CORE" "$OUT_PKG" -name '*.oct' | sort) 2>&1 | grep -v "缺 atomics   0 " || true
-echo "   （上面**只列有缺的**；一条都没列 = 全过）"
+echo "== 判据②：每个 .oct 必须含 **TLS 初始化入口**（-pthread 编出来的才有）"
+# ⚠️ 不能用 atomics_scan 判 .oct：.oct 是链接后的 side module、不带 target_features 段
+#    ⇒ 那样会把全部 44 个（含正确编出来的）都判成「缺 atomics」（实测踩到）。
+#    正确判据来自 B5 的失败原文（TypeError: tlsInitFunc is not a function）；
+#    反向断言（基础档不该有入口）在宿主侧做 —— 见 build/113/stage-lane-assets.sh。
+if [ -d "${BASE_OCT_DIR:-/tmp/base-oct}" ]; then
+  python3 /src/bin/check-oct-lane.py "$OUT_CORE" "$OUT_PKG" --base "${BASE_OCT_DIR:-/tmp/base-oct}"
+else
+  python3 /src/bin/check-oct-lane.py "$OUT_CORE" "$OUT_PKG"
+fi
 echo "OCT-LANE-DONE"

@@ -57,12 +57,18 @@
     // data 两档共用根目录那一份 —— 前提是两档的 `octave.data` **sha 相同**（链接后核对，
     // 记录在 HANDOFF/PLAN 里）。若哪天不同了，把 threads 的 data 改成 'threads/octave.data'
     // 并把文件部署过去即可（探针 probe-lane 会核对"胶水要的文件真的取得到"）。
-    // ★ 两档**只有 `.oct` 那部分资产不同**（2026-09-27 实测）：非 atomics 编的 side module 在
-    //   shared-memory 主模块里连 dlopen 都过不去（`TypeError: tlsInitFunc is not a function`，
-    //   见 NOTES-threads.md B5）⇒ 线程档必须用自己的 `.oct` 集（`oct-threads/`、`octdir-threads/`），
-    //   其余资产（.m 包 / 文档 / 字体数据）两档共用。清单里逐条带 `url`，所以"分档"= 换一份清单。
+    // ★ 两档**必须各自带一份 `octave.data`**（2026-09-27 实测）：两份的 sha **不同**
+    //   （基础 `f250530a…` 9,712,174 B / 线程 `5c1433c4…` 9,712,190 B —— 预载树里带进了链接期的差异）。
+    //   ⚠️ 早先我以为"同 sha 可共用一份"，实测推翻了 ⇒ 现在线程档指向 `threads/octave.data`。
+    //   `promote-webgl.sh` 里有一条 fail-closed：两档 data sha **不同**而 lane.js 却指根目录 ⇒ 拒绝上线
+    //   （否则线程档会**静默取到基础档的数据文件**，是最难查的那类）。
+    //
+    // ★ 资产：只有 `.oct` 那部分**必须**分档 —— 非 atomics 编的 side module 在 shared-memory 主模块里
+    //   连 dlopen 都过不去（`TypeError: tlsInitFunc is not a function`，见 NOTES-threads.md B5）
+    //   ⇒ 线程档用自己的 `.oct` 集（`oct-threads/`、`octdir-threads/`），其余（.m 包/文档/字体数据）
+    //   两档共用；清单逐条带 `url`，所以"分档"= 换一份清单。
     threads: { lane: 'threads', dir: 'threads/',
-               js: 'threads/octave.js', wasm: 'threads/octave.wasm', data: 'octave.data',
+               js: 'threads/octave.js', wasm: 'threads/octave.wasm', data: 'threads/octave.data',
                manifest: 'assets/manifest.threads.json' },
     base: { lane: 'base', dir: '',
             js: 'octave.js', wasm: 'octave.wasm', data: 'octave.data',

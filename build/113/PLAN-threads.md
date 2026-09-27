@@ -178,6 +178,7 @@
 
 > **用户拍板**（2026-09-27）："就开新分支做这个吧"。起因是 B6 的实测结论：线程档**不是**"重编 Octave"
 > 就能成的 —— `-pthread` 要求链上**每个对象**都声明 `atomics`，而现役 farm **全部**缺（扫描表见
+  ★ **更正（2026-09-27 实测，已登记 R-009）**：这句是**过度概括** —— wasm-ld 的规则针对**带 TLS / 用原子操作**的对象（报错原文里的 `libglpk_la-tls.o`/`fccache.o`/`src_sfnt_sfnt.c.o` 都是这类）；**纯计算、无 TLS 的对象可以静默链进** shared-memory 模块（实测：某次线程档产物链的正是基础档的非 atomics SIMD BLAS，而链接 0 违规、verdict=ok）。⇒ 判据不能只看「链过了」、也不能只看 atomics 扫描，**要看输入侧溯源**：已加 `check-build-manifest.py::lane_blas_problem()`（声明 threads=true ⇒ BLAS 必须来自车道路径）。
 > `PLAN-arch.md` §2 B6 的 2026-09-27 节）；并且 `build/113/NOTES-threads.md` 的 B5 实验证明
 > **`.oct` 车道（49 条资产）也必须按 `-pthread` 重编**（非线程档的 side module 连 dlopen 都过不去：
 > `TypeError: tlsInitFunc is not a function`）。

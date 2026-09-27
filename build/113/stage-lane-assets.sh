@@ -61,10 +61,10 @@ print("   基础 %d / 车道 %d；缺 %s；多 %s" % (len(want), len(got), miss 
 sys.exit(1 if miss else 0)
 PY
 
-echo "== ④ 判据：每个落地 .oct 都带 atomics"
-python3 "$REPO/build/113/atomics_scan.py" --quiet \
-  "$SITE/assets/oct-threads"/*.oct "$SITE/assets/octdir-threads"/*/*.oct \
-  && echo "   ✅ 全部带 atomics"
+echo "== ④ 判据：线程档 .oct 有 TLS 入口 **且** 基础档没有（带反向断言）"
+python3 "$REPO/build/113/check-oct-lane.py" \
+  "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads" \
+  --base "$SITE/assets/oct" "$SITE/assets/octdir"
 
 echo "== ⑤ 判据：两档清单只差前缀（--check 自带三条）"
 python3 "$REPO/build/113/make-lane-manifest.py" "$SITE/assets" --check
