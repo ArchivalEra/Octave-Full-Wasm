@@ -18,7 +18,7 @@
 | `dldprobe.oct` / `minioct.oct` | 历史诊断用 side module（保留，不影响运行） |
 
 来源与构建配方：**唯一入口 `bash build/113/relink.sh link product`**（2026-09-26 批次 A1 起；
-模式决定全部环境变量（条数 = `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** —— A1 加了
+模式决定全部环境变量（条数见 `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** —— A1 加了
 `BUILD_MODE` 标签变量；另有 `P5_OBJS` 是脚本内数组不算），`relink.sh explain product` 打出来就是口径 —— **别照抄文档拼命令**，
 漏一个变量会**静默**做出非现役形态的产物而构建/链接/自检全绿）。底层是 `build/113/link-web.sh`；
 链接末尾写出 `octave.build.json`（只记量到的事实），**`verdict=="ok"` 才可部署**。

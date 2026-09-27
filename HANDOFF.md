@@ -13,63 +13,39 @@
 
 ---
 
-## 0. 现在是什么（2026-09-27）
+## 0. 现在是什么（2026-09-27，**branch `threads`**）
 
-- **8761 = 现役构建**（A2 产物，带产物身份证 `octave.build.json`），开机自检 1.7s，
-  三处 parity `--strict` 绿（8761 / 8768 / 仓库 `site/`）。
-  ⚠️ **本文件正文不写任何"测出来的数字"** —— sha / 体积 / 回归套件数在文末的
-  `AUTO:STATE`，其他实测事实（SIMD 判据、导出名字数、环境变量条数…）在文末的 `AUTO:FACTS`，
-  正文只写**台账的键名**（这是 F2 收尾的规矩，`.githooks/check-facts.py` 会拦手抄）。
-- **架构深化 D1–D6 全部落地**（A0–A4）：重链有唯一入口 `build/113/relink.sh`（模式决定全部
-  环境变量，条数见 `build/FACTS.json` 的 `env_vars`）；页面层是**一内核两适配器**
-  （`bridge/octave-core.js`）；测试契约搬进仓库（`build/sweep.sh` + `test/browser/manifest.json`）；
-  术语表 `CONTEXT.md`。
-- **事实系统 F1–F3 已落地，F2 已收尾**（"保句子为真"的机械）：
-  · **F1 闸门自证台**：`build/lib/gate.py` + `build/gates-selftest.sh` —— **每个闸门都必须能
-    证明自己"会红"**（零值守卫 + `GATE_REPO` 根注入 + `--selftest`），**接在 pre-commit 上**；
-  · **F2 事实台账**：`build/facts.py` → `build/FACTS.json`（每条带复跑命令）→ 渲染成
-    `AUTO:FACTS` 块（**数字的唯一产地**）；`.githooks/check-facts.py` 四条规则：块与台账一致 /
-    正文不许裸数字 / 引用的键必须存在 / 台账不许过期；
-  · **F3 翻案台账**：`build/lib/retractions.json` + `.githooks/check-retractions.py`
-    （被推翻的断言重新出现且无更正标记 ⇒ 红）。
-- 产物能力**从身份证读，别背**：`site/octave.build.json` 的 `measured.*`
-  （`simd.v128`、`exported_functions`、`fonts`、`jspi_entry`、`gl4es`、`idbfs`、`fontconfig`）。
+- **8761 = 现役「基础档」**：sha / 体积 / 回归数字都在文末 `AUTO:STATE`；其他实测事实在 `AUTO:FACTS`
+  （源 = `build/FACTS.json`，每条带复跑命令）。正文只写**台账的键名**（F2 的规矩，闸门会拦手抄）。
+- **线程档（B6）已建成并通过浏览器实测**（branch `threads`；工作令 = `build/113/PLAN-threads.md` §6）：
+  · 产物：`threads_verdict` / `threads_shared_memory` / `threads_pthread_glue` / `threads_v128` /
+    `threads_blas_dir` / `threads_wasm_sha`（都在 `AUTO:FACTS` 里，别背数字）；
+  · `.oct` 两档分好：`oct_lane_tls_init` / `oct_lane_files` / `oct_lane_octdir_files`，基础档同条数
+    （`oct_base_files` / `octdir_base_files`）；
+  · **`test/browser/probe-lane.mjs` 全绿**（PASS 数见 `build/FACTS.json` 的 `probe_lane_pass`，
+    FAIL = `probe_lane_fail` 必须为 0）：带头选线程档 + `caps.sharedMemory === true`、
+    不带头落基础档照常 ready、`?lane=base` 覆盖生效、**没 COI 强选线程档硬失败**。
+- ⚠️ **一条最容易在压缩里丢的细微事实**：线程档现在是 **refblas/lapack 的「SIMD + atomics」版**，
+  **不是 OpenBLAS** ⇒ **多线程运行时已启用，但数学还没并行化**。收益要靠 E2 把线程版 OpenBLAS 链进去；
+  E2 的前置（整条 farm 带 atomics）**本批已完成**。
+- 现役 farm（`/usr/local`、`/src/deps`）**一字未动**（实测仍 100% 缺 atomics）；车道在
+  `/usr/local-threads` + `/src/deps-threads`；两档 prefix 分开是硬要求。
+- 事实系统：`build/FACTS.json`（源）+ `AUTO:FACTS`（渲染）+ 翻案台账 `build/lib/retractions.json`
+  （本轮新增 R-009：更正了「每个对象都必须带 atomics」这句过度概括）。
 
 ## 1. 下一步（按此顺序）
 
-1. ✅ **F2 收尾（2026-09-27 落地）**：数字**只在** `AUTO:FACTS` 块里生产（`build/facts.py
-   --render-doc`，pre-commit 重算），正文引用台账键名。闸门从"抄了要抄对"升级成四条：
-   块与台账一致 / 正文不许裸数字 / 引用的键必须存在 / **台账不许过期**（promote 后忘跑
-   `facts.py` ⇒ 红）。
-2. ✅ **F4 探针输入契约（2026-09-27 落地）**：选片逻辑搬进 `build/lib/sweep_select.py`
-   （纯函数 + 14 条自证）；清单新增 `inputs` 段，5 个"产物在仓库外"的探针登记完，
-   缺输入**跳过并报明缺什么**。实测 `PROBES=1` 选中 68 个套件、按清单跳过 16 个（全是 manual），
-   跑完全绿；**accept-only 口径**（验收底线那对数字）见 `build/FACTS.json` 的
-   `accept_suites` / `accept_pass`，全量合计（含探针/基准）见文末 `AUTO:STATE` 那一行的括号。
-   `--check-inputs` 一行回答"要跑全套我缺什么"。
-3. **B6 线程档：已在 `threads` 分支持续推进**（用户 2026-09-27 拍板"就开新分支做这个"）
-   · 分支：**`threads`**（从 `Slay` 分出）。**工作令 = `build/113/PLAN-threads.md` §6**（库→脚本→prefix
-     映射表 + `.oct` 确切清单 + 三个静默陷阱 + 顺序/判据/回退），**先读它**。
-   · ✅ 已落地：机制侧（可逆补丁 / `WITH_THREADS=1` / `relink.sh threads` 模式 / 身份证 `threads` 轴 /
-     `lane.js` 选档 + 双档 + 身份证按档读 / `serve-coi.py` / `probe-lane` / promote 落件）+
-     **两档资产清单机制**（只有 `.oct` 分档；`build/113/make-lane-manifest.py`，8 条自证）+
-     **判据工具进仓**（`build/113/atomics_scan.py`，9 条自证）+ 车道构建脚本（`lane-shim.sh`、
-     `build-gl-lane.sh`、`build-oct-lane.sh`、`build-tree-lane.sh`）。
-   · ✅ **车道依赖 farm 全过**：`/usr/local-threads`（libf2c/refblas/lapack/pcre2）+ `/src/deps-threads`
-     （zlibbz2/glpk/fftw/qhull/sndfile/rapidjson/hdf5/arpack/qrupdate/suitesparse/freetype/fontconfig/
-     expat/gl2ps）—— `atomics_scan --quiet` **无一条违规**。判据是逐成员扫字节（构建 rc=0 与符号自检
-     **都不算**：本轮实测三个静默陷阱，见 PLAN §6 的表）。
-   · ⏳ **正在跑**：gl4es+GLU 车道 → 车道 sundials → **Octave 树**（`WITH_THREADS=1` + 车道 prefix +
-     独立 `install-threads`，数小时）。之后：`.oct` 车道（三批 + 判据）→ 资产分档 → `relink threads`
-     到 `verdict=ok` → 8768 双档验证（`probe-lane` + 两档 `PROBES=1`）→ 才谈 promote 8761。
-   · 纪律：**8761 / `site/` 全程不动**（实测：base farm 仍 100% 缺 atomics、部署件仍是
-     `1ed3e528…`、三处 parity `--strict` 绿）。产物能力面**不许降级**（GLPK/QHULL 那次的教训）。
-4. **E2 悬案（用户定：**另开分支**做）**：把线程版 BLAS 链进 Octave 的最后一步 —— 那是**性能收益
-   真正兑现的那一步**（现役 BLAS 是 f2c 出的标量代码，光有线程运行时**一分钱买不到**）。
-   **根因已锁定**：不是重复定义、也不是 Fortran 接口，而是**子程序返回类型**（f2c 的 `-> i32` vs
-   OpenBLAS 的 `-> void`，wasm-ld 警告原文写了）。两条修法（给 `interface/*.c` 加 `int` 返回且**必须**
-   `return 0;` / 符号改名 + 薄包装）见 `NOTES-threads.md` 末两节。
-   ⚠️ E2 与本批的 B6 有**共同前置**：链上每个静态库都得带 atomics（见上面第 3 条那条实测硬约束）。
+1. **两档验收矩阵**（跑着）：8768 带头 = 线程档、8770 不带头 = 基础档，各 43 套。
+   · 绿 ⇒ 走 §5 批次收尾：8768 → promote **8761（双档）** → 带头服务（`build/serve-coi.py`）→
+     `check-boot` / 部署件 SHA 三层 / 同步仓库 `site/` / `make-dist` / 三处 parity `--strict` /
+     六道闸门 → 提交 → 推 mirror。
+   · 红 ⇒ 先怀疑线程档特有路径：交互类套件依赖 `st.mem`（本轮刚修「内存是从 JS 导入的」那条）；
+     `.oct` 载入问题看 `check-oct-lane.py` 的 TLS 入口结论。
+2. **E2（可选；用户定：另开分支）**：把**线程版 OpenBLAS** 链进主模块 —— 收益真正兑现的一步
+   （探针实测 DGEMM N=2000 的 T=8 = 7.2×）。前置已完成，只剩「OpenBLAS → 主模块」的符号/接口
+   （根因与两条修法见 `build/113/NOTES-threads.md` 末两节）。
+3. **B6 收尾项（不阻塞）**：`probe-lane` 的输入契约已登记（线程档产物不在 ⇒ 跳过并报原因）；
+   8761/8768 **起服务必须带头**（`build/serve-coi.py`）—— 已写进 `AGENTS.md` 的批次收尾。
 
 ## 2. 铁律（违反会被拦或返工）
 
@@ -164,17 +140,32 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-092416 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
-| `env_vars` | **23** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
+| `env_vars` | **27** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
 | `exported_functions` | **710**（M2 保活集大小（M1 约 44987）） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.exported_functions` |
 | `fonts_count` | **8** | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.fonts` |
 | `js_sha` | `caac68bf62015859…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.js` |
 | `jspi_entry` | 是（B 姿势的可挂起入口在不在） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.jspi_entry` |
 | `matrix_page_sha` | `54a7e1c261a2df2f…` | `sha256sum /mnt/hdd/octave-wasm-build/site/matrix-android.html` |
+| `oct_base_files` | **16**（基础档 `assets/oct/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' \| wc -l` |
+| `oct_lane_files` | **16**（线程档 `assets/oct-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/siteWebGL/assets/oct-threads -name '*.oct' \| wc -l` |
+| `oct_lane_octdir_files` | **28**（线程档 `assets/octdir-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/siteWebGL/assets/octdir-threads -name '*.oct' \| wc -l` |
+| `oct_lane_tls_init` | **44**（每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；分母见 oct_lane_files + oct_lane_octdir_files） | `python3 build/113/check-oct-lane.py <站点>/assets/oct-threads <站点>/assets/octdir-threads --base <站点>/assets/oct <站点>/assets/octdir` |
+| `octdir_base_files` | **28**（基础档 `assets/octdir/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' \| wc -l` |
+| `probe_lane_fail` | **0** | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
+| `probe_lane_pass` | **15**（双档探针的 PASS 数（FAIL 必须 0）） | `SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
+| `threads_blas_dir` | **/src/deps-threads/lapack-simd/lib**（**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 inputs.blas.resolved_dir` |
+| `threads_exported_functions` | **725** | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.exported_functions` |
+| `threads_pthread_glue` | **54**（基础档实测是 0） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.threads.pthread_glue` |
+| `threads_shared_memory` | 是（wasm 内存段的 shared 位；线程档的硬身份） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.threads.shared_memory` |
+| `threads_v128` | **4756**（线程档也带 SIMD（两轴不互斥）） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.simd.v128` |
+| `threads_verdict` | **ok**（只有 ok 才可部署（fail-closed）） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 verdict` |
+| `threads_wasm_bytes` | **29218378** | `stat -c%s /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm` |
+| `threads_wasm_sha` | `c2899a71b5c75fce…` | `sha256sum /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm` |
 | `wasm_bytes` | **29632229** | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-27T09:46:00+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-27T12:27:23+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态

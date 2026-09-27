@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-09-27T09:46:00+0800",
+ "generated": "2026-09-27T12:27:23+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -57,7 +57,7 @@
    "source": "site/matrix-android.html"
   },
   "env_vars": {
-   "value": 23,
+   "value": 27,
    "cmd": "grep -oE '\\$\\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh | sort -u（去掉位置参数）",
    "source": "build/113/link-web.sh"
   },
@@ -71,6 +71,92 @@
    "cmd": "同上，把每个套件的 PASS 相加",
    "source": "sweep-logs/20260927-092416",
    "note": "最近一次**全绿**扫描的 PASS 合计"
+  },
+  "threads_verdict": {
+   "value": "ok",
+   "cmd": "读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 verdict",
+   "source": "m2fc-threads-out/octave.build.json",
+   "note": "只有 ok 才可部署（fail-closed）"
+  },
+  "threads_shared_memory": {
+   "value": true,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.threads.shared_memory",
+   "source": "m2fc-threads-out/octave.build.json",
+   "note": "wasm 内存段的 shared 位；线程档的硬身份"
+  },
+  "threads_pthread_glue": {
+   "value": 54,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.threads.pthread_glue",
+   "source": "m2fc-threads-out/octave.build.json",
+   "note": "基础档实测是 0"
+  },
+  "threads_v128": {
+   "value": 4756,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.simd.v128",
+   "source": "m2fc-threads-out/octave.build.json",
+   "note": "线程档也带 SIMD（两轴不互斥）"
+  },
+  "threads_exported_functions": {
+   "value": 725,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.exported_functions",
+   "source": "m2fc-threads-out/octave.build.json"
+  },
+  "threads_blas_dir": {
+   "value": "/src/deps-threads/lapack-simd/lib",
+   "cmd": "读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 inputs.blas.resolved_dir",
+   "source": "m2fc-threads-out/octave.build.json",
+   "note": "**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）"
+  },
+  "threads_wasm_sha": {
+   "value": "c2899a71b5c75fce43475ecaedd35cd76af6aeb5fee542ebd9ad8479276f2cf4",
+   "cmd": "sha256sum /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm",
+   "source": "m2fc-threads-out/octave.wasm"
+  },
+  "threads_wasm_bytes": {
+   "value": 29218378,
+   "cmd": "stat -c%s /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm",
+   "source": "m2fc-threads-out/octave.wasm"
+  },
+  "oct_lane_files": {
+   "value": 16,
+   "cmd": "find /mnt/hdd/octave-wasm-build/siteWebGL/assets/oct-threads -name '*.oct' | wc -l",
+   "source": "site/assets/oct-threads",
+   "note": "线程档 `assets/oct-threads/` 条数"
+  },
+  "oct_lane_octdir_files": {
+   "value": 28,
+   "cmd": "find /mnt/hdd/octave-wasm-build/siteWebGL/assets/octdir-threads -name '*.oct' | wc -l",
+   "source": "site/assets/octdir-threads",
+   "note": "线程档 `assets/octdir-threads/` 条数"
+  },
+  "oct_base_files": {
+   "value": 16,
+   "cmd": "find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' | wc -l",
+   "source": "site/assets/oct",
+   "note": "基础档 `assets/oct/` 条数"
+  },
+  "octdir_base_files": {
+   "value": 28,
+   "cmd": "find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' | wc -l",
+   "source": "site/assets/octdir",
+   "note": "基础档 `assets/octdir/` 条数"
+  },
+  "oct_lane_tls_init": {
+   "value": 44,
+   "cmd": "python3 build/113/check-oct-lane.py <站点>/assets/oct-threads <站点>/assets/octdir-threads --base <站点>/assets/oct <站点>/assets/octdir",
+   "source": "site/assets/oct-threads + octdir-threads",
+   "note": "每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；分母见 oct_lane_files + oct_lane_octdir_files"
+  },
+  "probe_lane_pass": {
+   "value": 15,
+   "cmd": "SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log",
+   "source": "probe-lane.log",
+   "note": "双档探针的 PASS 数（FAIL 必须 0）"
+  },
+  "probe_lane_fail": {
+   "value": 0,
+   "cmd": "同上（脚本结尾的 `=== N PASS / M FAIL ===`）",
+   "source": "probe-lane.log"
   }
  }
 }

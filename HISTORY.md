@@ -3158,3 +3158,14 @@ BLAS 来自车道（`/src/deps-threads/lapack-simd/lib`，判据 `inputs.blas.re
 **顺带更正一处过度概括（R-009）**："每个对象都必须带 atomics"不准确 —— wasm-ld 只对**带 TLS/原子的**
 对象强制；纯计算对象（无 TLS）能静默链进（实测：某次线程档产物链的正是基础档非 atomics SIMD BLAS，
 0 违规、verdict=ok）⇒ 判据改成"**看输入侧溯源**"（`lane_blas_problem()`）。
+
+**事实系统更新（2026-09-27，压缩前）**：`build/FACTS.json` 13 → **28 条**，新增的都是这一轮
+**测出来的**事实（各带复跑命令）：线程档 8 条（`threads_verdict`/`threads_shared_memory`/
+`threads_pthread_glue`/`threads_v128`/`threads_exported_functions`/`threads_blas_dir`/
+`threads_wasm_sha`/`threads_wasm_bytes`）、`.oct` 分档 5 条（`oct_lane_files`/`oct_lane_octdir_files`/
+`oct_lane_tls_init`/`oct_base_files`/`octdir_base_files`）、双档探针 2 条（`probe_lane_pass`/
+`probe_lane_fail`，从保存的探针日志读）。另外 `env_vars` 由 23 → **27**（本轮模式表加了
+`DEPS_ROOT`/`DEPS`/`GL4ES_A`/`GLU_A` 等）——三处活状态因此改成**键引用**（正文不写数字），
+`PLAN-arch` 里两处旧数字加了「当时」标记。
+新增闸门规则：`probe_lane_pass`（文档写 `probe-lane.mjs` 的 PASS 数就必须与台账一致），
+且**当场抓到** HANDOFF 里那个手抄的 15（这正是 F2 要拦的形状）。

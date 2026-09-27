@@ -28,7 +28,7 @@
 1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**；写不出复跑方式的句子 → 只能放进 HISTORY 当历史。
 2. **口径搬进代码了（2026-09-26 批次 A1）——别再照抄文档拼命令**：
    重链的**唯一入口是 `bash build/113/relink.sh link product`**（模式 `product` / `scalar` / `m1`
-   决定**全部环境变量**（条数 = `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** ——
+   决定**全部环境变量**（条数见 `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** ——
    A1 加了 `BUILD_MODE` 标签变量，另有 `P5_OBJS` 是脚本内数组不算）**，一个都不许手设**。要看口径就打
    `bash build/113/relink.sh explain product`（**那就是文档，生成物**）；
    `bash build/113/relink.sh --selfcheck` 是它的可测契约（link-web.sh 读的每个变量都必须被

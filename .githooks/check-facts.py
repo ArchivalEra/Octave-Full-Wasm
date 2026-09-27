@@ -56,6 +56,8 @@ RULES = {
     "exported_functions": re.compile(r"导出\s*(\d+)\s*个名字"),
     "env_vars": re.compile(r"(\d+)\s*个环境变量"),
     "accept_suites": re.compile(r"(\d+)\s*套\s*/\s*([\d,]+)\s*(?:PASS|项)"),
+    # ★ 双档探针的 PASS 数（B6）：文档里写 `probe-lane.mjs` 的 PASS 就要与台账一致
+    "probe_lane_pass": re.compile(r"probe-lane\.mjs[^\n]{0,24}?(\d+)\s*PASS"),
 }
 
 
