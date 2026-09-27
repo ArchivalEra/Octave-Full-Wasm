@@ -92,7 +92,13 @@ console.log(`ready=${((Date.now() - t0) / 1000).toFixed(1)}s`);
 //    对同目录一个垃圾内容的 zzfake.oct 却返回 3 —— 正是这条规则的实证。
 const wrote = await page.evaluate(async () => {
   try {
-    const buf = await fetch('minioct.oct').then(r => r.arrayBuffer());
+    // ★ B6 双档：**夹具本身是 side module**（会被 dlopen）⇒ 线程档必须用 `-pthread` 版，
+    //   否则载入失败（`failed to load Incompatible version or missing dependencies` —— 实测
+    //   首跑 3 PASS / 5 FAIL 就是这个）。按档取（内核把选档结果暴露在 `__octaveCaps.lane`）。
+    var lane = (window.__octaveCaps && window.__octaveCaps.lane
+                && window.__octaveCaps.lane.chosen) || 'base';
+    var fx = (lane === 'threads') ? 'threads/minioct.oct' : 'minioct.oct';
+    const buf = await fetch(fx).then(r => r.arrayBuffer());
     const FS = window.Module.FS;
     const dir = '/usr/src/octave/m/oct';
     try { FS.mkdir(dir); } catch (e) { /* 已存在 */ }

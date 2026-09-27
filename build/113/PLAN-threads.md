@@ -326,6 +326,30 @@ cp /src/work/octave-11.3.0/config.h \
 **修法**：车道用**独立的 WORK 目录**（`WORK=/src/libwork-threads`）。`unpack` 那种
 "目录在就不重新解包"的写法会把旧构建树带过来，独立 WORK 一次性解决，顺带不污染现役构建树。
 
+### ★ 第八个坑（验收抓到的）：**不在 manifest 里的 `.oct` 夹具也要分档**
+
+线程档 8768 的 `accept-113-oct` 首跑 **3 PASS / 5 FAIL**：`miniprobe/minioct.oct` 载入失败
+（`failed to load Incompatible version or missing dependencies`）。诊断：那个夹具是**站点根**上
+09-22 的老件、`_emscripten_tls_init` **不存在**（实测 `tls_init=False`）⇒ 正是 B5 那条规则
+（非 `-pthread` 的 side module 载不进 shared-memory 主模块）。
+
+**为什么资产分档没覆盖它**：它**不在 `assets/manifest.json` 里** —— 套件直接从站点根
+`fetch('minioct.oct')`（`test/browser/accept-113-oct.mjs:95`）。⇒ 修法两条一起做：
+① 用车道头 + 影子重建 `minioct.oct`（`/src/websrc/minioct.cc`）落到 `threads/minioct.oct`；
+② 套件按档取（页面已暴露 `caps.lane.chosen`）：
+   `fetch(caps.lane.chosen === 'threads' ? 'threads/minioct.oct' : 'minioct.oct')`。
+
+### ★ 第九个坑（同一轮验收抓到的）：**全局默认资产实例不知道档**
+
+`accept-113-assets` 首跑 **12 PASS / 4 FAIL**：`convhulln`/`__delaunayn__`/`__glpk__`/`fftw` 载入失败 ——
+它们**在**我们分好档的 44 条里，但套件用的是 `window.OctaveAssets`（**全局默认实例**，A2 之前的别名）
+⇒ 它不认识选档、默认拉**基础档**清单 ⇒ 把基础档的 `.oct` 装进 FS ⇒ dlopen 失败。
+修法（2 行，惠及所有消费者）：`assets-loader.js` 的 `init(url)` 在**没显式给清单**时取
+`octaveLanePlan.manifest`（`octaveLanePlan` 由 `bridge/lane.js` 暴露）。
+
+**通用教训**：判断"哪些 side module 要分档"不能只看 manifest —— **任何会被 dlopen 的东西**
+（资产里的 `.oct`、套件夹具、诊断件）都算。
+
 ### 红与回退
 
 - 任一步 `atomics_scan` 有残留 ⇒ 该库没真重编（旗标没进某条编译路径）⇒ 修脚本，别绕。

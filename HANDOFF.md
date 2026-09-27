@@ -36,6 +36,11 @@
 ## 1. 下一步（按此顺序）
 
 1. **两档验收矩阵**（跑着）：8768 带头 = 线程档、8770 不带头 = 基础档，各 43 套。
+   **首跑已暴露两条红，都已诊断 + 修好、等复跑确认**（都在 `PLAN-threads.md` §6 里）：
+   · `accept-113-oct` 3/5：套件从**站点根**取的夹具 `minioct.oct` 是老的非 pthread 件
+     ⇒ 线程档载入失败（B5 规则）⇒ 已重建为 `threads/minioct.oct` + 套件按档取；
+   · `accept-113-assets` 12/4：套件用 **`window.OctaveAssets`（全局默认实例）**，它不认识选档、
+     默认拉基础档清单 ⇒ 已让 `init()` 在没显式给清单时取 **当前档**的清单（惠及所有消费者）。
    · 绿 ⇒ 走 §5 批次收尾：8768 → promote **8761（双档）** → 带头服务（`build/serve-coi.py`）→
      `check-boot` / 部署件 SHA 三层 / 同步仓库 `site/` / `make-dist` / 三处 parity `--strict` /
      六道闸门 → 提交 → 推 mirror。

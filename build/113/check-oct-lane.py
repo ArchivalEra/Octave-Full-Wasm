@@ -92,7 +92,7 @@ def main(argv):
     if not lane:
         print(__doc__.strip().split("用法：")[-1].strip(), file=sys.stderr)
         return 2
-    problems, notes = check(octs_in(lane), octs_in(base))
+    problems, notes = check(octs_in(lane), None if base is None else octs_in(base))
     for n in notes:
         print("   · %s" % n)
     for p in problems:
@@ -127,6 +127,8 @@ def selftest():
             ("**线程档为空** ⇒ 必须报（零值守卫）", lambda: bool(check([], [base_ok])[0])),
             ("**基础档为空**（给了但空）⇒ 必须报（反向断言没法做）",
              lambda: bool(check([lane_ok], [])[0])),
+            ("★ 命令行不给 --base 也不许崩（`octs_in(None)` 的坑，实测踩到）",
+             lambda: main([lane_ok]) in (0, 1)),
             ("★ 没给基础档 ⇒ 只记 note、不算问题（容器侧只能做正向）",
              lambda: check([lane_ok], None)[0] == [] and bool(check([lane_ok], None)[1])),
         ]
