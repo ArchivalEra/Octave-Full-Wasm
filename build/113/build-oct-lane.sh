@@ -45,7 +45,8 @@ echo "== ② --cc 批（websrc 那 6 个）→ $OUT_CORE"
 OUT="$OUT_CORE" PREFIX="$OCT_INSTALL" CC_SRCS="$CC_SRCS" bash /src/bin/build-oct.sh --cc
 
 echo "== ③ __ode15__（要车道版 sundials；build-ode15.sh 自己建 sundials 到 SUNDIALS_PREFIX）"
-SUNDIALS_PREFIX="$SUNDIALS_PREFIX" bash /src/bin/build-ode15.sh "$OUT_CORE" > /tmp/oct-lane-ode15.log 2>&1 \
+# ⚠️ build-ode15.sh 的用法是**无参数**：输出目录走 `OUT` 环境变量（实测踩过：传位置参数被忽略）
+OUT="$OUT_CORE" SUNDIALS_PREFIX="$SUNDIALS_PREFIX" bash /src/bin/build-ode15.sh > /tmp/oct-lane-ode15.log 2>&1 \
   || { echo "FATAL: __ode15__ 失败（见 /tmp/oct-lane-ode15.log）" >&2; tail -20 /tmp/oct-lane-ode15.log >&2; exit 1; }
 
 echo "== ④ Forge 包（含 control 的 slicot 调度模块）→ $OUT_PKG"

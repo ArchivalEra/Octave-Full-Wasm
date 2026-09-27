@@ -239,6 +239,19 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 6. **双档上线**（机制已就绪，见 `PLAN-arch.md` §2 B6 的 2026-09-27 节）：8768 先跑 `probe-lane`
    （带头选线程档 / 不带头落基础档 / 选错档硬失败）+ 两档 `PROBES=1` 全量 → 再 promote 8761。
 
+### ★ 已踩到的静默失效：**旗标注入了，但构建系统认为"无事可做"**（2026-09-27 实测）
+
+影子包装（`lane-shim.sh`）改的是**编译器**，不改任何 `Makefile` ⇒ autotools 的 `config.status`
+发现生成的 `Makefile` 与上次**逐字节相同**就不重写它 ⇒ `make` 看 mtime 判定目标文件都是新的
+⇒ **一个对象都不重编**，产物照旧是非 atomics 的。实测现场：`glpk`/`qhull`/`sndfile`/`suitesparse`
+（7/9 个 archive）重跑一遍仍然 **100% 缺 atomics**，而"看起来"构建是成功的（rc=0、符号自检也过）。
+
+**判据只能看产物**：`atomics_scan.py` 逐成员扫字节（这也是它存在的理由 —— 构建脚本的自检只验符号，
+验不出"对象是不是带 atomics 的"）。
+
+**修法**：车道用**独立的 WORK 目录**（`WORK=/src/libwork-threads`）。`unpack` 那种
+"目录在就不重新解包"的写法会把旧构建树带过来，独立 WORK 一次性解决，顺带不污染现役构建树。
+
 ### 红与回退
 
 - 任一步 `atomics_scan` 有残留 ⇒ 该库没真重编（旗标没进某条编译路径）⇒ 修脚本，别绕。
