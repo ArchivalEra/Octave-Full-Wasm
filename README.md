@@ -225,7 +225,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `AGENTS.md` (13435 bytes)
 - `CONTEXT.md` (10000 bytes)
 - `DEPLOY.md` (3563 bytes)
-- `HANDOFF.md` (16000 bytes)
+- `HANDOFF.md` (16233 bytes)
 - `HISTORY.md` (251413 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
