@@ -941,3 +941,24 @@ side module 自带 BLAS 副本是设计使然（主模块不导出 BLAS）。
 **⇒ 线程档的两条已知边界（都写进断言，改回去就会红）**：
 - worker 宿主：自动落基础档（`probe-lane` 格 5 + `accept-worker` 的 B6 那一条）；
 - 同页多实例：**支持**（13/0），前提是选档缺省取页面计划（否则错配）。
+
+### ★ 反例：**手抄桥文件到 8761 会让基线"半新半旧"**（2026-09-27，我自己踩的，已回退）
+
+为了在 8768 上试 worker 修法，我顺手把 `bridge/{lane.js,index.html}` 也 `cp` 进了
+`/mnt/hdd/octave-wasm-build/site`（**8761 那个站点**），而那个站点上**没有 `threads/`**：
+8761 正由 `serve-coi.py` 带头服务 ⇒ 页面按"COI + SAB"选**线程档** ⇒ 去取 `threads/octave.js`
+**404** ⇒ **验收底线当时是坏的**（实测：`curl -I` 头在、`threads/octave.js` 404、
+`lane.js` 200、页面里 0 处档引用回退后才成立）。
+
+回退（实测三步，全都不需要浏览器）：
+```bash
+cp <仓库>/site/index.html /mnt/hdd/octave-wasm-build/site/index.html   # 回到 8e93b8da（入库存档那份）
+rm -f /mnt/hdd/octave-wasm-build/site/lane.js                          # 摘掉多出来的选档文件
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8761/lane.js  # 期望 404
+grep -c 'threads/' /mnt/hdd/octave-wasm-build/site/index.html          # 期望 0
+```
+
+**规则（写进操作习惯）**：**8761 只由 `build/promote-webgl.sh` 改**。想在 8768 上试页面改动，
+就只 `cp` 到 `siteWebGL/`；手抄到 `site/` 等于把"页面认档 + 站点没有线程档"这种**半新半旧**状态
+装上基线 —— 它不会自己报错，只在浏览器里 404（而 `check-site-parity --strict` 事后能抓到：
+它的部署件清单里现在有 `lane.js` 与 `threads/*`，一处缺就是红）。

@@ -257,7 +257,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/NOTES-slicot.md` (19273 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
-- `build/113/NOTES-threads.md` (65529 bytes)
+- `build/113/NOTES-threads.md` (67036 bytes)
 - `build/113/NOTES-umfpack.md` (7445 bytes)
 - `build/113/NOTES-webgl.md` (59320 bytes)
 - `build/113/PLAN-arch.md` (57658 bytes)
