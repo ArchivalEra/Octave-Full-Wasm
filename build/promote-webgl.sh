@@ -74,9 +74,44 @@ done
 # ⚠️ 清单必须跟着"页面会 <script src> / new Worker() 的文件"走：漏一个就是部署后 404。
 #    octave-worker.js 是 C3/B5（2026-09-26）新增的 worker 宿主，`?worker=1` 会 `new Worker` 它。
 #    octave-core.js 是 A2（2026-09-26）抽出的**内核**：页面与 worker **共用同一份**，两边都 `src` 它。
-for f in index.html assets-loader.js octave-core.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-worker.js; do
+for f in index.html assets-loader.js octave-core.js lane.js queue.js p5canvas.js webaudio.js webaudiorec.js webfilepick.js webnet.js octave-worker.js; do
   run "cp '$REPO/bridge/$f' '$SITE/$f'"
 done
+
+say "2b) ★ 双档（B6）：线程档 → $SITE/threads/"
+# 为什么不把它并进第 2 步：它是**另一份产物**（同名文件、子目录区分，见 bridge/lane.js），
+# 而且**必须拿它自己的身份证核对**再落件 —— 线程档 verdict != ok 就**不许**上线（fail-closed）。
+# 产物不在 ⇒ 只部署基础档（明确跳过并打印；双档是"该有"，但站点只跑基础档也能活）。
+THREADS_OUT="${THREADS_OUT:-/src/websrc/m2fc-threads-out}"
+if sudo docker exec o113 test -s "$THREADS_OUT/octave.wasm" 2>/dev/null; then
+  # ⚠️ 身份证**取回宿主再读**：别在 `docker exec` 里套引号跑 python（本仓为此踩过引号地狱）。
+  tmpx="$(mktemp)"
+  sudo docker cp "o113:$THREADS_OUT/octave.build.json" "$tmpx" >/dev/null 2>&1 || true
+  tv=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('verdict'))" "$tmpx" 2>/dev/null || echo "?")
+  rm -f "$tmpx"
+  if [ "$tv" != "ok" ]; then
+    echo "FATAL: 线程档产物的身份证 verdict=$tv（**只有 ok 才可部署**）" >&2
+    echo "       先跑：bash build/113/relink.sh verify threads --out $THREADS_OUT" >&2
+    exit 3
+  fi
+  run "mkdir -p '$SITE/threads'"
+  for f in octave.js octave.wasm octave.data octave.build.json; do
+    run "sudo docker cp 'o113:$THREADS_OUT/$f' '$SITE/threads/$f'"
+  done
+  echo "   线程档已落件（verdict=ok）"
+  # 两份 octave.data 是否同 sha：同 ⇒ 可以只留一份（磁盘/交付包省 9.7MB），
+  # 不同 ⇒ 必须都留（lane.js 的 FILES.threads.data 指向 threads/octave.data）。
+  a=$(sudo docker exec o113 sha256sum "$SRC_OUT/octave.data" | cut -c1-16)
+  b=$(sudo docker exec o113 sha256sum "$THREADS_OUT/octave.data" | cut -c1-16)
+  if [ "$a" = "$b" ]; then
+    echo "   ℹ️ 两档 octave.data 同 sha（$a）⇒ 可以删掉 $SITE/threads/octave.data 省一份（lane.js 里已指根目录）"
+  else
+    echo "   ⚠️ 两档 octave.data **不同** sha（基础 $a / 线程 $b）⇒ 两份都要留，"
+    echo "      并确认 bridge/lane.js 的 FILES.threads.data 是 'threads/octave.data'"
+  fi
+else
+  echo "   （线程档产物不在 $THREADS_OUT ⇒ 本次只部署基础档；要双档先跑 relink.sh link threads）"
+fi
 
 say "3) 资产：**源在仓库**的那几个 .m 包重新打包 + 刷新清单摘要"
 # 为什么必须重打：这些包的源就在仓库里（站点上的是生成物）；不重打就等于部署了**旧代码**。

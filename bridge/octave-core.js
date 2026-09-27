@@ -97,7 +97,9 @@
       try {
         var f = (typeof global.fetch === 'function') ? global.fetch : null;
         if (!f) return;
-        f(baseOf() + 'octave.build.json').then(function (r) {
+        // ★ B6：身份证**按档读** —— 线程档跑的是另一份产物，拿基础档的身份证会自相矛盾
+        //   （`caps.artifact.threads` 会说 false 而实际在跑线程档；probe-lane 交叉核对会当场红）。
+        f(baseOf() + (lane.dir || '') + 'octave.build.json').then(function (r) {
           if (!r || !r.ok) return null;
           return r.json();
         }).then(function (m) {
