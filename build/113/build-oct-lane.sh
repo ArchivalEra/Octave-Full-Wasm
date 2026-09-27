@@ -71,11 +71,25 @@ OUTROOT="$OUT_PKG" PREFIX="$OCT_INSTALL" bash /src/bin/build-pkg-oct.sh all > /t
 
 echo "== ④b slicot 调度模块（唯一需要**静态链库**的那个 .oct）"
 # 为什么单列：`build-pkg-oct.sh` 明确**不建** slicot（见它的注释），调度模块是独立一步
-# （`build/113/NOTES-slicot.md` 有配方）。而它 `OCT_LIBS=` 静态链 slicot ⇒ **slicot 库也得是车道版**
-# （否则模块里混着非 atomics 对象；本轮判据①先抓到"整块缺失"，判据②会抓"对象不干净"）。
+# （`build/113/NOTES-slicot.md` 的 §5.8 是配方）。它靠 `OCT_LIBS=` **把整条链静态打进 .oct**。
+#
+# ★ 2026-09-27 实测事故（accept-forge2 的 `step` 崩 `TypeError: resolved is not a function`）：
+#   第一版只链了 `slicotlibrary.a` ⇒ 模块 2.97MB、`dgemm_/dlamch_/dggev_` 等 **226 个符号成了
+#   导入**（基础档同模块 8.1MB、这些符号**都在模块里**）：主模块**不导出**它们（`llvm-nm
+#   --defined-only --extern-only` 两档都没有）⇒ 第一次 BLAS 调用就崩。判据必须看**产物**：
+#   模块体积 + "这些符号是定义还是导入"（见本步末尾的第⑨条判据）。
 SLICOT_C_SRC="${SLICOT_C_SRC:-/src/libwork/f2c-probe}"     # 已由 f2c 翻译好的 .c（613 个）
 SLICOT_OBJ="${SLICOT_OBJ:-/src/libwork-threads/slicot-obj}"
 SLICOT_LIB="${SLICOT_LIB:-/src/libwork-threads/slicotlibrary.a}"
+SLICOT_NODUP="${SLICOT_NODUP:-/src/libwork-threads/slicotlibrary-nodup.a}"
+# ⚠️ BLAS/LAPACK 用**基础档的 PIC 版**（`/src/deps/lapack-pic/`），不用车道那套 `lapack-simd`：
+#   车道那套**不是 PIC** ⇒ side module 链接直接报
+#   `relocation R_WASM_MEMORY_ADDR_LEB cannot be used against symbol ...; recompile with -fPIC`
+#   （实测）。基础档的 slicot 模块用的也是这份 PIC 归档 ⇒ 两档的 slicot 路径**算得完全一样**
+#   （行为对齐，也省掉一次 PIC BLAS 重编）。side module 里带自己的 BLAS 副本是**设计使然**：
+#   主模块不导出 BLAS（两档都不导出），所以每个需要 BLAS 的 `.oct` 自带一份。
+LAPACK_PIC="${LAPACK_PIC:-/src/deps/lapack-pic/lib}"
+F2C_SHIM="${F2C_SHIM:-/src/bin/f2c-io-shim.c}"             # libf2c 的两个数据符号垫片（NOTES-slicot §5.8）
 CTRL_SRC="${CTRL_SRC:-/src/libwork/forge/control-4.1.3/src}"
 if [ -d "$SLICOT_C_SRC" ] && [ ! -s "$SLICOT_LIB" ]; then
   mkdir -p "$SLICOT_OBJ"
@@ -86,11 +100,34 @@ if [ -d "$SLICOT_C_SRC" ] && [ ! -s "$SLICOT_LIB" ]; then
   emar rcs "$SLICOT_LIB" "$SLICOT_OBJ"/*.o
   echo "   ✅ 车道 slicotlibrary.a（$(stat -c%s "$SLICOT_LIB") 字节）"
 fi
+# nodup：去掉与 liblapack 重复的三个成员（否则 `--allow-multiple-definition` 会静默吞掉重复定义）
 if [ -s "$SLICOT_LIB" ]; then
-  OUT="$OUT_CORE" OCT_INCS="-I$CTRL_SRC" OCT_LIBS="$SLICOT_LIB" \
+  cp -f "$SLICOT_LIB" "$SLICOT_NODUP"
+  emar d "$SLICOT_NODUP" dgegs.o dlatzm.o zlatzm.o 2>/dev/null || true
+  echo "   nodup 成员 $(ar t "$SLICOT_NODUP" | wc -l)（全量 $(ar t "$SLICOT_LIB" | wc -l)）"
+fi
+[ -s "$F2C_SHIM" ] || { echo "FATAL: 缺 $F2C_SHIM（宿主上：sudo docker cp build/113/f2c-io-shim.c o113:/src/bin/）" >&2; exit 2; }
+if [ -s "$SLICOT_NODUP" ]; then
+  OUT="$OUT_CORE" OCT_INCS="-I$CTRL_SRC" \
+    OCT_LIBS="$SLICOT_NODUP $LAPACK_PIC/liblapack.a $LAPACK_PIC/librefblas.a $LAPACK_PIC/libf2c-subset.a $F2C_SHIM" \
     CC_SRCS="__control_slicot_functions__:$CTRL_SRC/__control_slicot_functions__.cc" \
     bash /src/bin/build-oct.sh --cc || { echo "FATAL: slicot 调度模块构建失败" >&2; exit 1; }
   echo "   ✅ __control_slicot_functions__.oct"
+  # 判据⑨（产物侧）：BLAS/LAPACK 入口必须是**定义**在模块里，不是导入 —— 这正是上面那次事故的形状
+  OCT_SLICOT="$OUT_CORE/__control_slicot_functions__.oct"
+  NM="$(command -v llvm-nm || echo /emsdk/upstream/bin/llvm-nm)"
+  if [ -x "$NM" ]; then
+    ndef="$("$NM" --defined-only "$OCT_SLICOT" | grep -cE ' (dgemm_|dlamch_|lsame_|dggev_)$' || true)"
+    if [ "${ndef:-0}" -lt 3 ]; then
+      echo "FATAL: slicot 模块里只定义了 $ndef 个 BLAS/LAPACK 入口（应 ≥3）⇒ 静态库没链进去，" >&2
+      echo "       这些符号会变成导入，而主模块**不导出**它们 ⇒ 第一次调用就" >&2
+      echo "       \`TypeError: resolved is not a function\`（accept-forge2 的 step 实测崩过）" >&2
+      exit 1
+    fi
+    echo "   判据⑨：模块内定义 BLAS/LAPACK 入口 $ndef 个（非导入），体积 $(stat -c%s "$OCT_SLICOT") 字节 ✓"
+  else
+    echo "   ⚠️ 找不到 llvm-nm ⇒ 判据⑨**没做**（不是通过）"
+  fi
 fi
 
 echo "== ⑤ 判据①：文件名清单 vs 现役站点 manifest 的 kind:oct 条目"
