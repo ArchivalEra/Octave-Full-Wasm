@@ -43,43 +43,81 @@ STRICT=0
 
 # ── 自证（F1，2026-09-26）────────────────────────────────────────────────────
 # 判据：① 三处齐全且一致 ⇒ 通过；② **三处都缺 VERSION ⇒ 必须红**（零值守卫）；
-#       ③ 一处不同 ⇒ 必须红。用例用 SITE_A/B/C 指向临时夹具目录，不碰真实站点。
+#       ③ 一处不同 ⇒ 必须红；④ 车道 `.oct` 某一处不同 ⇒ 必须红；
+#       ⑤ **三处都没有车道 .oct** ⇒ 必须红（零值守卫：分档检查不许空转）。
+#       用例用 SITE_A/B/C 指向临时夹具目录，不碰真实站点。
 if [ "${1:-}" = "--selftest" ]; then
-  tmp="$(mktemp -d)"; fails=0
+  tmp="$(mktemp -d)"; fails=0; ncases=0
   mkfix() {
-    mkdir -p "$1/assets"
-    for f in octave.wasm octave.js octave.data index.html assets-loader.js octave.build.json VERSION; do
+    mkdir -p "$1/assets/oct-threads"
+    for f in octave.wasm octave.js octave.data index.html assets-loader.js octave.build.json \
+             VERSION lane.js octave-core.js octave-worker.js; do
       printf 'same-%s' "$f" > "$1/$f"
     done
+    mkdir -p "$1/threads"
+    for f in octave.wasm octave.js octave.data octave.build.json; do
+      printf 'same-thr-%s' "$f" > "$1/threads/$f"
+    done
     printf '[]' > "$1/assets/manifest.json"
+    printf '[]' > "$1/assets/manifest.threads.json"
+    printf 'lane-oct' > "$1/assets/oct-threads/a.oct"
+  }
+  probe() {  # $1 = 期望（ok|red），$2 = 用例名
+    ncases=$((ncases + 1))
+    got="ok"
+    SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1 || got="red"
+    if [ "$got" = "$1" ]; then echo "PASS | $2"
+    else echo "fail | $2（期望 $1 实得 $got）"; fails=$((fails + 1)); fi
   }
   mkfix "$tmp/a"; mkfix "$tmp/b"; mkfix "$tmp/c"
-  if SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1; then
-    echo "PASS | 三处齐全且一致 ⇒ 通过"
-  else
-    echo "fail | 三处齐全却报红"; fails=$((fails + 1))
-  fi
+  probe ok "三处齐全且一致 ⇒ 通过"
   rm -f "$tmp/a/VERSION" "$tmp/b/VERSION" "$tmp/c/VERSION"
-  if SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1; then
-    echo "fail | **三处都缺 VERSION 却报一致**（零值守卫失效）"; fails=$((fails + 1))
-  else
-    echo "PASS | ★ 三处都缺 VERSION ⇒ 必须红"
-  fi
+  probe red "★ 三处都缺 VERSION ⇒ 必须红"
   printf 'diff' > "$tmp/b/VERSION"
-  if SITE_A="$tmp/a" SITE_B="$tmp/b" SITE_C="$tmp/c" sh "$0" --strict >/dev/null 2>&1; then
-    echo "fail | 一处内容不同却报一致"; fails=$((fails + 1))
-  else
-    echo "PASS | 一处内容不同 ⇒ 红"
-  fi
+  probe red "一处内容不同 ⇒ 红"
+  rm -f "$tmp/a/VERSION" "$tmp/b/VERSION" "$tmp/c/VERSION"   # 复原（下面只动车道那一层）
+  printf 'lane-oct-OLD' > "$tmp/c/assets/oct-threads/a.oct"
+  probe red "★ 车道 .oct 有一处是旧件 ⇒ 必须红（B6：另一套编译的 44 个 side module）"
+  rm -f "$tmp/a/assets/oct-threads/a.oct" "$tmp/b/assets/oct-threads/a.oct" "$tmp/c/assets/oct-threads/a.oct"
+  probe red "★ 三处都没有车道 .oct ⇒ 必须红（零值守卫：分档检查不许空转）"
   rm -rf "$tmp"
   echo ""
-  echo "=== check-site-parity 自证：$((3 - fails)) PASS / $fails fail ==="
+  echo "=== check-site-parity 自证：$((ncases - fails)) PASS / $fails fail ==="
   exit $([ "$fails" = "0" ] && echo 0 || echo 1)
 fi
 
 
 # 部署件清单：三处必须逐字节相同的那批
 DEPLOY="octave.wasm octave.js octave.data octave.build.json index.html assets-loader.js VERSION assets/manifest.json"
+# ★ B6 双档：线程档与**选档胶水**也是部署件（同名文件、子目录区分；lane.js 决定选哪一档）
+#   —— 不列进来就会"8761 还在跑上一版选档逻辑/上一版线程档"而闸门全绿。
+#   `octave-core.js`/`octave-worker.js` 是内核与 worker 宿主（index.html 与 worker 都 src 它），
+#   它们**必须**与站点同时更新（实测：promote 前 A/C 的这两份是"选档前"的老件）。
+DEPLOY="$DEPLOY lane.js octave-core.js octave-worker.js"
+DEPLOY="$DEPLOY threads/octave.wasm threads/octave.js threads/octave.data threads/octave.build.json"
+DEPLOY="$DEPLOY assets/manifest.threads.json"
+
+# 车道 `.oct` 分档（44 个 `-pthread` 的 side module）：不进上面那张清单（它是**集合**不是单件），
+# 单独用 (相对路径, sha256) 列表比对。判据可证伪：任一处的旧件/缺件都会让列表不同。
+lane_list() {
+  python3 - "$1" <<'PY'
+import hashlib, os, sys
+site = sys.argv[1]
+for sub in ("assets/oct-threads", "assets/octdir-threads"):
+    root = os.path.join(site, sub)
+    if os.path.isdir(root):
+        for r, _d, fs in os.walk(root):
+            for f in sorted(fs):
+                if not f.endswith(".oct"):
+                    continue
+                p = os.path.join(r, f)
+                h = hashlib.sha256()
+                with open(p, "rb") as fh:
+                    for c in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(c)
+                print("%s %s" % (os.path.relpath(p, site), h.hexdigest()))
+PY
+}
 
 diffcount=0
 say() { printf '%s\n' "$*"; }
@@ -142,6 +180,26 @@ for n in $referenced; do
   fi
 done
 
+say "【车道 .oct 分档（44 个 pthread 版 side module）】"
+_lza="$(mktemp)"; _lzb="$(mktemp)"; _lzc="$(mktemp)"
+lane_list "$A" >"$_lza"; lane_list "$B" >"$_lzb"; lane_list "$C" >"$_lzc"
+na=$(grep -c . "$_lza" || true); nb=$(grep -c . "$_lzb" || true); nc=$(grep -c . "$_lzc" || true)
+if [ "${na:-0}" = "0" ] && [ "${nb:-0}" = "0" ] && [ "${nc:-0}" = "0" ]; then
+  # 零值守卫：三处都没有 ⇒ 不许报"一致"（分档检查空转 —— 正是 F1 要消灭的形状）
+  say "  A/8761=0  B/8768=0  C/仓库=0  ← **三处都没有车道 .oct**，不算一致（闸门空转）"
+  diffcount=$((diffcount + 1))
+else
+  if cmp -s "$_lza" "$_lzb" && cmp -s "$_lzb" "$_lzc"; then
+    printf '  %s 个文件（oct-threads+octdir-threads）  %s  三处逐字节一致\n' "$nb" "$(sha256sum "$_lzb" | cut -c1-16)"
+  else
+    printf '  A=%s  B=%s  C=%s 个文件 ← **不一致**，差异前 5 行：\n' "$na" "$nb" "$nc"
+    diff "$_lza" "$_lzb" 2>/dev/null | head -5 | sed 's/^/     A|B /'
+    diff "$_lzb" "$_lzc" 2>/dev/null | head -5 | sed 's/^/     B|C /'
+    diffcount=$((diffcount + 1))
+  fi
+fi
+rm -f "$_lza" "$_lzb" "$_lzc"
+echo ""
 say "【未引用的遗留资产（**不算差异**，只是报出来）】"
 for d in "$A" "$B" "$C"; do
   [ -d "$d/assets/m" ] || continue

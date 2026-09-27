@@ -35,10 +35,29 @@ import sys
 
 MARK = b"_emscripten_tls_init"
 
+# ── 判据②：`.oct` 不许引用**两档主模块都不提供**的符号（2026-09-27 实测事故）────────────
+# 现场：`accept-dldfcn` 的 `audiowrite` 崩在 `TypeError: resolved is not a function`（基础档
+# 同套件 71/0 绿）。三段实测锁定机制（容器里可复跑，源见 build-oct-lane.sh 第⑧条）：
+#   · `em++ -O2 -c`（带**动态** static 初始化）⇒ 目标文件里 `__cxa_guard` 出现 **0** 次
+#     —— emcc 默认就是 `-fno-threadsafe-statics`（所以基础档 `.oct` 不引用它）；
+#   · 加 `-pthread` ⇒ **3** 次（clang 改回线程安全静态）；
+#   · 再加 `-fno-threadsafe-statics` ⇒ 回到 **0** 次。
+#   而两档**主模块都不定义**这两个符号（`llvm-nm --defined-only --extern-only` 在基础/线程两份
+#   `octave.wasm` 里都没有）⇒ 动态加载器把它解析成 undefined ⇒ 第一次动态静态初始化就崩。
+# ⇒ 车道 `.oct` 配方必须带 `-fno-threadsafe-statics`；本条是它的**产物侧**判据（配方是"应该"，
+#   产物才是"是"）。判据对**两档都查**：基础档若哪天出现，同样会在基础档主模块上崩。
+UNPROVIDED = (b"__cxa_guard_acquire", b"__cxa_guard_release")
+
 
 def has_tls_init(path):
     with open(path, "rb") as fh:
         return MARK in fh.read()
+
+
+def unprovided_refs(path):
+    with open(path, "rb") as fh:
+        b = fh.read()
+    return [m.decode() for m in UNPROVIDED if m in b]
 
 
 def octs_in(dirs):
@@ -73,8 +92,22 @@ def check(lane, base):
         # 反向断言：基础档**不该**有入口。真出现了 ⇒ 说明这个信号与"哪一档"无关 ⇒ 判据无判别力
         problems.append("基础档里出现了 TLS 入口（判据失去判别力，先查清楚）：%s"
                         % ", ".join(os.path.basename(x) for x in bad_base[:3]))
+    # ② 两档都不许引用主模块提供不了的符号（`__cxa_guard_*`）
+    n_guard = 0
+    for p in lane + (base or []):
+        ms = unprovided_refs(p)
+        if ms:
+            problems.append("引用了**两档主模块都不提供**的 %s ⇒ 第一次动态静态初始化会"
+                            "`TypeError: resolved is not a function`：%s"
+                            % ("/".join(ms), os.path.basename(p)))
+        else:
+            n_guard += 1
+    notes.append("两档 %d 个 `.oct` 都没引用 %s（判据②）"
+                 % (n_guard, "/".join(m.decode() for m in UNPROVIDED)))
     notes.append("线程档 %d/%d 有 TLS 入口；基础档 %d 个**都没有**（反向断言成立）"
-                 % (n_ok, len(lane), len(base) if base is not None else 0))
+                 % (n_ok, len(lane), len(base) if base is not None else 0)
+                 if (base and not bad_base) else
+                 "线程档 %d/%d 有 TLS 入口（基础档那侧见上面的问题行）" % (n_ok, len(lane)))
     return problems, notes
 
 
@@ -118,12 +151,23 @@ def selftest():
         lane_bad = _mk(d, "lane_bad.oct", b"...nothing...")
         base_ok = _mk(d, "base_ok.oct", b"...nothing...")
         base_bad = _mk(d, "base_bad.oct", b"...__emscripten_tls_init...")
+        lane_guard = _mk(d, "lane_guard.oct",
+                         b"...__emscripten_tls_init...__cxa_guard_acquire...")
+        base_guard = _mk(d, "base_guard.oct", b"...__cxa_guard_release...")
         cases = [
             ("线程档有入口 + 基础档没有 ⇒ 全过",
              lambda: check([lane_ok], [base_ok])[0] == []),
             ("★ 线程档**缺**入口 ⇒ 必须报", lambda: bool(check([lane_bad], [base_ok])[0])),
             ("★ 基础档**有**入口 ⇒ 必须报（反向断言：判据可能无判别力）",
              lambda: bool(check([lane_ok], [base_bad])[0])),
+            # ★ 判据②：本轮真事故（audiowrite 的 `resolved is not a function`）的产物侧形状
+            ("★ 引用 `__cxa_guard_acquire` ⇒ 必须报（两档主模块都不提供它）",
+             lambda: bool(check([lane_guard], [base_ok])[0])),
+            ("★ 基础档引用它也一样报（同一条判据两档共用）",
+             lambda: bool(check([lane_ok], [base_guard])[0])),
+            ("★ 判据② 干净时不报（避免「恒报 = 没人看」）",
+             lambda: check([lane_ok], [base_ok])[0] == []
+             and any("判据②" in n for n in check([lane_ok], [base_ok])[1])),
             ("**线程档为空** ⇒ 必须报（零值守卫）", lambda: bool(check([], [base_ok])[0])),
             ("**基础档为空**（给了但空）⇒ 必须报（反向断言没法做）",
              lambda: bool(check([lane_ok], [])[0])),

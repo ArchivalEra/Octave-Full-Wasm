@@ -12,8 +12,10 @@
 #   ② 每个 `.oct` 都带 `atomics`（它是 wasm side module，直接扫字节）；
 #   ③ 产物落在**车道目录**（`/src/libwork/octs-threads*`），现役那几份一字不动。
 #
-# 用法（容器内，**先**把车道影子放进 PATH —— `.oct` 也必须是 atomics 的）：
-#   SHIM=$(bash /src/bin/lane-shim.sh -pthread) && export PATH="$SHIM:$PATH"
+# 用法（容器内，**先**把车道影子放进 PATH —— `.oct` 必须是 atomics 的，且**必须**带上
+# `-fno-threadsafe-statics`，理由见下面第 ⑧ 条判据）：
+#   SHIM=$(PATH=/src/bin:$PATH bash /src/bin/lane-shim.sh "-pthread -fno-threadsafe-statics") \
+#     && export PATH="$SHIM:$PATH"
 #   bash /src/bin/build-oct-lane.sh
 set -euo pipefail
 
@@ -32,7 +34,21 @@ CC_SRCS="webio:/src/websrc/webio.cc __init_web__:/src/websrc/web_graphics_toolki
 
 command -v emcc >/dev/null || { echo "FATAL: PATH 里没有 emcc" >&2; exit 2; }
 head -3 "$(command -v emcc)" | grep -q "车道影子" || {
-  echo "FATAL: emcc 不是车道影子（先 SHIM=\$(bash lane-shim.sh -pthread); export PATH=\"\$SHIM:\$PATH\"）" >&2; exit 2; }
+  echo "FATAL: emcc 不是车道影子（先 SHIM=\$(bash lane-shim.sh -pthread -fno-threadsafe-statics); export PATH=\"\$SHIM:\$PATH\"）" >&2; exit 2; }
+# ★ 判据 ⑧（2026-09-27，实测事故）：影子的旗标里**必须**有 `-fno-threadsafe-statics`。
+# 为什么（三行实测，容器里可复跑）：
+#   · `em++ -O2 -c g2.cpp`（有动态 static 初始化）⇒ `__cxa_guard` 出现 **0** 次（emcc 默认就关）；
+#   · 加 `-pthread` ⇒ **3** 次（clang 改回线程安全静态）；
+#   · 再加 `-fno-threadsafe-statics` ⇒ **0** 次。
+#   而两档的**主模块都不提供** `__cxa_guard_acquire/release`（实测 `llvm-nm --defined-only
+#   --extern-only` 在基础/线程两份 wasm 里都没有）⇒ 线程档里那个引用了守卫的 `.oct` 在第一次
+#   动态静态初始化时崩：`TypeError: resolved is not a function`（accept-dldfcn 的 audiowrite，
+#   实测；基础档同套件 71/0 绿）。⇒ 车道 `.oct` 与基础档保持**同一套静态初始化语义**（都关）。
+head -3 "$(command -v emcc)" | grep -q -- "-fno-threadsafe-statics" || {
+  echo "FATAL: 车道影子缺 -fno-threadsafe-statics ⇒ 编出来的 .oct 会引用两档主模块都不提供的" >&2
+  echo "       __cxa_guard_acquire/release（第一次动态静态初始化就 TypeError: resolved is not a function）" >&2
+  echo "       重做影子：SHIM=\$(PATH=/src/bin:\$PATH bash /src/bin/lane-shim.sh \"-pthread -fno-threadsafe-statics\")" >&2
+  exit 2; }
 [ -d "$OCT_INSTALL/include" ] || { echo "FATAL: 缺线程档安装头 $OCT_INSTALL（先配线程档并 make install）" >&2; exit 2; }
 
 mkdir -p "$OUT_CORE" "$OUT_PKG"

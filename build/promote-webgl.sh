@@ -23,6 +23,12 @@ BAK=/mnt/hdd/octave-wasm-build/site-prewebgl-bak
 SRC_OUT=${SRC_OUT:-/src/websrc/out}
 GL_OUT=${GL_OUT:-/src/websrc/out-webgl}
 NONGL_BAK=/src/websrc/out-nongl-bak
+# 车道 `.oct` 编目：**容器里**是源（`build-oct-lane.sh` 的产物），**宿主**两份是给
+# `stage-lane-assets.sh` 读的（它按清单把件铺到站点，跑在宿主上）⇒ 第 3b 步先同步再分档。
+LANE_OCT_OUT="${LANE_OCT_OUT:-/src/libwork/octs-threads}"
+LANE_OCT_PKG="${LANE_OCT_PKG:-/src/libwork/octs-threads-pkg}"
+LANE_OCT_HOST="${LANE_OCT_HOST:-/mnt/hdd/octave-wasm-build/octs-threads}"
+LANE_OCT_PKG_HOST="${LANE_OCT_PKG_HOST:-/mnt/hdd/octave-wasm-build/octs-threads-pkg}"
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
 say() { echo "== $*"; }
@@ -62,6 +68,39 @@ else
   run "sudo docker exec o113 cp -a '$GL_OUT'/. '$SRC_OUT'/"
 fi
 
+say "1b) 目标产物 vs 现役：**比现役旧的产物不许推上去**（2026-09-27 差点踩到）"
+# 为什么加这道（实测）：本脚本的默认 `SRC_OUT=/src/websrc/out`、`GL_OUT=/src/websrc/out-webgl`
+# 停在上一次带 GL 的批次（9-23，wasm 36.8MB 的**另一条车道**）；而现役基础档是 9-25 链的
+# M2 SIMD 产物（`/src/websrc/m2fc-simd-out` = 改名前的 `product`）。**裸跑 promote 会把 8761
+# 静默换成 9-23 那份**，而脚本内所有自检（gl4es / 字体 / 桥资产 / 开机）**照样全绿**。
+# 判据：产物要变（sha 不同）时，容器里那份的构建时间必须**不早于**站点上现役那份的落件时间；
+# 不满足就停（要硬推就显式 `FORCE_OLD_ARTIFACT=1`）。
+DEP_WASM_SHA="$(sha256sum "$SITE/octave.wasm" 2>/dev/null | cut -d' ' -f1)"
+SRC_WASM_SHA="$(sudo docker exec o113 sha256sum "$SRC_OUT/octave.wasm" | cut -d' ' -f1)"
+LEDGER_SHA="$(python3 -c "
+import json
+d = json.load(open('$REPO/build/FACTS.json', encoding='utf-8'))
+f = d.get('facts', d)
+v = f.get('wasm_sha')
+print(v.get('value') if isinstance(v, dict) else (v or ''))" 2>/dev/null || echo '')"
+echo "   目标 $SRC_OUT/octave.wasm = $(printf "%s" "$SRC_WASM_SHA" | cut -c1-16)"
+echo "   现役 $SITE/octave.wasm     = $(printf "%s" "$DEP_WASM_SHA" | cut -c1-16)"
+echo "   台账 build/FACTS.json      = $(printf "%s" "$LEDGER_SHA" | cut -c1-16)（部署件变了就**必须**重渲染台账）"
+if [ "$SRC_WASM_SHA" != "$DEP_WASM_SHA" ]; then
+  echo "   ⚠️ 产物**会变**（这是换产物，不是纯资产/页面批）"
+  if [ -n "$LEDGER_SHA" ] && [ "$LEDGER_SHA" != "$SRC_WASM_SHA" ]; then
+    echo "   ⚠️ 目标 sha 与台账那条不一致 ⇒ 上线后跑 python3 build/facts.py --render + 六道闸门"
+  fi
+  src_t=$(sudo docker exec o113 stat -c %Y "$SRC_OUT/octave.wasm" 2>/dev/null || echo 0)
+  dep_t=$(stat -c %Y "$SITE/octave.wasm" 2>/dev/null || echo 0)
+  if [ "${src_t:-0}" -lt "${dep_t:-0}" ] && [ "${FORCE_OLD_ARTIFACT:-0}" != "1" ]; then
+    echo "FATAL: 目标产物（$(date -d "@${src_t:-0}" '+%m-%d %H:%M')）比现役（$(date -d "@${dep_t:-0}" '+%m-%d %H:%M')）**旧** ⇒ 这是在把旧产物推上去" >&2
+    echo "       本批次要部署哪条车道就把两处都指过去，例：SRC_OUT=/src/websrc/m2fc-simd-out GL_OUT=\$SRC_OUT sh build/promote-webgl.sh" >&2
+    echo "       （M2 车道必须 GL_OUT=SRC_OUT；确有理由硬推时用 FORCE_OLD_ARTIFACT=1）" >&2
+    exit 3
+  fi
+fi
+
 say "2) 三大件 + 桥文件 → $SITE"
 for f in octave.js octave.wasm octave.data octave.build.json; do
   # ★ A1/A2：`octave.build.json` 是**产物身份证**（页面开机读它填 Capabilities，见
@@ -83,12 +122,17 @@ say "2b) ★ 双档（B6）：线程档 → $SITE/threads/"
 # 而且**必须拿它自己的身份证核对**再落件 —— 线程档 verdict != ok 就**不许**上线（fail-closed）。
 # 产物不在 ⇒ 只部署基础档（明确跳过并打印；双档是"该有"，但站点只跑基础档也能活）。
 THREADS_OUT="${THREADS_OUT:-/src/websrc/m2fc-threads-out}"
+# LANE_ON：本批次到底部不部署线程档（第 2b 与第 3b 步共用这一条判据）。
+# ⚠️ 不许用"站点上有没有 threads/ 目录"当判据 —— 那正是**上一次遗留**的形状（dry-run 下也会
+#    走错分支）。判据只能是"容器里有没有通过身份证核对的线程档产物"。
+LANE_ON=0
 if sudo docker exec o113 test -s "$THREADS_OUT/octave.wasm" 2>/dev/null; then
+  LANE_ON=1
   # ⚠️ 身份证**取回宿主再读**：别在 `docker exec` 里套引号跑 python（本仓为此踩过引号地狱）。
   tmpx="$(mktemp)"
   sudo docker cp "o113:$THREADS_OUT/octave.build.json" "$tmpx" >/dev/null 2>&1 || true
   tv=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('verdict'))" "$tmpx" 2>/dev/null || echo "?")
-  rm -f "$tmpx"
+  sudo rm -f "$tmpx"   # docker cp 落的件属 root ⇒ 普通 rm 会 EPERM（实测刷屏）
   if [ "$tv" != "ok" ]; then
     echo "FATAL: 线程档产物的身份证 verdict=$tv（**只有 ok 才可部署**）" >&2
     echo "       先跑：bash build/113/relink.sh verify threads --out $THREADS_OUT" >&2
@@ -99,20 +143,51 @@ if sudo docker exec o113 test -s "$THREADS_OUT/octave.wasm" 2>/dev/null; then
     run "sudo docker cp 'o113:$THREADS_OUT/$f' '$SITE/threads/$f'"
   done
   echo "   线程档已落件（verdict=ok）"
-  # 两份 octave.data 是否同 sha：同 ⇒ 可以只留一份（磁盘/交付包省 9.7MB），
-  # 不同 ⇒ 必须都留（lane.js 的 FILES.threads.data 指向 threads/octave.data）。
+  # 两份 octave.data 与 `lane.js` 的声明必须**自洽**（判据从 "lane.js 说什么" 反过来查，
+  # 而不是假设它指向根目录 —— 旧版本写死了那个假设，2026-09-27 lane.js 改成指
+  # `threads/octave.data` 之后它就成了"永远 FATAL"的假判据）。
+  # ⚠️ 实测事实：两份的 sha **不同**（基础 9,712,174 B / 线程 9,712,190 B），所以必须两份都在。
   a=$(sudo docker exec o113 sha256sum "$SRC_OUT/octave.data" | cut -c1-16)
   b=$(sudo docker exec o113 sha256sum "$THREADS_OUT/octave.data" | cut -c1-16)
-  if [ "$a" = "$b" ]; then
-    echo "   ℹ️ 两档 octave.data 同 sha（$a）⇒ 可以删掉 $SITE/threads/octave.data 省一份（lane.js 里已指根目录）"
-  else
-    # ★ fail-closed（复核时补的洞）：lane.js 的 FILES.threads.data **写死**指向根目录那一份
-    #   ⇒ 两档 data 不同时必须先改 lane.js，否则线程档会**静默取到基础档的数据文件**（最难查的那种）。
-    echo "FATAL: 两档 octave.data 的 sha **不同**（基础 $a / 线程 $b）⇒ 不能就这么上线：" >&2
-    echo "       线程档会按 lane.js 的 FILES.threads.data 去取根目录那份 ⇒ **静默取错内容**。" >&2
-    echo "       修法：把 bridge/lane.js 的 threads.data 改成 'threads/octave.data'，重跑本次 promote。" >&2
+  # 从 lane.js 的 `threads: { … data: '…' … }` 里取线程档的 data 路径（**按块取**，不用
+  # `head -1`：那张表里 base 那行的 data 也叫 `data:`，顺序一换就会取错 —— 判据不许依赖行序）。
+  lane_data=$(python3 - "$REPO/bridge/lane.js" <<'PY'
+import re, sys
+s = open(sys.argv[1], encoding='utf-8').read()
+m = re.search(r"threads:\s*\{[^}]*?data:\s*'([^']+)'", s, re.S)
+print(m.group(1) if m else '')
+PY
+)
+  if [ -z "$lane_data" ]; then
+    echo "FATAL: 从 bridge/lane.js 里取不到线程档的 data 路径（零值守卫：解析失败不许当通过）" >&2
     exit 3
   fi
+  case "$lane_data" in
+    threads/*)
+      # 查**源**（容器里那份），不查站点那份：站点那份是同一步里的 `run` 拷过去的，
+      # dry-run 下不会真的落件 —— 判据要在两种模式下都可复跑。
+      if ! sudo docker exec o113 test -s "$THREADS_OUT/octave.data"; then
+        echo "FATAL: lane.js 声明线程档的 data 是 '$lane_data'，但站点上没有这个文件" >&2
+        echo "       （两份 data sha 不同：基础 $a / 线程 $b ⇒ 不能共用根目录那份）" >&2
+        exit 3
+      fi
+      if [ "$a" = "$b" ]; then
+        echo "   ℹ️ 两档 octave.data 同 sha（$a）；lane.js 仍各自取一份（多花 9.7MB，但不错）"
+      else
+        echo "   两档 octave.data 不同 sha（基础 $a / 线程 $b）⇒ 各自一份，lane.js 指 '$lane_data' ✓"
+      fi
+      ;;
+    *)
+      # lane.js 指根目录那份 ⇒ 只有两档同 sha 才允许（否则线程档**静默取错内容**）
+      if [ "$a" != "$b" ]; then
+        echo "FATAL: 两档 octave.data 的 sha **不同**（基础 $a / 线程 $b），而 lane.js 的线程档 data" >&2
+        echo "       指的是 '$lane_data'（根目录那份）⇒ 线程档会**静默取到基础档的数据文件**。" >&2
+        echo "       修法：把 bridge/lane.js 的 threads.data 改成 'threads/octave.data'，重跑本次 promote。" >&2
+        exit 3
+      fi
+      echo "   两档 octave.data 同 sha（$a）⇒ lane.js 共用根目录那份 ✓"
+      ;;
+  esac
 else
   echo "   （线程档产物不在 $THREADS_OUT ⇒ 本次只部署基础档；要双档先跑 relink.sh link threads）"
   # ★ 复核时补的洞：产物缺席时**清掉站点上遗留的 threads/** —— 否则"上一次部署的线程档"
@@ -147,6 +222,40 @@ print(m.get('mount') or '/usr/src/octave/m/$name')
 done
 run "python3 '$REPO/build/assets.py' sync-js '$SITE'$NAMES"
 
+say "3b) ★ 双档（B6）：.oct 分档 + 线程档夹具 → $SITE/assets/{oct-threads,octdir-threads}"
+# 为什么必须单独一步：线程档的 `.oct`（44 个 `-pthread` side module）**文件名与基础档逐字相同**，
+# 只差目录（`oct-threads/`、`octdir-threads/`），而加载器按 `manifest.threads.json` 的 sha
+# **fail-closed** 校验 ⇒ 漏这一步（或落成旧一套）的表现是"页面能开、线程档 .oct 功能全无"
+#（实测：8768 首跑 accept-archive 0/20、accept-dldfcn 11/60 —— 那一片红只有一个真因）。
+# ⚠️ 顺序：必须在本脚本第 3 步（重打 .m 资产 + `sync-js` **刷新 manifest.json 摘要**）**之后** ——
+#    线程档清单是从基础清单生成的，先做就会带着旧的 assets/m sha 上线。
+if [ "$LANE_ON" = "1" ]; then
+  # ① 先把容器里的车道编目**同步到宿主**（否则用的是上一次 docker cp 的旧件 —— 本批刚在
+  #    "清单指旧 sha"上栽过一次，判据必须落在**字节**上）。
+  run "sudo docker cp 'o113:$LANE_OCT_OUT/.' '$LANE_OCT_HOST/'"
+  run "sudo docker cp 'o113:$LANE_OCT_PKG/.' '$LANE_OCT_PKG_HOST/'"
+  run "sudo chown -R \$(id -u):\$(id -g) '$LANE_OCT_HOST' '$LANE_OCT_PKG_HOST'"
+  # ② 分档落地 + 生成 manifest.threads.json：四步判据全 fail-closed（文件名集合逐字、
+  #    每个 .oct 有 TLS 入口、基础档反向没有、两档清单只差前缀 **且 sha 与磁盘一致**）。
+  run "LANE_CORE='$LANE_OCT_HOST' LANE_PKG='$LANE_OCT_PKG_HOST' bash '$REPO/build/113/stage-lane-assets.sh' '$SITE'"
+  # ③ 两个夹具（pthread 版 side module）：验收套件**按档取**它们
+  #    （accept-113-oct 取 threads/minioct.oct、accept-full 取 threads/dldprobe.oct）
+  #    ⇒ 8761 双档跑全量回归时缺它们就是红。
+  for f in minioct.oct dldprobe.oct; do
+    run "sudo docker cp 'o113:$LANE_OCT_OUT/$f' '$SITE/threads/$f'"
+  done
+  echo "   车道 .oct 分档 + 夹具已落件（判据见 stage-lane-assets.sh）"
+else
+  # ★ 与第 2b 步同理：本次不部署线程档时**清掉**遗留分档 —— 否则"上一次的线程 .oct"留在
+  #   站点上，三处 parity 与人工核对都会对不上。
+  for p in "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads" "$SITE/assets/manifest.threads.json"; do
+    if [ -e "$p" ]; then
+      echo "   ⚠️ 本次不部署线程档 ⇒ 清掉遗留 $p"
+      run "rm -rf '$p'"
+    fi
+  done
+fi
+
 say "4) VERSION"
 run "echo octave-11.3.0 > '$SITE/VERSION'"
 run "sudo chown -R \$(id -u):\$(id -g) '$SITE'"
@@ -166,6 +275,36 @@ if [ "$DRY" = "0" ]; then
   #   octave-worker.js 都依赖它，缺了就是 404 + 整页起不来。与 p5canvas.js 同类，必须点名查。
   [ -f "$SITE/octave-core.js" ] || { echo "FATAL: 缺 octave-core.js（index.html/octave-worker.js 都会 404）" >&2; exit 3; }
   echo "   桥资产 / webgraphics 资产 / p5canvas.js / octave-core.js 都在"
+  # ★ B6 双档：线程档的 `.oct` 分档必须**真的**在站点上。判据不写死数字（会腐烂），
+  #   而是从基础清单**反查应有条数**（oct 条数 + octdir 各包的 files 数）—— 条数对不上、
+  #   清单缺、夹具缺、或 `manifest.threads.json` 自检不过，一律 fail-closed 不上线。
+  if [ "$LANE_ON" = "1" ]; then
+    want=$(python3 - "$SITE/assets/manifest.json" <<'PY'
+import json, sys
+a = json.load(open(sys.argv[1], encoding='utf-8'))['assets']
+n = sum(1 for x in a if x.get('kind') == 'oct')
+n += sum(len(x.get('files') or []) for x in a if x.get('kind') == 'octdir')
+print(n)
+PY
+)
+    got=$(find "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads" -name '*.oct' 2>/dev/null | wc -l)
+    if [ "$got" != "$want" ]; then
+      echo "FATAL: 站点上的车道 .oct 有 $got 个，基础清单要求 $want 个（分档没落全）" >&2
+      exit 3
+    fi
+    [ -s "$SITE/assets/manifest.threads.json" ] || { echo "FATAL: 缺 assets/manifest.threads.json" >&2; exit 3; }
+    for f in minioct.oct dldprobe.oct; do
+      if [ ! -s "$SITE/threads/$f" ]; then
+        echo "FATAL: 缺线程档夹具 threads/$f（验收套件按档取它，缺了 8761 全量会红）" >&2
+        exit 3
+      fi
+    done
+    python3 "$REPO/build/113/make-lane-manifest.py" "$SITE/assets" --check >/dev/null || {
+      echo "FATAL: 线程档清单 --check 不过（再跑一次看明细：build/113/make-lane-manifest.py $SITE/assets --check）" >&2
+      exit 3
+    }
+    echo "   车道 .oct $got 个（= 基础清单的 $want 条）+ 夹具 + manifest.threads.json（--check 过）✓"
+  fi
   grep -qa 'gl4es_gl' "$SITE/octave.wasm" || { echo "FATAL: 站点 wasm 里没有 gl4es（不是带 GL 的那份）" >&2; exit 3; }
   echo "   站点 wasm 带 gl4es ✓"
   # FreeType（批次 D）：`EXPECT_FREETYPE=1` 时要求产物里有字体预载记录。
