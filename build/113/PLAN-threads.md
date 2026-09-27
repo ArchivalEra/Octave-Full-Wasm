@@ -253,6 +253,14 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 **通用结论**：车道的构建**不许复用任何"已有"状态** —— 源码树、构建目录、输出 prefix 三者都要是车道专属的，
 且每建完一批就用 `atomics_scan` 复核一遍。
 
+### ★ 第六个坑：**含空格的多词旗标被当成一个参数**（同一天实测）
+
+车道 SIMD BLAS 第一次跑：`SIMD_FLAG="-msimd128 -pthread"` —— 而脚本把它当 **一个** 参数传下去
+（`sh -c '...' _ {} "$SIMD_FLAG"` 里是 `"$1"`）⇒ `emf77` 收到单个含空格的 token ⇒ **149 个 BLAS 文件
+全部被拒编**（失败清单就是证据）。修法：**别在单值口子里塞多词旗标** —— `SIMD_FLAG` 保持 `-msimd128`，
+`-pthread` 交给影子（PATH 包装）注入。一般规律：**"单值变量"只放单值；多词旗标走影子或专门的
+数组口子**。
+
 ### ★ 第五个坑：`DEPS=/usr/local` 也是写死的（同一天实测）
 
 `link-web.sh:36` 的 `DEPS=/usr/local`（早期四件 libf2c/refblas/lapack/pcre2-8 的 prefix）**写死**，
