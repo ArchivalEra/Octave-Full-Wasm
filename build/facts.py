@@ -18,6 +18,8 @@
 #
 # 用法：
 #   python3 build/facts.py                       # 量一遍并写 build/FACTS.json
+#   python3 build/facts.py                        # **重测并重写** build/FACTS.json（掉条会拒绝）
+#   python3 build/facts.py --allow-drop           # 允许本次掉条（掉掉的键会打出来；记进 HISTORY）
 #   python3 build/facts.py --render              # 把台账渲染成 markdown 机器块（打到 stdout）
 #   python3 build/facts.py --render-doc [文件]   # 把机器块写进 HANDOFF.md（默认）
 #   python3 build/facts.py --check               # 文档里的块是否与台账一致（陈旧 ⇒ exit 1）
@@ -111,6 +113,11 @@ def check_doc(path_rel, ledger):
     return 0
 
 
+def dropped_keys(old_facts, new_facts):
+    """本次重测会掉掉哪些键（纯函数：自证要用）。"""
+    return sorted(set(old_facts or {}) - set(new_facts or {}))
+
+
 def main(argv):
     if argv and argv[0] == "--render":
         sys.stdout.write(render_block(load_ledger()) + "\n")
@@ -154,6 +161,11 @@ CASES = [
      lambda: _block_of(_FULL) == _block_of(_FULL)),
     ("★ 台账少一条 ⇒ 块跟着变（块不是常量）",
      lambda: _block_of(_FULL) != _block_of({"facts": {"wasm_v128": _FULL["facts"]["wasm_v128"]}})),
+    # ★ 掉条守卫（2026-09-27 实测踩到：无参数跑一次就把 28 条静默缩成 17 条）
+    ("★ 重测会掉条 ⇒ dropped_keys 必须报出来（写盘处据此拒绝）",
+     lambda: dropped_keys({"a": 1, "b": 2}, {"a": 1}) == ["b"]),
+    ("★ 不掉条（新增/相同）⇒ 不报", lambda: dropped_keys({"a": 1}, {"a": 1, "c": 3}) == []),
+    ("★ 空台账起步 ⇒ 不报（第一次生成不许被自己拦住）", lambda: dropped_keys({}, {"a": 1}) == []),
 ]
 
 
@@ -347,6 +359,19 @@ def measure():
         except OSError as e:
             print("⚠ 读不到探针日志 %s：%s" % (pl, e), file=sys.stderr)
 
+    # ★ 零值守卫（2026-09-27 实测踩到）：本脚本**无参数运行就会重写台账**，而某些事实的输入
+    #   现在不在（例：8761 站点此刻没有 `threads/` ⇒ 8 条线程档事实测不出来）⇒ 一次手滑就把
+    #   台账从 28 条**静默缩成 17 条**（闸门靠"引用键不存在"才抓到）。⇒ 掉条就拒绝，除非显式
+    #   `--allow-drop`（那时把掉掉的键打出来，留痕）。
+    dropped = dropped_keys((load_ledger().get("facts") or {}) if os.path.exists(OUT) else {}, facts)
+    if dropped and "--allow-drop" not in argv:
+        print("FATAL: 本次会从台账里**掉掉 %d 条事实**（输入不在？）：%s"
+              % (len(dropped), ", ".join(dropped)), file=sys.stderr)
+        print("       台账不写。要么把输入准备好（例：站点上要有 `threads/`），", file=sys.stderr)
+        print("       要么显式 `--allow-drop`（并把掉掉的键记进 HISTORY）。", file=sys.stderr)
+        return 2
+    if dropped:
+        print("⚠ --allow-drop：本次掉掉 %d 条：%s" % (len(dropped), ", ".join(dropped)), file=sys.stderr)
     doc = {"schema": 1, "generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
            "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
            "facts": facts}

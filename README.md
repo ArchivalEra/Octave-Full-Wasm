@@ -368,7 +368,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/check_m.py` (6710 bytes)
 - `build/embed/coi-serviceworker.js` (6028 bytes)
 - `build/embed/coi-serviceworker.min.js` (3009 bytes)
-- `build/facts.py` (22026 bytes)
+- `build/facts.py` (24068 bytes)
 - `build/fftw_threads_stub.c` (553 bytes)
 - `build/forge-build.sh` (2117 bytes)
 - `build/forge-fetch.py` (5109 bytes)
