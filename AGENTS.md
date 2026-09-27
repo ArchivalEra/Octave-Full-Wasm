@@ -28,7 +28,8 @@
 1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**；写不出复跑方式的句子 → 只能放进 HISTORY 当历史。
 2. **口径搬进代码了（2026-09-26 批次 A1）——别再照抄文档拼命令**：
    重链的**唯一入口是 `bash build/113/relink.sh link product`**（模式 `product` / `scalar` / `m1`
-   决定**全部 23 个环境变量（★ 2026-09-26 实测更正：曾写 22 —— A1 加了 `BUILD_MODE` 标签变量；另有 `P5_OBJS` 是脚本内数组不算）**，一个都不许手设）。要看口径就打
+   决定**全部环境变量**（条数 = `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** ——
+   A1 加了 `BUILD_MODE` 标签变量，另有 `P5_OBJS` 是脚本内数组不算）**，一个都不许手设**。要看口径就打
    `bash build/113/relink.sh explain product`（**那就是文档，生成物**）；
    `bash build/113/relink.sh --selfcheck` 是它的可测契约（link-web.sh 读的每个变量都必须被
    模式表覆盖；反向实测能红）。**重配**仍是一整组
@@ -36,10 +37,11 @@
    ⇒ 默认 toolkit 静默掉回 `web`，而构建/链接/自检**全绿**）。
    历史口径与踩坑留在 HISTORY §5.26 / §5.38 / §5.54（**当历史读，别当配方**）。
    产物自证不靠 grep 了：链接时写出 `octave.build.json`（只记**量到的事实**），
-   **`verdict=="ok"` 才可部署**；现役 `octave.wasm` sha `1ed3e528…`、`measured.simd.v128=4752`。
+   **`verdict=="ok"` 才可部署**；现役 `octave.wasm` 的 sha 与 `measured.simd.v128` 见
+   `build/FACTS.json` 的 `wasm_sha` / `wasm_v128`（**正文不手抄数字**）。
    ⚠️ 手跑 `link-web.sh` 的产物 `declared` 是 null ⇒ 判拒；补判：
    `relink.sh verify <模式> --out <目录>`。手查仍可用 `llvm-objdump -d <wasm> | grep -c v128`
-   （现役 4752，非 SIMD 那版 = 0；⚠️ 别用 `grep simd128`，那是**假**判据）。
+   （现役值 = `build/FACTS.json` 的 `wasm_v128`，非 SIMD 那版 = 0；⚠️ 别用 `grep simd128`，那是**假**判据）。
 3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）必须**浏览器侧**实测；
    构建成功 + 产物自检绿**不算**功能验收。
 4. **断言要能证伪**：替身不能比真实对象松；新契约至少配一条**反向**断言（该报错的必须报错）。
@@ -88,7 +90,17 @@ sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门�
 `git status --short --ignored <目录>`。
 
 ## 操作习惯与硬坑（踩过的，别再来一次）
-- **重活用 `setsid nohup … &` + ≤3 分钟的命令轮询**，输出只 `tail -n`/`grep` —— 长前台命令会把 ZCode 弄崩。
+- ★ **禁止使用 `sleep`**（用户点名，2026-09-27）。**任何形式都不行** —— `sleep 3`、`sleep 3 && …`、
+  `until …; do sleep 1; done` 都算。
+  · 原因（实测）：ZCode 的 120 s 前台预算到点会把命令**转后台并救活**，
+    **唯独 `sleep` 开头的命令直接被杀**（`Command timed out after 10m`）⇒ 等待本身把工作弄丢；
+    而"轮询一次"只是把同一件事再看一遍，白花一个工具调用 + 它读回来的 token。
+  · 正确做法：**长任务用 `run_in_background: true` 起**（后台任务**没有超时**），
+    起完就返回、去干别的，**等完成通知**；需要盯着已有进程就用
+    `tail -f --pid=<pid> <日志>`（进程一死 `tail` 自己退出 ⇒ 通知即完成），
+    或直接读它写好的产物（`sweep-logs/<时间戳>/`、`FACTS.json`、`*.log`）。
+  · 已经后台化的任务**绝不重跑**：重跑 = 双倍工作 + 两份互相打架的日志。
+- **重活用 `setsid nohup … &` 起、输出只 `tail -n`/`grep`**（前台长命令会占住预算）。
   **跑验收时别并行干重活**（并发 docker commit / 压缩曾让一个套件假崩）。
 - **测试用例从仓库原路径直跑**（`cd harness && node /mnt/hdd/.../test/browser/x.mjs`）——
   别 `cp` 一份到 harness 再跑：改完仓库用旧副本跑，断言红绿全错位（实测两次，2026-09-25）。

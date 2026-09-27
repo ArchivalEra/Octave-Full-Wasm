@@ -3,13 +3,17 @@
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# 两个 AUTO 区块都是**机器维护**的（README 的文件清单 / HANDOFF 的部署状态），
-# 提交前重算并暂存；再把"活状态断言不得与产物矛盾"与"白名单"两道闸门跑一遍。
+# 三个 AUTO 区块都是**机器维护**的（README 的文件清单 / HANDOFF 的部署状态 / HANDOFF 的
+# 实测事实台账），提交前重算并暂存；再把"活状态断言不得与产物矛盾"与"白名单"两道闸门跑一遍。
 set -e
 HOOK_DIR="$(dirname "$0")"
 python3 "$HOOK_DIR/update-readme.py"
 git add README.md
 python3 "$HOOK_DIR/update-handoff.py"
+git add HANDOFF.md
+# ★ F2 收尾（2026-09-27）：**数字的唯一产地** —— 从 build/FACTS.json 渲染 AUTO:FACTS 块。
+#   必须排在 check-facts 之前：那道闸门要比的就是"块与台账一致"。
+python3 build/facts.py --render-doc HANDOFF.md
 git add HANDOFF.md
 python3 "$HOOK_DIR/check-handoff.py"
 python3 "$HOOK_DIR/check-consistency.py"

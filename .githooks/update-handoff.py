@@ -59,8 +59,20 @@ def render(prev):
         L.append(f"| 资产条目 | {nassets} | |")
 
     if sweep["ok"]:
+        # ★ 口径（F2 收尾 2026-09-27 定死）：表头数字 = **只数 accept-***（与 FACTS.json 的
+        #   `accept_suites`/`accept_pass` 同口径）；探针/基准另写在括号里，免得同一份文档里
+        #   出现两个"最近一次全绿"（PROBES=1 那轮的合计是 43+23 套）。
+        ex = sweep.get("extras") or {}
+        extra = ""
+        if ex.get("suites") or ex.get("no_summary"):
+            bits = []
+            if ex.get("suites"):
+                bits.append(f"探针 {ex['suites']} 套 / {F.fmt(ex['pass'])} PASS")
+            if ex.get("no_summary"):
+                bits.append(f"基准 {len(ex['no_summary'])} 套（按契约无汇总行）")
+            extra = "（同日 PROBES=1 另跑：" + "、".join(bits) + "）"
         L.append(f"| 最近一次**全绿**回归 | `{sweep['dir']}` · **{sweep['suites']} 套 / "
-                 f"{F.fmt(sweep['pass'])} PASS / 0 FAIL** | {sweep.get('url', '')} |")
+                 f"{F.fmt(sweep['pass'])} PASS / 0 FAIL**{extra} | {sweep.get('url', '')} |")
     elif sweep.get("fallback"):
         f = sweep["fallback"]
         extra = f" · 缺汇总 {f['missing']} 条" if f.get("missing") else ""

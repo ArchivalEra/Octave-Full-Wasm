@@ -20,7 +20,9 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
 // sweep 会把被测站 URL 传进来；本探针自 host **产物目录**（run.html），URL 参数不适用 ⇒ 忽略之
-const DIR = (process.argv[2] && !/^http/.test(process.argv[2])) ? process.argv[2] : '/mnt/hdd/octave-wasm-build/jspi-probe';
+// ★ F4：输入契约在 `test/browser/manifest.json` 的 `inputs` 里声明；环境变量
+//    `PROBE_DIR` 可覆盖路径（两处口径必须一致 —— 清单声明的就是探针读的这个）。
+const DIR = process.env.PROBE_DIR || ((process.argv[2] && !/^http/.test(process.argv[2])) ? process.argv[2] : '/mnt/hdd/octave-wasm-build/jspi-probe');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
 
 const server = createServer(async (req, res) => {

@@ -100,11 +100,13 @@ def check_living(text, current_shas, sweep):
         problems.append((0, "零值守卫", "活状态里**没有一行非空文本** ⇒ 闸门空转",
                          "文档为空/结构变了？先确认 living_text() 还能认出活状态"))
         return problems, notes
+    sha_hits = suite_hits = 0
     for lineno, line, _ in rows:
         if HIST_MARK.search(line):
             # 行内标了历史标记的行是允许的（见文件头那段约定）
             continue
         for tok in SHA_NEAR.findall(line):
+            sha_hits += 1
             if current_shas and not any(tok.startswith(s[:len(tok)]) or s.startswith(tok)
                                         for s in current_shas.values()):
                 problems.append((lineno, "L1 部署 sha",
@@ -112,6 +114,8 @@ def check_living(text, current_shas, sweep):
             elif not current_shas:
                 notes.append((lineno, "L1 跳过", "读不到部署件 ⇒ **无法核对 sha**", line.strip()[:80]))
         m = SUITE.search(line)
+        if m:
+            suite_hits += 1
         if m and sweep.get("ok") and not DATED_RECORD.search(line):
             suites, total = int(m.group(1)), int(m.group(2).replace(",", ""))
             if (suites, total) != (sweep["suites"], sweep["pass"]):
@@ -138,6 +142,15 @@ def check_living(text, current_shas, sweep):
     if not current_shas and not sweep.get("ok"):
         problems.append((0, "闸门空转", "部署件与回归事实**都**读不到 ⇒ 本闸门当前零覆盖",
                          "先把事实来源接上（或明确说明为什么允许空跑）"))
+    # ★ F2 收尾（2026-09-27）：L1/L2 的**可查对象**消失了 —— 这是设计行为（数字只在机器块里
+    #   生产，正文不许手抄），但**必须说出来**：否则"规则还在、只是没东西可查"会伪装成"通过"。
+    #   块本身的数字由 `update-handoff.py`（生成）与 `check-facts.py`（核对）管。
+    if sha_hits == 0 or suite_hits == 0:
+        which = " / ".join([n for n, c in (("L1 sha", sha_hits), ("L2 套件数", suite_hits)) if c == 0])
+        notes.append((0, "覆盖说明",
+                      "活状态正文里没有 %s 的可查对象（F2 之后数字只在 AUTO 块与 FACTS 台账里）"
+                      "⇒ 这两条规则本次没查东西，**不是**它们通过了" % which,
+                      "块与台账的一致性由 check-facts.py 管"))
     return problems, notes
 
 
@@ -177,6 +190,12 @@ def _nprob(text, shas=None, sweep=None):
     return len(p)
 
 
+def _notes(text, shas=None, sweep=None):
+    _, n = check_living(text, shas if shas is not None else {"wasm": _SHA_A},
+                        sweep if sweep is not None else _SWEEP_OK)
+    return n
+
+
 CASES = [
     ("合成文档 + 一致的 sha/套件数 ⇒ 不报",
      lambda: _nprob(_HEAD + "wasm sha `%s…`，全量 43 套 / 1076 项全绿\n" % _SHA_A[:16]) == 0),
@@ -191,6 +210,8 @@ CASES = [
     ("**空文档** ⇒ 必须报（零值守卫：闸门空转）", lambda: _nprob("") >= 1),
     ("**两条事实链都读不到** ⇒ 必须报（零值守卫 2）",
      lambda: _nprob(_HEAD + "全量 43 套 / 1076 项全绿\n", shas={}, sweep={"ok": False}) >= 1),
+    ("★ 正文不写数字（F2 之后）⇒ 必须**声明** L1/L2 本次没有可查对象，不许静默通过",
+     lambda: any(k == "覆盖说明" for _, k, _, _ in _notes(_HEAD + "数字见文末两个 AUTO 块。\n"))),
 ]
 
 

@@ -33,42 +33,13 @@ PROBES="${PROBES:-0}"
   echo "FATAL: harness 缺 node_modules（$HARNESS_DIR）—— playwright-core 装在那里" >&2; exit 2; }
 mkdir -p "$LOGDIR"
 
-# ── 选哪些套件：交给清单（用 python 读 JSON；shell 读 JSON 太容易写错）──────────────
+# ── 选哪些套件：交给清单（逻辑在 build/lib/sweep_select.py —— F4 从 heredoc 搬出来的）──
 # 落成一个临时文件，**主壳**再逐行读 —— 别用 `python | while`（那是子壳，计数器传不出来）。
 SEL="$LOGDIR/.selected.tsv"
-python3 - "$MAN" "$REPO" "$FILTER" "$PROBES" "$LOGDIR" >"$SEL" <<'PY'
-import glob, json, os, sys
-man_path, repo, flt, probes = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
-logdir = sys.argv[5]
-man = json.load(open(man_path, encoding="utf-8"))
-cats, exc = man["categories"], man.get("exceptions", {})
-CAT = {"accept": "accept", "probe": "probe", "bench": "bench"}
-names = sorted(os.path.basename(p)[:-4] for p in glob.glob(os.path.join(repo, "test/browser/*.mjs")))
-skipped, rows = [], []
-for name in names:
-    cat = CAT.get(name.split("-", 1)[0])          # 类别**从前缀推**，清单只列例外
-    if cat is None:
-        continue
-    c, e = cats[cat], exc.get(name, {})
-    if flt:
-        if not glob.fnmatch.fnmatch(name, flt):
-            continue
-    elif not (probes or c.get("default")):
-        continue
-    if e.get("manual"):
-        skipped.append("%s（%s）" % (name, e.get("why", "人工套件")))
-        continue
-    if e.get("requires_env") and not os.environ.get(e["requires_env"]):
-        skipped.append("%s（缺环境变量 %s）：%s" % (name, e["requires_env"], e.get("why", "")))
-        continue
-    rows.append((name, c.get("timeout", 420), 1 if c.get("summary", True) else 0))
-for n, t, s in rows:
-    print("%s\t%s\t%s" % (n, t, s))
-with open(os.path.join(logdir, ".skipped.txt"), "w") as fh:
-    fh.write("; ".join(skipped))
-with open(os.path.join(logdir, ".matched.txt"), "w") as fh:
-    fh.write(str(len(rows) + len(skipped)))
-PY
+# ⚠️ 选片逻辑自己带 `--selftest` 并进了 `build/gates-selftest.sh`：清单写坏（未知 kind /
+#    残留 requires_env / 没有 categories）它 exit 2，**不许**当成"没有套件所以绿"。
+python3 "$REPO/build/lib/sweep_select.py" "$MAN" "$REPO" "$FILTER" "$PROBES" "$LOGDIR" >"$SEL" || {
+  echo "FATAL: 选片失败（清单/参数问题，见上）" >&2; exit 2; }
 
 NSEL="$(grep -c . "$SEL" || true)"
 NMATCH="$(cat "$LOGDIR/.matched.txt" 2>/dev/null || echo "$NSEL")"

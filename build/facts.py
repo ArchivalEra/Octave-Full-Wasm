@@ -16,8 +16,21 @@
 # `.githooks/check-facts.py` 会按每条事实的正则去活状态文档里找**同一个数字**，
 # 不一致就报（带日期的历史行除外）。
 #
-# 用法：python3 build/facts.py        # 量一遍并写 build/FACTS.json
+# 用法：
+#   python3 build/facts.py                       # 量一遍并写 build/FACTS.json
+#   python3 build/facts.py --render              # 把台账渲染成 markdown 机器块（打到 stdout）
+#   python3 build/facts.py --render-doc [文件]   # 把机器块写进 HANDOFF.md（默认）
+#   python3 build/facts.py --check               # 文档里的块是否与台账一致（陈旧 ⇒ exit 1）
+#   python3 build/facts.py show [键]             # 打印某条事实（值 + 出处 + 复跑命令）
+#   python3 build/facts.py --selftest            # 自证：空台账必须渲染成"空"，不许装作有事实
 # ⚠️ 量不到的项**不写**（宁缺勿假）：比如最近一次全绿回归只在有 sweep-logs 的机器上有。
+#
+# ★ F2 收尾（2026-09-27）—— **数字只生产一次**：
+#   上面的 `--render-doc` 是"测出来的数字"在活状态文档里的**唯一产地**（`AUTO:FACTS` 块）。
+#   正文要引用就写 `build/FACTS.json` 的**键名**，不许手抄数字；`.githooks/check-facts.py`
+#   会拦"活状态文档里出现裸数字"，也会拦"块与台账不一致"与"引用不存在的键"。
+#   为什么不再满足于"抄了但抄对"：抄对了也要**有人去更新**，而"该更新哪几处"正是过去两天
+#   反复出错的环节（`22`/`23` 个环境变量 6 处、`13`/`19` 项探针 2 处、`703`/`710`…）。
 # ═══════════════════════════════════════════════════════════════════════════════
 import json
 import os
@@ -39,7 +52,103 @@ def fact(value, cmd, source, note=""):
     return d
 
 
-def main():
+# ── 渲染：台账 → 活状态文档里的机器块（数字的**唯一产地**）────────────────────────
+# ⚠️ 渲染函数与块标记搬去了 `build/lib/facts_block.py` —— 生成器（本文件）与闸门
+#    （`.githooks/check-facts.py`）必须共用同一套渲染，否则"块对不对"两边口径会分叉。
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+from facts_block import (BLOCK_BEGIN, BLOCK_END, block_body,  # noqa: E402
+                         render_block)
+
+DOC = "HANDOFF.md"
+
+
+def load_ledger(path=None):
+    with open(path or OUT, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def write_doc(path_rel, ledger):
+    """把块写进文档（就地替换）。**没有标记就报错，不悄悄追加** ——
+    悄悄追加会让"块过期"变成"有两份块"，那是更难查的坏法。"""
+    p = path_rel if os.path.isabs(path_rel) else os.path.join(REPO, path_rel)
+    text = open(p, encoding="utf-8").read()
+    if BLOCK_BEGIN not in text or BLOCK_END not in text:
+        print("%s 缺少 %s / %s 标记（第一次落地时要手工放一次）" % (p, BLOCK_BEGIN, BLOCK_END),
+              file=sys.stderr)
+        return 2
+    pre, _, rest = text.partition(BLOCK_BEGIN)
+    _, _, post = rest.partition(BLOCK_END)
+    new = pre + render_block(ledger) + post
+    if new != text:
+        open(p, "w", encoding="utf-8").write(new)
+        print("已刷新 %s 的事实块" % path_rel)
+    else:
+        print("%s 的事实块无变化" % path_rel)
+    return 0
+
+
+def check_doc(path_rel, ledger):
+    p = path_rel if os.path.isabs(path_rel) else os.path.join(REPO, path_rel)
+    text = open(p, encoding="utf-8").read()
+    if BLOCK_BEGIN not in text or BLOCK_END not in text:
+        print("%s 缺少事实块标记" % path_rel, file=sys.stderr)
+        return 2
+    cur = text.split(BLOCK_BEGIN, 1)[1].split(BLOCK_END, 1)[0]
+    if cur != block_body(ledger):
+        print("%s 的事实块与 build/FACTS.json 不一致：跑 python3 build/facts.py --render-doc"
+              % path_rel, file=sys.stderr)
+        return 1
+    print("%s 的事实块与台账一致" % path_rel)
+    return 0
+
+
+def main(argv):
+    if argv and argv[0] == "--render":
+        sys.stdout.write(render_block(load_ledger()) + "\n")
+        return 0
+    if argv and argv[0] == "--render-doc":
+        return write_doc(argv[1] if len(argv) > 1 else DOC, load_ledger())
+    if argv and argv[0] == "--check":
+        return check_doc(argv[1] if len(argv) > 1 else DOC, load_ledger())
+    if argv and argv[0] == "show":
+        led = load_ledger()
+        f = led.get("facts") or {}
+        keys = [argv[1]] if len(argv) > 1 else sorted(f)
+        rc = 0
+        for k in keys:
+            if k not in f:
+                print("没有这条事实：%s（现有：%s）" % (k, ", ".join(sorted(f))), file=sys.stderr)
+                rc = 1
+                continue
+            print("%-20s %s" % (k, f[k].get("value")))
+            print("    出处  %s" % f[k].get("source", "?"))
+            print("    复跑  %s" % f[k].get("cmd", "?"))
+            if f[k].get("note"):
+                print("    备注  %s" % f[k]["note"])
+        return rc
+    return measure()
+
+
+def _block_of(ledger):
+    return render_block(ledger)
+
+
+_FULL = {"generated": "T", "facts": {"wasm_v128": {"value": 4752, "cmd": "c", "source": "s"},
+                                     "wasm_sha": {"value": "a" * 64, "cmd": "c", "source": "s"}}}
+CASES = [
+    ("有台账 ⇒ 每个键都出现在块里", lambda: all(k in _block_of(_FULL) for k in _FULL["facts"])),
+    ("有台账 ⇒ 值是原值（4752 出现在块里）", lambda: "**4752**" in _block_of(_FULL)),
+    ("sha 截断显示（不整条摊开）", lambda: "`" + "a" * 16 + "…`" in _block_of(_FULL)),
+    ("★ **空台账 ⇒ 块里必须写明「为空」**（零值守卫：不许渲染成一张空表）",
+     lambda: "台账为空" in _block_of({"facts": {}}) and "| 键 |" not in _block_of({"facts": {}})),
+    ("★ 块渲染是**纯函数**（同一份台账渲染两次逐字节相同）",
+     lambda: _block_of(_FULL) == _block_of(_FULL)),
+    ("★ 台账少一条 ⇒ 块跟着变（块不是常量）",
+     lambda: _block_of(_FULL) != _block_of({"facts": {"wasm_v128": _FULL["facts"]["wasm_v128"]}})),
+]
+
+
+def measure():
     facts = {}
 
     # ── 产物侧：读**产物身份证**（A1 起它在 site/ 里；读数不用重链）────────────────
@@ -145,4 +254,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+    from gate import selftest as _st            # noqa: E402
+    sys.exit(_st("facts.py 渲染", CASES) if "--selftest" in sys.argv else main(sys.argv[1:]))

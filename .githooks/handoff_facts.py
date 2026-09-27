@@ -87,8 +87,34 @@ def assets_count():
         return None
 
 
+def _no_summary_names():
+    """**按契约**不产 `=== N PASS / M FAIL ===` 的套件（类别级 `summary:false` + 清单里 manual 的）。
+
+    ★ F4 暴露的坑（2026-09-27 实测）：`PROBES=1` 的那轮是**全绿**的，但 `bench-core` /
+    `bench-dgemm` 按契约没有汇总行 ⇒ 旧逻辑把它们记成 `missing` ⇒ `clean=False` ⇒
+    AUTO:STATE 会把一次全绿运行写成"**未全绿**（缺汇总 2 条）"。契约在
+    `test/browser/manifest.json`（A3 搬进仓库的那份），这里必须读它，而不是硬编码。
+    读不到清单时退回旧行为（宁可说"缺汇总"，也不要凭空说它齐）。"""
+    try:
+        man = json.load(open(os.path.join(REPO, "test/browser/manifest.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    out = set()
+    for name, e in (man.get("exceptions") or {}).items():
+        if e.get("manual") or e.get("summary") is False:
+            out.add(name)
+    for cat, c in (man.get("categories") or {}).items():
+        if c.get("summary") is False:
+            out.add("@" + cat)
+    return out
+
+
 def sweep_facts():
-    """最近一次**全绿**的全量回归（没有全绿的就把最新一次如实报出来）。"""
+    """最近一次**全绿**的全量回归（没有全绿的就把最新一次如实报出来）。
+
+    ★ 口径（F2 收尾，2026-09-27 定死）：表头那对数字**只数 `accept-*`** —— 那是"验收底线"的
+    口径，也是 `build/FACTS.json` 的 `accept_suites`/`accept_pass` 的口径（两处必须同口径，
+    否则同一份文档里会出现两个"最近一次全绿"）。探针/基准另计，放进 `extras` 供文档单独写。"""
     out = {"ok": False}
     if not os.path.isdir(LOGS):
         out["why"] = f"没有 {LOGS}"
@@ -102,34 +128,46 @@ def sweep_facts():
     # 套件汇总两种形态：`=== N PASS / M FAIL ===` 与 pkgoct 的 `=== N 个模块：OK k / … ===`
     pat_a = re.compile(r"===\s*(\d+)\s*PASS\s*/\s*(\d+)\s*FAIL\s*===")
     pat_b = re.compile(r"===\s*(\d+)\s*个模块：OK\s*(\d+)\s*/")
+    no_sum = _no_summary_names()
 
     for d in dirs:
         logs = sorted(f for f in os.listdir(os.path.join(LOGS, d)) if f.endswith(".log"))
         if not logs:
             continue
-        suites = p = f_ = missing = 0
+        suites = p = f_ = missing = 0                      # 表头 = accept-*
+        xs = xp = xf = 0                                   # extras = 探针等
+        x_no_sum = []
         url = ""
         for fn in logs:
+            name = fn[:-4]
+            is_accept = name.startswith("accept-")
             txt = open(os.path.join(LOGS, d, fn), encoding="utf-8", errors="replace").read()
             if not url:
                 m = re.search(r"^URL=(\S+)", txt, re.M)
                 if m:
                     url = m.group(1)
-            m = pat_a.search(txt)
-            if m:
-                suites += 1
-                p += int(m.group(1))
-                f_ += int(m.group(2))
+            ma, mb = pat_a.search(txt), pat_b.search(txt)
+            if ma or mb:
+                if ma:
+                    sp, sf = int(ma.group(1)), int(ma.group(2))
+                else:
+                    sp, sf = int(mb.group(2)), int(mb.group(1)) - int(mb.group(2))
+                if is_accept:
+                    suites += 1
+                    p += sp
+                    f_ += sf
+                else:
+                    xs += 1
+                    xp += sp
+                    xf += sf
                 continue
-            m = pat_b.search(txt)
-            if m:
-                suites += 1
-                p += int(m.group(2))
-                f_ += int(m.group(1)) - int(m.group(2))
+            if name in no_sum or ("@" + name.split("-", 1)[0]) in no_sum:
+                x_no_sum.append(name)                      # 按契约没有汇总行 ⇒ 不是"缺"
                 continue
             missing += 1
-        clean = (f_ == 0 and missing == 0)
+        clean = (f_ == 0 and xf == 0 and missing == 0)
         rec = {"dir": d, "suites": suites, "pass": p, "fail": f_, "missing": missing,
+               "extras": {"suites": xs, "pass": xp, "fail": xf, "no_summary": x_no_sum},
                "url": url, "clean": clean, "mtime": os.path.getmtime(os.path.join(LOGS, d))}
         if clean:
             out.update(rec)

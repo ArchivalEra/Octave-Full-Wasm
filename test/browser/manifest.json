@@ -4,9 +4,12 @@
     "测试契约（A3/D5）。**为什么要有它**：81+ 个套件的'怎么跑'以前只写在各自文件头的注释里，",
     "而筛选逻辑在**仓库之外**的 sweep.sh 里（默认只跑 accept-*，PROBES=1 时用 * 扫全部）——",
     "于是'哪些套件会自己起服务器''哪些需要额外引擎''哪些不产汇总行'都靠人读注释猜。",
-    "这份清单让仓库自己说清楚；`build/sweep.sh` 读它决定跑谁。",
+    "这份清单让仓库自己说清楚；`build/sweep.sh` 读它决定跑谁（选片逻辑在",
+    "`build/lib/sweep_select.py`，带 `--selftest` —— 缺输入必须**报跳过**而不是静默漏跑）。",
     "★ 类别**从文件名前缀推**（accept- / probe- / bench-），这里只列**例外** —— 加一个新套件",
-    "通常什么都不用改；只有当它不产 `=== N PASS / M FAIL ===` 时才要在这里登记。"
+    "通常什么都不用改；只有当它不产 `=== N PASS / M FAIL ===` 时才要在这里登记。",
+    "★ **输入在 `inputs` 段声明**（F4）：产物在仓库外/要额外引擎的探针，缺就跳过并报出缺什么。",
+    "  探针读的环境变量（`PROBE_DIR` / `PLAYWRIGHT_BROWSERS_PATH`）与这里的声明**必须一致**。"
   ],
   "categories": {
     "accept": {
@@ -41,17 +44,39 @@
     "probe-gpu-backend": { "manual": true, "why": "打印本机 WebGL 后端，无汇总行" },
     "probe-nogl-flag": { "manual": true, "why": "找旗标用的一次性探针，无汇总行" },
     "probe-gl4es-smoke": { "manual": true, "why": "**硬编码 8767 端口**的 gl4es 冒烟探针（不接 URL 参数）⇒ 那台服务不在时必然 ERR_CONNECTION_REFUSED" },
-    "probe-blas-threads": {
-      "manual": true,
-      "why": "需要先跑 `bash build/113/probe-blas-threads.sh` 生成线程版 BLAS 探针产物（在仓库外 /mnt/hdd/octave-wasm-build/blas-threads-probe/），且要 COI 头（runner 自注入）"
-    },
-    "probe-coi-sw": {
-      "requires_env": "PLAYWRIGHT_BROWSERS_PATH",
-      "why": "三引擎探针（firefox/webkit 要 playwright 托管，见 /mnt/hdd/crossbuild-tools/pw-browsers）；裸环境启动即失败 ⇒ 跳过并计数，用时先 export 该变量再单独跑"
-    },
     "probe-p5-run": { "manual": true, "why": "跑 fixtures/*.m 并打印，无汇总行" },
     "probe-t2-graphics": { "manual": true, "why": "打印图形句柄状态量，无汇总行" },
     "probe-t2-run": { "manual": true, "why": "跑 fixtures/t2-*.m 并打印，无汇总行" },
     "probe-toolkit-print": { "manual": true, "why": "打印 toolkit print 路径，无汇总行" }
+  },
+  "inputs": {
+    "probe-threads": [
+      { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/threads-probe",
+        "why": "pthread×dlopen 探针产物，由容器里的 `bash build/113/probe-threads.sh` 生成（仓库外；探针自己注入 COI 头）" }
+    ],
+    "probe-threads-coi": [
+      { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/threads-probe",
+        "why": "同上产物，这一档专门验 COI 头的三种形态" }
+    ],
+    "probe-jspi": [
+      { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/jspi-probe",
+        "why": "JSPI 探针产物，由 `bash build/113/probe-jspi.sh` 生成" }
+    ],
+    "probe-jspi-b": [
+      { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/jspi-probe-b",
+        "why": "B 姿势（无 `-sJSPI`）探针产物，由 `bash build/113/probe-jspi-b.sh` 生成" }
+    ],
+    "probe-jspi-worker": [
+      { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/jspi-worker-probe",
+        "why": "Worker 内 JSPI 探针产物，由 `bash build/113/probe-jspi-worker.sh` 生成" }
+    ],
+    "probe-blas-threads": [
+      { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/blas-threads-probe",
+        "why": "线程版 OpenBLAS 探针产物，由 `bash build/113/probe-blas-threads.sh` 生成；另需 firefox（playwright 默认缓存里有就不必设 `PLAYWRIGHT_BROWSERS_PATH`，缺则该项如实报红）" }
+    ],
+    "probe-coi-sw": [
+      { "kind": "env", "value": "PLAYWRIGHT_BROWSERS_PATH",
+        "why": "它要 **webkit**（三引擎里唯一不在默认缓存里的那个，在 /mnt/hdd/crossbuild-tools/pw-browsers）；缺则相关引擎记 N/A 而不是红 ⇒ 单独跑时才 export" }
+    ]
   }
 }

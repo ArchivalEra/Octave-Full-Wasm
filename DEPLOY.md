@@ -1,7 +1,7 @@
 # DEPLOY · 可部署站点（`site/` 目录）
 
-> **`site/` 是验收底线 8761 的逐字节镜像**（wasm sha `1ed3e528…`，**三处** parity `--strict` 绿：
-> 8761 / 8768 / 本目录）。
+> **`site/` 是验收底线 8761 的逐字节镜像**（wasm sha = `build/FACTS.json` 的 `wasm_sha`，
+> **三处** parity `--strict` 绿：8761 / 8768 / 本目录）。
 > 仓库因此**自带全部可部署产物**：配好 yml 后不需要任何构建步骤，部署 = 把这个目录原样发布。
 
 ## 这个目录是什么
@@ -18,10 +18,11 @@
 | `dldprobe.oct` / `minioct.oct` | 历史诊断用 side module（保留，不影响运行） |
 
 来源与构建配方：**唯一入口 `bash build/113/relink.sh link product`**（2026-09-26 批次 A1 起；
-模式决定全部 23 个环境变量（★ 2026-09-26 实测更正：曾写 22 —— A1 加了 `BUILD_MODE` 标签变量；另有 `P5_OBJS` 是脚本内数组不算），`relink.sh explain product` 打出来就是口径 —— **别照抄文档拼命令**，
+模式决定全部环境变量（条数 = `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** —— A1 加了
+`BUILD_MODE` 标签变量；另有 `P5_OBJS` 是脚本内数组不算），`relink.sh explain product` 打出来就是口径 —— **别照抄文档拼命令**，
 漏一个变量会**静默**做出非现役形态的产物而构建/链接/自检全绿）。底层是 `build/113/link-web.sh`；
 链接末尾写出 `octave.build.json`（只记量到的事实），**`verdict=="ok"` 才可部署**。
-现役 `octave.wasm` sha `1ed3e528…`、`measured.simd.v128` = **4752**（手查：
+现役 `octave.wasm` 的 sha 与 `measured.simd.v128` 见 `build/FACTS.json` 的 `wasm_sha` / `wasm_v128`（手查：
 `llvm-objdump -d octave.wasm | grep -c v128`）。
 
 ## 怎么部署（GitHub Pages）

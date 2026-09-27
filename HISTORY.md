@@ -2989,3 +2989,48 @@ sh /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/recover-113.sh   # 8762（同�
 
 **教训**：写进 `AGENTS.md` 事实纪律第 5 条 —— 活状态只写**实测**；**推断**进 NOTES 并注明结案实验；
 被推翻的断言进**台账**（否则它会以"现状"的身份回来）。
+
+---
+
+### 5.61 F2 收尾（数字只生产一次）+ F4（探针输入契约）+ 禁止 sleep（2026-09-27）
+
+**起因**：用户"接续读 HANDOFF 然后继续"，HANDOFF §1 的下一步顺序就是 F2 收尾 → F4；
+中途用户追加一条硬规矩：**写进 AGENTS.md —— 禁止使用 `sleep`**。
+
+**F2 收尾（把"抄了要抄对"升级成"只生产一次"）**：
+- `HANDOFF.md` 新增 `AUTO:FACTS` 块 = 活状态文档里**测出来的数字的唯一产地**，
+  由 `build/facts.py --render-doc` 从 `build/FACTS.json` 渲染，`pre-commit` 重算并 `git add`。
+- 正文改成**引用台账键名**（`build/FACTS.json` 的 `wasm_v128` …）；渲染器抽到
+  `build/lib/facts_block.py` 供生成器与闸门共用（避免口径分叉），纯函数可自证。
+- `.githooks/check-facts.py` 重写成四条规则：**A 正文不许裸数字**（块内豁免）/ B 块与台账一致 /
+  C 引用的键必须存在 / D 台账不许过期。8 条"该红"用例（含"抄对了也报""台账过期必须报"）。
+- 现场清掉 6 处手抄数字（`AGENTS`/`CONTEXT`/`DEPLOY`/`HANDOFF` 的 `4752`、`23 个环境变量`、
+  `1ed3e528…`、`43 套 / 1076`）；现在正文 **9 处键引用 / 0 处裸数字**。
+- 诚实记副作用：`check-handoff` 的 L1/L2 在正文里没了可查对象（设计行为）⇒ 它现在**打印一条
+  "覆盖说明"**声明自己本次没查东西，不许静默通过。
+
+**F4（探针输入契约）**：
+- 选片逻辑从 `sweep.sh` 的 heredoc 搬进 `build/lib/sweep_select.py`（纯函数 + 14 条自证 +
+  `--check-inputs`）；`test/browser/manifest.json` 新增 `inputs` 段（7 条），`requires_env` 并入且
+  残留即报错。
+- 5 个"唯一输入在仓库外"的探针（`probe-threads` / `-coi` / `probe-jspi` / `-b` / `-worker`）
+  终于登记，并从 manual 降级为"输入齐备就跑"；探针加 `PROBE_DIR` 覆盖（与清单声明一致）。
+- **实测**：`PROBES=1` 选中 **68 套**、跳过 **16 套**（全是 manual，逐条打印理由），
+  跑完 **68 套 / 1286 PASS / 0 FAIL / 全绿**；accept-only **43 套 / 1076 PASS**（与台账同口径）；
+  6 个新登记探针全绿（6/3/9/13/8/5 项）。
+- 顺带修掉一个真缺陷：`handoff_facts.sweep_facts()` 把**按契约没有汇总行**的 bench 记成 `missing`
+  ⇒ 一次全绿的 PROBES=1 会被 AUTO:STATE 写成"**未全绿**（缺汇总 2 条）"。现在读清单的
+  `summary:false` 契约，并把口径定死：**表头只数 `accept-*`**，探针/基准写进括号。
+- 我自己的两处错（都记在 PLAN-arch §2 F4）：给 `probe-blas-threads` 声明了**假需求**
+  `PLAYWRIGHT_BROWSERS_PATH`（会让它被无谓跳过）；五处探针的 env 覆盖第一次写成
+  `a || b ? c : d` —— JS 优先级把 `DIR` 设成了 URL，已加括号并用 `node --check` 逐个验。
+
+**禁止 `sleep`（用户点名，进 `AGENTS.md` 操作习惯首条 + `HANDOFF` §4）**：
+ZCode 的 120 s 前台预算会把普通长命令**转后台救活**，**唯独 `sleep` 开头的直接被杀**
+（`Command timed out after 10m`）⇒ 用 sleep 等 = 把工作弄丢，而且"轮询一次"白花一个工具调用。
+正确做法：长任务 `run_in_background: true` 起（后台无超时）或 `setsid nohup … &`，靠**完成通知**
+或 `tail -f --pid=<pid> <日志>` 收尾；已后台化的任务绝不重跑。本轮就按这条改成
+`tail -f --pid=<sweep pid>` 挂后台等结果。
+
+**教训**：口径不一致（"最近一次全绿"到底是 43 还是 68）是**同一份文档说两种话**的来源 ⇒
+把它写进 `FACTS.json` 的 note 与 AUTO:STATE 的括号里，让数字自带口径。

@@ -35,6 +35,8 @@ build/113/check-build-manifest.py --selftest
 build/113/check-oct-imports.py --selftest
 build/113/check-dylink-signatures.py --selftest
 build/113/relink.sh --selftest
+build/facts.py --selftest
+build/lib/sweep_select.py --selftest
 EOF
 
 n=0; bad=0; badlist=""
