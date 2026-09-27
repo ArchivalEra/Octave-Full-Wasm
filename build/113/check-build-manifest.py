@@ -47,6 +47,24 @@ def sha256_file(p, chunk=1 << 20):
     return h.hexdigest()
 
 
+def lane_blas_problem(declared, man):
+    """★ 车道一致性（B6）：声明 `threads=true` 的产物，**链进去的 BLAS 必须来自车道**。
+
+    为什么单列：实测发现 wasm-ld 的 atomics 规则只针对**带 TLS/原子的**对象 ⇒ 一个**非 atomics 的纯计算
+    BLAS**（无 TLS）可以**静默**链进 shared-memory 模块（当时的产物 0 违规，里面却混着基础档对象）。
+    判据只能看**输入侧溯源**：身份证 `inputs.blas.resolved_dir` 必须是车道路径（含 `-threads`）。
+    纯函数 ⇒ 自证直接喂合成输入。"""
+    if declared.get("threads") is not True:
+        return None
+    rd = ((man.get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
+    if not rd:
+        return "线程档产物里没有 `inputs.blas.resolved_dir` ⇒ 无法确认 BLAS 来自车道"
+    if "-threads" not in rd:
+        return ("声明 threads=true，但链进去的 BLAS 在 `%s`（**基础档**）"
+                "⇒ 产物里混着基础档对象，口径不一致" % rd)
+    return None
+
+
 def compare(declared, measured):
     """返回 [(键, 声明值, 实测值, 为什么)]，空表 = 全过。"""
     bad = []
@@ -182,6 +200,15 @@ def main(argv):
         if not (measured.get("files") or {}):
             file_bad.append("清单里没有 measured.files ⇒ 无法核对")
 
+    # ── ★ 车道一致性（B6，2026-09-27 实测补）：声明 threads=true 的产物，**它链进去的 BLAS 必须来自车道**
+    #   为什么单列：实测发现 wasm-ld 的 atomics 规则只针对**带 TLS/原子的**对象 ⇒ 一个**非 atomics 的纯计算
+    #   BLAS**（无 TLS）可以**静默**链进 shared-memory 模块（当时的产物 0 违规却混着基础档对象）。
+    #   判据只能看**输入侧溯源**：身份证 `inputs.blas.resolved_dir` 必须是车道路径。
+    why = lane_blas_problem(declared, man)
+    if why:
+        rd = ((man.get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
+        bad.append({"key": "(车道 BLAS)", "declared": "含 `-threads` 的路径", "measured": rd, "why": why})
+
     ok = not bad and not file_bad
     verdict = "ok" if ok else "rejected"
     print("== 核对模式声明 vs 产物实测：%s" % ("**OK**" if ok else "**拒绝**"))
@@ -221,6 +248,12 @@ _DECL = {"simd": True, "jspi_entry": True, "jspi_glue_suspending": 0, "gl4es": T
          "threads": False}
 
 
+def _lane_blas_bad(threads_decl, blas_dir):
+    """纯函数直调：返回 1=判定有问题、0=没问题（自证只看这一条规则的取舍）。"""
+    man = {"inputs": {"blas": {"resolved_dir": blas_dir}}}
+    return 1 if lane_blas_problem({"threads": threads_decl}, man) else 0
+
+
 def _nc(decl):
     return len(compare(decl, dict(_MEAS)))
 
@@ -235,6 +268,12 @@ CASES = [
      lambda: len(compare({**_DECL, "threads": True}, _MEAS)) == 1),
     ("★ **声明非线程档但产物内存是 shared ⇒ 必须报**（反向：线程档不许挂别人的名义）",
      lambda: len(compare(_DECL, _THREADS_MEAS)) == 1),
+    ("★ 声明 threads=true 但 BLAS 来自基础档 ⇒ **必须报**（车道一致性）",
+     lambda: _lane_blas_bad(True, "/src/deps/lapack-simd/lib") == 1),
+    ("★ 声明 threads=true 且 BLAS 来自车道 ⇒ 不报",
+     lambda: _lane_blas_bad(True, "/src/deps-threads/lapack-simd/lib") == 0),
+    ("★ 非线程档不受这条约束（否则会误伤 product/scalar/m1）",
+     lambda: _lane_blas_bad(False, "/src/deps/lapack-simd/lib") == 0),
     ("★ 量不到线程事实 ⇒ 必须报（不许当通过）",
      lambda: len(compare({**_DECL, "threads": True}, {**_MEAS, "threads": {}})) == 1),
     ("**空声明** ⇒ 必须报（零值守卫）", lambda: True),      # 由 main 的守卫覆盖，这里只作占位

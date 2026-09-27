@@ -1,75 +1,82 @@
 {
-  "schema": 1,
-  "_why": [
-    "断言台账（事实系统 F3，2026-09-26）。**为什么需要它**：本仓的'翻案'一直只是散文 ——",
-    "没有索引、也没有任何东西会在被推翻的断言**重新出现**时报警。实测过的代价：",
-    "`build/113/PLAN-arch.md:36` 的'线程档在 Pages 上跑不起来'在**同一个文件**的 `:422` 被更正过，",
-    "却一直留到 F3 —— 而同一条断言在 HANDOFF 里也有一份副本。",
-    "更早的同类：`accept-hdf5` 的一条断言靠裸子串匹配假过了几个月（HISTORY §…，修法是 check-wants 规则 C）。"
-  ],
-  "_rule": [
-    "每条 = 一条**已被推翻**的断言。`text` 是它的**特征片段**（会被当搜索串在活状态文档里找）。",
-    "`why` 说它为什么错，`evidence` 给复跑方式或出处，`fixed_in` 说现在哪里说对了。",
-    "`check-retractions.py` 的判据：活状态文档里只要出现 `text`，**该行必须带更正标记**",
-    "（已翻案/更正/是错的/误读/推翻…），否则报错 —— 目的是让'翻过的句子'不能悄悄回来当现状。",
-    "⚠️ `HISTORY.md` 是 append-only 的历史，**不在扫描范围内**（那里保留原文是对的）。"
-  ],
-  "retractions": [
-    {
-      "id": "R-001",
-      "text": "线程档在 Pages 上跑不起来",
-      "why": "误读旧笔记里『只有 Chromium 能兼得 COI 与 CDN』的措辞 —— 被 coi-serviceworker 拦掉的是**跨源 CDN 脚本**，不是 COI 本身。",
-      "evidence": "test/browser/probe-coi-sw.mjs（三引擎 × 三档：装 SW 后 Chromium/Firefox/WebKit 全部 coi=true + SAB）",
-      "fixed_in": "build/113/PLAN-arch.md §2 B6（『那句是错的』）+ HANDOFF §8"
-    },
-    {
-      "id": "R-002",
-      "text": "重复符号 vs LAPACK",
-      "why": "查错了对象：当时比的是 `liblapack.a`（交集确实 0），而真实的重复对是 `-lrefblas`(f2c) 与 `blas-nof2c/librefblas.a`(gfortran)，两者共享 156 个同名符号。",
-      "evidence": "emnm 交叉：78 个签名不匹配符号中，librefblas.a 命中 77、OpenBLAS 命中 78、liblapack.a 命中 0",
-      "fixed_in": "build/113/NOTES-threads.md『E2 悬案：根因锁定』"
-    },
-    {
-      "id": "R-003",
-      "text": "换 Fortran 接口",
-      "why": "G77/GFORT 那两个宏只改符号命名与复数传递，**不改子程序的返回约定**；干净副本 + F_COMPILER=G77 重编后，78 个 signature mismatch 一个没少。",
-      "evidence": "build/113/NOTES-threads.md『E2 悬案』（构建日志里 F_INTERFACE_G77 出现 1689 次、GFORT 0 次）",
-      "fixed_in": "build/113/NOTES-threads.md（真根因 = 子程序返回类型：f2c 的 int vs OpenBLAS 的 void）"
-    },
-    {
-      "id": "R-004",
-      "text": "17 个不产汇总行",
-      "why": "实际构成是 2 个 bench + 15 个真不产 + **4 个『有自己的格式』**（带 URL 前缀 / 带 `/ N N/A` / 用『结果：』前缀 / 裸环境启动即失败）。",
-      "evidence": "build/sweep.sh --selftest 与 test/browser/manifest.json（PROBES=1 选 66、跳 17）",
-      "fixed_in": "build/113/PLAN-arch.md §2 A3"
-    },
-    {
-      "id": "R-005",
-      "text": "漂移 7 处",
-      "why": "逐行核对后是 **10 处**（少数了：JSPI 能力门 worker 完全没有、pkgfix 的 eval 串两边不同、execute_interp 与包装的顺序相反）。",
-      "evidence": "build/113/PLAN-arch.md §2 A2（逐条列出 10 处）",
-      "fixed_in": "build/113/PLAN-arch.md §2 A2『逐行核出来是 10 处』"
-    },
-    {
-      "id": "R-006",
-      "text": "OCTAVE_VER = 7.2.0",
-      "why": "曾被审计列为『7.2 残留』，实为**误读** —— 它是 7.2 车道的上游配方，11.3.0 容器里根本没这个文件。",
-      "evidence": "HISTORY.md:1200-1202；.githooks/check-consistency.py 的豁免注释",
-      "fixed_in": "check-consistency.py 的 7.2 车道检查里明确豁免 build/Makefile"
-    },
-    {
-      "id": "R-007",
-      "text": "probe-fontname.mjs 13 项",
-      "why": "实测复跑是 **19 PASS**（HANDOFF 里同时存在 13 与 19 两个值，13 的那两处是陈旧副本）。",
-      "evidence": "cd /mnt/hdd/octave-wasm-build/harness && sh run.sh <repo>/test/browser/probe-fontname.mjs http://127.0.0.1:8761/  → === 19 PASS / 0 FAIL ===",
-      "fixed_in": "HANDOFF.md（两处改成 19 项，并注明曾写 13）"
-    },
-    {
-      "id": "R-008",
-      "text": "probe-core-names.mjs，19 项",
-      "why": "实测复跑是 **23 PASS**（HANDOFF 里同时存在 23 与 19 两个值，19 的那处是陈旧副本）。",
-      "evidence": "同上跑法换 probe-core-names.mjs → === 23 PASS / 0 FAIL ===",
-      "fixed_in": "HANDOFF.md §7（改成 23 项，并注明曾写 19）"
-    }
-  ]
+ "schema": 1,
+ "_why": [
+  "断言台账（事实系统 F3，2026-09-26）。**为什么需要它**：本仓的'翻案'一直只是散文 ——",
+  "没有索引、也没有任何东西会在被推翻的断言**重新出现**时报警。实测过的代价：",
+  "`build/113/PLAN-arch.md:36` 的'线程档在 Pages 上跑不起来'在**同一个文件**的 `:422` 被更正过，",
+  "却一直留到 F3 —— 而同一条断言在 HANDOFF 里也有一份副本。",
+  "更早的同类：`accept-hdf5` 的一条断言靠裸子串匹配假过了几个月（HISTORY §…，修法是 check-wants 规则 C）。"
+ ],
+ "_rule": [
+  "每条 = 一条**已被推翻**的断言。`text` 是它的**特征片段**（会被当搜索串在活状态文档里找）。",
+  "`why` 说它为什么错，`evidence` 给复跑方式或出处，`fixed_in` 说现在哪里说对了。",
+  "`check-retractions.py` 的判据：活状态文档里只要出现 `text`，**该行必须带更正标记**",
+  "（已翻案/更正/是错的/误读/推翻…），否则报错 —— 目的是让'翻过的句子'不能悄悄回来当现状。",
+  "⚠️ `HISTORY.md` 是 append-only 的历史，**不在扫描范围内**（那里保留原文是对的）。"
+ ],
+ "retractions": [
+  {
+   "id": "R-001",
+   "text": "线程档在 Pages 上跑不起来",
+   "why": "误读旧笔记里『只有 Chromium 能兼得 COI 与 CDN』的措辞 —— 被 coi-serviceworker 拦掉的是**跨源 CDN 脚本**，不是 COI 本身。",
+   "evidence": "test/browser/probe-coi-sw.mjs（三引擎 × 三档：装 SW 后 Chromium/Firefox/WebKit 全部 coi=true + SAB）",
+   "fixed_in": "build/113/PLAN-arch.md §2 B6（『那句是错的』）+ HANDOFF §8"
+  },
+  {
+   "id": "R-002",
+   "text": "重复符号 vs LAPACK",
+   "why": "查错了对象：当时比的是 `liblapack.a`（交集确实 0），而真实的重复对是 `-lrefblas`(f2c) 与 `blas-nof2c/librefblas.a`(gfortran)，两者共享 156 个同名符号。",
+   "evidence": "emnm 交叉：78 个签名不匹配符号中，librefblas.a 命中 77、OpenBLAS 命中 78、liblapack.a 命中 0",
+   "fixed_in": "build/113/NOTES-threads.md『E2 悬案：根因锁定』"
+  },
+  {
+   "id": "R-003",
+   "text": "换 Fortran 接口",
+   "why": "G77/GFORT 那两个宏只改符号命名与复数传递，**不改子程序的返回约定**；干净副本 + F_COMPILER=G77 重编后，78 个 signature mismatch 一个没少。",
+   "evidence": "build/113/NOTES-threads.md『E2 悬案』（构建日志里 F_INTERFACE_G77 出现 1689 次、GFORT 0 次）",
+   "fixed_in": "build/113/NOTES-threads.md（真根因 = 子程序返回类型：f2c 的 int vs OpenBLAS 的 void）"
+  },
+  {
+   "id": "R-004",
+   "text": "17 个不产汇总行",
+   "why": "实际构成是 2 个 bench + 15 个真不产 + **4 个『有自己的格式』**（带 URL 前缀 / 带 `/ N N/A` / 用『结果：』前缀 / 裸环境启动即失败）。",
+   "evidence": "build/sweep.sh --selftest 与 test/browser/manifest.json（PROBES=1 选 66、跳 17）",
+   "fixed_in": "build/113/PLAN-arch.md §2 A3"
+  },
+  {
+   "id": "R-005",
+   "text": "漂移 7 处",
+   "why": "逐行核对后是 **10 处**（少数了：JSPI 能力门 worker 完全没有、pkgfix 的 eval 串两边不同、execute_interp 与包装的顺序相反）。",
+   "evidence": "build/113/PLAN-arch.md §2 A2（逐条列出 10 处）",
+   "fixed_in": "build/113/PLAN-arch.md §2 A2『逐行核出来是 10 处』"
+  },
+  {
+   "id": "R-006",
+   "text": "OCTAVE_VER = 7.2.0",
+   "why": "曾被审计列为『7.2 残留』，实为**误读** —— 它是 7.2 车道的上游配方，11.3.0 容器里根本没这个文件。",
+   "evidence": "HISTORY.md:1200-1202；.githooks/check-consistency.py 的豁免注释",
+   "fixed_in": "check-consistency.py 的 7.2 车道检查里明确豁免 build/Makefile"
+  },
+  {
+   "id": "R-007",
+   "text": "probe-fontname.mjs 13 项",
+   "why": "实测复跑是 **19 PASS**（HANDOFF 里同时存在 13 与 19 两个值，13 的那两处是陈旧副本）。",
+   "evidence": "cd /mnt/hdd/octave-wasm-build/harness && sh run.sh <repo>/test/browser/probe-fontname.mjs http://127.0.0.1:8761/  → === 19 PASS / 0 FAIL ===",
+   "fixed_in": "HANDOFF.md（两处改成 19 项，并注明曾写 13）"
+  },
+  {
+   "id": "R-008",
+   "text": "probe-core-names.mjs，19 项",
+   "why": "实测复跑是 **23 PASS**（HANDOFF 里同时存在 23 与 19 两个值，19 的那处是陈旧副本）。",
+   "evidence": "同上跑法换 probe-core-names.mjs → === 23 PASS / 0 FAIL ===",
+   "fixed_in": "HANDOFF.md §7（改成 23 项，并注明曾写 19）"
+  },
+  {
+   "id": "R-009",
+   "text": "『`-pthread` 要求链上**每个对象**都声明 `atomics`』／『atomics 缺失 ⇒ 链接必被 wasm-ld 拒』",
+   "why": "过度概括（2026-09-27 实测更正）：wasm-ld 的规则针对**带 TLS / 用原子操作**的对象（报错原文里的 `libglpk_la-tls.o`、`fccache.o`、`src_sfnt_sfnt.c.o` 都是这类）。**纯计算、无 TLS 的对象可以静默链进 shared-memory 模块**：实测那份线程档产物`m2fc-threads-out` 当时链进去的是**基础档**（非 atomics）的 SIMD BLAS（身份证 `inputs.blas.resolved_dir=/src/deps/lapack-simd/lib`，sha `6160358f…`），而链接 0 违规、verdict=ok。",
+   "evidence": "① `python3 build/113/atomics_scan.py --quiet /src/deps/lapack-simd/lib/*.a` → 1781 处缺；② 同一份产物 `octave.build.json` 的 `inputs.blas.refblas.sha256` == 该目录那份的 sha；③ 链接日志 `grep -c 'shared-memory is disallowed'` = 0",
+   "fixed_in": "PLAN-threads §6（口径改成「带 TLS/原子的对象必须」）+ 新增可证伪判据：`check-build-manifest.py::lane_blas_problem()` —— 声明 threads=true 时 BLAS 必须来自车道路径"
+  }
+ ]
 }
