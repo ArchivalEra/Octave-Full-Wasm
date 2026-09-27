@@ -26,17 +26,11 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 [ -d "$SITE/assets" ] || { echo "FATAL: $SITE/assets 不存在（站点目录写错了？）" >&2; exit 2; }
 [ -d "$LANE_CORE" ] || { echo "FATAL: 车道核心 .oct 不在 $LANE_CORE（先 docker cp 出来）" >&2; exit 2; }
 
-echo "== ① 落地 .oct（oct-threads/ + octdir-threads/）"
-mkdir -p "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads"
-cp -f "$LANE_CORE"/*.oct "$SITE/assets/oct-threads/"
-if [ -d "$LANE_PKG" ]; then
-  for d in "$LANE_PKG"/*/; do
-    [ -d "$d" ] || continue
-    mkdir -p "$SITE/assets/octdir-threads/$(basename "$d")"
-    cp -f "$d"*.oct "$SITE/assets/octdir-threads/$(basename "$d")/"
-  done
-fi
-echo "   oct-threads: $(ls "$SITE/assets/oct-threads" | wc -l) 个；octdir-threads: $(find "$SITE/assets/octdir-threads" -name '*.oct' | wc -l) 个"
+echo "== ① 落地 .oct：**结构由基础清单决定**（源目录只提供文件，不决定放哪）"
+# 为什么交给专用脚本：第一版按"源目录 → 目标目录"朴素映射，结果 slicot 调度模块（编在核心目录、
+# 清单说它属于 octdir/control/）被放错地方。清单是结构的**唯一真值**；该脚本另有 5 条自证。
+python3 "$REPO/build/113/stage-oct-by-manifest.py" "$SITE" "$LANE_CORE" "$LANE_PKG" || {
+  echo "FATAL: 落件失败（缺件或缺源目录）" >&2; exit 1; }
 
 echo "== ② 生成线程档清单（并从基础清单反查）"
 python3 "$REPO/build/113/make-lane-manifest.py" "$SITE/assets"

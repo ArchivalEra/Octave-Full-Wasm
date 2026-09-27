@@ -3113,3 +3113,48 @@ lane.js 再上线）。另一洞：线程档产物缺席时站点上遗留的 `t
 （`zgejsv_` 未定义）与树内 `.oct` 目标 —— 本站 `.oct` 走独立车道，不用树的 Makefile）之后，
 `relink.sh link product` **重链出 `1ed3e528561e4475…`，与部署件逐字节相同**，且
 `relink.sh verify product` 报 **verdict=ok**（9 项声明全有实测背书）⇒ 容器已回到"能产出部署件的那棵树"。
+
+---
+
+### 5.63 线程档 B6：依赖 farm + Octave 树 + `.oct` 车道全部重编，双档探针 15/15（2026-09-27，branch `threads`）
+
+**用户拍板**："就开新分支做这个吧"（B6 = 要求宿主发 COI 头以启用多线程）。工作令 = `PLAN-threads.md` §6。
+
+**规模是**"整条链"（实测，不是猜）：`-pthread` 要求链上**带 TLS/原子的**对象都声明 atomics，
+而现役 farm 20+ 个库**全部**缺 —— 且 `.oct` 车道（44 条资产）也**必须**按 `-pthread` 重编：
+非线程档编的 side module 载入 shared-memory 主模块时 `TypeError: tlsInitFunc is not a function`
+（B5 三档对照：带 `-pthread` = 6/0；不带 = ok=0；只加 `-matomics -mbulk-memory` = **也 ok=0**）。
+
+**做法**：两档 prefix 分开（`/usr/local-threads`、`/src/deps-threads`），**现役 farm 一字不动**
+（实测：base 仍 100% 缺 atomics、部署件仍 `1ed3e528…`）；车道旗标一个变量 `LANE_FLAGS` 贯穿
+（`build-deps.sh` 显式认；其余脚本用 `build/113/lane-shim.sh` 的 PATH 影子包装，零改脚本）。
+
+**踩到并修掉的七个"静默陷阱"**（共同点：构建 rc=0、脚本符号自检也过，产物却是旧的；
+判据只能是**产物** —— 逐成员扫字节）：
+1. `make` 认为无事可做（影子改编译器不改 Makefile ⇒ mtime 判定目标都新）→ 独立 WORK；
+2. `emcmake`/`emconfigure` 把编译器钉成绝对路径 ⇒ 脚本自己的旗标串绕过影子 → 拼 `$LANE_FLAGS`；
+3. `if [ ! -s $PREFIX/lib/x.a ]` 式跳过（expat 实测）→ 车道 prefix 先清再编；
+4. `link-web.sh`/`configure-113-full.sh` 里 21 处**写死的 `/src/deps/...`** → `DEPS_ROOT`；
+5. `DEPS=/usr/local` 是**硬赋值**（`--selfcheck` 看不见）→ 可覆盖 + 进模式表（覆盖数 22→26）；
+6. 含空格的多词旗标被当一个参数（`SIMD_FLAG="-msimd128 -pthread"` ⇒ 149 个 .f 全被拒编）→ 单值变量只放单值；
+7. `make install` 被树内 `.oct` 坏目标堵死（连 `fonts/` 都没有）→ 车道 install = 基线头树 + 车道 `config.h` + 并入 `share/`。
+
+**产物**：`relink.sh link threads` → **`verdict=ok`**（9 项声明全有实测背书，含 `threads: true`）、
+`threads 实测 {pthread_glue:54, worker_glue:1, shared_memory:true}`、`v128:4756`、`exported_functions:725`、
+BLAS 来自车道（`/src/deps-threads/lapack-simd/lib`，判据 `inputs.blas.resolved_dir` 必须含 `-threads`）。
+
+**双档上线（8768）**：线程档落 `threads/`（文件名不变、子目录区分）；`.oct` 分档为
+`oct-threads/` + `octdir-threads/`（44/44 逐字齐、每个都有 `_emscripten_tls_init`、基础档 44 个都没有）；
+`manifest.threads.json`（只差 oct/octdir 前缀）；页面换选档感知版。
+**`test/browser/probe-lane.mjs` 15 PASS / 0 FAIL**：带头选线程档 + `caps.sharedMemory === true`、
+不带头落基础档 + ready、`?lane=base` 覆盖生效、**没 COI 强选线程档硬失败**
+（`DataCloneError: … SharedArrayBuffer transfer requires self.crossOriginIsolated`）。
+
+**探针当场抓出的两个真 bug**（都已修）：
+① `createOctaveHost` 没把 `lane` **转发**给内核 ⇒ 页面载线程档胶水、内核取基础档 wasm ⇒ `BindingError`；
+② pthread 构建的内存是**从 JS 导入**的 ⇒ 只认 `exports.memory` 会让 `st.mem` 为 null，
+连带"点击写内存"那条路径（交互套件）静默失效 —— 改成"导出优先、退回导入"。
+
+**顺带更正一处过度概括（R-009）**："每个对象都必须带 atomics"不准确 —— wasm-ld 只对**带 TLS/原子的**
+对象强制；纯计算对象（无 TLS）能静默链进（实测：某次线程档产物链的正是基础档非 atomics SIMD BLAS，
+0 违规、verdict=ok）⇒ 判据改成"**看输入侧溯源**"（`lane_blas_problem()`）。

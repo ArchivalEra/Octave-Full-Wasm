@@ -85,9 +85,14 @@ def checks(man, lane, assets_dir, exists=os.path.exists):
     for a in lane_oct:
         kind = a.get("kind")
         if kind == "oct":
-            p = os.path.join(assets_dir, a.get("url", ""))
+            # ⚠️ 清单里的 url 是**相对站点根**的（`assets/oct-threads/x.oct`），而本函数的入参是
+            #    `<站点>/assets` ⇒ 直接 join 会得到 `assets/assets/...`（实测踩到：判据把**已经落好的**
+            #    文件全报成"不存在"）。这里把开头的 `assets/` 剥掉再接。
+            url = a.get("url", "")
+            rel = url.split("assets/", 1)[-1] if url.startswith("assets/") else url
+            p = os.path.join(assets_dir, rel)
             if not exists(p):
-                bad.append("线程档资产不存在：%s" % a.get("url"))
+                bad.append("线程档资产不存在：%s（找的是 %s）" % (url, p))
         else:
             p = os.path.join(assets_dir, (a.get("base_url") or "").split("/", 1)[-1])
             if not exists(p):

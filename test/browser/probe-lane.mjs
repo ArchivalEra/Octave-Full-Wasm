@@ -84,6 +84,7 @@ async function probeLane(browser, url, { expectReady = true, waitMs = 90000 } = 
       capsLane: c && c.lane ? c.lane.chosen : null,
       capsArtifactThreads: c && c.artifact ? c.artifact.threads : null,
       capsVerdict: c && c.artifact ? c.artifact.verdict : null,
+      sharedMemory: c ? c.sharedMemory : null,
       buf,
     };
   }).catch(e => ({ evalFail: String(e).slice(0, 160) }));
@@ -109,9 +110,9 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   check(i.laneState === 'threads' && i.lanePlan === 'threads' && i.capsLane === 'threads',
         '★ 带头站点选中**线程档**', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
   check(r.ready === true, '带头站点：页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
-  check(i.buf && i.buf.shared === true,
-        '★★ 线程档**真的**拿到 shared 内存（HEAP8.buffer instanceof SharedArrayBuffer）',
-        JSON.stringify(i.buf));
+  check(i.sharedMemory === true,
+        '★★ 线程档**真的**拿到 shared 内存（caps.sharedMemory：主模块内存是 SharedArrayBuffer）',
+        JSON.stringify({ sharedMemory: i.sharedMemory, heap8: i.buf }));
   check(i.capsArtifactThreads === true,
         '★ 产物的实测事实也是线程档（身份证 measured.threads.shared_memory）',
         JSON.stringify({ artifactThreads: i.capsArtifactThreads, verdict: i.capsVerdict }));
@@ -125,7 +126,8 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   check(i.capsLane === 'base', '★ 不带头 ⇒ 落回**基础档**', JSON.stringify({ caps: i.capsLane, state: i.laneState }));
   check(r.ready === true, '不带头：基础档照常跑到 ready（任何静态托管都能跑）',
         JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
-  check(i.buf && i.buf.shared === false, '基础档不是 shared 内存（与现役形态一致）', JSON.stringify(i.buf));
+  check(i.sharedMemory === false, '基础档不是 shared 内存（与现役形态一致）',
+        JSON.stringify({ sharedMemory: i.sharedMemory }));
 }
 
 // ── 格 3：带头 + 显式 base ⇒ 基础档在隔离环境里也能跑（健壮性）──────────────────
@@ -134,8 +136,9 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   const i = r.info;
   check(i.laneState === 'base' && i.capsLane === 'base', '★ `?lane=base` 覆盖生效',
         JSON.stringify({ state: i.laneState, caps: i.capsLane }));
-  check(r.ready === true && i.buf && i.buf.shared === false,
-        '带头站点上基础档照常可用（两档不互斥）', JSON.stringify({ ready: r.ready, buf: i.buf }));
+  check(r.ready === true && i.sharedMemory === false,
+        '带头站点上基础档照常可用（两档不互斥）',
+        JSON.stringify({ ready: r.ready, sharedMemory: i.sharedMemory }));
 }
 
 // ── 格 4（反证）：不带头 + 显式 threads ⇒ **必须响亮地失败** ─────────────────────

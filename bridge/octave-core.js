@@ -82,6 +82,7 @@
       },
       lane: { chosen: lane.lane, dir: lane.dir || '', js: lane.js,
               threads: lane.lane === 'threads' },
+      sharedMemory: null,      // 实例化后填（见 instantiateWasm 的 .then）
       artifact: null,     // 由 octave.build.json 填充（读不到就是 null，绝不因此报错）
     };
     // ── JSPI 能力门的状态（G0）────────────────────────────────────────────────
@@ -223,7 +224,20 @@
             return WebAssembly.instantiate(b, info);
           })
           .then(function (out) {
-            st.mem = out.instance.exports && out.instance.exports.memory ? out.instance.exports.memory : null;
+            // ⚠️ 内存可能**不是导出的、而是从 JS 导入的**（pthread 构建实测如此）⇒ 只认
+            //    `exports.memory` 会让 `st.mem` 为 null，连带两条都坏：① `caps.sharedMemory` 报 false；
+            //    ② 内核里"把点击写进内存"的路径（`st.mem.buffer`）静默失效（交互套件会假过）。
+            //    ⇒ 取"导出优先、退回导入的 memory"。
+            st.mem = (out.instance.exports && out.instance.exports.memory)
+                  || (info && info.env && info.env.memory)
+                  || (global.Module && global.Module.wasmMemory) || null;
+            // ★ B6：把"内存是不是 shared"记进 Capabilities —— 这是"线程档真的在跑"的**产物侧证据**，
+            //   而且给了探针一个稳定取法（`Module.HEAP8` 在 -O2 构建里没导出，实测读不到）。
+            try {
+              caps.sharedMemory = !!(st.mem && st.mem.buffer
+                && typeof SharedArrayBuffer === 'function'
+                && st.mem.buffer instanceof SharedArrayBuffer);
+            } catch (e) { caps.sharedMemory = null; }
             receiveInstance(out.instance, out.module);
           })
           .catch(function (e) {
