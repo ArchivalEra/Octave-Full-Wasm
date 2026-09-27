@@ -36,6 +36,9 @@
 (function (global) {
   'use strict';
 
+  // ⚠️ 清单 URL 的注入点**已经存在**（下面的 `init(url)`，实现见 `fetchJSON(url || MANIFEST_URL)`）
+  //    —— B6 双档复用它（线程档传 `assets/manifest.threads.json`）：**别再加法子**，
+  //    两套机制必然分叉（本仓的老教训）。
   var MANIFEST_URL = 'assets/manifest.json';
   var OCTAVE_M = '/usr/src/octave/m';
 

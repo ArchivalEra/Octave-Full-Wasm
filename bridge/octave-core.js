@@ -15,7 +15,8 @@
 // JSPI 能力门（两个 gate）、`Capabilities`。
 // 宿主**提供**（9 件，全部是"这一侧才知道的事"）：
 //   base      资源前缀（wasm/.data/资产/清单都在它后面）
-//   lane      选档计划（B6）：`{lane,dir,js,wasm,data}` —— 线程档时 wasm 在 `threads/`
+//   lane      选档计划（B6）：`{lane,dir,js,wasm,data,manifest}` —— 线程档时 wasm 在 `threads/`、
+//             资产清单换成 `assets/manifest.threads.json`（只有 `.oct` 那部分不同）
 //             子目录（文件名不变，胶水内部的 `octave.data` 引用因此不用改）。
 //             缺省 = 基础档（`opts.lane` 不传时的行为与 B6 之前逐字节一致）
 //   print     stdout 汇（页面：console.log + 上屏；worker：合批 postMessage）
@@ -382,7 +383,8 @@
       // 控制台里：await OctaveAssets.load('ode15s') / OctaveAssets.list()
       var Assets = host.assets(Module, baseOf(), function () { return st.ready; });
       st.assets = Assets;
-      Assets.init().then(function () {
+      // ★ B6：资产清单**按档**（线程档的 `.oct` 在 `oct-threads/`，理由见 bridge/lane.js）。
+      Assets.init(lane.manifest).then(function () {
         host.print('[assets] 可用资产: ' + Assets.list().join(', '));
         return Assets.load(CORE_DLDFCN).catch(function (e) {
           warn('[assets] dldfcn 核心组装载失败（这些函数将不可用）: ' + e.message);

@@ -57,10 +57,16 @@
     // data 两档共用根目录那一份 —— 前提是两档的 `octave.data` **sha 相同**（链接后核对，
     // 记录在 HANDOFF/PLAN 里）。若哪天不同了，把 threads 的 data 改成 'threads/octave.data'
     // 并把文件部署过去即可（探针 probe-lane 会核对"胶水要的文件真的取得到"）。
+    // ★ 两档**只有 `.oct` 那部分资产不同**（2026-09-27 实测）：非 atomics 编的 side module 在
+    //   shared-memory 主模块里连 dlopen 都过不去（`TypeError: tlsInitFunc is not a function`，
+    //   见 NOTES-threads.md B5）⇒ 线程档必须用自己的 `.oct` 集（`oct-threads/`、`octdir-threads/`），
+    //   其余资产（.m 包 / 文档 / 字体数据）两档共用。清单里逐条带 `url`，所以"分档"= 换一份清单。
     threads: { lane: 'threads', dir: 'threads/',
-               js: 'threads/octave.js', wasm: 'threads/octave.wasm', data: 'octave.data' },
+               js: 'threads/octave.js', wasm: 'threads/octave.wasm', data: 'octave.data',
+               manifest: 'assets/manifest.threads.json' },
     base: { lane: 'base', dir: '',
-            js: 'octave.js', wasm: 'octave.wasm', data: 'octave.data' }
+            js: 'octave.js', wasm: 'octave.wasm', data: 'octave.data',
+            manifest: 'assets/manifest.json' }
   };
 
   function filesFor(lane) { return FILES[lane] || FILES.base; }
