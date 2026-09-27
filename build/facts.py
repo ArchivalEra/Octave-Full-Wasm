@@ -20,6 +20,7 @@
 #   python3 build/facts.py                       # 量一遍并写 build/FACTS.json
 #   python3 build/facts.py                        # **重测并重写** build/FACTS.json（掉条会拒绝）
 #   python3 build/facts.py --allow-drop           # 允许本次掉条（掉掉的键会打出来；记进 HISTORY）
+#   python3 build/facts.py --accept-changes       # 允许本次**改口**（旧值→新值打出来；确认是实测出来的再按）
 #   python3 build/facts.py --render              # 把台账渲染成 markdown 机器块（打到 stdout）
 #   python3 build/facts.py --render-doc [文件]   # 把机器块写进 HANDOFF.md（默认）
 #   python3 build/facts.py --check               # 文档里的块是否与台账一致（陈旧 ⇒ exit 1）
@@ -33,6 +34,15 @@
 #   会拦"活状态文档里出现裸数字"，也会拦"块与台账不一致"与"引用不存在的键"。
 #   为什么不再满足于"抄了但抄对"：抄对了也要**有人去更新**，而"该更新哪几处"正是过去两天
 #   反复出错的环节（`22`/`23` 个环境变量 6 处、`13`/`19` 项探针 2 处、`703`/`710`…）。
+#
+# ★ 两道守卫（2026-09-27，互为补充）—— **重测**这一步有两个静默的坏法，各配一道：
+#   · **掉条**（键没了）：输入不在 ⇒ 事实**静默消失**。守卫 `dropped_keys` + `--allow-drop`。
+#   · **改口**（值换了）：输入变了、或量错了 ⇒ 事实**静默改成另一个数**。这条更阴 ——
+#     `check-facts.py` 的规则 D 只对 **3 个 sha** 回盘核对，其余 41 条的旧值一旦被覆盖，
+#     **再也查不到它变过**。守卫 `changed_keys` + `--accept-changes`。
+#   ⚠️ 改口守卫**只比 `value`**，不比 `cmd`/`source`/`note`：那是"复跑方式"的描述，改它们是
+#   文档维护的正常动作；连它们也要显式接受 ⇒ 守卫变成噪音 ⇒ 最后被 `--accept-changes` 一律
+#   糊过去，守卫就废了（这就是为什么它守住的范围要窄）。
 # ═══════════════════════════════════════════════════════════════════════════════
 import json
 import os
@@ -118,6 +128,36 @@ def dropped_keys(old_facts, new_facts):
     return sorted(set(old_facts or {}) - set(new_facts or {}))
 
 
+def _short(v, n=24):
+    """把值缩到一行（sha 只留前 16 位），给"改口"提示用。"""
+    s = v if isinstance(v, str) else str(v)
+    return s if len(s) <= n else (s[:16] + "…" if len(s) == 64 else s[:n] + "…")
+
+
+def changed_keys(old_facts, new_facts):
+    """本次重测会把哪些键的**值**换掉（纯函数：自证要用）。返回 [(键, 旧值, 新值)]。
+
+    与 `dropped_keys` 是一对，管两件不同的坏事：
+      · 掉条 = 键没了（输入不在 ⇒ 事实静默消失）；
+      · 改口 = 值换了（输入变了/量错了 ⇒ 事实静默改成另一个数）。
+    后者更难发现：`check-facts.py` 只对 3 个 sha 回盘核对，其余条目没有新鲜度检查。
+
+    ⚠️ **只比 `value`**（见文件头"两道守卫"那段）：`cmd`/`source`/`note` 是复跑方式的描述，
+    改它们不该要求一次显式接受。新增的键也不算"改口"（那是新增，交给 `dropped_keys` 的反面）。
+    """
+    def _v(f):
+        return f.get("value") if isinstance(f, dict) else f
+
+    olds = old_facts or {}
+    out = []
+    for k, nv in sorted((new_facts or {}).items()):
+        if k not in olds:
+            continue                      # 新增的键不是"改口"
+        if _v(olds[k]) != _v(nv):
+            out.append((k, _v(olds[k]), _v(nv)))
+    return out
+
+
 def main(argv):
     if argv and argv[0] == "--render":
         sys.stdout.write(render_block(load_ledger()) + "\n")
@@ -142,7 +182,7 @@ def main(argv):
             if f[k].get("note"):
                 print("    备注  %s" % f[k]["note"])
         return rc
-    return measure()
+    return measure(argv)
 
 
 def _block_of(ledger):
@@ -166,10 +206,30 @@ CASES = [
      lambda: dropped_keys({"a": 1, "b": 2}, {"a": 1}) == ["b"]),
     ("★ 不掉条（新增/相同）⇒ 不报", lambda: dropped_keys({"a": 1}, {"a": 1, "c": 3}) == []),
     ("★ 空台账起步 ⇒ 不报（第一次生成不许被自己拦住）", lambda: dropped_keys({}, {"a": 1}) == []),
+    # ★ 改口守卫（2026-09-27，与掉条守卫是一对）：值换了必须**显式接受**
+    ("★ **改口 ⇒ changed_keys 必须报出来，且带旧值→新值**",
+     lambda: changed_keys({"a": {"value": 1}}, {"a": {"value": 2}}) == [("a", 1, 2)]),
+    ("★ 值没变（相同）⇒ 不报", lambda: changed_keys({"a": {"value": 1}}, {"a": {"value": 1}}) == []),
+    ("★ **只改 cmd/source ⇒ 不报**（复跑方式的描述不是「改口」，否则守卫会变噪音）",
+     lambda: changed_keys({"a": {"value": 1, "cmd": "旧", "source": "旧"}},
+                          {"a": {"value": 1, "cmd": "新", "source": "新"}}) == []),
+    ("★ 新增的键 ⇒ 不算改口（那是新增，不该被这条拦）",
+     lambda: changed_keys({"a": {"value": 1}}, {"a": {"value": 1}, "b": {"value": 9}}) == []),
+    ("★ 空台账起步（旧为空）⇒ 不报", lambda: changed_keys({}, {"a": {"value": 1}}) == []),
+    ("★ sha 型的长值：_short 必须截断（否则 FATAL 一行能刷屏）",
+     lambda: _short("a" * 64) == "a" * 16 + "…"),
 ]
 
 
-def measure():
+def measure(argv):
+    """量一遍全部事实并写台账。
+
+    ⚠️ **必须接 `argv`**（2026-09-27 实测）：两道守卫都要读 `--allow-drop` / `--accept-changes`。
+    这个参数以前缺着 —— 于是 drop guard 里那句 `not in argv` 是个 **NameError**，
+    只在**真的掉条时**才炸（短路的反面：不掉条就永远走不到那句）。
+    后果：掉条时报的不是"掉了哪几条"，而是一段 traceback；`--allow-drop` 从来没生效过。
+    "写盘被拦住了"是**顺带**的（异常早于写盘），不是守卫生效 —— 那不叫守卫，那叫故障。
+    """
     facts = {}
 
     # ── 产物侧：读**产物身份证**（A1 起它在 site/ 里；读数不用重链）────────────────
@@ -459,6 +519,21 @@ def measure():
         return 2
     if dropped:
         print("⚠ --allow-drop：本次掉掉 %d 条：%s" % (len(dropped), ", ".join(dropped)), file=sys.stderr)
+
+    # ★ 第二道守卫：**改口**（值换了）。见文件头"两道守卫"。没有它，一次量错或输入换了，
+    #   旧值就被静默覆盖 —— 而闸门只对 3 个 sha 回盘核对，其余条目再也没人知道它变过。
+    changed = changed_keys((load_ledger().get("facts") or {}) if os.path.exists(OUT) else {}, facts)
+    if changed and "--accept-changes" not in argv:
+        print("FATAL: 本次重测会**改掉 %d 条事实的值**（未经接受的改口）：" % len(changed), file=sys.stderr)
+        for k, o, n in changed:
+            print("       %-24s %s → %s" % (k, _short(o), _short(n)), file=sys.stderr)
+        print("       台账不写。逐条确认这些变化**是实测出来的**（不是输入不在/量错了）之后，", file=sys.stderr)
+        print("       再显式 `--accept-changes`；若某条是量错了，先修输入 —— 那才是真 bug。", file=sys.stderr)
+        return 2
+    if changed:
+        print("⚠ --accept-changes：本次接受 %d 条改口：" % len(changed))
+        for k, o, n in changed:
+            print("       %-24s %s → %s" % (k, _short(o), _short(n)))
     doc = {"schema": 1, "generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
            "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
            "facts": facts}

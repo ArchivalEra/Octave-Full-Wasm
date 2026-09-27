@@ -146,3 +146,29 @@ sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门�
   开机路径上的任何探测/预热**必须 try/catch**，否则异常会打断 `postRun` 剩下的步骤
   ⇒ `__octaveReady` 永远 false ⇒ **页面看起来"卡死"**（G1 那次事故的真身）。
 - 结论只认**产物**：`sha256sum`、`sweep-logs/<时间戳>/`、探针输出；不认印象。
+
+## Agent skills
+
+### Issue tracker
+
+工单是本仓的 markdown 文件，在 `.scratch/open-questions/issues/NN-*.md` 下 —— **本地 tracker，
+不用 GitHub Issues**（本仓是私有仓且从未建过任何 issue；活状态由 `HANDOFF.md` 承载，工单只装
+"未结案"）。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+五个规范角色写成工单头部 `**Status:**` 行的字符串（`needs-triage` / `needs-info` /
+`ready-for-agent` / `ready-for-human` / `wontfix`）。`wontfix` **不是删除** —— "我们决定不查这个"
+本身是一条结论，删掉它下一个人会重问一遍。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文：根 `CONTEXT.md`（`docs/adr/` 尚未创建 ⇒ 静默跳过）。见 `docs/agents/domain.md`。
+
+### 悬案台账（本仓专属，2026-09-27 起）
+
+**未结案的问题不留在散文里**：一条悬案 = 一张工单，且**必须挂一个可跑的结算件**（头部
+`**Settling:**` 行）。写不出结算件的，只能降级成 `NOTES-*.md` 里的"猜想"，不许留在活状态。
+结算件尚不存在的悬案是**合法工单** —— 它的第一交付物就是造那个结算件（写
+`**Settling:** 不存在 —— 本工单的第一交付物`，别编假路径）。
+一句话理由：**没结案的问题等于没被问过**；`retractions.json` 管"被推翻的"，这里管"还没查清的"。

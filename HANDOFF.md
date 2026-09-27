@@ -221,5 +221,5 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | 资产条目 | 49 | |
 | 最近一次**全绿**回归 | `20260927-181413` · **43 套 / 1,077 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 24 套 / 227 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20260927` · tar.zst 50,023,518 B · `d60e1dc3b95351ce…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `e2-openblas`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
+| 仓库 | 分支 `open-questions`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
