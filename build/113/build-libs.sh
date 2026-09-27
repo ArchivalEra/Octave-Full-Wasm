@@ -29,6 +29,11 @@ export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
 # 所以必须把它们作为 **configure 的命令行参数**传。
 CCACHE_CC="ccache emcc"
 CCACHE_CXX="ccache em++"
+# ★ 车道旗标（branch `threads`）：默认空 = 现役口径。
+#   ⚠️ 为什么有了影子还要它：`emcmake`/`emconfigure` 把编译器**钉成绝对路径**（toolchain 文件 /
+#   emconfigure 的 CC）⇒ 影子的 PATH 包装**管不到**脚本自己写的旗标串。实测 qhull/sndfile 重编后
+#   仍 100% 缺 atomics —— 凡是脚本**自己给 CFLAGS/CMAKE_C_FLAGS** 的地方都得拼 $LANE_FLAGS。
+LANE_FLAGS="${LANE_FLAGS:-}"
 
 say () { echo; echo "=== $*"; }
 need () { [ -f "$1" ] || { echo "FATAL: 缺 $1" >&2; exit 2; }; }
@@ -66,8 +71,8 @@ do_zlibbz2 () {
   #   ② 主模块是 PIC 构建，非 PIC 的 zlib 对象进不去，而 Octave 核心又没引用
   #        zlib 的流式接口（deflate/inflate/gzopen）→ 那些对象根本不会被拉进主模块
   #        → 依赖它们的 .oct（gzip/webio）导入解析不到 → **调用即整页 trap**。
-  CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
-  emmake make -j"$JOBS" CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" > "$WORK/zlib-make.log" 2>&1
+  CC="$CCACHE_CC" CFLAGS="-O2 -fPIC $LANE_FLAGS" emconfigure ./configure --prefix="$P" --static > "$WORK/zlib-conf.log" 2>&1
+  emmake make -j"$JOBS" CC="$CCACHE_CC" CFLAGS="-O2 -fPIC $LANE_FLAGS" > "$WORK/zlib-make.log" 2>&1
   emmake make install > "$WORK/zlib-inst.log" 2>&1
   grep -q ' deflate$' <(emnm "$P/lib/libz.a") || { echo "FATAL: libz.a 缺 deflate" >&2; exit 1; }
   # bzip2：**绕开它的 Makefile**。实测两轮都失败：其 Makefile 里 `CC=gcc` 是
@@ -79,7 +84,7 @@ do_zlibbz2 () {
   cd "$WORK/bzip2-1.0.8"
   local bzobjs=() c
   for c in blocksort huffman crctable randtable compress decompress bzlib; do
-    $CCACHE_CC -O2 -fPIC -D_FILE_OFFSET_BITS=64 -c "$c.c" -o "$c.bz.o"
+    $CCACHE_CC -O2 -fPIC $LANE_FLAGS -D_FILE_OFFSET_BITS=64 -c "$c.c" -o "$c.bz.o"
     bzobjs+=("$c.bz.o")
   done
   mkdir -p "$P/lib" "$P/include"
@@ -101,7 +106,7 @@ do_glpk () {
   # legacy 的 invoke_*/emscripten_longjmp（实测扫出 117 处），web 终链报
   #   invoke_ functions exported but exceptions and longjmp are both disabled
   emconfigure ./configure --prefix="$P" --disable-shared --enable-static \
-      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions" > "$WORK/glpk-conf.log" 2>&1
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" > "$WORK/glpk-conf.log" 2>&1
   emmake make -j"$JOBS" > "$WORK/glpk-make.log" 2>&1
   emmake make install > "$WORK/glpk-inst.log" 2>&1
   local s; s="$(emnm "$P/lib/libglpk.a")"
@@ -121,7 +126,7 @@ do_fftw () {
     emmake make distclean >/dev/null 2>&1 || true
     emconfigure ./configure --prefix="$P" --disable-fortran --disable-threads \
         --disable-openmp --disable-shared --enable-static $variant \
-        CC="$CCACHE_CC" CFLAGS="-O2 -fPIC" > "$WORK/fftw-conf.log" 2>&1
+        CC="$CCACHE_CC" CFLAGS="-O2 -fPIC $LANE_FLAGS" > "$WORK/fftw-conf.log" 2>&1
     emmake make -j"$JOBS" > "$WORK/fftw-make.log" 2>&1
     emmake make install > "$WORK/fftw-inst.log" 2>&1
   done
@@ -148,7 +153,8 @@ do_qhull () {
   local TC=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
   emcmake cmake -S "$WORK/qhull-8.0.2" -B "$WORK/qhull-build" \
       -DCMAKE_INSTALL_PREFIX="$P" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_C_FLAGS="-O2 -fPIC -fwasm-exceptions" -DCMAKE_CXX_FLAGS="-O2 -fPIC -fwasm-exceptions" \
+      -DCMAKE_C_FLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" \
+      -DCMAKE_CXX_FLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" \
       -DCMAKE_TOOLCHAIN_FILE="$TC" \
       -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
@@ -172,7 +178,7 @@ do_sndfile () {
   emcmake cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$P" \
       -DBUILD_SHARED_LIBS=OFF -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF \
       -DBUILD_TESTING=OFF -DENABLE_EXTERNAL_LIBS=OFF -DENABLE_MPEG=OFF \
-      -DCMAKE_C_FLAGS="-O2 -fPIC" -DCMAKE_TOOLCHAIN_FILE="$TC" \
+      -DCMAKE_C_FLAGS="-O2 -fPIC $LANE_FLAGS" -DCMAKE_TOOLCHAIN_FILE="$TC" \
       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
       -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
       > "$WORK/sndfile-conf.log" 2>&1

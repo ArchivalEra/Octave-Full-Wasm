@@ -32,6 +32,8 @@ SRC="${SRC:-/src/vendor}"
 WORK="${WORK:-/src/libwork}"
 P="${P:-/src/deps/sundials}"
 JOBS="${JOBS:-$(nproc)}"
+# ★ 车道旗标（branch threads）：emcmake 把编译器钉成绝对路径 ⇒ 影子管不到显式旗标串
+LANE_FLAGS="${LANE_FLAGS:-}"
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
 TARBALL="sundials-6.1.1.tar.gz"
 SRCDIR="$WORK/sundials-6.1.1"
@@ -96,7 +98,7 @@ emcmake cmake -S "$SRCDIR" -B "$BUILD" \
   -DCMAKE_INSTALL_PREFIX="$P" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-  -DCMAKE_C_FLAGS="-O2 -fPIC -fwasm-exceptions" \
+  -DCMAKE_C_FLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" \
   -DBUILD_SHARED_LIBS=OFF \
   -DSUNDIALS_PRECISION=double \
   -DSUNDIALS_INDEX_SIZE=32 \

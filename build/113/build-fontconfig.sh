@@ -39,7 +39,9 @@ PREFIX_FC="${PREFIX_FC:-/src/deps/fontconfig}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 8)}"
 
 # 与 configure-113-full.sh / link-web.sh 的口径逐字一致（-O2 + wasm 异常 + PIC）
-CFLAGS_BASE="-O2 -fPIC -fwasm-exceptions"
+LANE_FLAGS="${LANE_FLAGS:-}"   # ★ 车道旗标（branch threads）：emconfigure 把 CC 钉成
+                              #   绝对路径 ⇒ 影子管不到，必须拼进显式 CFLAGS
+CFLAGS_BASE="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS"
 
 # ── `--host` 要不要给？看它自带的 `config.sub` 认不认识 emscripten（实测的坑）────────
 # expat 2.6.4 的 config.sub 是旧的 ⇒ `--host=wasm32-unknown-emscripten` 直接报
