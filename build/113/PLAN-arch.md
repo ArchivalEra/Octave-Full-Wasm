@@ -367,12 +367,12 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
   · `glue-selftest` **91/91** ✓
   · 8768 冒烟六套（正对我动过的每一处）：`accept-113-boot 10/0`、`accept-worker 16/0`、
     `accept-embed-multi 13/0`、`accept-idbfs 9/0`、`accept-input 9/0`、`accept-ginput 10/0` ✓
-  · **8768 全量 43 套 / 1076 PASS / 0 FAIL**（`accept-worker` 恰好排在最后跑，正好覆盖了
-    "给 worker 的 `diagnose` 加 `caps` 字段"那一改）
+  · **8768 全量 43 套 / 1076 PASS / 0 FAIL**（**A2 当时**的实测，别当现役数字；`accept-worker`
+    恰好排在最后跑，正好覆盖了"给 worker 的 `diagnose` 加 `caps` 字段"那一改）
   · promote（`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out`）自检绿、**BOOT OK 1.7s**、
     两侧 wasm sha 一致
   · **SHA 三层**：磁盘 / HTTP / 页面自证全 = `1ed3e528…` ✓
-  · **8761 全量 43 套 / 1076 PASS / 0 FAIL**（与 8768 同一组数字）✓
+  · **8761 全量 43 套 / 1076 PASS / 0 FAIL**（**A2 当时**；与 8768 同一组数字）✓
   · **三列 parity `--strict` = 0 差异**（连 promote 里重新打包的 6 个资产都逐字节一致）
   · 新探针 `probe-caps` **12/0**（含反证：身份证 404 ⇒ 页面照常 ready、`artifact=null`、无报错）
   · **43 套断言一行没改** ⇒ 行为零变化这条硬要求成立。

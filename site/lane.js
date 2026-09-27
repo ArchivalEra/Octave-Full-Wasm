@@ -1,0 +1,104 @@
+// Octave-Full-Wasm — **选档**：线程档 / 基础档（B6，2026-09-27）
+// Copyright (C) 2026 ArchivalEra
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// ── 为什么必须有它 ────────────────────────────────────────────────────────────
+// 线程档的产物（`-pthread` ⇒ wasm 内存 **shared**）在**没有跨源隔离**的页面上**连实例化都
+// 做不到**：SharedArrayBuffer 不可用 ⇒ 胶水建内存就崩（实测报错是
+// `DataCloneError: … SharedArrayBuffer transfer requires self.crossOriginIsolated`）。
+// 所以"用哪一档"必须在**加载胶水之前**、用**同步**判据决定 —— 不能等异步探测回来再选。
+//
+// ── 判据（两条都要）────────────────────────────────────────────────────────────
+//   `crossOriginIsolated === true` —— 宿主发了 `Cross-Origin-Opener-Policy: same-origin`
+//     + `Cross-Origin-Embedder-Policy: require-corp`（**要求宿主发头**是本轮的产品决定）
+//   `typeof SharedArrayBuffer === 'function'` —— 有些环境有隔离但没有 SAB（少见，但白测一次便宜）
+// 两条都满足 ⇒ 线程档；否则 ⇒ 基础档（**任何静态托管都能跑**，这是不能退的红线）。
+//
+// ── 两档都在（红线）──────────────────────────────────────────────────────────
+// 线程档**不许**是唯一产物：文件同名，线程档放在 `threads/` 子目录里（`threads/octave.js`…）。
+// 为什么是子目录而不是改文件名：Emscripten 胶水里**写死了** `octave.data` 这个名字，
+// 换名就得同时改胶水内部引用；放进子目录则胶水一行不用改，`locateFile` 一处前缀搞定。
+// 资产（`assets/`）与清单**两档共用**根目录那一份 ⇒ 不重复部署 9.7MB 的 `octave.data`。
+(function (global) {
+  'use strict';
+
+  // 显式覆盖（测试/调试用）：URL 上写 `?lane=threads` 或 `?lane=base`。
+  // ⚠️ 覆盖**不改判据** —— 它只改"选哪一档"，物理前提（COI）仍是硬的：
+  //    在没隔离的页面上强行选 threads ⇒ 胶水建 shared 内存当场抛。
+  //    这正是我们要能证伪的那一条（`probe-lane` 的第 4 格：**必须响亮地失败**）。
+  function override(env) {
+    try {
+      var q = (env.location && env.location.search) || '';
+      var m = /[?&]lane=(threads|base)(?:&|$)/.exec(q);
+      return m ? m[1] : null;
+    } catch (e) { return null; }
+  }
+
+  // 纯函数：给一份"环境事实"返回该选哪一档（自证/探针可直接喂合成输入）
+  function pickFrom(env) {
+    var coi = env.crossOriginIsolated === true;
+    var sab = typeof env.SharedArrayBuffer === 'function';
+    var auto = (coi && sab)
+      ? { lane: 'threads', why: '跨源隔离 + SharedArrayBuffer 都可用' }
+      : { lane: 'base',
+          why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用基础档）'
+                    : 'SharedArrayBuffer 不可用（用基础档）' };
+    var ov = override(env);
+    // ★ B6（2026-09-27 实测）：**Worker 模式（`?worker=1`）默认落基础档**。
+    //   原因：线程产物在 DedicatedWorker 里当**主宿主**是未验证组合 —— 实测 `accept-worker`
+    //   在 COI 下 4 PASS / 12 FAIL（症状 `Module.eval_string is not a function`：pthread 胶水
+    //   在这个上下文里没把导出挂上），而**同一份页面在基础档下 16/0 全绿**（8770 实测）。
+    //   要线程档得**显式** `?lane=threads&worker=1`（走"显式覆盖"分支：失败由它自己硬失败，
+    //   不做静默降级）。⚠️ 这条只在**没有显式覆盖**时生效 —— 显式 `?lane=` 永远赢（可证伪）。
+    var q = (function () {
+      try { return (env.location && env.location.search) || ''; } catch (e) { return ''; }
+    })();
+    if ((/[?&]worker=1(?:&|$)/.test(q) || typeof env.importScripts === 'function') && !ov) {
+      // ★ 两个触发条件都要：
+      //   ① 页面上的 `?worker=1`（把解释器交给 worker 的那种加载姿势）；
+      //   ② **本上下文自己就是一个 worker 宿主**（`importScripts` 是 worker 专有；
+      //      页面没有它）。加②是因为"别人手搓一个 `new Worker('octave-worker.js')`"也是真实用法
+      //      —— `accept-worker` 的 C3b（重启）就是手搓的，没有查询串 ⇒ 只靠①会漏，
+      //      那次实测正是 `Module.eval_string is not a function`（worker 自己按 COI 选了线程档）。
+      return { lane: 'base', coi: coi, sab: sab, forced: false, workerMode: true,
+               why: 'worker 宿主：线程产物在 DedicatedWorker 里当主宿主**未验证**'
+                    + '（实测 accept-worker 4/12）⇒ 用基础档；要线程档请显式 ?lane=threads' };
+    }
+    if (ov && ov !== auto.lane) {
+      return { lane: ov, coi: coi, sab: sab, forced: true,
+               why: '显式覆盖为 ' + ov + '（环境本来该选 ' + auto.lane + '）'
+                    + (ov === 'threads' && !coi
+                       ? '；⚠️ 没有 COI ⇒ 线程档会**硬失败**（这是有意的可证伪档）' : '') };
+    }
+    return { lane: auto.lane, coi: coi, sab: sab, forced: false, why: auto.why };
+  }
+
+  var FILES = {
+    // data 两档共用根目录那一份 —— 前提是两档的 `octave.data` **sha 相同**（链接后核对，
+    // 记录在 HANDOFF/PLAN 里）。若哪天不同了，把 threads 的 data 改成 'threads/octave.data'
+    // 并把文件部署过去即可（探针 probe-lane 会核对"胶水要的文件真的取得到"）。
+    // ★ 两档**必须各自带一份 `octave.data`**（2026-09-27 实测）：两份的 sha **不同**
+    //   （基础 `f250530a…` 9,712,174 B / 线程 `5c1433c4…` 9,712,190 B —— 预载树里带进了链接期的差异）。
+    //   ⚠️ 早先我以为"同 sha 可共用一份"，实测推翻了 ⇒ 现在线程档指向 `threads/octave.data`。
+    //   `promote-webgl.sh` 里有一条 fail-closed：两档 data sha **不同**而 lane.js 却指根目录 ⇒ 拒绝上线
+    //   （否则线程档会**静默取到基础档的数据文件**，是最难查的那类）。
+    //
+    // ★ 资产：只有 `.oct` 那部分**必须**分档 —— 非 atomics 编的 side module 在 shared-memory 主模块里
+    //   连 dlopen 都过不去（`TypeError: tlsInitFunc is not a function`，见 NOTES-threads.md B5）
+    //   ⇒ 线程档用自己的 `.oct` 集（`oct-threads/`、`octdir-threads/`），其余（.m 包/文档/字体数据）
+    //   两档共用；清单逐条带 `url`，所以"分档"= 换一份清单。
+    threads: { lane: 'threads', dir: 'threads/',
+               js: 'threads/octave.js', wasm: 'threads/octave.wasm', data: 'threads/octave.data',
+               manifest: 'assets/manifest.threads.json' },
+    base: { lane: 'base', dir: '',
+            js: 'octave.js', wasm: 'octave.wasm', data: 'octave.data',
+            manifest: 'assets/manifest.json' }
+  };
+
+  function filesFor(lane) { return FILES[lane] || FILES.base; }
+
+  global.octaveLanePick = pickFrom;
+  global.octaveLaneFiles = filesFor;
+  global.octaveLaneState = pickFrom(global);          // 开机**只算一次**
+  global.octaveLanePlan = filesFor(global.octaveLaneState.lane);
+})(typeof window !== 'undefined' ? window : self);

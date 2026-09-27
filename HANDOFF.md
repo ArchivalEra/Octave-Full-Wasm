@@ -156,8 +156,8 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 
 | 键 | 值 | 复跑命令 |
 |---|---|---|
-| `accept_pass` | **1076**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-092416 里带汇总行的套件（且 0 FAIL）` |
+| `accept_pass` | **1077**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
+| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-173821 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
 | `env_vars` | **27** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
@@ -167,25 +167,25 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `jspi_entry` | 是（B 姿势的可挂起入口在不在） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.jspi_entry` |
 | `matrix_page_sha` | `54a7e1c261a2df2f…` | `sha256sum /mnt/hdd/octave-wasm-build/site/matrix-android.html` |
 | `oct_base_files` | **16**（基础档 `assets/oct/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' \| wc -l` |
-| `oct_lane_files` | **16**（线程档 `assets/oct-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/siteWebGL/assets/oct-threads -name '*.oct' \| wc -l` |
-| `oct_lane_octdir_files` | **28**（线程档 `assets/octdir-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/siteWebGL/assets/octdir-threads -name '*.oct' \| wc -l` |
+| `oct_lane_files` | **16**（线程档 `assets/oct-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/oct-threads -name '*.oct' \| wc -l` |
+| `oct_lane_octdir_files` | **28**（线程档 `assets/octdir-threads/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/octdir-threads -name '*.oct' \| wc -l` |
 | `oct_lane_tls_init` | **44**（每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；分母见 oct_lane_files + oct_lane_octdir_files） | `python3 build/113/check-oct-lane.py <站点>/assets/oct-threads <站点>/assets/octdir-threads --base <站点>/assets/oct <站点>/assets/octdir` |
 | `octdir_base_files` | **28**（基础档 `assets/octdir/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' \| wc -l` |
 | `probe_lane_fail` | **0** | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
-| `probe_lane_pass` | **15**（双档探针的 PASS 数（FAIL 必须 0）） | `SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
-| `threads_blas_dir` | **/src/deps-threads/lapack-simd/lib**（**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 inputs.blas.resolved_dir` |
-| `threads_exported_functions` | **725** | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.exported_functions` |
-| `threads_pthread_glue` | **54**（基础档实测是 0） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.threads.pthread_glue` |
-| `threads_shared_memory` | 是（wasm 内存段的 shared 位；线程档的硬身份） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.threads.shared_memory` |
-| `threads_v128` | **4756**（线程档也带 SIMD（两轴不互斥）） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 measured.simd.v128` |
-| `threads_verdict` | **ok**（只有 ok 才可部署（fail-closed）） | `读 /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.build.json 的 verdict` |
-| `threads_wasm_bytes` | **29218378** | `stat -c%s /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm` |
-| `threads_wasm_sha` | `c2899a71b5c75fce…` | `sha256sum /mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm` |
+| `probe_lane_pass` | **17**（双档探针的 PASS 数（FAIL 必须 0）） | `SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
+| `threads_blas_dir` | **/src/deps-threads/lapack-simd/lib**（**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 inputs.blas.resolved_dir` |
+| `threads_exported_functions` | **725** | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.exported_functions` |
+| `threads_pthread_glue` | **54**（基础档实测是 0） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.threads.pthread_glue` |
+| `threads_shared_memory` | 是（wasm 内存段的 shared 位；线程档的硬身份） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.threads.shared_memory` |
+| `threads_v128` | **4756**（线程档也带 SIMD（两轴不互斥）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.simd.v128` |
+| `threads_verdict` | **ok**（只有 ok 才可部署（fail-closed）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 verdict` |
+| `threads_wasm_bytes` | **29218378** | `stat -c%s /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
+| `threads_wasm_sha` | `c2899a71b5c75fce…` | `sha256sum /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
 | `wasm_bytes` | **29632229** | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-27T12:27:23+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-27T18:01:36+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
@@ -200,7 +200,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260927-133405` · **43 套 / 1,076 PASS / 0 FAIL** | http://127.0.0.1:8770/ |
-| 交付包 | `octave-full-wasm-site-20260926` · tar.zst 27,262,406 B · `5b3fe9ae55645937…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260927-173821` · **43 套 / 1,077 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 24 套 / 227 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8768/ |
+| 交付包 | `octave-full-wasm-site-20260927` · tar.zst 50,022,970 B · `5b548f3ba9dee616…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `threads`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

@@ -166,6 +166,15 @@
     var core = window.createOctaveCore({
       base: base, mode: 'single', isDefault: isDefault, home: opts.home,
       state: inst, clicks: clicks,
+      // ★ B6：**必须转发** —— 不转发的话页面按档加载了 `threads/octave.js` 胶水，内核却去取
+      //   根目录的 `octave.wasm`（基础档）⇒ 胶水/产物不匹配，开机当场
+      //   `BindingError: Cannot register multiple overloads of a function with the same number
+      //   of arguments (0)!`（probe-lane 实测抓到；`caps.chosen` 会显示 base 而 plan 是 threads）。
+      // ★★ 第二处（2026-09-27，accept-embed-multi 实测）：**不带 opts.lane 的第二个实例**也会
+      //   掉进同一个坑 —— 内核的缺省是基础档，而页面上只加载了**本档的**胶水（`document.write`
+      //   写死一份）⇒ 两个实例一个线程档胶水 + 一个基础档产物，第二个实例 `eval_string is not
+      //   a function`（表现成 i2Ready=false）。所以缺省值必须是**页面的选档计划**（页面只有一档）。
+      lane: opts.lane || window.__octaveLanePlan,
       host: {
         // ⚠️ 仍然照常走 console：验收套件读的就是 console 里的输出，只写 DOM 会把 26 套全打掉。
         print: function (t) { console.log(t); uiAppend(t + '\n'); },
@@ -199,7 +208,19 @@
     return core.module;
   };
 </script>
-<script type="text/javascript" src="octave.js"></script>
+<!-- ★ B6（2026-09-27）：**选档**（线程档 / 基础档）。
+     `lane.js` 用**同步**判据（crossOriginIsolated + SharedArrayBuffer）定档，然后**在解析期**
+     按档加载胶水 —— 线程档产物在没有跨源隔离的页面上连实例化都做不到，所以不能等异步探测。
+     为什么用 `document.write`：下面的启动逻辑假定"胶水已就绪"（parse 顺序语义）。换异步加载
+     就得把整段启动改写进回调里（改动面大得多）；这里是**只在解析期写一次**的经典用法。
+     ⚠️ 线程档的文件名与基础档**相同**，放在 `threads/` 子目录（胶水内部写死的 `octave.data`
+     引用因此不用改，见 lane.js 的说明）。 -->
+<script type="text/javascript" src="lane.js"></script>
+<script type="text/javascript">
+  window.__octaveLanePlan = octaveLaneFiles(octaveLaneState.lane);
+  document.write('<script type="text/javascript" src="'
+                 + window.__octaveLanePlan.js + '"><\/script>');
+</script>
 <script type="text/javascript">
 // ── C3/B5（2026-09-26）：两种宿主，**默认路径一字不动** ────────────────────────
 // 缺省（无 `?worker=1`）= 单页模式：解释器在主线程（现役产物行为，77 个验收套件全靠它）。
@@ -211,12 +232,18 @@
 (function () {
   var params = new URLSearchParams(location.search);
   if (params.get('worker') !== '1') {
-    window.Module = window.createOctaveHost({ id: 'default' });
+    window.Module = window.createOctaveHost({ id: 'default',
+                                              lane: window.__octaveLanePlan });
     OCTAVE(window.Module);
     return;
   }
   var base = params.get('base') || '';
-  var w = new Worker('octave-worker.js');
+  // ★ B6（2026-09-27）：**把选档结果传给 worker**。Worker 里的 `location.search` 是
+  //   **worker 脚本自己的** URL，看不到页面的 `?lane=`/`?worker=` ⇒ 不传的话 worker 会自己按
+  //   `crossOriginIsolated` 再判一次，两边可能不一致（实测：页面写 `?lane=base` 对 worker
+  //   **无效**，worker 仍选线程档 ⇒ `accept-worker` 4/12）。lane.js 的 `override()` 读
+  //   `env.location.search` ⇒ 把档写进 Worker URL 就行（一行，且 worker 侧无需改动）。
+  var w = new Worker('octave-worker.js?lane=' + encodeURIComponent(window.__octaveLanePlan.lane));
   var seq = 0, pending = {};
   var API = { mode: 'worker', booted: true, ready: false, interrupted: 0, plots: 0 };
   function call(kind, payload) {

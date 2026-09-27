@@ -132,12 +132,18 @@ self.__octaveClicksArmed = false;
 //   doc = 上面那个 shim、assets = createOctaveAssets、onReady = 发 ready 消息。
 // ⚠️ `importScripts` 必须在 createOctaveCore **之前**（要用 assets-loader 的工厂），
 //    而 OCTAVE(Module) 必须在 createOctaveCore **之后**（内核提供 instantiateWasm/postRun）。
-importScripts('assets-loader.js', 'octave-core.js', 'octave.js');
+// ★ B6（2026-09-27）**选档**：先决定用哪一档，再按档 importScripts 胶水。
+//   worker 里 `crossOriginIsolated` 继承自页面（同源 worker），判据与页面侧同一份（lane.js）。
+//   ⚠️ 顺序不能反：线程档胶水在被 import 的那一刻就会建 **shared** 内存，没有隔离会直接崩。
+importScripts('assets-loader.js', 'octave-core.js', 'lane.js');
+var LANE = octaveLaneFiles(octaveLaneState.lane);
+importScripts(LANE.js);
 
 var st = { armed: false, ready: false, mem: null, mod: null };
 var core = createOctaveCore({
   // ⚠️ base 传**函数**（活取）：BASE 是 `opts` 消息到达时才设的，晚于这一句。
   base: function () { return BASE; }, mode: 'worker', isDefault: true, home: HOME, state: st, clicks: clickQ,
+  lane: LANE,                                   // B6：选档计划（线程档时 wasm 在 threads/）
   host: {
     print: function (t) { out(t); },
     printErr: function (t) { out(t); },

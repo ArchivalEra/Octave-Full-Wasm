@@ -36,6 +36,9 @@
 (function (global) {
   'use strict';
 
+  // ⚠️ 清单 URL 的注入点**已经存在**（下面的 `init(url)`，实现见 `fetchJSON(url || MANIFEST_URL)`）
+  //    —— B6 双档复用它（线程档传 `assets/manifest.threads.json`）：**别再加法子**，
+  //    两套机制必然分叉（本仓的老教训）。
   var MANIFEST_URL = 'assets/manifest.json';
   var OCTAVE_M = '/usr/src/octave/m';
 
@@ -351,6 +354,12 @@
     var API = {
       OCTAVE_M: OCTAVE_M,
       init: function (url) {
+        // ★ B6：**没显式给清单时按档取**（线程档 = `assets/manifest.threads.json`）。
+        //   为什么必要（实测踩到）：`window.OctaveAssets` 是**全局默认实例**（A2 之前的别名，
+        //   套件/工具还在用它）—— 它不知道选档，默认拉基础档清单 ⇒ 线程档会把**基础档的 `.oct`**
+        //   装进 FS ⇒ dlopen 报 `failed to load Incompatible version or missing dependencies`
+        //   （accept-113-assets 12/4、accept-113-oct 3/5 的现场）。这里让默认值也跟着档走。
+        url = url || (global.octaveLanePlan && global.octaveLanePlan.manifest) || url;
         if (manifest) return Promise.resolve(manifest);
         return fetchJSON(url || MANIFEST_URL).then(function (m) {
           manifest = m;
