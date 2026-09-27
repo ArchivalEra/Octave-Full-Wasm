@@ -825,3 +825,84 @@ TypeError: tlsInitFunc is not a function
 `/src/probe-threads/run.html` 是 **preload 时代的旧件**（没有 `fetch`/`writeFile`）⇒ 三档**全部**
 因"dlopen 找不到 `/side.wasm`（fetch 根本没发生）"而红，看起来像"三档都不兼容"。
 现在脚本里**找不到正确源码就 FATAL**，并显式检查 `run.html` 里有 `writeFile`。
+
+---
+
+## B6 验收期抓到的三条**车道专属**机制缺陷（2026-09-27，全部有复跑方式）
+
+三条的共同形状：**构建/加载全绿，只有真正调用那条代码路径才崩**（"能编过 ≠ 能用了"的教科书）。
+每条的判据都落在**产物字节**上，并且都进了某个 `--selftest`。
+
+### ① `.oct` 引用两档主模块都不提供的 `__cxa_guard_*` ⇒ `TypeError: resolved is not a function`
+
+现场：`accept-dldfcn` 线程档 `65/6`，失败集中在 audio（基础档同套件 `71/0`）：
+`CRASH | audiowrite 写 wav :: Error: page.evaluate: TypeError: resolved is not a function
+at stubs.<computed> (threads/octave.js:1:…)` —— 动态链接的导入代理把符号解析成了 undefined。
+
+容器里三行可复跑（`g2.cpp` = 带**动态** static 初始化的函数）：
+
+| 旗标 | 目标文件里 `__cxa_guard` 出现次数 |
+|---|---|
+| `em++ -O2 -fwasm-exceptions -c` | **0**（emcc 默认就是 `-fno-threadsafe-statics`） |
+| 加 `-pthread` | **3**（clang 改回线程安全静态） |
+| 再加 `-fno-threadsafe-statics` | **0** |
+
+而**两档主模块都不定义**这两个符号（`llvm-nm --defined-only --extern-only` 在基础/线程两份
+`octave.wasm` 里都没有）⇒ 线程档里那个引用了守卫的 `.oct` 第一次动态静态初始化就崩。
+实测范围：44 个车道 `.oct` 里**只有 `audioread.oct`**（基础档 44 个都没有）。
+
+修法与判据：车道影子必须带 `-fno-threadsafe-statics`（`build-oct-lane.sh` 第⑧条，缺则 FATAL）；
+产物侧由 `check-oct-lane.py` **判据②** 保证（两档 `.oct` 都不许出现这两个串）。
+复跑：`python3 build/113/check-oct-lane.py <车道目录…> --base <基础目录…>`（自证里有一条专门
+拿"旧配方重建的 `audioread.oct`"验它会红）。
+
+### ② 车道清单照抄了基础档的 **install 前缀** ⇒ 线程档 `help` 读不到 docstrings
+
+现场：`accept-help` 线程档 `5/7`（基础档 `12/0`）：
+`failed to open docstrings file: /src/work/octave-install-threads/share/octave/11.3.0/etc/built-in-docstrings`。
+
+实测（`grep -ao` 直接扫两份 wasm）：基础产物烤 `/src/work/octave-install`、线程档烤
+`/src/work/octave-install-threads`；基础清单把 `built-in-docstrings`/`doc-cache`/`macros.texi`
+挂在前者下（对），而车道清单是**从基础清单生成的**，把 `mount` 照抄了 ⇒ 线程档按自己烤的路径
+去读，必然没有。
+
+修法与判据：`make-lane-manifest.py` 增加第三类改口（起步于基础前缀的 `mount` → 车道前缀），
+前缀**从两份 wasm 里读**（`baked_prefix()`，读到多种/读不到就 FATAL —— 不猜）；
+`--check` 新增判据⑤（产物烤的前缀必须有挂载 / 不许残留另一档前缀 / 基础清单不许出现车道前缀）。
+自证 12 → 18 条。
+
+**附带的坑（自证当场抓到）**：`/src/work/octave-install` 是 `/src/work/octave-install-threads`
+的**前缀** ⇒ 只判 `startswith(基础)` 会把**正确产物**判成"残留基础前缀"，而改口那步会把
+`…-threads/share` 再改成 `…-threads-threads/share`。两处都补了"排除更长的那个"。
+
+### ③ slicot 调度模块**没把静态库链进去** ⇒ `step` 也崩在同一个 `resolved is not a function`
+
+现场：`accept-forge2` 线程档 `43/1`，唯一红是 `★ step 与解析解 1-e^-t 一致`。
+
+实测（两档同一模块对照）：
+
+| | 体积 | `dgemm_/dlamch_/lsame_/dggev_` |
+|---|---|---|
+| 基础 `__control_slicot_functions__.oct` | 8,115,591 B | **定义在模块里**（4/4） |
+| 车道第一版 | 2,966,696 B | **全是导入**（0/4） |
+
+主模块**不导出** BLAS/LAPACK（两档都不导出）⇒ 226 个符号解析成 undefined ⇒ 首次 BLAS 调用崩。
+根因：第一版只链了 `slicotlibrary.a`，而配方（`NOTES-slicot.md` §5.8）是五段：
+`common.oct.o → slicotlibrary-nodup.a → liblapack.a → librefblas.a → libf2c-subset.a → f2c-io-shim.c`。
+
+修法与判据：`build-oct-lane.sh` ④b 补齐整条链，新增**判据⑨**：模块里必须**定义**（不是导入）
+≥3 个 BLAS/LAPACK 入口，否则 FATAL。重编后 `8,097,627 B`、4/4 定义。
+
+**为什么 BLAS/LAPACK 用基础档的 PIC 归档**：车道那套 `lapack-simd` **不是 PIC** ⇒ side module
+链接直接报 `relocation R_WASM_MEMORY_ADDR_LEB cannot be used against symbol …; recompile with
+-fPIC`（实测）。基础档 slicot 用的也是这份 PIC 归档 ⇒ 两档 slicot 路径**算得完全一样**；
+side module 自带 BLAS 副本是设计使然（主模块不导出 BLAS）。
+
+### 顺带记一条**部署态**的坑（不是车道专属，但本轮差点踩到）
+
+`build/promote-webgl.sh` 的默认 `SRC_OUT=/src/websrc/out`、`GL_OUT=/src/websrc/out-webgl`
+停在 **9-23 那条带 GL 的旧车道**（wasm 36.8MB）；现役基础档是 9-25 链的 M2 SIMD 产物
+（`/src/websrc/m2fc-simd-out` = 改名前的 `product`）。**裸跑 promote 会把 8761 静默换成 9-23 那份**，
+而脚本内所有自检（gl4es/字体/桥资产/开机）照样全绿 ⇒ 加了 §1b 判据（产物要变时，容器里那份的
+构建时间不得早于站点现役那份的落件时间；硬推要显式 `FORCE_OLD_ARTIFACT=1`）。
+本批正确姿势：`SRC_OUT=/src/websrc/m2fc-simd-out GL_OUT=$SRC_OUT`（与现役三件逐字节相同）。
