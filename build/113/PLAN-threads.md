@@ -205,6 +205,27 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 | `.oct` 车道：核心 dldfcn + 13 个包 + slicot | `build/113/build-oct.sh` / `build-pkg-oct.sh` / `build_dldfcn.sh` | `/src/libwork/octs-threads` |
 | Octave 本体 | `build/113/configure-113-full.sh`（`WITH_THREADS=1` + `D=`/`DEPS=` 指向车道） | `/src/websrc/m2fc-threads-out` |
 
+### `.oct` 车道的确切清单（2026-09-27 从现役站点清单 + 各脚本注释反查，**不是猜的**）
+
+现役站点 `assets/manifest.json` 里 `kind:oct` 共 **16 条**，来源三分：
+
+| 批次 | 模块 | 源 | 额外旗标 |
+|---|---|---|---|
+| 树内 dldfcn（10） | `__delaunayn__` `__glpk__` `__voronoi__` `audioread` `convhulln` `fftw` `gzip` `__init_fltk__` `__init_gnuplot__` | `libinterp/dldfcn/*.cc` | — |
+| `--cc` 批（6） | `webio` / `__init_web__` / `__web_pause_ms__` / `__fltk_uigetfile__` / `webimage-oct` / `webnet-oct` | `websrc/{webio.cc, web_graphics_toolkit.cc, webpause.cc, webfilepick.cc, webimage.cc, webnet.cc}` | — |
+| 特殊（1） | `__ode15__` | `build/113/build-ode15.sh` | `OCT_DEFS`（HAVE_SUNDIALS…）+ `OCT_LIBS="-L$SUNDIALS/lib -lsundials_ida"` ⇒ **sundials 也要车道版** |
+| 包（`build-pkg-oct.sh all`） | 13 个包 → `octdir/<包>/`，其中 `control/__control_slicot_functions__.oct` | Forge 包源码 | `OCT_INCS` + `OCT_LIBS=slicotlibrary.a` ⇒ **slicot 也要车道版**（该脚本自己建 slicot） |
+
+判据（.oct 车道）：① 文件名清单与现役站点 16 条**逐字一致**（漏一个 = 功能静默缺失）；
+② **每个 `.oct` 都带 `atomics`**（`atomics_scan.py` 直接扫 `.oct` 字节即可 —— 它是 wasm side module）；
+③ 载入验证：线程档站点里 `__glpk__`/`convhulln`/`control` 等资产真的 load 成功（accept 套件 + `probe-lane`）。
+
+### 树与安装 prefix（`.oct` 车道要用**线程档的**头与库）
+
+线程档的 Octave 要配到**独立 prefix**（`configure-113-full.sh <src> /src/work/octave-install-threads`），
+`make install` 也进那里 ⇒ ① 车道 `.oct` 编的是线程档的头（`OCTAVE_USE_THREADS`/`HAVE_PTHREAD` 一致）；
+② **不动**现役 `/src/work/octave-install`。
+
 ### 顺序与判据（**每步都要量**，不许"链过了就算"）
 
 1. **数学核**（`build-deps.sh all`）→ 判据：`atomics_scan.py` 对 4 个 `.a` 报 **0 缺**；

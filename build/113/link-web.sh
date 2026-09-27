@@ -304,7 +304,13 @@ if [ "${GL_LIBS:-0}" = "1" ]; then
     echo "       （build/113/osmesa_toolkit.cc + patch-mesa-osmesa-static.sh），并参考 NOTES-p5-osmesa.md。" >&2
     exit 3
   fi
-  GL_FLAGS=( /src/libwork/gl4es-src/lib/libGL.a /src/libwork/glu-webgl/lib/libGLU.a
+  # ★ 两个归档路径**可注入**（B6 线程档：gl4es/GLU 也必须重编成 atomics 版，见
+  #   `PLAN-threads.md` §6）—— 由 `relink.sh` 的模式表填（`--selfcheck` 会保证四个模式都覆盖）。
+  GL4ES_A="${GL4ES_A:-/src/libwork/gl4es-src/lib/libGL.a}"
+  GLU_A="${GLU_A:-/src/libwork/glu-webgl/lib/libGLU.a}"
+  [ -f "$GL4ES_A" ] || { echo "FATAL: 找不到 gl4es 归档 $GL4ES_A" >&2; exit 2; }
+  [ -f "$GLU_A" ]   || { echo "FATAL: 找不到 GLU 归档 $GLU_A" >&2; exit 2; }
+  GL_FLAGS=( "$GL4ES_A" "$GLU_A"
              "$SRC/gl4es-unmangled-shim.c" )
   # include 顺序**很重要**：gl4es 的 `GL/gl.h` 会把 `glBegin` 之类 mangle 成
   # `gl4es_glBegin`；而 GLU 自己那份 `GL/glu.h` 必须保持原名（`gl-render.o` 引用的是
