@@ -25,6 +25,12 @@
   · **`test/browser/probe-lane.mjs` 全绿**（PASS 数见 `build/FACTS.json` 的 `probe_lane_pass`，
     FAIL = `probe_lane_fail` 必须为 0）：带头选线程档 + `caps.sharedMemory === true`、
     不带头落基础档照常 ready、`?lane=base` 覆盖生效、**没 COI 强选线程档硬失败**。
+- **线程档的两条已知边界（都钉了断言，改回去会红）**：
+  · **worker 宿主自动落基础档**（`?worker=1` 或缺省的手搓 `new Worker`）：线程产物在
+    DedicatedWorker 里当主宿主**起不来**（`Module.eval_string is not a function`，实测）；
+    显式 `?lane=threads&worker=1` 仍选线程档并**硬失败**（不静默降级）。
+  · **同页多实例是支持的**（13/0），但**前提是每个实例都拿到页面的选档计划** —— 少传一个就是
+    "线程胶水 + 基础产物"的错配（`eval_string` 缺席）。
 - ⚠️ **一条最容易在压缩里丢的细微事实**：线程档现在是 **refblas/lapack 的「SIMD + atomics」版**，
   **不是 OpenBLAS** ⇒ **多线程运行时已启用，但数学还没并行化**。收益要靠 E2 把线程版 OpenBLAS 链进去；
   E2 的前置（整条 farm 带 atomics）**本批已完成**。
@@ -35,22 +41,31 @@
 
 ## 1. 下一步（按此顺序）
 
-1. **两档验收矩阵**（跑着）：8768 带头 = 线程档、8770 不带头 = 基础档，各 43 套。
-   **首跑已暴露两条红，都已诊断 + 修好、等复跑确认**（都在 `PLAN-threads.md` §6 里）：
-   · `accept-113-oct` 3/5：套件从**站点根**取的夹具 `minioct.oct` 是老的非 pthread 件
-     ⇒ 线程档载入失败（B5 规则）⇒ 已重建为 `threads/minioct.oct` + 套件按档取；
-   · `accept-113-assets` 12/4：套件用 **`window.OctaveAssets`（全局默认实例）**，它不认识选档、
-     默认拉基础档清单 ⇒ 已让 `init()` 在没显式给清单时取 **当前档**的清单（惠及所有消费者）。
-   · 绿 ⇒ 走 §5 批次收尾：8768 → promote **8761（双档）** → 带头服务（`build/serve-coi.py`）→
-     `check-boot` / 部署件 SHA 三层 / 同步仓库 `site/` / `make-dist` / 三处 parity `--strict` /
-     六道闸门 → 提交 → 推 mirror。
-   · 红 ⇒ 先怀疑线程档特有路径：交互类套件依赖 `st.mem`（本轮刚修「内存是从 JS 导入的」那条）；
-     `.oct` 载入问题看 `check-oct-lane.py` 的 TLS 入口结论。
-2. **E2（可选；用户定：另开分支）**：把**线程版 OpenBLAS** 链进主模块 —— 收益真正兑现的一步
+1. **两档验收矩阵 = 线程档**：`PROBES=1 sh build/sweep.sh http://127.0.0.1:8768/`（带头 = 线程档）。
+   **基础档那侧已全绿**（8770 不带头；套件数与 PASS/FAIL 见文末 `AUTO:STATE`，别在这儿写数字）。
+   线程档首跑暴露的 **七条红已逐条诊断 + 修好 + 单套复跑确认**（每条都有产物侧判据，见
+   `NOTES-threads.md` 的「B6 验收期抓到的机制缺陷」三段 + `PLAN-threads.md` §6 的坑清单）：
+   · `accept-113-oct` / `accept-113-assets`：夹具未分档、全局默认资产实例不认档（已修）；
+   · `accept-archive` 0/20、`accept-dldfcn` 11/60、`accept-full` 9/11（**同一个真因**）：
+     `manifest.threads.json` 只改 URL 不改 `sha256` ⇒ 加载器 fail-closed 拒载 16 条 `.oct`（已修，
+     生成器现在**按磁盘字节重算** sha，判据④）；
+   · `accept-help` 5/7：车道清单照抄了基础档的 **install 前缀**（线程档烤的是
+     `/src/work/octave-install-threads`）⇒ `help` 读不到 docstrings（已修，判据⑤）；
+   · `accept-dldfcn` 的 audio：pthread 编的 `.oct` 引用 `__cxa_guard_*`，而两档主模块都**不提供**
+     ⇒ 车道影子必须带 `-fno-threadsafe-statics`（已修，判据②）；
+   · `accept-forge2` / `accept-slicot`：slicot 调度模块**少链了 `common.oct.o` + PIC 归档**
+     ⇒ `step`/`norm` 首次调用崩（已修，判据③ + 构建侧判据⑨）；
+   · `accept-worker` 4/12、`accept-embed-multi` 13/12：选档只传给了第一个实例 ⇒ **胶水与产物错配**
+     （已修：缺省取页面计划 + worker 宿主自动落基础档；判据在 `probe-lane` 格 5 / `accept-worker`）。
+2. **绿之后走批次收尾**：promote **8761（双档）** → 带头服务（`build/serve-coi.py`）→
+   `check-boot` / 部署件 SHA 三层 → 同步仓库 `site/` → `make-dist` → 三处 parity `--strict` →
+   六道闸门 → 提交 → 推 mirror。**8761 现在是现役基础档、一字未动**。
+   ⚠️ promote 的两条姿势（都别省）：`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out`（现役产物那条车道，
+   裸跑默认会把 9-23 的旧件推上去 ⇒ 脚本 §1b 会 FATAL 拦你）；两条 `octave.data` sha 不同是**已知且
+   正确**的（lane.js 指 `threads/octave.data`，脚本按 lane.js 反查）。
+3. **E2（可选；用户定：另开分支）**：把**线程版 OpenBLAS** 链进主模块 —— 收益真正兑现的一步
    （探针实测 DGEMM N=2000 的 T=8 = 7.2×）。前置已完成，只剩「OpenBLAS → 主模块」的符号/接口
    （根因与两条修法见 `build/113/NOTES-threads.md` 末两节）。
-3. **B6 收尾项（不阻塞）**：`probe-lane` 的输入契约已登记（线程档产物不在 ⇒ 跳过并报原因）；
-   8761/8768 **起服务必须带头**（`build/serve-coi.py`）—— 已写进 `AGENTS.md` 的批次收尾。
 
 ## 2. 铁律（违反会被拦或返工）
 

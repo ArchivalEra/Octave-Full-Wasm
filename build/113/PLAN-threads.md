@@ -350,6 +350,40 @@ cp /src/work/octave-11.3.0/config.h \
 **通用教训**：判断"哪些 side module 要分档"不能只看 manifest —— **任何会被 dlopen 的东西**
 （资产里的 `.oct`、套件夹具、诊断件）都算。
 
+### ★ 第十个坑（验收抓到）：**清单只改 URL、不改 `sha256`** ⇒ 加载器 fail-closed 拒载
+
+`manifest.threads.json` 由基础清单生成，第一版只换了 `oct`/`octdir` 的路径前缀 ⇒ sha 还是基础档的
+⇒ 加载器**校验失败就拒载**（原文：`资产校验失败 webio（期望 d6efe987… 实得 4e1bde27…）`）⇒ 表现是
+"页面能开、线程档所有 `.oct` 功能全无"：`accept-archive` 0/20、`accept-dldfcn` 11/60、`accept-full` 9/11。
+而旧判据只查"路径存在"，44/44 齐、两档只差前缀 ⇒ **全绿**。
+修法与判据：生成器在生成时**按磁盘字节重算** sha（`sync_shas`），`--check` 判据④逐条核对；
+自证里有"只改路径不改 sha ⇒ 必须报"这一条（拿**修前的真清单**跑过，16 条逐条红）。
+
+### ★ 第十一个坑（验收抓到）：**车道清单照抄了基础档的 install 前缀** ⇒ `help` 读不到 docstrings
+
+两档产物**烤进各自的 install 前缀**（实测 `grep -ao` 直接扫两份 wasm）：基础
+`/src/work/octave-install`、线程 `/src/work/octave-install-threads`。基础清单把
+`built-in-docstrings`/`doc-cache`/`macros.texi` 挂在前者下（对），车道清单**照抄** ⇒ `accept-help`
+5 PASS / 7 FAIL（基础档 12/0）。修法：`make-lane-manifest.py` 增加第三类改口（前缀**从产物 bytes 里读**，
+不猜），判据⑤三条（产物烤的前缀必须有挂载 / 不许残留另一档前缀 / 基础清单不许出现车道前缀）。
+**附带坑**：`…-install` 是 `…-install-threads` 的**前缀** ⇒ 只判 `startswith(基础)` 会把正确产物判成
+"残留基础前缀"（自证当场抓到）。
+
+### ★ 第十二个坑（验收抓到）：`.oct` 引用**两档主模块都不提供**的符号
+
+两条同形状的事故：① pthread 编的 audioread 引用 `__cxa_guard_acquire/release`（emcc 默认
+`-fno-threadsafe-statics`，`-pthread` 把它改回线程安全静态）；② slicot 调度模块**少链 `common.oct.o`**
+⇒ 多导入 8 个助手符号（`_Z3maxii`/`error_msg`…）。两者主模块都不导出 ⇒ 首次调用
+`TypeError: resolved is not a function`。判据：`check-oct-lane.py` 判据②（守卫符号，两档都查）、
+判据③（**成对核对**：车道相对基础档多出的导入必须能在主模块导出 ∪ 胶水文本里解析）+ 构建侧判据⑧⑨。
+
+### ★ 第十三个坑（验收抓到）：**选档只传给第一个上下文** ⇒ 胶水与产物错配
+
+`createOctaveHost` 只转发显式给的 `lane`，而第二个实例/worker 都不带 ⇒ 内核缺省回基础档，
+而页面上只加载了本档的胶水 ⇒ 第二个实例 `Module.eval_string is not a function`（`i2Ready=false`）。
+两条修法：缺省值取**页面的选档计划**；worker 侧页面把档写进 Worker URL（worker 的
+`location.search` 是**它自己脚本的** URL，看不到页面查询）+ `lane.js` 对 **worker 宿主**缺省落基础档。
+
 ### 红与回退
 
 - 任一步 `atomics_scan` 有残留 ⇒ 该库没真重编（旗标没进某条编译路径）⇒ 修脚本，别绕。

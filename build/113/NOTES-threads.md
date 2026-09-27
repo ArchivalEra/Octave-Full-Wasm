@@ -906,3 +906,38 @@ side module 自带 BLAS 副本是设计使然（主模块不导出 BLAS）。
 而脚本内所有自检（gl4es/字体/桥资产/开机）照样全绿 ⇒ 加了 §1b 判据（产物要变时，容器里那份的
 构建时间不得早于站点现役那份的落件时间；硬推要显式 `FORCE_OLD_ARTIFACT=1`）。
 本批正确姿势：`SRC_OUT=/src/websrc/m2fc-simd-out GL_OUT=$SRC_OUT`（与现役三件逐字节相同）。
+
+### ④ **选档只传给"第一个上下文"** ⇒ 其余上下文各自再判一次（两个套件由红转绿）
+
+现场两条红，形状**同一个**：`Module.eval_string is not a function`，而单页单实例全绿。
+- `accept-embed-multi`：第二实例 `i2Ready=false`；
+- `accept-worker`：worker 模式 4 PASS / 12 FAIL。
+
+**第二实例那条（实测根因）**：`createOctaveHost` 转发的是 `opts.lane`；而嵌入者/套件调
+`createOctaveHost({mount:'#host2', home:'/home/web_user/i2', id:'i2'})` 时**不带 lane** ⇒ 内核
+缺省回**基础档**，可页面上 `document.write` **只加载了本档的胶水**（线程档）⇒ **线程胶水 +
+基础产物** ⇒ 第二个实例拿不到导出。修：缺省值 = 页面的选档计划
+（`opts.lane || window.__octaveLanePlan`）⇒ `accept-embed-multi` **13/0**。
+
+⚠️ 这条同时**推翻我自己先前的一个猜想**："pthread 胶水不能在同页再入（两个实例必然坏）"。
+实测量到的是**错配的症状**，不是再入的限制 —— 两个 pthread 实例同页共存**没问题**
+（状态隔离、FS 隔离、资产进对实例、交替 100 次 eval 全绿）。**"能编过/能起来 ≠ 用得了"，
+反过来也成立：看起来像"能力不支持"的现象，先怀疑"两边配置不一致"。**
+
+**worker 那条（实测根因，两条结论）**：
+1. worker 里的 `location.search` 是 **worker 脚本自己的** URL ⇒ 页面写 `?lane=base` 对 worker
+   **无效**（worker 照旧按 `crossOriginIsolated` 选线程档）⇒ 现象与"线程档进 worker"混淆在一起。
+   修：页面把选档结果写进 Worker URL（`octave-worker.js?lane=<plan>`），worker 的 `override()`
+   读得到 ⇒ 两边**必然同档**。
+2. 同档之后真相露出来：**线程产物在 DedicatedWorker 里当主宿主确实起不来**
+   （`ready:false` + `Module.eval_string is not a function`）。所以 `lane.js` 的 picker 加一条：
+   **worker 宿主缺省基础档**（判据 `typeof env.importScripts === 'function'` —— worker 专有；
+   页面没有）。显式 `?lane=threads&worker=1` 仍然选线程档并**硬失败**（实测 worker 永不 ready），
+   不做静默降级 ⇒ `accept-worker` **17/0**。
+
+**为什么用 `importScripts` 而不是只看 `?worker=1`**：手搓 `new Worker('octave-worker.js')` 也是
+真实用法（套件 C3b 重启就是手搓的，没有查询串）⇒ 只靠 URL 会漏。
+
+**⇒ 线程档的两条已知边界（都写进断言，改回去就会红）**：
+- worker 宿主：自动落基础档（`probe-lane` 格 5 + `accept-worker` 的 B6 那一条）；
+- 同页多实例：**支持**（13/0），前提是选档缺省取页面计划（否则错配）。
