@@ -268,6 +268,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
 - `build/113/STATUS.md` (8407 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
+- `build/113/atomics_scan.py` (7856 bytes)
 - `build/113/build-blas-simd.sh` (4660 bytes)
 - `build/113/build-deps.sh` (10033 bytes)
 - `build/113/build-fontconfig.sh` (12072 bytes)
