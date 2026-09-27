@@ -154,6 +154,24 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
         '★ 失败原因指向隔离/共享内存（而不是别的偶发失败）', why.slice(0, 200) || '(没有错误文本)');
 }
 
+// ── 格 5（B6，2026-09-27）：带头 + `?worker=1` ⇒ **自动落基础档**（不自动选未验证组合）─────
+// 判据只看**页面自己的选档状态**（boot 与否不影响）：`octaveLaneState.workerMode === true`
+// 且 `lane === 'base'`，而环境本身是 COI（不然这条恒真、没有判别力 —— 所以同时断言 coi=true）。
+{
+  const page = await (await browser.newContext()).newPage();
+  await page.goto(`${A}/index.html?worker=1`, { waitUntil: 'load', timeout: 60000 }).catch(() => {});
+  const i = await page.evaluate(() => ({
+    coi: typeof crossOriginIsolated === 'boolean' ? crossOriginIsolated : null,
+    lane: window.octaveLaneState && window.octaveLaneState.lane,
+    workerMode: window.octaveLaneState && window.octaveLaneState.workerMode,
+    why: window.octaveLaneState && window.octaveLaneState.why,
+  })).catch(e => ({ err: String(e).slice(0, 120) }));
+  check(i.coi === true, '格5 前提：这台带头站点确实是 COI（否则本格无判别力）', JSON.stringify(i));
+  check(i.lane === 'base' && i.workerMode === true,
+        '★ B6 带头 + ?worker=1 ⇒ 自动落**基础档**（线程产物在 worker 里当主宿主未验证）',
+        JSON.stringify({ lane: i.lane, workerMode: i.workerMode, why: i.why }));
+}
+
 await browser.close();
 for (const k of kids) { try { k.kill('SIGTERM'); } catch (e) { /* 已退出 */ } }
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);

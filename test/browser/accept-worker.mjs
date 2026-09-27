@@ -61,10 +61,19 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   }
   const b = await page.evaluate(() => ({ hasApi: typeof window.OctaveWorker === 'object',
     ready: window.OctaveWorker && window.OctaveWorker.ready,
-    noLocalModule: typeof window.Module === 'undefined' }));
+    noLocalModule: typeof window.Module === 'undefined',
+    laneState: window.octaveLaneState && window.octaveLaneState.lane,
+    laneWorkerMode: window.octaveLaneState && window.octaveLaneState.workerMode,
+    laneWhy: window.octaveLaneState && window.octaveLaneState.why }));
   check(ok && b.hasApi && b.ready, '★ B Worker 模式就绪（window.OctaveWorker.ready）', JSON.stringify(b));
   check(b.noLocalModule, 'B2 Worker 模式下页面**没有**本地解释器（window.Module 缺席 ⇒ 主线程真的空着）',
     `noLocalModule=${b.noLocalModule}`);
+  // ★ B6（2026-09-27）：**worker 模式下自动落基础档**（线程产物在 DedicatedWorker 里当主宿主
+  //   是未验证组合，实测 4/12；显式 `?lane=threads&worker=1` 才是那条路）。这条断言把
+  //   `bridge/lane.js` 的这条决定**钉住**：改回去就会红。
+  check(b.laneState === 'base' && b.laneWorkerMode === true,
+    '★ B6 worker 模式自动选**基础档**（未验证组合不自动选线程档）',
+    JSON.stringify({ state: b.laneState, workerMode: b.laneWorkerMode, why: b.laneWhy }));
 
   // C ★ 主线程不冻：worker 里跑长计算，期间页面 tick 必须推进
   const live = await page.evaluate(async () => {

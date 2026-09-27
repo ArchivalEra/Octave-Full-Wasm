@@ -56,9 +56,20 @@ sys.exit(1 if miss else 0)
 PY
 
 echo "== ④ 判据：线程档 .oct 有 TLS 入口 **且** 基础档没有（带反向断言）"
-python3 "$REPO/build/113/check-oct-lane.py" \
-  "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads" \
-  --base "$SITE/assets/oct" "$SITE/assets/octdir"
+# ★ 第三条判据（2026-09-27 实测事故）：车道模块相对基础档**多出的**导入必须能被线程档主模块解析
+#   —— 真事故是 slicot 少链 `common.oct.o`，多出 8 个助手符号 ⇒ 首次调用 `resolved is not a function`。
+#   主模块/胶水都按**线程档**那两份给（判据读的是产物字节，不猜）。
+if [ -s "$SITE/threads/octave.wasm" ] && [ -s "$SITE/threads/octave.js" ]; then
+  python3 "$REPO/build/113/check-oct-lane.py" \
+    "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads" \
+    --base "$SITE/assets/oct" "$SITE/assets/octdir" \
+    --main-wasm "$SITE/threads/octave.wasm" --main-glue "$SITE/threads/octave.js"
+else
+  echo "   ⚠️ 站点上没有线程档三件 ⇒ 判据③**没做**（只做正向 TLS/守卫两条）"
+  python3 "$REPO/build/113/check-oct-lane.py" \
+    "$SITE/assets/oct-threads" "$SITE/assets/octdir-threads" \
+    --base "$SITE/assets/oct" "$SITE/assets/octdir"
+fi
 
 echo "== ⑤ 判据：两档清单只差前缀（--check 自带三条）"
 python3 "$REPO/build/113/make-lane-manifest.py" "$SITE/assets" --check

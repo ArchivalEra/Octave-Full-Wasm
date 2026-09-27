@@ -170,7 +170,11 @@
       //   根目录的 `octave.wasm`（基础档）⇒ 胶水/产物不匹配，开机当场
       //   `BindingError: Cannot register multiple overloads of a function with the same number
       //   of arguments (0)!`（probe-lane 实测抓到；`caps.chosen` 会显示 base 而 plan 是 threads）。
-      lane: opts.lane,
+      // ★★ 第二处（2026-09-27，accept-embed-multi 实测）：**不带 opts.lane 的第二个实例**也会
+      //   掉进同一个坑 —— 内核的缺省是基础档，而页面上只加载了**本档的**胶水（`document.write`
+      //   写死一份）⇒ 两个实例一个线程档胶水 + 一个基础档产物，第二个实例 `eval_string is not
+      //   a function`（表现成 i2Ready=false）。所以缺省值必须是**页面的选档计划**（页面只有一档）。
+      lane: opts.lane || window.__octaveLanePlan,
       host: {
         // ⚠️ 仍然照常走 console：验收套件读的就是 console 里的输出，只写 DOM 会把 26 套全打掉。
         print: function (t) { console.log(t); uiAppend(t + '\n'); },
@@ -234,7 +238,12 @@
     return;
   }
   var base = params.get('base') || '';
-  var w = new Worker('octave-worker.js');
+  // ★ B6（2026-09-27）：**把选档结果传给 worker**。Worker 里的 `location.search` 是
+  //   **worker 脚本自己的** URL，看不到页面的 `?lane=`/`?worker=` ⇒ 不传的话 worker 会自己按
+  //   `crossOriginIsolated` 再判一次，两边可能不一致（实测：页面写 `?lane=base` 对 worker
+  //   **无效**，worker 仍选线程档 ⇒ `accept-worker` 4/12）。lane.js 的 `override()` 读
+  //   `env.location.search` ⇒ 把档写进 Worker URL 就行（一行，且 worker 侧无需改动）。
+  var w = new Worker('octave-worker.js?lane=' + encodeURIComponent(window.__octaveLanePlan.lane));
   var seq = 0, pending = {};
   var API = { mode: 'worker', booted: true, ready: false, interrupted: 0, plots: 0 };
   function call(kind, payload) {

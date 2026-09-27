@@ -70,6 +70,12 @@ OUTROOT="$OUT_PKG" PREFIX="$OCT_INSTALL" bash /src/bin/build-pkg-oct.sh all > /t
   || { echo "FATAL: 包车道失败（见 /tmp/oct-lane-pkg.log）" >&2; tail -20 /tmp/oct-lane-pkg.log >&2; exit 1; }
 
 echo "== ④b slicot 调度模块（唯一需要**静态链库**的那个 .oct）"
+# ⚠️ 这一段的**顺序有讲究**：配方（`NOTES-slicot.md` §5.8）是
+#   `common.oct.o` → `slicotlibrary-nodup.a` → `liblapack.a` → `librefblas.a` → `libf2c-subset.a`
+#   → `f2c-io-shim.c`。第二版漏了**第一段** `common.oct.o`（= 编译 `control/src/common.cc`），
+#   后果：模块比基础档多导入 8 个助手符号（`_Z3maxii`/`_Z3minii`/`error_msg`/`warning_msg`…），
+#   而主模块两档都不导出它们 ⇒ `step` 首次调用崩 `TypeError: resolved is not a function`
+#   （accept-forge2 43/1、accept-slicot 13/12 实测）。判据见本步末尾 + `check-oct-lane.py` 判据③。
 # 为什么单列：`build-pkg-oct.sh` 明确**不建** slicot（见它的注释），调度模块是独立一步
 # （`build/113/NOTES-slicot.md` 的 §5.8 是配方）。它靠 `OCT_LIBS=` **把整条链静态打进 .oct**。
 #
@@ -107,9 +113,20 @@ if [ -s "$SLICOT_LIB" ]; then
   echo "   nodup 成员 $(ar t "$SLICOT_NODUP" | wc -l)（全量 $(ar t "$SLICOT_LIB" | wc -l)）"
 fi
 [ -s "$F2C_SHIM" ] || { echo "FATAL: 缺 $F2C_SHIM（宿主上：sudo docker cp build/113/f2c-io-shim.c o113:/src/bin/）" >&2; exit 2; }
+# common.cc → common.oct.o（拿 build-oct.sh 自己的 FLAGS 编，省得手抄 20 个 -I）
+COMMON_OBJ="${COMMON_OBJ:-$OUT_CORE/common.oct.o}"
+if [ ! -s "$COMMON_OBJ" ]; then
+  rm -rf /tmp/oct-lane-common && mkdir -p /tmp/oct-lane-common
+  OUT=/tmp/oct-lane-common PREFIX="$OCT_INSTALL" \
+    CC_SRCS="common:$CTRL_SRC/common.cc" bash /src/bin/build-oct.sh --cc > /tmp/oct-lane-common.log 2>&1 || true
+  [ -s /tmp/oct-lane-common/common.oct.o ] || {
+    echo "FATAL: common.oct.o 没编出来（见 /tmp/oct-lane-common.log）" >&2; tail -12 /tmp/oct-lane-common.log >&2; exit 1; }
+  cp /tmp/oct-lane-common/common.oct.o "$COMMON_OBJ"
+fi
+echo "   common.oct.o: $(stat -c%s "$COMMON_OBJ") 字节"
 if [ -s "$SLICOT_NODUP" ]; then
   OUT="$OUT_CORE" OCT_INCS="-I$CTRL_SRC" \
-    OCT_LIBS="$SLICOT_NODUP $LAPACK_PIC/liblapack.a $LAPACK_PIC/librefblas.a $LAPACK_PIC/libf2c-subset.a $F2C_SHIM" \
+    OCT_LIBS="$COMMON_OBJ $SLICOT_NODUP $LAPACK_PIC/liblapack.a $LAPACK_PIC/librefblas.a $LAPACK_PIC/libf2c-subset.a $F2C_SHIM" \
     CC_SRCS="__control_slicot_functions__:$CTRL_SRC/__control_slicot_functions__.cc" \
     bash /src/bin/build-oct.sh --cc || { echo "FATAL: slicot 调度模块构建失败" >&2; exit 1; }
   echo "   ✅ __control_slicot_functions__.oct"

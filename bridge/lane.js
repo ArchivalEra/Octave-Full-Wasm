@@ -44,6 +44,26 @@
           why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用基础档）'
                     : 'SharedArrayBuffer 不可用（用基础档）' };
     var ov = override(env);
+    // ★ B6（2026-09-27 实测）：**Worker 模式（`?worker=1`）默认落基础档**。
+    //   原因：线程产物在 DedicatedWorker 里当**主宿主**是未验证组合 —— 实测 `accept-worker`
+    //   在 COI 下 4 PASS / 12 FAIL（症状 `Module.eval_string is not a function`：pthread 胶水
+    //   在这个上下文里没把导出挂上），而**同一份页面在基础档下 16/0 全绿**（8770 实测）。
+    //   要线程档得**显式** `?lane=threads&worker=1`（走"显式覆盖"分支：失败由它自己硬失败，
+    //   不做静默降级）。⚠️ 这条只在**没有显式覆盖**时生效 —— 显式 `?lane=` 永远赢（可证伪）。
+    var q = (function () {
+      try { return (env.location && env.location.search) || ''; } catch (e) { return ''; }
+    })();
+    if ((/[?&]worker=1(?:&|$)/.test(q) || typeof env.importScripts === 'function') && !ov) {
+      // ★ 两个触发条件都要：
+      //   ① 页面上的 `?worker=1`（把解释器交给 worker 的那种加载姿势）；
+      //   ② **本上下文自己就是一个 worker 宿主**（`importScripts` 是 worker 专有；
+      //      页面没有它）。加②是因为"别人手搓一个 `new Worker('octave-worker.js')`"也是真实用法
+      //      —— `accept-worker` 的 C3b（重启）就是手搓的，没有查询串 ⇒ 只靠①会漏，
+      //      那次实测正是 `Module.eval_string is not a function`（worker 自己按 COI 选了线程档）。
+      return { lane: 'base', coi: coi, sab: sab, forced: false, workerMode: true,
+               why: 'worker 宿主：线程产物在 DedicatedWorker 里当主宿主**未验证**'
+                    + '（实测 accept-worker 4/12）⇒ 用基础档；要线程档请显式 ?lane=threads' };
+    }
     if (ov && ov !== auto.lane) {
       return { lane: ov, coi: coi, sab: sab, forced: true,
                why: '显式覆盖为 ' + ov + '（环境本来该选 ' + auto.lane + '）'
