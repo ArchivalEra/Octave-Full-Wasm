@@ -962,3 +962,93 @@ grep -c 'threads/' /mnt/hdd/octave-wasm-build/site/index.html          # 期望 
 就只 `cp` 到 `siteWebGL/`；手抄到 `site/` 等于把"页面认档 + 站点没有线程档"这种**半新半旧**状态
 装上基线 —— 它不会自己报错，只在浏览器里 404（而 `check-site-parity --strict` 事后能抓到：
 它的部署件清单里现在有 `lane.js` 与 `threads/*`，一处缺就是红）。
+
+---
+
+## ★ E2 落地：线程版 OpenBLAS 链进主模块（2026-09-27，branch `e2-openblas`）
+
+### 一句话结论
+
+**78 条 mismatch 的根因是返回约定**（f2c/F77_RET_T 按"子程序返回 `int`"调、OpenBLAS 定义成
+`void`）。方案 A（改 `interface/*.c` 的返回类型）在**共享函数体**上撞墙（体里有裸 `return;`，
+改成 `int` 会打破 CBLAS 那趟）；**方案 B 落地**：给 OpenBLAS 的 Fortran 入口加 `ob_` 前缀 +
+生成薄包装接回既有 ABI。**产物 verdict=ok，且链接警告与车道基线逐条相同（E2 零新增警告）**。
+
+### 配方（可复跑；全部在容器内）
+
+```bash
+# ① 干净副本（★ 必须从原始树取；在跑过一轮构建的树里继续构建会踩 config.h/旧对象）
+rm -rf /src/work/OpenBLAS-e2 && mkdir -p /src/work/OpenBLAS-e2
+tar -C /src/work/OpenBLAS-0.3.34 --exclude='*.o' --exclude='*.a' --exclude='*.so' \
+    --exclude='config.h' --exclude='Makefile.conf' -cf - . | tar -C /src/work/OpenBLAS-e2 -xf -
+
+# ② 两个补丁（都是工具，都带 --check/--revert/--selftest）
+python3 /src/bin/patch-openblas-symbol-prefix.py --apply /src/work/OpenBLAS-e2 ob_
+python3 /src/bin/patch-openblas-emscripten.py   --apply /src/work/OpenBLAS-e2
+
+# ③ 构建（线程 + SIMD；NUM_THREADS=4 与主模块的 PTHREAD_POOL_SIZE 对齐；E2PREFIX 让 NAME 带前缀）
+cd /src/work/OpenBLAS-e2 && make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
+     NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc -pthread" FC="/src/bin/emf77 -pthread" HOSTCC=gcc -j12
+#   ⇒ libopenblas_wasm128p-r0.3.34.a（utest/*.exe 编译失败无妨：我们不需要测试程序）
+
+# ④ 包装（签名从**两次预言机**量出；见下"怎么量签名"）
+python3 /src/bin/gen-f77-wrappers.py --from-log <harvest+oracle 合成日志> \
+        --extras <相同签名的那批.tsv> --out /tmp/e2-f77-wrappers.c
+
+# ⑤ 组装 E2 的 librefblas.a = 前缀 OpenBLAS（**摘掉 c_abs.o**）+ 包装对象
+ar d librefblas.a c_abs.o
+emar r librefblas.a e2-f77-wrappers.o
+
+# ⑥ 链接（车道模式 + E2 口子；★ 车道影子必须进 PATH：`main.cc` 不带 -pthread 会被 shared-memory 拒）
+SHIM=$(PATH=/src/bin:$PATH bash /src/bin/lane-shim.sh "-pthread -fno-threadsafe-statics" \
+        /src/libwork/lane-shim-guards); export PATH="$SHIM:$PATH"
+E2_OPENBLAS=/src/work/e2-openblas-lib bash /src/bin/relink.sh link threads --out /src/websrc/e2-ob-out
+```
+
+### 怎么量签名（**两次预言机**）
+
+`wasm-ld` 的 mismatch 报文只报**有冲突**的符号 ⇒ "当时就相符"的那批（加前缀后**原名没人提供**）
+必须在第一轮链接后从 `warning: undefined symbol:` 里捞出来，再量它们的签名。量法：
+
+```c
+/* 用 0 参调用去逼链接器把**定义侧**签名打出来（C 里 `void f()` 是不带原型的声明） */
+extern void zhemm_();  int main(void){ zhemm_(); return 0; }
+```
+```bash
+emcc this.c <要量的那份库> -o t.wasm --no-entry -sERROR_ON_UNDEFINED_SYMBOLS=0
+# 输出里 `>>> defined as (i32,…,i32) -> void in …/librefblas.a(zhemm.o)` 就是定义侧签名
+```
+
+**要量两次**：对**车道**的库量一次（= **调用方**约定：f2c 的 LAPACK / flang 的 qrupdate），
+对 **OpenBLAS** 量一次（它自己的约定）。两者合起来才能判"该走哪条规则"：
+
+| 车道（调用方） | OpenBLAS | 处理 |
+|---|---|---|
+| `(n×i32) -> i32` | `(m×i32) -> void` | 规则①：转发前 m 个 + `return 0;`（**子程序，多数**） |
+| `(n×i32) -> f64` | `(n×i32) -> f32` | 规则②：加宽 `(double)`（单精度函数返回 doublereal） |
+| `(n×i32) -> i32` | `(m×i32) -> i32`，m<n | 规则③：丢隐藏字符长度（`lsame_`） |
+| `(n×i32) -> f64` | `(m×i32) -> void`，m=n+1 | 规则④：sret 结果区、返回 `r[0]` |
+| 两侧**相同** | 相同 | **透传**包装（名字没了、签名不变） |
+| 形状不在表里 | — | **拒绝生成**（"另一侧参数表必须是前缀关系"是硬判据） |
+
+### 三个必须记的坑
+
+1. **`zdotu_` 有约定互斥的两个调用方**：lane 的 LAPACK 按 `(6,void)`（sret）、qrupdate 按 `(5,f64)`。
+   去包装会让**两个引用互相打架**（`error: function signature mismatch`，链接直接失败）⇒ 按
+   **OpenBLAS 的签名透传**，复现车道现状。**这条 mismatch 是既有的**：车道基线链接（无 E2）
+   也只有它，产物 wasm sha 复现现役的 `c2899a71…`。
+2. **`c_abs` 交给 libf2c**：调用方（lane LAPACK，`clahqr.simd.o`）要 `(1)->f64`，OpenBLAS 自带一份
+   **f32** 且**没被加前缀**（所以也没有 `ob_c_abs`）⇒ 包装会同名冲突。车道基线里它来自
+   `/usr/local-threads/lib/libf2c.a`（f64 ✓，实测 lane refblas 不定义它）⇒ **摘掉 OpenBLAS 那个成员、
+   不包装**，与基线逐条一致。
+3. **`ob_c_abs` 那类"内部引用被加了前缀、定义没有"** 的错配，判据是"存档里有没有这个名字"，
+   不要靠猜（我第一版就是猜它有 ⇒ 25 个 undefined）。
+
+### 判据（全部是"产物侧/可证伪"）
+
+- `check-build-manifest.py`：声明 `e2_openblas: true` ⇒ `inputs.blas.resolved_dir` 必须含
+  `openblas`（**输入侧溯源**：声明换了库、实际还是车道 refblas 这种情况，构建/链接全绿）；
+- **链接警告与基线逐条一致**：E2 与车道基线的 undefined 集合（gl4es / cgejsv_ / zgejsv_）与
+  mismatch 集合（`zdotu_`）**完全相同** ⇒ 零新增；
+- 出厂核对 `verdict=ok`；产物实测 `shared_memory=true`、`pthread_glue=54`、`v128=5296`
+  （车道那份是 4756 ⇒ OpenBLAS 的 SIMD 更密）。
