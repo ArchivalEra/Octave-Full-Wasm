@@ -71,7 +71,7 @@ def lane_blas_problem(declared, man):
     return None
 
 
-def compare(declared, measured):
+def compare(declared, measured, man=None):
     """返回 [(键, 声明值, 实测值, 为什么)]，空表 = 全过。"""
     bad = []
 
@@ -136,11 +136,16 @@ def compare(declared, measured):
             #   判据落在**输入侧溯源**（与 threads 那条同样的道理）：`inputs.blas.resolved_dir`
             #   必须指向 E2 那份（路径含 `openblas`）——"声明说换了库、实际链的还是车道 refblas"
             #   这种情况构建/链接全绿，只有溯源能看出来。
-            rd = ((man.get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
-            got = "openblas" in rd.lower()
-            if bool(declared[k]) != got:
-                add(k, declared[k], {"resolved_dir": rd},
-                    "声明 e2_openblas=%s，但 BLAS 溯源是 `%s`" % (declared[k], rd or "(空)"))
+            # ⚠️ BLAS 溯源按仓库口径放在 `inputs` 段（**输入侧**事实，不是产物量测）⇒ 判据要读
+            #    manifest；拿不到 manifest 就**判拒**（fail-closed，不许当通过）。
+            rd = (((man or {}).get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
+            if man is None:
+                add(k, declared[k], None, "核验需要 manifest（inputs.blas.resolved_dir），本次没给 ⇒ 判拒")
+            else:
+                got = "openblas" in rd.lower()
+                if bool(declared[k]) != got:
+                    add(k, declared[k], {"resolved_dir": rd},
+                        "声明 e2_openblas=%s，但 BLAS 溯源是 `%s`" % (declared[k], rd or "(空)"))
         elif k == "gl4es":
             hits = (measured.get("gl4es") or {}).get("symbol_hits", 0)
             if bool(declared[k]) != (hits > 0):
@@ -196,7 +201,7 @@ def main(argv):
     if not declared:
         print("== 拒绝：模式声明是空的（{}）⇒ 相当于没人核对过", file=sys.stderr)
         return 3
-    bad = compare(declared, measured)
+    bad = compare(declared, measured, man)
 
     # ── 清单与产物是不是一对 ──
     d = out_dir or (man.get("build") or {}).get("out")
@@ -280,6 +285,17 @@ CASES = [
      len(compare({**_DECL}, {**_MEAS, "simd": {"v128": 0}})) == 1),
     ("线程档：声明 true + 产物内存 shared ⇒ 不报",
      lambda: len(compare({**_DECL, "threads": True}, _THREADS_MEAS)) == 0),
+    # ★ E2（branch e2-openblas）：声明 e2_openblas 的核验读 **manifest 的 inputs.blas.resolved_dir**
+    ("★ 声明 e2_openblas=true 且溯源含 openblas ⇒ 不报",
+     lambda: len(compare({**_DECL, "threads": True, "e2_openblas": True}, _THREADS_MEAS,
+                         {"inputs": {"blas": {"resolved_dir": "/src/work/e2-openblas-lib"}}})) == 0),
+    ("★ 声明 e2_openblas=true 但溯源是车道 ⇒ 必须报",
+     lambda: any("e2_openblas" in str(b) for b in compare(
+         {**_DECL, "threads": True, "e2_openblas": True}, _THREADS_MEAS,
+         {"inputs": {"blas": {"resolved_dir": "/src/deps-threads/lapack-simd/lib"}}}))),
+    ("★ 声明 e2_openblas 但**没给 manifest** ⇒ 判拒（不许当通过）",
+     lambda: any("e2_openblas" in str(b) for b in compare(
+         {**_DECL, "threads": True, "e2_openblas": True}, _THREADS_MEAS))),
     ("★ **声明线程档但产物内存不是 shared ⇒ 必须报**（-pthread 传了但没生效）",
      lambda: len(compare({**_DECL, "threads": True}, _MEAS)) == 1),
     ("★ **声明非线程档但产物内存是 shared ⇒ 必须报**（反向：线程档不许挂别人的名义）",

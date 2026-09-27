@@ -37,6 +37,15 @@ import sys
 
 # ★ 逐符号特例（**都必须写明原因**，且必须真的出现在日志里 —— 否则是过期名单 ⇒ 报错）：
 #   `PASSTHROUGH`：按 **OpenBLAS 自己的签名**做透传包装（声明与它一致、原样转发）。
+# ★ 交给 **libf2c** 的符号（**不生成包装**；E2 存档里把 OpenBLAS 自带的同名成员摘掉）。
+#   实测（2026-09-27）：`c_abs` 的调用方是 lane 的 LAPACK（`clahqr.simd.o`，按 `(1 参) -> f64`），
+#   而 OpenBLAS 自带一份 **f32** 版（`c_abs.o`）；**车道基线里它来自 libf2c（f64 ✓，实测 lane refblas
+#   不定义它、`/usr/local-threads/lib/libf2c.a` 定义它）** ⇒ 摘掉 OpenBLAS 那份、别包它，
+#   就与基线**逐条一致**。包装会与 OpenBLAS 那份同名冲突（且它没被加前缀 ⇒ 也没有 `ob_c_abs`）。
+F2C_OWNED = {
+    "c_abs": "f2c 的复数绝对值（f64），车道基线就取自 libf2c；OpenBLAS 自带的是 f32 ⇒ 摘成员、不包装",
+}
+
 PASSTHROUGH = {
     "zdotu_": "两个调用方的约定互斥：lane 的 LAPACK 按 `(6 参) -> void`（sret）调它，"
               "qrupdate 的 `zgqvec.o` 按 `(5 参) -> f64` 调它，而 **OpenBLAS 原生是 `(6, void)`**"
@@ -88,9 +97,32 @@ def parse_log(text):
     return out
 
 
-def render(pairs, exclude=None):
-    """返回 (C 源码, 各规则命中数)。形状不认识就抛 SystemExit。`exclude` 可注入（自证用）。"""
+def seen_syms_of(pairs):
+    return {p[0] for p in pairs}
+
+
+def render(pairs, exclude=None, extras=None):
+    """返回 (C 源码, 各规则命中数)。形状不认识就抛 SystemExit。
+
+    `extras`：[[sym, argc, ret], …] —— "当时签名相符、所以没进 mismatch 名单"的那批符号
+    （加前缀后它们的**原名**没人提供了 ⇒ 必须补**透传**包装）。签名由调用方量好传入
+    （用"0 参调用"当**签名预言机**逼链接器打出来，见 NOTES-threads）。
+    """
     special = PASSTHROUGH if exclude is None else exclude
+    extras = extras or []
+    ex_keys = {e[0] for e in extras}
+    dup = sorted(ex_keys & seen_syms_of(pairs))
+    if dup:
+        raise SystemExit("FATAL: 这些符号既在 mismatch 名单、又在 extras 里（会重复定义）：%s"
+                         % ", ".join(dup))
+    f2c = sorted(set(F2C_OWNED) & (ex_keys | seen_syms_of(pairs)))
+    f2c_keep = [e for e in extras if e[0] not in F2C_OWNED]
+    pairs = [q for q in pairs if q[0] not in F2C_OWNED]
+    extras = f2c_keep
+    if f2c:
+        lines_note = f2c
+    else:
+        lines_note = []
     seen_syms = {p[0] for p in pairs}
     stale = [k for k in special if k not in seen_syms]
     if stale:
@@ -157,6 +189,21 @@ def render(pairs, exclude=None):
                              % (sym, cr, orr))
         lines.append(body)
         lines.append("")
+    # extras：透传包装（声明与**量到的**签名一致；非 void 返回要 return）
+    for sym, argc, ret in extras:
+        par = ", ".join("void *a%d" % (i + 1) for i in range(argc))
+        call = ", ".join("a%d" % (i + 1) for i in range(argc))
+        wret = {"void": "void", "i32": "int", "f64": "double", "f32": "float"}.get(ret)
+        if wret is None:
+            raise SystemExit("FATAL: extras 里 %s 的返回类型 %r 不认识 ⇒ 拒绝生成" % (sym, ret))
+        if ret == "void":
+            body = ("extern void ob_%s(%s);\nvoid %s(%s) { ob_%s(%s); }"
+                    % (sym, ", ".join(["void*"] * argc), sym, par, sym, call))
+        else:
+            body = ("extern %s ob_%s(%s);\n%s %s(%s) { return ob_%s(%s); }"
+                    % (wret, sym, ", ".join(["void*"] * argc), wret, sym, par, sym, call))
+        lines.append(body)
+        lines.append("")
     return "\n".join(lines), stats
 
 
@@ -174,12 +221,23 @@ def main(argv):
         print("FATAL: 日志里一条 signature mismatch 都没解析到（日志给错了？）", file=sys.stderr)
         return 3
     emitted = len(pairs)
-    src, stats = render(pairs)
+    extras = []
+    if "--extras" in argv:
+        ep = argv[argv.index("--extras") + 1]
+        for line in io.open(ep, encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            sym, argc, ret = line.split("\t")
+            extras.append((sym, int(argc), ret))
+    src, stats = render(pairs, extras=extras)
     out = argv[argv.index("--out") + 1]
     io.open(out, "w", encoding="utf-8").write(src)
-    print("已写出 %s：%d 个包装（①%d ②%d ③%d ④%d + 透传特例 %d：%s）"
+    print("已写出 %s：%d 个（mismatch 派生 ①%d ②%d ③%d ④%d + 透传特例 %d + extras %d；"
+          "交给 libf2c 不包装 %d：%s）"
           % (out, emitted, stats["1"], stats["2"], stats["3"], stats["4"],
-             len(PASSTHROUGH), ", ".join(sorted(PASSTHROUGH))))
+             len(PASSTHROUGH), len([e for e in extras if e[0] not in F2C_OWNED]),
+             len(F2C_OWNED), ", ".join(sorted(F2C_OWNED))))
     return 0
 
 
