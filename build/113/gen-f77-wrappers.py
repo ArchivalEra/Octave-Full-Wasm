@@ -35,12 +35,15 @@ import io
 import re
 import sys
 
-# ★ 显式排除（**写明原因**；且每个被排除的符号必须真的出现在日志里 —— 否则是过期名单 ⇒ 报错）
-EXCLUDE = {
-    "zdotu_": "两个调用方约定互斥：lane 的 LAPACK 按 `(6 参) -> void`（sret）调它，而 qrupdate 的 "
-              "`zgqvec.o` 按 `(5 参) -> f64` 调它；**OpenBLAS 原生正是 `(6 参) -> void`** ⇒ 不包它，"
-              "让它与 LAPACK 对上。qrupdate 那条**是既有不匹配**（实测：拿同样的 5 参写法去链"
-              "**车道** refblas 也报同一条；6 参写法 0 条）⇒ 与 E2 换库无关，别在这里修。",
+# ★ 逐符号特例（**都必须写明原因**，且必须真的出现在日志里 —— 否则是过期名单 ⇒ 报错）：
+#   `PASSTHROUGH`：按 **OpenBLAS 自己的签名**做透传包装（声明与它一致、原样转发）。
+PASSTHROUGH = {
+    "zdotu_": "两个调用方的约定互斥：lane 的 LAPACK 按 `(6 参) -> void`（sret）调它，"
+              "qrupdate 的 `zgqvec.o` 按 `(5 参) -> f64` 调它，而 **OpenBLAS 原生是 `(6, void)`**"
+              "（与 lane LAPACK 一致）。⇒ 按 OpenBLAS 的签名做**透传**包装：定义成 `(6, void)`，"
+              "复现车道现状。qrupdate 那条 mismatch **是既有的**（实测：`llvm-nm` 里 qrupdate 的"
+              "`zdotu_` 是 `U`（未定义引用）、车道 refblas 的定义是 `(6, void)`；拿 6 参 void 写法去"
+              "链车道 refblas **0** 条 mismatch、5 参 f64 写法 **1** 条）⇒ 与 E2 换库无关，别在这里修。",
 }
 
 MISMATCH_RE = re.compile(
@@ -87,17 +90,16 @@ def parse_log(text):
 
 def render(pairs, exclude=None):
     """返回 (C 源码, 各规则命中数)。形状不认识就抛 SystemExit。`exclude` 可注入（自证用）。"""
-    exclude = EXCLUDE if exclude is None else exclude
+    special = PASSTHROUGH if exclude is None else exclude
     seen_syms = {p[0] for p in pairs}
-    stale = [k for k in exclude if k not in seen_syms]
+    stale = [k for k in special if k not in seen_syms]
     if stale:
-        raise SystemExit("FATAL: 排除名单里有日志里不存在的符号 %s ⇒ 名单过期了，别当没看见"
+        raise SystemExit("FATAL: 特例名单里有日志里不存在的符号 %s ⇒ 名单过期了，别当没看见"
                          % ", ".join(stale))
-    pairs = [p for p in pairs if p[0] not in exclude]
     lines = [HEAD]
-    if exclude:
-        lines.append("/* 显式排除（原因见 build/113/gen-f77-wrappers.py 的 EXCLUDE）：")
-        for k, why in sorted(exclude.items()):
+    if special:
+        lines.append("/* 逐符号特例（原因见 build/113/gen-f77-wrappers.py 的 PASSTHROUGH）：")
+        for k, why in sorted(special.items()):
             lines.append(" *   %s —— %s" % (k, why))
         lines.append(" */")
     stats = {"1": 0, "2": 0, "3": 0, "4": 0}
@@ -116,6 +118,20 @@ def render(pairs, exclude=None):
         call_args = ", ".join(names)
         wargs = ", ".join("void *a%d" % (i + 1) for i in range(n))
         odecl = ", ".join(["void*"] * m)
+        if sym in special:
+            # 透传：声明与 OpenBLAS 一致、原样转发（不碰返回约定）
+            wrapper_ret = "void" if orr == "void" else ("double" if orr == "f64" else "int")
+            # ⚠️ 包装的**参数表**与**调用实参**要用**参数名**；`odecl`（类型表）只给 extern 用。
+            #    （第一版把 odecl 也用在了这两处 ⇒ 生成 `void f_(void*, void*) { g_(void*, void*); }`
+            #     这种根本编不过的代码；自证当场抓到。）
+            par = ", ".join("void *a%d" % (i + 1) for i in range(m))
+            call = ", ".join("a%d" % (i + 1) for i in range(m))
+            body = ("extern %s ob_%s(%s);\n"
+                    "%s %s(%s) { ob_%s(%s); }" % (wrapper_ret, sym, odecl,
+                                                  wrapper_ret, sym, par, sym, call))
+            lines.append(body)
+            lines.append("")
+            continue
         if cr == "i32" and orr == "void":
             body = ("extern void ob_%s(%s);\n"
                     "int %s(%s) { ob_%s(%s); return 0; }" % (sym, odecl, sym, wargs, sym, call_args))
@@ -157,13 +173,13 @@ def main(argv):
         # 零值守卫：一条都没解析到 ⇒ **别写空文件**（"少包装"会让链接继续报错，却有产物）
         print("FATAL: 日志里一条 signature mismatch 都没解析到（日志给错了？）", file=sys.stderr)
         return 3
-    emitted = len([p for p in pairs if p[0] not in EXCLUDE])
+    emitted = len(pairs)
     src, stats = render(pairs)
     out = argv[argv.index("--out") + 1]
     io.open(out, "w", encoding="utf-8").write(src)
-    print("已写出 %s：发出 %d 个包装（①%d ②%d ③%d ④%d），显式排除 %d 个（%s）"
+    print("已写出 %s：%d 个包装（①%d ②%d ③%d ④%d + 透传特例 %d：%s）"
           % (out, emitted, stats["1"], stats["2"], stats["3"], stats["4"],
-             len(pairs) - emitted, ", ".join(sorted(EXCLUDE))))
+             len(PASSTHROUGH), ", ".join(sorted(PASSTHROUGH))))
     return 0
 
 
@@ -180,6 +196,9 @@ wasm-ld: warning: function signature mismatch: lsame_
 wasm-ld: warning: function signature mismatch: zdotu_
 >>> defined as (i32,i32,i32,i32,i32) -> f64   in /x/libqrupdate.a(d.o)
 >>> defined as (i32,i32,i32,i32,i32,i32) -> void  in /y/librefblas.a(zdotu.o)
+wasm-ld: warning: function signature mismatch: zdotc_
+>>> defined as (i32,i32,i32,i32,i32) -> f64   in /x/libqrupdate.a(d2.o)
+>>> defined as (i32,i32,i32,i32,i32,i32) -> void  in /y/librefblas.a(zdotc.o)
 wasm-ld: warning: function signature mismatch: ztrsv_
 >>> defined as (i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32) -> i32   in /x/liblapack.a(e.o)
 >>> defined as (i32,i32,i32,i32,i32,i32,i32,i32) -> void  in /y/librefblas.a(ztrsv.o)
@@ -187,7 +206,7 @@ wasm-ld: warning: function signature mismatch: ztrsv_
 
 
 def selftest():
-    src, stats = render(parse_log(_L), exclude={})          # 形状测试不看排除名单
+    src, stats = render(parse_log(_L), exclude={})          # 形状测试不看特例名单
     src2, _st2 = render(parse_log(_L))
     cases = [
         ("① 子程序：转发 + `return 0;`",
@@ -198,25 +217,26 @@ def selftest():
                  "{ return (double)ob_sdot_(a1, a2, a3, a4, a5); }" in src),
         ("③ `lsame_`：调用方 4 参 / OpenBLAS 2 参 ⇒ 只转发前 2 个、返回透传",
          lambda: "int lsame_(void *a1, void *a2, void *a3, void *a4) { return ob_lsame_(a1, a2); }" in src),
-        ("④ `zdotu_`：sret（补结果区、返回实部）",
-         lambda: "double zdotu_(void *a1, void *a2, void *a3, void *a4, void *a5) "
-                 "{ double r[2]; ob_zdotu_(r, a1, a2, a3, a4, a5); return r[0]; }" in src),
+        ("④ `zdotc_`：sret（补结果区、返回实部）",
+         lambda: "double zdotc_(void *a1, void *a2, void *a3, void *a4, void *a5) "
+                 "{ double r[2]; ob_zdotc_(r, a1, a2, a3, a4, a5); return r[0]; }" in src),
         ("★ 调用方多出的**隐藏长度被丢掉**（11 参 → 转发前 8 个）",
          lambda: "int ztrsv_(void *a1, void *a2, void *a3, void *a4, void *a5, void *a6, void *a7, "
                  "void *a8, void *a9, void *a10, void *a11) "
                  "{ ob_ztrsv_(a1, a2, a3, a4, a5, a6, a7, a8); return 0; }" in src),
-        ("统计：①2（dgemm_+ztrsv_）②1 ③1 ④1",
-         lambda: stats == {"1": 2, "2": 1, "3": 1, "4": 1}),
+        ("统计：①2（dgemm_+ztrsv_）②1 ③1 ④2（zdotu_+zdotc_，不含特例时）",
+         lambda: stats == {"1": 2, "2": 1, "3": 1, "4": 2}),
         ("★ **OpenBLAS 比调用方多参数、又不是规则④的 sret ⇒ 必须拒**（别自己发明补参）",
          lambda: _raises(lambda: render(parse_log(
              _L.replace(">>> defined as (i32,i32,i32,i32) -> i32   in /x/liblapack.a(c.o)",
                         ">>> defined as (i32,i32) -> i32   in /x/liblapack.a(c.o)").replace(
                  ">>> defined as (i32,i32) -> i32   in /y/librefblas.a(lsame.o)",
                  ">>> defined as (i32,i32,i32,i32) -> i32   in /y/librefblas.a(lsame.o)"))))),
-        ("★ **排除名单里的符号确实不生成包装**（`zdotu_`）+ 输出里写明原因",
-         lambda: "double zdotu_(" not in src2
-         and "两个调用方约定互斥" in src2[:src2.index("extern")]),
-        ("★ **排除名单过期（符号不在日志里）⇒ 必须拒**",
+        ("★ 特例符号按 **OpenBLAS 的签名**透传（`zdotu_`：`(6,void)` 原样转发）",
+         lambda: "void zdotu_(void *a1, void *a2, void *a3, void *a4, void *a5, void *a6) "
+                 "{ ob_zdotu_(a1, a2, a3, a4, a5, a6); }" in src2),
+        ("★ 特例的**原因写进生成物头部**", lambda: "两个调用方的约定互斥" in src2[:src2.index("extern")]),
+        ("★ **特例名单过期（符号不在日志里）⇒ 必须拒**",
          lambda: _raises(lambda: render(parse_log(_L.replace("zdotu_", "zzz_")), exclude={"zdotu_": "x"}))),
         ("★ **前缀性质被破坏 ⇒ 必须拒**（别静默拼一个）",
          lambda: _raises(lambda: render(parse_log(_L.replace(
