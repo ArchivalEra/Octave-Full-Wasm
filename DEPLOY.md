@@ -25,6 +25,36 @@
 现役 `octave.wasm` 的 sha 与 `measured.simd.v128` 见 `build/FACTS.json` 的 `wasm_sha` / `wasm_v128`（手查：
 `llvm-objdump -d octave.wasm | grep -c v128`）。
 
+## ★ 双档（B6）：`threads/` 子目录 + **宿主必须发 COI 头**
+
+本站点带**两档产物**，文件名相同、目录不同：
+
+| 档 | 文件 | 什么时候用 |
+|---|---|---|
+| 基础档 | 根目录 `octave.wasm` / `octave.js` / `octave.data` | **任何**静态托管；页面默认回落到它 |
+| 线程档 | `threads/octave.{wasm,js,data}` | 宿主发了下面两个响应头时**自动**选它（多线程**运行时**就绪） |
+
+页面按**同步**判据选档（`crossOriginIsolated === true` 且 `SharedArrayBuffer` 可用），
+判据与两档的文件表都在 `bridge/lane.js`；显式覆盖用 `?lane=base` / `?lane=threads`。
+
+要**启用线程档**，宿主必须对**整站**发这两个头（缺一个都不行）：
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+- 本地参考实现：`python3 build/serve-coi.py --dir <站点目录> --port 8761`（要测"基础档那一侧"
+  另起一台加 `--no-coi`）。**别用 `python3 -m http.server` 测线程档** —— 它发不了这两个头，
+  页面会**静默**落回基础档（不报错，只是没线程）。
+- GitHub Pages **发不了**这两个头 ⇒ 在线版本跑的是基础档（`threads/` 目录在那儿等于闲置，
+  不影响任何功能）。要线程档就得用能改响应头的托管（Cloudflare Pages / 自己的 nginx 等）。
+- ⚠️ **线程档的已知边界**：① worker 宿主（`?worker=1` 或手搓 `new Worker('octave-worker.js')`）
+  **自动落基础档** —— 线程产物在 DedicatedWorker 里当主宿主未验证；② 同页多实例**支持**，
+  但每个实例都必须拿到页面的选档计划（页面内部已处理）。细节见 `build/113/NOTES-threads.md`。
+- ⚠️ 线程档现在是 **refblas/lapack 的「SIMD + atomics」版**（不是 OpenBLAS）⇒ 多线程**运行时**已就绪，
+  但**数学还没并行化**；真正提速那一步（线程版 OpenBLAS 链进主模块）见 `build/113/NOTES-threads.md` 末两节。
+
 ## 怎么部署（GitHub Pages）
 
 1. 仓库 Settings → Pages → **Source 选 "GitHub Actions"**（一次性手工步骤）。

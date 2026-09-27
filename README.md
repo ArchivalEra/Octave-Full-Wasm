@@ -224,7 +224,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (13436 bytes)
 - `CONTEXT.md` (10001 bytes)
-- `DEPLOY.md` (3564 bytes)
+- `DEPLOY.md` (5595 bytes)
 - `HANDOFF.md` (18346 bytes)
 - `HISTORY.md` (256292 bytes)
 - `LICENSE` (34523 bytes)
