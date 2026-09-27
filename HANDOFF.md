@@ -157,7 +157,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | 键 | 值 | 复跑命令 |
 |---|---|---|
 | `accept_pass` | **1077**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-173821 里带汇总行的套件（且 0 FAIL）` |
+| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-181413 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
 | `env_vars` | **27** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
@@ -185,7 +185,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-27T18:01:36+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-27T18:36:26+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
@@ -200,7 +200,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260927-180323` · **43 套 / 1,077 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260927` · tar.zst 50,022,970 B · `5b548f3ba9dee616…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260927-181413` · **43 套 / 1,077 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 24 套 / 227 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260927` · tar.zst 50,023,518 B · `d60e1dc3b95351ce…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `threads`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

@@ -3169,3 +3169,66 @@ BLAS 来自车道（`/src/deps-threads/lapack-simd/lib`，判据 `inputs.blas.re
 `PLAN-arch` 里两处旧数字加了「当时」标记。
 新增闸门规则：`probe_lane_pass`（文档写 `probe-lane.mjs` 的 PASS 数就必须与台账一致），
 且**当场抓到** HANDOFF 里那个手抄的 15（这正是 F2 要拦的形状）。
+
+---
+
+### 5.64 B6 验收收尾：线程档七条红逐条查清 + 双档 promote 到 8761（2026-09-27，branch `threads`）
+
+**矩阵（当时实测，日志留档）**：
+- **线程档**（8768，带头 + `PROBES=1`）：**69 套 / 1304 PASS / 0 FAIL**（日志留档
+  `sweep-logs/20260927-173821`）。
+- **基础档**（8770，不带头）：**43 套 / 1076 PASS / 0 FAIL**（日志留档 `sweep-logs/20260927-133405`）。
+
+**首跑一片红 → 七个独立的真因**（六个是"线程档专属"：基础档绿、线程档红，且都不是偶发）。
+每条都修好并逐套复跑确认，每条都配**产物侧判据**（不是"应该"）：
+
+| # | 套件（修前 → 修后，均为当时实测） | 真因 | 判据落在哪 |
+|---|---|---|---|
+| 1 | `accept-113-oct` 3/5 → **8/0** | 夹具 `minioct.oct` 是**站点根**的老非 pthread 件 | 套件按档取（`__octaveCaps.lane`） |
+| 2 | `accept-113-assets` 12/4 → **16/0** | `window.OctaveAssets`（全局默认实例）不认档 ⇒ 拉基础档清单 | `assets-loader.init()` 缺省取当前档清单 |
+| 3 | `accept-archive` 0/20、`accept-dldfcn` 11/60、`accept-full` 9/11 → **20/0 / 71/0 / 20/0** | 清单**只改 URL 不改 `sha256`** ⇒ 加载器 fail-closed 拒载 16 条 `.oct` | 生成器按磁盘重算 + 判据④（拿**修前真清单**验过红） |
+| 4 | `accept-help` 5/7 → **12/0** | 车道清单照抄**基础档的 install 前缀** ⇒ `help` 读不到 docstrings | 前缀从产物字节读 + 判据⑤ |
+| 5 | `accept-dldfcn` 的 audio | pthread 编的 `.oct` 引用 `__cxa_guard_*`，**两档主模块都不提供** | 判据② + 影子带 `-fno-threadsafe-statics`（判据⑧） |
+| 6 | `accept-forge2` 43/1、`accept-slicot` 13/12 → **44/0 / 25/0** | slicot 调度模块**少链 `common.oct.o` + PIC 归档** ⇒ `step`/`norm` 首次调用崩 | 判据③（成对核导入差集）+ 判据⑨（入口必须是**定义**） |
+| 7 | `accept-worker` 4/12 → **17/0**、`accept-embed-multi` 13/12 → **13/0** | **选档只传给第一个上下文** ⇒ 线程胶水 + 基础产物错配 | worker 宿主缺省基础档（`probe-lane` 格 5 + 套件断言）；多实例缺省取页面计划 |
+
+**顺带更正两条我自己的判断**（写进 `NOTES-threads.md`）：
+- "pthread 胶水不能同页再入、两个实例必然坏" —— **错**（那是错配的症状）；实测两实例共存全绿。
+- "线程档 × DedicatedWorker 未验证" —— 这条**成立**，但先被另一 bug 掩盖：worker 看不到页面的
+  `?lane=`（worker 的 `location.search` 是它自己脚本的 URL）⇒ 必须把档写进 Worker URL。
+
+**两条"自己的工具"问题**：`probe-artifact-sha` 写死取根目录 wasm、`probe-caps` 拿基础档的 `v128`
+精确值当通用断言 ⇒ 双档站点上**必然假红**；两个探针都改成**按档取件/按档断言**。
+
+**一次真踩到的基线事故（已回退）**：为在 8768 上试页面改动，顺手把 `bridge/{lane.js,index.html}`
+也抄进了 **8761 站点**，而那里没有 `threads/` 且**带头服务** ⇒ 页面按 COI 选线程档 ⇒
+`threads/octave.js` **404** ⇒ 验收底线当时是坏的（回退三步与判据见 `NOTES-threads.md` 末节）。
+**规则：8761 只由 `build/promote-webgl.sh` 改。**
+
+**事实系统也跟着修一处**：`python3 build/facts.py`（无参数）**会重写台账**，当时 8761 上没有
+`threads/` ⇒ 8 条线程档事实测不出来 ⇒ 一次手滑把台账从 28 条**静默缩成 17 条**。现在**掉条会拒绝**
+（`dropped_keys` 守卫 + 3 条自证），显式口子 `--allow-drop`。
+
+**收尾 A（promote → 8761 双档）实测**：
+- promote：基础档三件与现役**逐字节相同**（wasm 见台账 `wasm_sha`）；线程档三件 + 44 个车道
+  `.oct` + 两个夹具落地；内建判据全过（车道 `.oct` 条数从基础清单反查、`manifest.threads.json
+  --check`、gl4es、字体预载）。
+- 开机自检（8761，带头）BOOT OK 1.2s；**部署件 SHA 三层**：两档各自"磁盘 ✓ + HTTP ✓"，页面层
+  `probe-artifact-sha` **2 PASS / 0 FAIL** ⇒ **8761 现在跑的是线程档**（B6 的产品目标达成）。
+- 三处 parity `--strict` **完全一致**（部署件 + 资产包 + 清单 + 44 个车道 `.oct` 的哈希列表）；
+  dist 包内两档 wasm 的 sha 与部署件**同**。
+- 台账按自己的复跑命令重测：`probe_lane_pass` 15 → **17**，28 条一条不少。
+
+**闸门**：本轮新增/加严 8 处（`wasm_symbols.py` 公共符号表解析器、`check-oct-lane` 判据②③、
+`make-lane-manifest` 判据④⑤、parity 的双档部署件与车道 `.oct` 摘要比对、promote §1b"旧产物不许上去"、
+`facts.py` 掉条守卫、slicot 判据⑨）⇒ 闸门自证 14 → **22 个**，全绿。
+
+**收尾 B（8761 = 部署态，带头 ⇒ 页面跑线程档）实测**：
+- **8761 全量回归**：**43 套 / 1077 PASS / 0 FAIL**（当时实测，日志留档 `sweep-logs/20260927-180323`）。
+  比基础档那侧多 1 条，差的正是本轮新加的那条断言（`accept-worker` 从 16 条变 17 条：
+  "worker 模式自动落基础档"）。几个**曾经在首跑里红**的套件在**部署态**也复验了：
+  `accept-dldfcn 71/0`、`accept-embed-multi 13/0`、`accept-t8-uigetfile 20/0`（首跑是 NO-SUMMARY）、
+  `accept-t9-helpm 18/0`、`accept-t6-audio-doc 33/0`。
+- **8761 `PROBES=1`**：**69 套 / 1304 PASS / 0 FAIL**（当时实测，日志留档 `sweep-logs/20260927-181413`）
+  —— 与 8768 那侧同一组数字（同一份产物、同一条车道），说明**部署态**的探针（含 `probe-lane`
+  的选档格、`probe-artifact-sha` 的按档取件、`probe-caps` 的按档断言）也全过。
