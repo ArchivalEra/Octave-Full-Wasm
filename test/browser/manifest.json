@@ -74,6 +74,10 @@
       { "kind": "path", "env": "PROBE_DIR", "value": "/mnt/hdd/octave-wasm-build/blas-threads-probe",
         "why": "线程版 OpenBLAS 探针产物，由 `bash build/113/probe-blas-threads.sh` 生成；另需 firefox（playwright 默认缓存里有就不必设 `PLAYWRIGHT_BROWSERS_PATH`，缺则该项如实报红）" }
     ],
+    "probe-lane": [
+      { "kind": "path", "env": "SITE_DIR", "value": "/mnt/hdd/octave-wasm-build/siteWebGL",
+        "why": "**双档**站点目录（必须已部署 `threads/` 子目录）；探针自己起两台服务（带头/不带头，用 build/serve-coi.py ⇒ 顺带把发头脚本本身也测了）" }
+    ],
     "probe-coi-sw": [
       { "kind": "env", "value": "PLAYWRIGHT_BROWSERS_PATH",
         "why": "它要 **webkit**（三引擎里唯一不在默认缓存里的那个，在 /mnt/hdd/crossbuild-tools/pw-browsers）；缺则相关引擎记 N/A 而不是红 ⇒ 单独跑时才 export" }

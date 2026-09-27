@@ -107,6 +107,22 @@ export LDFLAGS="-L$DEPS/lib ${LIBS[*]} -fPIC -fwasm-exceptions -Wl,--allow-multi
 export CFLAGS="-O2 -fwasm-exceptions -fPIC"
 export CXXFLAGS="-O2 -fwasm-exceptions -fPIC"
 
+# ── 线程模型开关（B6，2026-09-27）──────────────────────────────────────────────
+# `WITH_THREADS=1` ⇒ 线程档：AX_PTHREAD **正常生效**（PTHREAD_CFLAGS=-pthread 顺着
+#   CFLAGS 进全树）⇒ wasm 内存是 shared ⇒ **浏览器侧硬要求 COOP/COEP**（闸门③ 被翻）。
+# 默认（不设）⇒ 现役形态：跳过 AX_PTHREAD ⇒ 内存不 shared ⇒ 任何静态托管都能跑。
+# ⚠️ 两件事必须**一起**做对，少一件就是"看着像线程档、其实不是"：
+#   ① configure 里那段"压线程"的插入必须**撤掉**（`patch-ax-pthread.sh --revert`），
+#      否则 `--enable-threads` 也白配（覆盖点会把 PTHREAD_CFLAGS 清空，实测）；
+#   ② `--enable-threads`（而不是 `--disable-threads`）⇒ config.h 里 OCTAVE_USE_THREADS。
+# 状态由旗标**强制**（下面显式 revert/patch），不靠"上次跑过什么"的假设。
+WITH_THREADS="${WITH_THREADS:-0}"
+if [ "$WITH_THREADS" = "1" ]; then
+  THREADS_FLAG="--enable-threads"
+else
+  THREADS_FLAG="--disable-threads"
+fi
+
 export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 export PKG_CONFIG=/usr/bin/pkg-config
 
@@ -125,8 +141,24 @@ rm -f config.cache
 echo "=== configure 前置处理"
 grep -q -- '-fexceptions' configure && sed -i 's/-fexceptions/-fwasm-exceptions/g' configure || true
 grep -qE "^postdeps_CXX='.+'$" configure && sed -i "s/^postdeps_CXX=.*/postdeps_CXX=''/" configure || true
-# emscripten 下跳过 AX_PTHREAD（保留 pthread.h 检测）—— 闸门③ 的关键
-bash /src/bin/patch-ax-pthread.sh "$SRCDIR"
+# emscripten 下跳过 AX_PTHREAD（保留 pthread.h 检测）—— 闸门③ 的关键。
+# `WITH_THREADS=1` 时**反过来**：撤掉那段插入，让 AX_PTHREAD 正常给出 -pthread（线程档）。
+if [ "$WITH_THREADS" = "1" ]; then
+  echo "=== WITH_THREADS=1：撤销 AX_PTHREAD 覆盖（线程档要 -pthread 进全树）"
+  # ⚠️ 撤销工具用 **exit 3 = "没有标记，无需撤销"** 表示"状态已满足"。
+  #    本脚本是 `set -euo pipefail` ⇒ 直接调用会被 3 杀掉（实测踩到：configure 静默中止、
+  #    日志停在"无需撤销"这一行、rc=3，看起来像 configure 失败）。所以必须显式接住 0/3。
+  set +e
+  bash /src/bin/patch-ax-pthread.sh --revert "$SRCDIR"
+  rv=$?
+  set -e
+  case "$rv" in
+    0|3) ;;
+    *) echo "FATAL: 撤销失败（rc=$rv）" >&2; exit 1 ;;
+  esac
+else
+  bash /src/bin/patch-ax-pthread.sh "$SRCDIR"
+fi
 
 # P5 步骤②：要不要开 OpenGL？
 #   默认仍然 `--without-opengl`（与之前逐字节一致）。
@@ -246,7 +278,7 @@ emconfigure ./configure \
   --with-blas=-lrefblas --with-lapack=-llapack \
   --disable-shared --enable-static \
   --disable-readline --disable-docs --disable-java \
-  --disable-threads \
+  ${THREADS_FLAG} \
   --without-qt --without-fltk ${OPENGL_FLAG} \
   ${FREETYPE_FLAG} ${FONTCONFIG_FLAG} \
   --without-curl --without-magick --without-portaudio \

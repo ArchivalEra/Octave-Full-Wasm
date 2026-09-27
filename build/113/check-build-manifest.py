@@ -88,6 +88,21 @@ def compare(declared, measured):
                 miss = [f for f in want if f not in got]
                 extra = [f for f in got if f not in want]
                 add(k, want, got, "字体面不一致（缺 %s / 多 %s）" % (miss or "无", extra or "无"))
+        elif k == "threads":
+            # ★ B6（2026-09-27）：线程档的判据只能是产物事实 —— 声明 threads=true 而产物里
+            #   没有 PThread 胶水/atomics，就是"命令行写了 -pthread、产物却不是线程档"
+            #   （与 HISTORY §5.46 那条"旗标赋了值但没被引用"同族）。
+            #   双向都判：声明 false 的产物也必须量到全 0（否则有人把线程档挂上非线程的名义）。
+            t = measured.get("threads") or {}
+            glue, shm = t.get("pthread_glue"), t.get("shared_memory")
+            if glue is None or shm is None:
+                add(k, declared[k], t, "量不到线程事实（胶水/shared_memory）⇒ **无法核验，判拒**")
+            else:
+                got = bool(glue > 0 and shm)
+                if bool(declared[k]) != got:
+                    add(k, declared[k], t,
+                        "声明 threads=%s，但产物里内存 shared=%s / PThread 胶水 %s 次"
+                        % (declared[k], shm, glue))
         elif k == "gl4es":
             hits = (measured.get("gl4es") or {}).get("symbol_hits", 0)
             if bool(declared[k]) != (hits > 0):
@@ -191,10 +206,12 @@ def main(argv):
 # ── 自证（F1）：`compare()` 是纯函数 ⇒ 直接喂合成输入 ─────────────────────────
 _MEAS = {"exported_functions": 710, "jspi_entry": True, "jspi_glue_suspending": 0,
          "idbfs": True, "fontconfig": True, "gl4es": {"symbol_hits": 5},
-         "simd": {"v128": 4752}, "fonts": ["a.otf"], "main_module": 2}
-_DECL = {"exported_functions": None}          # 占位，下面逐条构造
+         "simd": {"v128": 4752}, "fonts": ["a.otf"], "main_module": 2,
+         "threads": {"pthread_glue": 0, "worker_glue": 0, "shared_memory": False}}
+_THREADS_MEAS = {**_MEAS, "threads": {"pthread_glue": 38, "worker_glue": 1, "shared_memory": True}}
 _DECL = {"simd": True, "jspi_entry": True, "jspi_glue_suspending": 0, "gl4es": True,
-         "idbfs": True, "fontconfig": True, "fonts": ["a.otf"], "main_module": 2}
+         "idbfs": True, "fontconfig": True, "fonts": ["a.otf"], "main_module": 2,
+         "threads": False}
 
 
 def _nc(decl):
@@ -205,6 +222,14 @@ CASES = [
     ("一致的声明 ⇒ 不报", lambda: _nc(_DECL) == 0),
     ("simd.v128 被改成 0 ⇒ 报", lambda: _nc({**_DECL, "simd": True}) == 0 and
      len(compare({**_DECL}, {**_MEAS, "simd": {"v128": 0}})) == 1),
+    ("线程档：声明 true + 产物内存 shared ⇒ 不报",
+     lambda: len(compare({**_DECL, "threads": True}, _THREADS_MEAS)) == 0),
+    ("★ **声明线程档但产物内存不是 shared ⇒ 必须报**（-pthread 传了但没生效）",
+     lambda: len(compare({**_DECL, "threads": True}, _MEAS)) == 1),
+    ("★ **声明非线程档但产物内存是 shared ⇒ 必须报**（反向：线程档不许挂别人的名义）",
+     lambda: len(compare(_DECL, _THREADS_MEAS)) == 1),
+    ("★ 量不到线程事实 ⇒ 必须报（不许当通过）",
+     lambda: len(compare({**_DECL, "threads": True}, {**_MEAS, "threads": {}})) == 1),
     ("**空声明** ⇒ 必须报（零值守卫）", lambda: True),      # 由 main 的守卫覆盖，这里只作占位
 ]
 

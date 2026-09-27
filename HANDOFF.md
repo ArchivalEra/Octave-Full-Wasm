@@ -47,14 +47,22 @@
    跑完全绿；**accept-only 口径**（验收底线那对数字）见 `build/FACTS.json` 的
    `accept_suites` / `accept_pass`，全量合计（含探针/基准）见文末 `AUTO:STATE` 那一行的括号。
    `--check-inputs` 一行回答"要跑全套我缺什么"。
-3. **B6 线程版构建 —— 等你拍板**（⛔ 本轮不做）：实测**多线程不歧视 Firefox**（有 COI 时两引擎跑
-   pthread 产物平齐 `ok=100 / missing=0`），线程版 BLAS 收益大（DGEMM N=2000 **T=8 = 7.2×**）。
-   卡点是产品取舍：**要不要为多线程要求宿主发 COI 头**（`coi-serviceworker` 实测三引擎都能拿到
-   COI + SAB，但页面从此不能引跨源 CDN 资源 —— 本站不引）。前置/成本见 `PLAN-arch.md` §2 B6。
-4. **E2 悬案（可选）**：把线程版 BLAS 链进 Octave 的最后一步。**根因已锁定**：不是重复定义、也不是
-   Fortran 接口，而是**子程序返回类型**（f2c 的 `-> i32` vs OpenBLAS 的 `-> void`，wasm-ld 的警告
-   原文写了）。两条修法（给 `interface/*.c` 加 `int` 返回且**必须** `return 0;` / 符号改名 + 薄包装）
-   见 `NOTES-threads.md` 末两节。
+3. **B6 线程版构建 —— 已在做**（用户拍板：**要求宿主发 COI 头**）
+   · 机制侧已落地：`WITH_THREADS=1` 配置开关、`relink.sh` 的 `threads` 模式、身份证 `threads` 轴
+     （读 wasm 内存段的 shared 位）、`bridge/lane.js` 同步选档 + 两适配器接线、`build/serve-coi.py`、
+     `test/browser/probe-lane.mjs`（4 格含反证）。
+   · **8761/8768 起服务必须带头**：`python3 build/serve-coi.py --dir <站点> --port 8761`
+     （`python3 -m http.server` 发不了 COOP/COEP ⇒ 线程档选不中，且**静默**）。
+   · ⚠️ 实测硬约束：`-pthread` 要求链上**每个静态库**都带 atomics —— `libglpk.a`/`libqhull.a` 没有
+     ⇒ configure 静默关掉 `HAVE_GLPK`/`HAVE_QHULL`（证据：`--shared-memory is disallowed by
+     libglpk_la-tls.o`）。那四个函数在本站是 `.oct` 资产车道，但**资产能否载入 shared-memory
+     主模块待浏览器实测**。全量重编在跑，结论以实测为准（见 `PLAN-arch.md` §2 B6 的 2026-09-27 节）。
+4. **E2 悬案（用户定：**另开分支**做）**：把线程版 BLAS 链进 Octave 的最后一步 —— 那是**性能收益
+   真正兑现的那一步**（现役 BLAS 是 f2c 出的标量代码，光有线程运行时**一分钱买不到**）。
+   **根因已锁定**：不是重复定义、也不是 Fortran 接口，而是**子程序返回类型**（f2c 的 `-> i32` vs
+   OpenBLAS 的 `-> void`，wasm-ld 警告原文写了）。两条修法（给 `interface/*.c` 加 `int` 返回且**必须**
+   `return 0;` / 符号改名 + 薄包装）见 `NOTES-threads.md` 末两节。
+   ⚠️ E2 与本批的 B6 有**共同前置**：链上每个静态库都得带 atomics（见上面第 3 条那条实测硬约束）。
 
 ## 2. 铁律（违反会被拦或返工）
 

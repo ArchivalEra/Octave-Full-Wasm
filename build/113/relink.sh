@@ -61,11 +61,12 @@ out_default() {
     product) echo /src/websrc/product ;;
     scalar)  echo /src/websrc/scalar ;;
     m1)      echo /src/websrc/m1 ;;
+    threads) echo /src/websrc/m2fc-threads-out ;;    # B6：线程档（PLAN-threads §5 步骤④）
     *)       echo "" ;;
   esac
 }
 
-modes_list() { echo "product scalar m1"; }
+modes_list() { echo "product scalar m1 threads"; }
 
 # 基线：结构优先 —— 下一级模式自己的产物在就用它，否则退回表里记录的现存路径。
 pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
@@ -77,7 +78,7 @@ pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
 # ── 模式表：**唯一**的真值来源。22 个变量全在这里推出来，调用方一个都不许传 ──────────
 mode_table() {      # 输出 KEY=VALUE 行（供 export）
   local m="$1"
-  case "$m" in product|scalar|m1) ;; *)
+  case "$m" in product|scalar|m1|threads) ;; *)
     echo "FATAL: 未知模式 '$m'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 
   # 三模式共有：都是"完整产品形态"的能力面（区别只在 DCE / SIMD 两条轴，
@@ -132,6 +133,28 @@ EOF
         echo "BASELINE_WASM=$(pick_baseline m1 /src/websrc/out/octave.wasm)"
       fi
       ;;
+    threads)
+      # ★ B6（2026-09-27）：product 的形态 **+ 线程运行时**。
+      #   链接侧只多一个 `-pthread`（它自带 SHARED_MEMORY ⇒ wasm 内存 shared ⇒ 浏览器侧
+      #   **硬要求** COOP/COEP，闸门③ 由此翻面）。实测：`-pthread` 编/链在 emcc 下都成立。
+      #   ⚠️ **只加这个旗标是不够的**：对象层必须是用 `WITH_THREADS=1` 重编过的那一份
+      #   （configure 去掉 `--disable-threads` **且**撤销 AX_PTHREAD 覆盖）。拿旧对象链 ⇒
+      #   链接期就报特性不兼容；硬链成 ⇒ 产物的 threads 实测事实会是 false，而
+      #   `check-build-manifest.py` 的 threads 判定**当场判拒**（fail-closed）。
+      cat <<'EOF'
+MAIN_MODULE_LEVEL=2
+WITH_JSPI=1
+KEEP_LIST=/src/libwork/keep.txt
+LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
+EXPORT_IF_DEFINED=
+EXPORTED_FUNCS=_main
+OCT_SCAN_DIRS=/src/octs-site
+EOF
+      echo "EXTRA_LDFLAGS=-L/src/deps/lapack-simd/lib -pthread"
+      # 基线 = **现役 product 产物**（导出面要保住）。`/src/websrc/product` 还没链过时，退回
+      # A1 那份逐字节复现的 product 产物（sha 与 8761 现役件相同）。
+      echo "BASELINE_WASM=$(pick_baseline product /src/websrc/a1-verify-product/octave.wasm)"
+      ;;
   esac
 }
 
@@ -141,7 +164,7 @@ mode_declared() {
     product)
       cat <<'EOF'
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false,
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -149,7 +172,15 @@ EOF
     scalar)
       cat <<'EOF'
 {"main_module": 2, "simd": false, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false,
+ "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
+           "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
+EOF
+      ;;
+    threads)
+      cat <<'EOF'
+{"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true,
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -157,7 +188,7 @@ EOF
     m1)
       cat <<'EOF'
 {"main_module": 1, "simd": false, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false,
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -188,6 +219,7 @@ usage() {
   relink.sh explain <模式>                             # 打印全部 22 个变量（文档生成物）
   relink.sh --list
 模式：product（现役） / scalar（去 SIMD 的对照） / m1（无 DCE，保活基线）
+      threads（B6 线程档：product + `-pthread` ⇒ **需宿主发 COOP/COEP**，否则页面自动落回非线程档）
 EOF
 }
 
@@ -210,6 +242,7 @@ cmd_list() {
   echo "product  $(out_default product)   现役形态：M2 + JSPI + 字体 + GL + IDBFS + SIMD BLAS"
   echo "scalar   $(out_default scalar)    同上但**无 SIMD**（product 的 A/B 对照，也是 product 的保活基线）"
   echo "m1       $(out_default m1)        M1（无 DCE），导出面最全（保活闸门差分基线；scalar 的基线）"
+  echo "threads  $(out_default threads)  B6 线程档：product + -pthread（内存 shared ⇒ 宿主必须发 COOP/COEP）"
 }
 
 # ★ D1 的**反向断言**（静态、不需要容器）：link-web.sh 读的每个环境变量都必须由模式表推出。
@@ -300,7 +333,7 @@ cmd_rebuild() {
   local m="$1" out="$2" diag="$3" yes="$4"
   echo "════ relink.sh rebuild $m ════"
   echo "这会做四步（数小时）："
-  echo "  ① cd $OCT && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 bash $HERE/configure-113-full.sh"
+  echo "  ① cd $OCT && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 WITH_THREADS=$( [ "$m" = threads ] && echo 1 || echo 0 ) bash $HERE/configure-113-full.sh"
   echo "  ② cd $OCT && emmake make clean      # 刻意强制：不信任 config.h 的新鲜度"
   echo "  ③ cd $OCT && emmake make -k -j$JOBS"
   echo "  ④ relink.sh link $m --out $out $([ "$diag" = 1 ] && echo --diag)"
@@ -312,8 +345,11 @@ cmd_rebuild() {
   fi
   command -v emmake >/dev/null 2>&1 || {
     echo "FATAL: PATH 里没有 emmake（先 export PATH=/usr/src/emsdk/upstream/emscripten:\$PATH）" >&2; exit 2; }
+  # ★ 线程档：模式决定 configure 的线程开关（WITH_THREADS=1 ⇒ 撤销 AX_PTHREAD 覆盖 +
+  #   --enable-threads）。**不许手设** —— 与 D1 的纪律一致（口径从模式推出来）。
+  local th=0; [ "$m" = threads ] && th=1
   ( cd "$OCT" && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 \
-      bash "$HERE/configure-113-full.sh" )
+      WITH_THREADS="$th" bash "$HERE/configure-113-full.sh" )
   ( cd "$OCT" && emmake make clean )
   ( cd "$OCT" && emmake make -k -j"$JOBS" )
   cmd_link "$m" "$out" "$diag"
@@ -387,7 +423,7 @@ case "$SUB" in
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }
-case "$MODE" in product|scalar|m1) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
+case "$MODE" in product|scalar|m1|threads) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || OUT="$(out_default "$MODE")"
 
 case "$SUB" in

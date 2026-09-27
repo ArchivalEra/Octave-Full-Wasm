@@ -15,6 +15,9 @@
 // JSPI 能力门（两个 gate）、`Capabilities`。
 // 宿主**提供**（9 件，全部是"这一侧才知道的事"）：
 //   base      资源前缀（wasm/.data/资产/清单都在它后面）
+//   lane      选档计划（B6）：`{lane,dir,js,wasm,data}` —— 线程档时 wasm 在 `threads/`
+//             子目录（文件名不变，胶水内部的 `octave.data` 引用因此不用改）。
+//             缺省 = 基础档（`opts.lane` 不传时的行为与 B6 之前逐字节一致）
 //   print     stdout 汇（页面：console.log + 上屏；worker：合批 postMessage）
 //   printErr  stderr 汇（页面分开 console.warn；worker 与 stdout 同路）
 //   note      诊断汇（非致命警告）
@@ -50,6 +53,9 @@
     // ⚠️ base **必须活取**：worker 的 BASE 是 `opts` 消息到达时才设的（晚于 createOctaveCore）
     //    ⇒ 捕获成值会让 `?worker=1&base=...` 静默失效（读的是空前缀）。传函数即活取。
     var baseOf = (typeof opts.base === 'function') ? opts.base : function () { return opts.base || ''; };
+    // ★ B6 选档：宿主把 `octaveLanePlan` 传进来；不传 = 基础档（老宿主/老测试不受影响）。
+    var lane = opts.lane || { lane: 'base', dir: '', js: 'octave.js',
+                              wasm: 'octave.wasm', data: 'octave.data' };
     var base = baseOf();           // 仅用于同步场景（页面宿主是常量）
     var isDefault = opts.isDefault !== false;
     // st = **宿主自己的**实例记录（页面的注册表条目要读 `armed`/`ready`/`mem` 做扇出与断言）
@@ -73,6 +79,8 @@
                              ? global.crossOriginIsolated : null,
         sharedArrayBuffer: (typeof global.SharedArrayBuffer === 'function'),
       },
+      lane: { chosen: lane.lane, dir: lane.dir || '', js: lane.js,
+              threads: lane.lane === 'threads' },
       artifact: null,     // 由 octave.build.json 填充（读不到就是 null，绝不因此报错）
     };
     // ── JSPI 能力门的状态（G0）────────────────────────────────────────────────
@@ -101,6 +109,7 @@
             simd: !!((me.simd || {}).v128 > 0),
             v128: (me.simd || {}).v128,
             jspiEntry: !!me.jspi_entry,
+            threads: !!((me.threads || {}).shared_memory),   // 产物侧实测（内存 shared）
             gl4es: !!((me.gl4es || {}).symbol_hits > 0),
             idbfs: !!me.idbfs,
             fontconfig: !!me.fontconfig,
@@ -194,7 +203,8 @@
             }
           }
         } catch (e) { /* 覆写失败 = 退回 webjslib 原始（window 队列）语义，不致命 */ }
-        global.fetch(baseOf() + 'octave.wasm').then(function (r) { return r.arrayBuffer(); })
+        global.fetch(baseOf() + (lane.dir || '') + 'octave.wasm')
+          .then(function (r) { return r.arrayBuffer(); })
           .then(function (b) {
             // ★ SHA 自证（2026-09-25）：把**本页实际实例化的 wasm 字节**算成 sha256 暴露出来。
             //   测试/收尾用它对照"磁盘文件"与"刚构建的产物"——防"改完程序跑旧产物"
@@ -220,7 +230,12 @@
         return {};
       },
       // ⚠️ octave.data 一向走胶水的 locateFile（默认文档 base）；有了 base 就统一由它管。
-      locateFile: function (p) { return baseOf() + p; },
+      // ⚠️ 只重写**胶水自己会去取的那一个名字**（`octave.data`）；带 '/' 的路径一律不动
+      //    （前缀一个目录会把 `assets/x` 这类路径弄坏 —— 资产两档共用根目录）。
+      locateFile: function (p) {
+        if (p === 'octave.data') return baseOf() + (lane.data || 'octave.data');
+        return baseOf() + p;
+      },
       print: function (t) { host.print(t); },
       printErr: function (t) { host.printErr(t); },
       // stdin：Emscripten 的**官方扩展点**（`/dev/stdin` 的设备回调，必须在**启动前**定义 ——

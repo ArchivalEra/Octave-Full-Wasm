@@ -54,6 +54,10 @@
    闸门自身也吃这条：每个闸门必须 `--selftest`（`build/gates-selftest.sh`，接在 pre-commit）。
 
 ## 批次收尾（固定动作，缺一步等于没做完）
+★ **服务方式（B6 起，2026-09-27）**：8761/8768 **必须带头**起 —— `python3 build/serve-coi.py
+  --dir <站点目录> --port 8761`（它发 `COOP: same-origin` + `COEP: require-corp`）。`python3 -m
+  http.server` 发不了这两个头 ⇒ 线程档选不中、页面**静默**落回基础档（不报错，只是没线程）。
+  测"基础档"那一侧时另起一台 `--no-coi`（同一份目录）。
 `sh build/glue-selftest.sh`（宿主秒级）→ **8768 验绿**（`sweep.sh http://127.0.0.1:8768/`）
 → promote 8761（`build/promote-webgl.sh`；纯资产批用 `assets.py bundle-m` + `sync-js`；
   **M2 车道必须 `GL_OUT=$SRC_OUT`** —— 只传 SRC_OUT 会把 out-webgl 旧件盖上新产物，§5.49）
@@ -64,6 +68,8 @@
 → **同步仓库 `site/`**（入库的可部署镜像，部署说明 DEPLOY.md）：
   `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/` 后一并提交
 → **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
+  ★ **双档（B6）**：站点里除根目录三大件外还要有 `threads/octave.{js,wasm}`（文件名相同、子目录区分），
+  `SITE_DIR=<站点目录> sh build/…` 跑 `probe-lane` 验"带头选线程档 / 不带头落基础档 / 选错档硬失败"。
 → `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
 → **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**

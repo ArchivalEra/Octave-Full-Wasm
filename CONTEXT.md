@@ -52,6 +52,26 @@ JSPI（单产物 + 运行时能力门 —— 不加 `-sJSPI`，包装发生在�
 标签变量；另有 `P5_OBJS` 是脚本内数组不算），一个都不许手设（漏一个会**静默退化**，而构建/链接/自检全绿）。
 **证据：** `build/113/relink.sh`
 
+### 双档（线程档 / 基础档）
+同一个站部署**两份产物**：`threads/` 子目录里的线程档（`-pthread` ⇒ wasm 内存 **shared**）与根目录的
+基础档（现役形态）。**文件名相同**，靠子目录区分 —— 因为 Emscripten 胶水内部**写死了 `octave.data`**，
+换名就得改胶水。**线程档不许是唯一产物**（红线：基础档要能在任何静态托管上跑）。
+**证据：** `bridge/lane.js`
+
+### 选档（lane）
+页面/Worker 在**加载胶水之前**、用**同步**判据定档：`crossOriginIsolated === true` +
+`typeof SharedArrayBuffer === 'function'` ⇒ 线程档，否则基础档。不能等异步探测：线程档胶水在
+被 import 的那一刻就会建 shared 内存，没有隔离**当场抛**。URL 上 `?lane=threads|base` 可显式覆盖
+（测试/调试用；覆盖不改物理前提，选错档**必须响亮失败**）。
+**证据：** `test/browser/probe-lane.mjs`
+
+### COI 头（跨源隔离）
+宿主发 `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
+⇒ 页面拿到 `crossOriginIsolated` + `SharedArrayBuffer` ⇒ 才可能用线程档。**这是本项目的产品决定**
+（B6，2026-09-27）：要求宿主发头，而不是装 service worker。自家站点用 `build/serve-coi.py` 起
+（同一份目录可 `--no-coi` 起第二台，专门测基础档）。
+**证据：** `build/serve-coi.py`
+
 ### 产物身份证
 `octave.build.json`：与产物放在一起的机器可读记录。**只记量到的事实**（不抄旗标 ——
 抄一遍就是又一份会漂的拷贝）。字段：`measured.simd.v128`、`measured.jspi_entry`、

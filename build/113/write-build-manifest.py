@@ -87,6 +87,73 @@ def count_bytes(hay, needle):
     return hay.count(needle)
 
 
+def _uleb(b, i):
+    r = s = 0
+    while True:
+        x = b[i]
+        i += 1
+        r |= (x & 0x7f) << s
+        if not (x & 0x80):
+            return r, i
+        s += 7
+
+
+def mem_shared_flags(path):
+    """wasm 里**每个内存**（定义的 + 导入的）的 shared 标志位（limits flags 的 bit1）。
+
+    为什么必须这样量（★ B6 实测踩到的假判据）：
+      · `b"atomics" in wasm`（特征段）**会被 wasm-opt 在 -O2 下精简掉** —— 同一份 `-pthread`
+        产物，-O0 有 atomics、-O2 没有；拿它当判据会得出"线程档其实不是线程档"的错结论。
+      · `grep -c PThread` 数的是**行数**，-O2 混淆把 38 行压成 1 行（实测），也不是判据。
+      · 内存是不是 shared 是**链接期定死**的（memory 段的 limits flags），优化动不了它。
+    实测：`-pthread` 最小样例 = [True]；现役 product `octave.wasm` = [False]。
+    """
+    b = read_bytes(path)
+    if b[:4] != b"\0asm":
+        return None
+    i, out = 8, []
+    while i < len(b):
+        sid = b[i]
+        i += 1
+        size, i = _uleb(b, i)
+        end = i + size
+        if sid == 5:                      # memory section
+            n, j = _uleb(b, i)
+            for _ in range(n):
+                flags, j = _uleb(b, j)
+                out.append(bool(flags & 0x02))
+                _mn, j = _uleb(b, j)
+                if flags & 0x01:
+                    _mx, j = _uleb(b, j)
+        elif sid == 2:                    # import section（内存可能是导入的）
+            n, j = _uleb(b, i)
+            for _ in range(n):
+                l, j = _uleb(b, j)
+                j += l
+                l, j = _uleb(b, j)
+                j += l
+                kind = b[j]
+                j += 1
+                if kind == 0x02:
+                    flags, j = _uleb(b, j)
+                    out.append(bool(flags & 0x02))
+                    _mn, j = _uleb(b, j)
+                    if flags & 0x01:
+                        _mx, j = _uleb(b, j)
+                elif kind == 0x00:
+                    _t, j = _uleb(b, j)
+                elif kind == 0x01:
+                    _e, j = _uleb(b, j)
+                    fl, j = _uleb(b, j)
+                    _mn, j = _uleb(b, j)
+                    if fl & 0x01:
+                        _mx, j = _uleb(b, j)
+                elif kind == 0x03:
+                    j += 2
+        i = end
+    return out
+
+
 def count_wasm_exports(path):
     """量 wasm **导出段**的条目数 —— 这是 `MAIN_MODULE=1/2` 唯一可测的判据。
     为什么不能读环境变量 `MAIN_MODULE_LEVEL`：那只是"命令行上传过什么"，
@@ -182,6 +249,13 @@ def main():
         "osmessa_residue": count_bytes(wasm, b"OSMesaMakeCurrent"),
         "idbfs": b'"IDBFS"' in js,
         "fontconfig": b"FONTCONFIG_FILE" in wasm,
+        # ★ 线程档事实（B6，2026-09-27）：量三个**产物侧**信号，不读环境变量。
+        #   决定性的是 `shared_memory`（内存段 limits flags，链接期定死、优化动不了）；
+        #   `pthread_glue` 是旁证。**别用** `b"atomics" in wasm`（-O2 会被精简掉）与
+        #   `grep -c PThread`（数行数，混淆后失真）—— 两个假判据都实测踩过，见函数注释。
+        "threads": {"pthread_glue": count_bytes(js, b"PThread"),
+                    "worker_glue": count_bytes(js, b"new Worker"),
+                    "shared_memory": any(mem_shared_flags(os.path.join(OUT, "octave.wasm")) or [])},
         "fonts": font_names,
         "preload_atftp_misplaced": b'filename:"/ftp@' in js,
         "files": files,
@@ -242,6 +316,11 @@ def main():
         fh.write("\n")
     os.replace(tmp, os.path.join(OUT, "octave.build.json"))
     log("导出条目 = %s（M2 基准 710 / M1 基准 44987）" % measured["exported_functions"])
+    _t = measured["threads"]
+    log("线程事实 = 内存 shared=%s / PThread 胶水 %s 次 / new Worker %s 次 ⇒ %s"
+        % (_t["shared_memory"], _t["pthread_glue"], _t["worker_glue"],
+           "线程档（需 COOP/COEP）" if (_t["pthread_glue"] > 0 and _t["shared_memory"])
+           else "非线程档（任何静态托管都能跑）"))
     log("已写出 %s（verdict=unverified；等 relink.sh verify 判定）" % os.path.join(OUT, "octave.build.json"))
     if notes:
         log("notes: " + " | ".join(notes))

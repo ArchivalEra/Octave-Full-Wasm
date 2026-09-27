@@ -425,6 +425,55 @@ worker 模式**连 sha 自证都没有**（页面算，worker 不算）。
 - **回退点**：删 `CONTEXT.md` + 撤掉 `.gitignore` 里的 `!CONTEXT.md` + 撤掉检查项 5；
   纯文档，不影响站点与产物。
 
+### ★ 2026-09-27：**用户拍板执行**（"要求宿主发 COI 头以启用多线程 做一下咯"）
+
+**决定**：走"**要求宿主发 COI 头**"这条（不装 service worker）⇒ 线程档在我方站点（带头）启用，
+不带头/发不了头的托管上自动落回基础档（**双档**是 PLAN-threads §5 的红线，保留）。
+
+**已落地（机制侧，全部带自证）**：
+· `build/113/unpatch-ax-pthread.py` + `patch-ax-pthread.sh --revert` —— 补丁工具**可逆**（闸门③ 就是靠那段
+  插入实现的；线程档要它反过来）。判据是**差分**：撤销后与原始 tarball 的差异里 **0 行**与 pthread 有关
+  （实测）。⚠️ `ax_pthread_ok=no` **不是**判据（那是 AX_PTHREAD 宏自己的初始化）—— 我第一版判错了。
+· `configure-113-full.sh` 加 `WITH_THREADS=1`：**状态由旗标强制**（撤销覆盖 + `--enable-threads`），
+  不靠"上次跑过什么"的假设。实测 `-pthread` 进了 **5 个消费点**（`BUILD_CFLAGS`/`BUILD_CXXFLAGS`/
+  `XTRA_CFLAGS`/`XTRA_CXXFLAGS`/`PTHREAD_CFLAGS`）。
+· `relink.sh` 加 **`threads` 模式**（第 4 个模式）：表里推 9 个变量 + `EXTRA_LDFLAGS=… -pthread`，
+  产物目录 `/src/websrc/m2fc-threads-out`；`--selfcheck` 仍保证"link-web.sh 读的每个变量都被覆盖"。
+· 身份证新增 **`threads` 轴**（声明 vs 实测，**双向**判）：实测侧读 **wasm 内存段的 shared 标志位**
+  （`mem_shared_flags()`）。⚠️ 这里连着踩了两个**假判据**：`b"atomics" in wasm`（wasm-opt 在 -O2 下会
+  把它精简掉）与 `grep -c PThread`（数**行数**，混淆后 38 行→1 行）。两条都实测过，注释在写入器里。
+· `bridge/lane.js` + `octave-core.js`/`index.html`/`octave-worker.js` 接线：**同步选档**、按档加载胶水、
+  `locateFile` 只重写 `octave.data`；`build/serve-coi.py`（带头/不带头两台，同一目录）；
+  `test/browser/probe-lane.mjs`（4 格 + **反证**：没 COI 时强选线程档必须响亮失败）。
+
+**★ 实测到的硬约束（这条比"要不要翻闸门"重要得多，2026-09-27）**：
+`-pthread` 的链接**要求链上的每个静态库都带 atomics/bulk-memory**。实测证据（configure 的
+`-lglpk` 探测原文）：
+
+```
+wasm-ld: error: --shared-memory is disallowed by libglpk_la-tls.o because it was
+        not compiled with 'atomics' or 'bulk-memory' features.
+```
+
+后果：configure **静默**把 `HAVE_GLPK` 与 `HAVE_QHULL` 关掉（`config.h` 差异实测：10 个轴，
+6 个是线程，2 个是这两个功能，2 个是 GL2PS —— 后者是我多加 `WITH_GL2PS=1` 造成的，已收回）。
+⇒ **线程档 ≠ product + 线程**，除非把每个预编译依赖都用 `-pthread` 重编。
+缓解/待验：`__glpk__`/`__delaunayn__`/`__voronoi__`/`convhulln` 在本站是 **`.oct` 资产车道**
+（`site/assets/manifest.json` 实测在册）⇒ 主模块里的 `HAVE_GLPK/QHULL` 关掉**可能**没有用户可见影响；
+但 `.oct` 资产本身也是**非 atomics** 编的，能不能载入 shared-memory 主模块要**浏览器实测**（验收矩阵）。
+⇒ 待测项明确列在下面"判据"里，**没测完不算数**。
+
+**判据（红/绿 + 待测标记）**：
+· ✅ 机制绿：撤销差分复核 0 行 pthread 差异；`relink.sh --selfcheck/--selftest` 绿；身份证 threads 轴
+  正反 3 条自证；`serve-coi.py` 头部实测（带头 2 个头 / 不带头 0 个）；`lane.js` 5 条合成输入全过。
+· ⏳ **待测**：线程产物链接+`verdict=ok`；浏览器侧"选档正确 + `HEAP8.buffer instanceof SharedArrayBuffer`"
+  （`probe-lane`）；两档验收矩阵（43 套 accept 各跑一遍）；**`.oct` 资产在 shared-memory 主模块里能否装载**
+  （这是上面那条硬约束的落点）；三引擎（chromium/firefox/webkit）。
+· 回退点：`/src/libwork/config.h.pre-threads` 还原 + 重编回非线程档（或直接丢弃线程产物目录）；
+  **8761 在 promote 之前一动不动**。
+
+---
+
 ### B6 · 线程版构建 —— ⛔ 本轮仍不做，但**理由已更正**（2026-09-26 实测重估）
 
 **先说更正**：本文件与 `HANDOFF.md` 在 2026-09-26 曾写过"线程档在 GitHub Pages 上跑不起来"。

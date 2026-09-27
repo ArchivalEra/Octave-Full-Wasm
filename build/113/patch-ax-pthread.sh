@@ -35,11 +35,56 @@
 #
 set -euo pipefail
 
-SRC="${1:-/src/work/octave-11.3.0}"
+# ⚠️ `--revert` 必须在**算 CFG 之前**分派：否则 SRC 会变成字符串 "--revert"，
+#    于是 CFG="--revert/configure" ⇒ 报"找不到 --revert/configure"（实测踩到）。
+#    参数形态：`patch-ax-pthread.sh [SRC]` 或 `patch-ax-pthread.sh --revert [SRC]`。
+REVERT=0
+if [ "${1:-}" = "--revert" ]; then
+  REVERT=1
+  SRC="${2:-/src/work/octave-11.3.0}"
+else
+  SRC="${1:-/src/work/octave-11.3.0}"
+fi
 CFG="$SRC/configure"
 [ -f "$CFG" ] || { echo "FATAL: 找不到 $CFG" >&2; exit 2; }
 
 MARK="Octave-Full-Wasm: emscripten 下跳过 AX_PTHREAD"
+
+# ── --revert：撤掉本补丁（B6 线程档必须做的第一步，2026-09-27 加）──────────────────
+# 为什么补丁工具必须**可逆**：闸门③（"不引入 COI/SAB 需求"）就是靠这段插入实现的；
+# 线程档要的恰好相反（让 AX_PTHREAD 正常生效 ⇒ PTHREAD_CFLAGS=-pthread 流进 CFLAGS）
+# ⇒ 不撤掉它，`--enable-threads` 也是白配（configure 里 2 处覆盖点会把 PTHREAD_CFLAGS
+# 清空，全树照旧不带 -pthread、wasm 内存照旧不是 shared）。
+# 删除是**按标记精确删**那 12 行（不是拿备份覆盖 —— 树里还有别的补丁必须留着：
+# `-fexceptions`→`-fwasm-exceptions`、`postdeps_CXX` 置空）。逻辑在
+# `unpatch-ax-pthread.py` 里（带 --selftest：该删的删掉 / 形状不对必须拒 / 幂等）。
+if [ "$REVERT" = "1" ]; then
+  python3 "$(dirname "$0")/unpatch-ax-pthread.py" "$CFG" || exit $?
+  # 撤销后复核。⚠️ **别用 `ax_pthread_ok=no` 当判据**（我第一版就错了）：那两处是
+  # AX_PTHREAD 宏**自己的初始化**（宏体开头先置 no 再逐项试），原始 tarball 里也有。
+  # 真正能证伪的判据是**差分**：撤销后与原始 tarball 的差异里，不许再有任何 pthread 字样。
+  grep -qF "$MARK" "$CFG" && { echo "FATAL: 撤销后仍能找到标记" >&2; exit 1; }
+  # 差分复核：从原始 tarball 里现取一份 configure 当基准（**不依赖我手工准备的 /tmp**）。
+  TARBALL="${OCTAVE_TARBALL:-/src/probe11/octave-11.3.0.tar.xz}"
+  PRISTINE=""
+  if [ -f "$TARBALL" ]; then
+    PTMP="$(mktemp -d)"
+    if tar -xJf "$TARBALL" -C "$PTMP" octave-11.3.0/configure 2>/dev/null; then
+      PRISTINE="$PTMP/octave-11.3.0/configure"
+    fi
+  fi
+  if [ -n "$PRISTINE" ] && [ -f "$PRISTINE" ]; then
+    n=$(diff "$PRISTINE" "$CFG" | grep -ci pthread || true)
+    rm -rf "$PTMP"
+    [ "$n" = "0" ] || { echo "FATAL: 与原始 tarball 仍有 $n 行 pthread 差异" >&2; exit 1; }
+    echo "  ✅ 撤销完成：标记 0 处；与原始 tarball（$TARBALL）的差异里 **0 行**与 pthread 有关" \
+         "⇒ AX_PTHREAD 会正常给出 -pthread"
+  else
+    echo "  ✅ 撤销完成：标记 0 处"
+    echo "  ⚠️ **本次没做差分复核**（找不到原始 tarball：$TARBALL）—— 设 OCTAVE_TARBALL 指过去可补验"
+  fi
+  exit 0
+fi
 
 if grep -qF "$MARK" "$CFG"; then
   echo "  已应用（跳过）"

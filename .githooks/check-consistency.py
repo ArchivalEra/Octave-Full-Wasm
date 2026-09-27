@@ -207,7 +207,7 @@ def main():
     except OSError:
         notes.append("git ls-files 取不到 ⇒ 跳过『页面引用必须入库』检查")
     if tracked:
-        dangling = []; nrefs = 0
+        dangling = []; nrefs = 0; nskipped = 0
         targets = (("bridge/index.html", "html"), ("bridge/octave-worker.js", "js"))
         for rel, kind in targets:
             try:
@@ -216,10 +216,20 @@ def main():
                 continue
             refs = []
             if kind == "html":
-                refs = re.findall(r'<script[^>]+src="([^"]+)"', txt)
+                cand = re.findall(r'<script[^>]+src="([^"]+)"', txt)
             else:
+                # ⚠️ `importScripts(...)` 的参数**必须是字面量**才算"引用了某个文件"：
+                #    B6 起 worker 用 `importScripts(LANE.js)`（选档后的动态名）——
+                #    旧写法把 `LANE.js` 当成文件名 ⇒ 假阳性（实测踩到）。
+                cand = []
                 for grp in re.findall(r"importScripts\(([^)]*)\)", txt):
-                    refs += [x.strip().strip("'\"") for x in grp.split(",")]
+                    cand += re.findall(r"['\"]([^'\"]+)['\"]", grp)
+            # 只认"像路径"的（不含 + ' " 空格等）：`document.write` 里拼出来的
+            # `src="' + plan.js + '"` 属于动态引用，静态查不了 —— 那种引用由
+            # **它拼的来源**负责（这里是 `bridge/lane.js` 的 FILES 表）。
+            refs = [r for r in cand if re.fullmatch(r"[A-Za-z0-9_./@-]+", r or "")]
+            skipped = len(cand) - len(refs)
+            nskipped += skipped
             for r in refs:
                 if not r or r.startswith(("http:", "https:", "//", "data:")):
                     continue
@@ -238,7 +248,10 @@ def main():
         elif dangling:
             problems.append(("页面引用的文件不在 git 里", "; ".join(sorted(set(dangling))[:6])))
         else:
-            notes.append("页面引用的本地文件都在 git 里（%d 个引用）" % nrefs)
+            notes.append("页面引用的本地文件都在 git 里（%d 个引用%s）"
+                         % (nrefs, "；另跳过 %d 个**动态**引用（字面量正则抓不到，"
+                                   "由 bridge/lane.js 的 FILES 表负责）" % nskipped
+                            if nskipped else ""))
 
     # ── 5. CONTEXT.md 的"证据行"必须指向**存在**的仓库路径（2026-09-26 A4）──────
     # 为什么单列：术语表最容易退化成散文("大家都知道")。约定每条术语挂一行 `证据：`，
