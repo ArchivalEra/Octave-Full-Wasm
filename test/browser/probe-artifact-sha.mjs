@@ -28,13 +28,24 @@ const check = (ok, label, detail) => { ok ? pass++ : fail++; console.log(`${ok ?
 const pageSha = await page.evaluate(() => window.__octaveWasmSha || null).catch(() => null);
 check(!!pageSha, '① 页面自证 sha 存在（页面实例化的字节）', pageSha || '缺席（页面没算？）');
 if (pageSha) {
-  const httpSha = await page.evaluate(async () => {
-    const b = await (await fetch('octave.wasm')).arrayBuffer();
-    const d = await crypto.subtle.digest('SHA-256', b);
-    return Array.prototype.map.call(new Uint8Array(d), x => ('0' + x.toString(16)).slice(-2)).join('');
+  // ★ B6 双档（2026-09-27）：**取页面真正实例化的那一份**（线程档在 `threads/` 下）。
+  //   第一版写死 `fetch('octave.wasm')` ⇒ 带头站点上"HTTP 层"必然报红（拿根目录那份去比
+  //   线程档页面自证的 sha，实测 http=1ed3e528… page=c2899a71…）—— 那是**探针自己的** bug。
+  const laneDir = await page.evaluate(() => {
+    try { return (window.__octaveCaps && window.__octaveCaps.lane && window.__octaveCaps.lane.dir) || ''; }
+    catch (e) { return ''; }
   });
-  check(httpSha === pageSha, '② HTTP 层：URL fetch 的 wasm sha == 页面自证 sha', `http=${httpSha.slice(0, 16)}… page=${pageSha.slice(0, 16)}…`);
-  if (EXPECT) {
+  const httpSha = await page.evaluate(async (d) => {
+    const b = await (await fetch(d + 'octave.wasm')).arrayBuffer();
+    const dg = await crypto.subtle.digest('SHA-256', b);
+    return Array.prototype.map.call(new Uint8Array(dg), x => ('0' + x.toString(16)).slice(-2)).join('');
+  }, laneDir);
+  check(httpSha === pageSha, `② HTTP 层：fetch(${laneDir}octave.wasm) 的 sha == 页面自证 sha`,
+        `http=${httpSha.slice(0, 16)}… page=${pageSha.slice(0, 16)}… dir=${laneDir || '(根)'}`);
+  if (EXPECT && laneDir) {
+    console.log(`   ③ 期望层：页面跑的是 **线程档**（${laneDir}）⇒ 传进来的期望 sha 是基础档的，本层跳过；`);
+    console.log(`      两档各自的 sha 由 check-deploy-sha.sh（磁盘/HTTP/页面三层）在批次收尾核`);
+  } else if (EXPECT) {
     check(pageSha === EXPECT.toLowerCase(), '③ 期望层：== 刚构建的产物', `page=${pageSha.slice(0, 16)}… expect=${EXPECT.slice(0, 16)}…`);
   } else {
     console.log(`   ③ 期望层：未给期望 sha（页面自证 = ${pageSha}）—— 批次收尾请传第二参数`);

@@ -51,7 +51,8 @@ check(ready, 'A0 页面 ready（下面才有意义）', ((Date.now() - t0) / 100
 const caps = await page.evaluate(() => {
   const c = window.__octaveCaps;
   if (!c) return null;
-  return { mode: c.mode, engine: c.engine, artifact: c.artifact };
+  return { mode: c.mode, engine: c.engine, artifact: c.artifact,
+           lane: c.lane && c.lane.chosen };
 });
 check(!!caps, '★ A `window.__octaveCaps` 存在（D4：开机算一次，消费者只读）', caps ? JSON.stringify(caps.engine) : '(无)');
 if (caps) {
@@ -66,7 +67,18 @@ if (caps) {
   const a = caps.artifact;
   if (a) {
     check(a.verdict === 'ok', '★ B1 身份证 `verdict === "ok"`（可部署的那一档）', JSON.stringify(a));
-    check(a.simd === true && a.v128 === 4752, '★ B2 `simd=true` 且 `v128=4752`（与 A1 实测清单一致）', `v128=${a.v128}`);
+    // ★ B6 双档（2026-09-27）：这个"精确值"是**基础档**的实测值（台账 `wasm_v128`）。
+    //   线程档是另一份产物、v128 也不同（台账 `threads_v128`）⇒ 精确值只在基础档那侧断言，
+    //   线程档那侧断 `> 0` 并把实际值打出来（它的精确值由 `relink.sh verify threads` 与
+    //   `check-deploy-sha.sh` 在**产物层**核）—— 否则探针会把正确的线程档判红（实测踩到）。
+    if (caps.lane === 'threads') {
+      check(a.simd === true && typeof a.v128 === 'number' && a.v128 > 0,
+            '★ B2（线程档）`simd=true` 且 `v128>0`（精确值见台账 `threads_v128`）',
+            `v128=${a.v128} lane=${caps.lane}`);
+    } else {
+      check(a.simd === true && a.v128 === 4752,
+            '★ B2 `simd=true` 且 `v128=4752`（基础档；与 A1 实测清单一致）', `v128=${a.v128}`);
+    }
     check(a.fonts === 8, 'B3 `fonts === 8`（FreeSans ×4 + FreeMono ×4）', a.fonts);
     check(a.jspiEntry === true, 'B4 `jspiEntry === true`（B 姿势导出在）', a.jspiEntry);
   } else {
