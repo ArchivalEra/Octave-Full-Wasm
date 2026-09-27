@@ -253,6 +253,25 @@ DEPS=/src/deps-threads         # 表驱动依赖（build-libs.sh 那一族）
 **通用结论**：车道的构建**不许复用任何"已有"状态** —— 源码树、构建目录、输出 prefix 三者都要是车道专属的，
 且每建完一批就用 `atomics_scan` 复核一遍。
 
+### ★ 第五个坑：`DEPS=/usr/local` 也是写死的（同一天实测）
+
+`link-web.sh:36` 的 `DEPS=/usr/local`（早期四件 libf2c/refblas/lapack/pcre2-8 的 prefix）**写死**，
+而它是**硬赋值**、不是 `${DEPS:-…}` ⇒ `relink.sh --selfcheck`（只认 `${VAR:-…}` 形态）**看不见它**，
+模式表也就管不到。修法：改成 `${DEPS:-/usr/local}` 并进模式表（threads = `/usr/local-threads`）
+⇒ 覆盖数 25 → **26** 个变量。
+
+### ★ 车道还需要一份"**线程 + SIMD**"的 BLAS
+
+`threads` 模式的 `EXTRA_LDFLAGS` 原指 `/src/deps/lapack-simd/lib`（**基础档**的 SIMD BLAS）。
+车道要自己那份（SIMD 与 atomics 是两件事，都得有）：
+
+```sh
+SIMD_FLAG="-msimd128 -pthread" PREFIX=/src/deps-threads/lapack-simd \
+  WORK=/src/libwork-threads bash build/113/build-blas-simd.sh
+```
+（`build-blas-simd.sh` 的 `SIMD_FLAG` 正好是个现成口子 —— 把 `-pthread` 拼进去即可，
+**零改脚本**；判据仍是 `atomics_scan` 该 prefix 下全 0 缺。）
+
 ### ★ 第四个坑：**依赖库路径写死**（2026-09-27 实测）
 
 `link-web.sh` 与 `configure-113-full.sh` 里有一批**写死的 `/src/deps/...`**（gl2ps、那 9 个 `-L`、

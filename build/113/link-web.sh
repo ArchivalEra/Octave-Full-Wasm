@@ -33,7 +33,8 @@ M="$INST/share/octave/$MV/m"
 # 于是 `help ode45` 这类 .m 文件不再触发运行时的 makeinfo（本构建没有 shell）。
 M_SRC="${M_SRC:-$M}"
 SRC=/src/websrc
-DEPS=/usr/local
+DEPS="${DEPS:-/usr/local}"   # ★ 早期四件（libf2c/refblas/lapack/pcre2-8）的 prefix；
+                            #   B6 线程档传 `/usr/local-threads`（原先**写死**，模式表管不到）
 
 [ -f "$SRC/main.o" ] || { echo "FATAL: 缺 $SRC/main.o（先编 main.cc）" >&2; exit 2; }
 [ -f "$SRC/post.js" ] || { echo "FATAL: 缺 $SRC/post.js" >&2; exit 2; }

@@ -112,6 +112,7 @@ EXPORTED_FUNCS=_main
 OCT_SCAN_DIRS=
 BASELINE_WASM=
 EXTRA_LDFLAGS=
+DEPS=/usr/local
 DEPS_ROOT=/src/deps
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
@@ -126,6 +127,7 @@ LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
 OCT_SCAN_DIRS=/src/octs-site
+DEPS=/usr/local
 DEPS_ROOT=/src/deps
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
@@ -155,6 +157,7 @@ LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
 OCT_SCAN_DIRS=/src/octs-site
+DEPS=/usr/local-threads
 DEPS_ROOT=/src/deps-threads
 GL4ES_A=/src/libwork/gl4es-src-threads/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl-threads/lib/libGLU.a
@@ -162,7 +165,7 @@ EOF
       # `-pthread` 自带 SHARED_MEMORY；**池大小必须显式给** —— 否则 Emscripten 只允许
       # "从 worker 里动态起 worker"，主线程 `pthread_create` 直接失败 ⇒ "线程档"名不副实
       # （命令行看着有线程、实际一个都起不来）。4 = 够用且不白占内存（每个 worker 有独立栈）。
-      echo "EXTRA_LDFLAGS=-L/src/deps/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      echo "EXTRA_LDFLAGS=-L/src/deps-threads/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
       # 基线 = **现役 product 产物**（导出面要保住）。`/src/websrc/product` 还没链过时，退回
       # A1 那份逐字节复现的 product 产物（sha 与 8761 现役件相同）。
       echo "BASELINE_WASM=$(pick_baseline product /src/websrc/a1-verify-product/octave.wasm)"
