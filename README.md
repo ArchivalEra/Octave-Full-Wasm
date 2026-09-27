@@ -656,7 +656,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `site/assets/pkg/tsa.js` (254427 bytes)
 - `site/dldprobe.oct` (2764 bytes)
 - `site/index.html` (23891 bytes)
-- `site/matrix-android.html` (25913 bytes)
+- `site/matrix-android.html` (24853 bytes)
 - `site/minioct.oct` (5694 bytes)
 - `site/octave-core.js` (27028 bytes)
 - `site/octave-worker.js` (13150 bytes)

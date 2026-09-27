@@ -199,19 +199,7 @@
     return core.module;
   };
 </script>
-<!-- ★ B6（2026-09-27）：**选档**（线程档 / 基础档）。
-     `lane.js` 用**同步**判据（crossOriginIsolated + SharedArrayBuffer）定档，然后**在解析期**
-     按档加载胶水 —— 线程档产物在没有跨源隔离的页面上连实例化都做不到，所以不能等异步探测。
-     为什么用 `document.write`：下面的启动逻辑假定"胶水已就绪"（parse 顺序语义）。换异步加载
-     就得把整段启动改写进回调里（改动面大得多）；这里是**只在解析期写一次**的经典用法。
-     ⚠️ 线程档的文件名与基础档**相同**，放在 `threads/` 子目录（胶水内部写死的 `octave.data`
-     引用因此不用改，见 lane.js 的说明）。 -->
-<script type="text/javascript" src="lane.js"></script>
-<script type="text/javascript">
-  window.__octaveLanePlan = octaveLaneFiles(octaveLaneState.lane);
-  document.write('<script type="text/javascript" src="'
-                 + window.__octaveLanePlan.js + '"><\/script>');
-</script>
+<script type="text/javascript" src="octave.js"></script>
 <script type="text/javascript">
 // ── C3/B5（2026-09-26）：两种宿主，**默认路径一字不动** ────────────────────────
 // 缺省（无 `?worker=1`）= 单页模式：解释器在主线程（现役产物行为，77 个验收套件全靠它）。
@@ -223,8 +211,7 @@
 (function () {
   var params = new URLSearchParams(location.search);
   if (params.get('worker') !== '1') {
-    window.Module = window.createOctaveHost({ id: 'default',
-                                              lane: window.__octaveLanePlan });
+    window.Module = window.createOctaveHost({ id: 'default' });
     OCTAVE(window.Module);
     return;
   }
