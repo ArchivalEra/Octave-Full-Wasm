@@ -303,7 +303,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/gl4es-unmangled-shim.c` (3188 bytes)
 - `build/113/lane-shim.sh` (3910 bytes)
 - `build/113/link-web.sh` (45834 bytes)
-- `build/113/make-lane-manifest.py` (12907 bytes)
+- `build/113/make-lane-manifest.py` (21513 bytes)
 - `build/113/minioct.cc` (2409 bytes)
 - `build/113/patch-ax-pthread.sh` (8062 bytes)
 - `build/113/patch-gl4es.sh` (7469 bytes)

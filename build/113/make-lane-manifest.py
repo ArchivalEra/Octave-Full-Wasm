@@ -28,27 +28,53 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 
 REWRITE = {"oct": ("assets/oct/", "assets/oct-threads/"),
            "octdir": ("assets/octdir/", "assets/octdir-threads/")}
 BASE = "manifest.json"
 LANE = "manifest.threads.json"
-LANE_KEYS = ("oct", "octdir")          # 只有这两类分档
+LANE_KEYS = ("oct", "octdir")          # 这两类**分档**（换一套 side module）
+# ★ 第二类要改口的：**烤进产物的 install 前缀**（2026-09-27 实测事故 —— 见 `baked_prefix`）。
+#   基础产物烤的是 `/src/work/octave-install`，线程档烤的是 `...-threads` ⇒ 清单里挂在
+#   `<前缀>/share/octave/11.3.0/etc/...` 的那几个数据资产（built-in-docstrings / doc-cache /
+#   macros.texi）**必须按档挂**，否则线程档的 `help` 直接报
+#   `failed to open docstrings file: /src/work/octave-install-threads/share/.../built-in-docstrings`
+#   （实测：accept-help 5 PASS / 7 FAIL，基础档 12/0 绿）。
+PREFIX_RE = re.compile(rb"/src/work/octave-install[A-Za-z0-9_.-]*")
 
 
-def rewrite_entry(a):
-    """返回 (新条目, 是否改过)。只动 oct/octdir 的路径前缀，别的键一律原样。"""
-    kind = a.get("kind")
-    if kind not in REWRITE:
-        return dict(a), False
-    old, new = REWRITE[kind]
+def baked_prefix(wasm_path):
+    """从**产物里读出来**它烤进去的 install 前缀（不猜；产物不在 ⇒ None）。"""
+    try:
+        with open(wasm_path, "rb") as fh:
+            hits = PREFIX_RE.findall(fh.read())
+    except OSError:
+        return None
+    return sorted({h.decode() for h in hits}) or None
+
+
+def rewrite_entry(a, mount_from=None, mount_to=None):
+    """返回 (新条目, 是否改过)。改三类：oct/octdir 的 url、以及 install 前缀下的 `mount`。"""
     b = dict(a)
     changed = False
-    for key in ("url", "base_url"):
-        v = b.get(key)
-        if isinstance(v, str) and v.startswith(old):
-            b[key] = new + v[len(old):]
+    kind = b.get("kind")
+    if kind in REWRITE:
+        old, new = REWRITE[kind]
+        for key in ("url", "base_url"):
+            v = b.get(key)
+            if isinstance(v, str) and v.startswith(old):
+                b[key] = new + v[len(old):]
+                changed = True
+    if mount_from and mount_to:
+        v = b.get("mount")
+        # ⚠️ 必须**排除已经改过口**的值：车道前缀是基础前缀的**扩展**
+        #    （`/src/work/octave-install` ⊂ `/src/work/octave-install-threads`）⇒ 只判
+        #    startswith(mount_from) 会把 `.../octave-install-threads/share` 再改一次，
+        #    变成 `...-threads-threads/share`（前缀包含关系是判据的经典坑；自证第 5 条抓到的）。
+        if isinstance(v, str) and v.startswith(mount_from) and not v.startswith(mount_to):
+            b["mount"] = mount_to + v[len(mount_from):]
             changed = True
     return b, changed
 
@@ -102,24 +128,27 @@ def sync_shas(lane, assets_dir, sha_of=None, exists=os.path.exists):
     return n
 
 
-def build_lane_manifest(man, assets_dir=None, sha_of=None):
+def build_lane_manifest(man, assets_dir=None, sha_of=None, mount_from=None, mount_to=None):
     out = dict(man)
     out["assets"] = []
     n = 0
     for a in man.get("assets", []):
-        b, changed = rewrite_entry(a)
+        b, changed = rewrite_entry(a, mount_from, mount_to)
         n += 1 if changed else 0
         out["assets"].append(b)
     out["_lane"] = {"for": "threads",
-                    "why": "只有 `.oct`（oct/octdir）分档；其余与基础清单逐字相同",
+                    "why": "`.oct`（oct/octdir）分档 + 产物烤的 install 前缀改口；其余与基础清单逐字相同",
                     "rewritten": n}
+    if mount_from and mount_to:
+        out["_lane"]["mount_prefix"] = [mount_from, mount_to]
     if assets_dir:
         out["_lane"]["sha_resynced"] = sync_shas(out, assets_dir, sha_of)
     return out, n
 
 
-def checks(man, lane, assets_dir, exists=os.path.exists, sha_of=None):
-    """返回问题清单。四类判据都能证伪。"""
+def checks(man, lane, assets_dir, exists=os.path.exists, sha_of=None,
+           mount_from=None, mount_to=None, lane_baked=None):
+    """返回问题清单。六类判据都能证伪。"""
     sha_of = sha_of or _sha_of_path
     bad = []
     base_oct = [a for a in man.get("assets", []) if a.get("kind") in LANE_KEYS]
@@ -151,10 +180,43 @@ def checks(man, lane, assets_dir, exists=os.path.exists, sha_of=None):
                     if not exists(os.path.join(p, f)):
                         bad.append("线程档目录缺文件：%s/%s" % (a.get("base_url"), f))
                         break
-    # ③ 反向：**非 oct/octdir** 的条目必须逐字相同（证明"只差 .oct"）
-    keep = lambda lst: [a for a in lst if a.get("kind") not in LANE_KEYS]
+    # ③ 反向：**非 oct/octdir** 的条目必须逐字相同（证明改动面只有"分档 + install 前缀"）。
+    #    线程档里 `mount` 从基础前缀改成车道前缀 ⇒ 比对前把它**归一化回基础前缀**，
+    #    这样"只差前缀"与"真的改坏了"能分开（否则这条判据会把正确产物判红）。
+    def norm(a):
+        b = dict(a)
+        if mount_to and mount_from:
+            v = b.get("mount")
+            if isinstance(v, str) and v.startswith(mount_to):
+                b["mount"] = mount_from + v[len(mount_to):]
+        return b
+    keep = lambda lst: [norm(a) for a in lst if a.get("kind") not in LANE_KEYS]
     if keep(man.get("assets", [])) != keep(lane.get("assets", [])):
-        bad.append("非 oct/octdir 的条目**不一致** ⇒ 分档改动面超出预期（应逐字相同）")
+        bad.append("非 oct/octdir 的条目**不一致** ⇒ 改动面超出预期（应只差 install 前缀）")
+    # ⑤ **产物烤的 install 前缀必须在清单里被挂载**，且清单里不许残留**另一档**的前缀。
+    #    真事故（2026-09-27）：线程档 wasm 烤的是 `/src/work/octave-install-threads`，而车道清单
+    #    照抄了基础档的 `/src/work/octave-install` ⇒ `help` 报
+    #    `failed to open docstrings file: /src/work/octave-install-threads/share/.../built-in-docstrings`
+    #    （accept-help 5/7，基础档 12/0）。
+    lane_mounts = [a.get("mount") for a in lane.get("assets", []) if isinstance(a.get("mount"), str)]
+    base_mounts = [a.get("mount") for a in man.get("assets", []) if isinstance(a.get("mount"), str)]
+    if mount_from and mount_to:
+        if not any(m.startswith(mount_to) for m in lane_mounts):
+            bad.append("线程档清单里没有任何 `mount` 落在车道前缀 %s 下 ⇒ 产物要的路径没人挂载" % mount_to)
+        # 同样排除更长的车道前缀（否则"正确产物"会被判成"残留基础前缀"）
+        stale = sorted({m for m in lane_mounts
+                        if m.startswith(mount_from) and not m.startswith(mount_to)})
+        if stale:
+            bad.append("线程档清单里残留基础档前缀 %s 的 `mount`（%d 处，例：%s）⇒ 线程档读不到"
+                       % (mount_from, len(stale), stale[0]))
+    if lane_baked:
+        # 产物侧：wasm 里烤的车道前缀**必须**在清单里有对应挂载（这条是"产物说什么"的判据）
+        if not any(m.startswith(lane_baked) for m in lane_mounts):
+            bad.append("线程档产物烤的前缀 %s 在清单里没有任何挂载（help/doc 会读不到）" % lane_baked)
+        if not any(m.startswith(lane_baked) for m in base_mounts):
+            pass                      # 基础档清单本来就不该有车道前缀
+        else:
+            bad.append("基础档清单里出现了车道前缀 %s 的挂载（挂错了档）" % lane_baked)
     # ④ **两档清单里带 sha256 的条目，sha 必须与磁盘字节一致**（实测事故：只改路径不改 sha ⇒
     #    加载器 fail-closed 拒载 ⇒ 线程档"页面能开、.oct 功能全无"，而所有构建自检都是绿的）
     for tag, m in (("基础", man), ("线程档", lane)):
@@ -171,6 +233,11 @@ def checks(man, lane, assets_dir, exists=os.path.exists, sha_of=None):
     return bad
 
 
+def _one(vals):
+    """烤进去的前缀只允许一种（多种 ⇒ 不知道按哪个改口 ⇒ 返回 None 让调用方 FATAL）。"""
+    return vals[0] if vals and len(vals) == 1 else None
+
+
 def main(argv):
     if "--selftest" in argv:
         return selftest()
@@ -178,31 +245,49 @@ def main(argv):
         print(__doc__.strip().split("用法：")[-1].strip(), file=sys.stderr)
         return 2
     d = argv[0]
+    site = os.path.dirname(os.path.abspath(d))
     p_base, p_lane = os.path.join(d, BASE), os.path.join(d, LANE)
     with io.open(p_base, encoding="utf-8") as fh:
         man = json.load(fh)
+    # ★ 两档产物**烤进去的 install 前缀**：从 wasm 里**读**（不猜）。车道清单里挂在
+    #   `<前缀>/share/octave/11.3.0/etc/...` 的数据资产必须跟着档走（见 `baked_prefix` 的注释）。
+    mf = _one(baked_prefix(os.path.join(site, "octave.wasm")))
+    mt = _one(baked_prefix(os.path.join(site, "threads", "octave.wasm")))
+    need_prefix = any(isinstance(a.get("mount"), str)
+                      and a["mount"].startswith("/src/work/octave-install")
+                      for a in man.get("assets", []))
+    if need_prefix and not (mf and mt):
+        # fail-closed：要改口却读不到前缀 ⇒ 宁可拒绝，也不生成一份"挂错档"的清单
+        print("FATAL: 基础清单里有 install 前缀的挂载，但读不到两档产物烤的前缀"
+              "（基础 %r / 线程 %r）" % (mf, mt), file=sys.stderr)
+        print("       找的是：%s 与 %s" % (os.path.join(site, "octave.wasm"),
+                                          os.path.join(site, "threads", "octave.wasm")), file=sys.stderr)
+        return 2
+    if mf and mt:
+        print("   产物烤的前缀：基础 %s / 线程 %s" % (mf, mt))
     if "--check" in argv:
         if not os.path.exists(p_lane):
             print("FATAL: 缺 %s（先跑本脚本生成）" % p_lane, file=sys.stderr)
             return 2
         with io.open(p_lane, encoding="utf-8") as fh:
             lane = json.load(fh)
-        bad = checks(man, lane, d)
+        bad = checks(man, lane, d, mount_from=mf, mount_to=mt, lane_baked=mt)
         for b in bad:
             print("   ✗ %s" % b)
         if bad:
             print("线程档清单**不合格**（%d 条）" % len(bad), file=sys.stderr)
             return 1
         n = sum(1 for a in lane.get("assets", []) if a.get("kind") in LANE_KEYS)
-        print("线程档清单 OK：%d 条 oct/octdir 已分档，其余条目与基础清单逐字相同" % n)
+        print("线程档清单 OK：%d 条 oct/octdir 已分档 + install 前缀已按档改口，"
+              "其余条目与基础清单逐字相同" % n)
         return 0
-    lane, n = build_lane_manifest(man, d)
+    lane, n = build_lane_manifest(man, d, mount_from=mf, mount_to=mt)
     with io.open(p_lane, "w", encoding="utf-8") as fh:
         json.dump(lane, fh, indent=1, ensure_ascii=False)
         fh.write("\n")
-    print("已写出 %s（改写 %d 条 oct/octdir，sha 按磁盘重算 %d 条）"
+    print("已写出 %s（改写 %d 条：oct/octdir 分档 + install 前缀改口；sha 按磁盘重算 %d 条）"
           % (p_lane, n, (lane.get("_lane") or {}).get("sha_resynced", 0)))
-    bad = checks(man, lane, d)
+    bad = checks(man, lane, d, mount_from=mf, mount_to=mt, lane_baked=mt)
     for b in bad:
         print("   ⚠️ %s" % b)
     return 1 if bad else 0
@@ -217,6 +302,15 @@ _MAN = {"assets": [
 _ALL = lambda _p: True                                    # noqa: E731
 # 假 sha：`BB` 就是"磁盘上的真实字节"，用来构造"清单写 AA / 磁盘是 BB"的事故形状。
 _SHA = lambda _p: "BB"                                    # noqa: E731
+
+
+def _mk_wasm(prefix):
+    """造一个"烤了 install 前缀"的假产物（自证用：证明判据是**从字节里读**的）。"""
+    import tempfile
+    fd, p = tempfile.mkstemp(suffix=".wasm")
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(b"\0asm\x01\0\0\0" + prefix.encode() + b"/share/octave/11.3.0/etc")
+    return p
 
 
 def _lane_of(env=None):
@@ -234,10 +328,45 @@ def _lane_synced():
     return build_lane_manifest(_man_synced(), "/tmp", _SHA)[0]
 
 
+# ── install 前缀那一组（真事故：accept-help 5/7；线程档 wasm 烤 `...-threads`，清单照抄基础前缀）
+_PF = "/src/work/octave-install"
+_PT = "/src/work/octave-install-threads"
+_MANP = {"assets": [
+    # ⚠️ 必须**也含一条 oct**：否则会先撞上"基础清单里一条 oct/octdir 都没有 ⇒ 生成器空转"
+    #    那条零值守卫（自证用例自己踩过），测不到前缀这一组。
+    {"name": "a", "kind": "oct", "url": "assets/oct/a.oct", "sha256": "BB"},
+    {"name": "built-in-docstrings", "kind": "file", "url": "assets/data/built-in-docstrings",
+     "mount": _PF + "/share/octave/11.3.0/etc/built-in-docstrings"},
+    {"name": "m", "kind": "js", "url": "assets/pkg/m.js"},
+]}
+_LANEP = build_lane_manifest(_MANP, mount_from=_PF, mount_to=_PT)[0]
+
+
+def _lane_stale_mount():
+    """真事故形状：mount 照抄基础前缀（不改口）。"""
+    l = build_lane_manifest(_MANP)[0]
+    return l
+
+
 CASES = [
     ("oct 的 url 前缀被改写", lambda: _lane_of()["assets"][0]["url"] == "assets/oct-threads/a.oct"),
     ("octdir 的 base_url 被改写", lambda: _lane_of()["assets"][1]["base_url"] == "assets/octdir-threads/d"),
     ("非 oct 条目**逐字不动**", lambda: _lane_of()["assets"][2] == _MAN["assets"][2]),
+    ("★ install 前缀的 mount 被改口到车道", lambda: _LANEP["assets"][1]["mount"].startswith(_PT)),
+    ("★ 改口后的清单 ⇒ 不报（且规则③ 归一化后仍逐字相同）", lambda: not checks(
+        _MANP, _LANEP, "/tmp", _ALL, _SHA, mount_from=_PF, mount_to=_PT, lane_baked=_PT)),
+    ("★ mount 没改口（真事故：accept-help 5/7）⇒ 必须报", lambda: bool(checks(
+        _MANP, _lane_stale_mount(), "/tmp", _ALL, _SHA, mount_from=_PF, mount_to=_PT, lane_baked=_PT))),
+    ("★ 产物烤车道前缀、清单一个都没挂载 ⇒ 必须报", lambda: bool(checks(
+        _MANP, {"assets": [dict(_MANP["assets"][0], mount=_PF + "/etc/x"),
+                           _MANP["assets"][1]]},
+        "/tmp", _ALL, _SHA, mount_from=_PF, mount_to=_PT, lane_baked=_PT))),
+    ("★ 基础档清单里出现车道前缀的挂载 ⇒ 必须报（挂错档）", lambda: bool(checks(
+        {"assets": [dict(_MANP["assets"][0], mount=_PT + "/etc/x"), _MANP["assets"][1]]},
+        _LANEP, "/tmp", _ALL, _SHA, mount_from=_PF, mount_to=_PT, lane_baked=_PT))),
+    ("★ baked_prefix 真从产物字节里读（读不到就是 None，不猜）", lambda: (
+        lambda t: baked_prefix(t) == [_PT] and baked_prefix("/tmp/does-not-exist") is None)(
+        _mk_wasm(_PT))),
     ("★ 漏改一条 ⇒ --check 必须报", lambda: bool(checks(
         _MAN, {"assets": [_MAN["assets"][0], _MAN["assets"][1], _MAN["assets"][2]]},
         "/tmp", _ALL, _SHA))),
