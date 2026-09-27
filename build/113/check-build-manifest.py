@@ -131,6 +131,16 @@ def compare(declared, measured):
                     add(k, declared[k], t,
                         "声明 threads=%s，但产物里内存 shared=%s / PThread 胶水 %s 次"
                         % (declared[k], shm, glue))
+        elif k == "e2_openblas":
+            # ★ E2（branch e2-openblas，2026-09-27）：声明"这份产物用的是线程版 OpenBLAS"。
+            #   判据落在**输入侧溯源**（与 threads 那条同样的道理）：`inputs.blas.resolved_dir`
+            #   必须指向 E2 那份（路径含 `openblas`）——"声明说换了库、实际链的还是车道 refblas"
+            #   这种情况构建/链接全绿，只有溯源能看出来。
+            rd = ((man.get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
+            got = "openblas" in rd.lower()
+            if bool(declared[k]) != got:
+                add(k, declared[k], {"resolved_dir": rd},
+                    "声明 e2_openblas=%s，但 BLAS 溯源是 `%s`" % (declared[k], rd or "(空)"))
         elif k == "gl4es":
             hits = (measured.get("gl4es") or {}).get("symbol_hits", 0)
             if bool(declared[k]) != (hits > 0):

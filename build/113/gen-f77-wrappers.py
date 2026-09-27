@@ -35,6 +35,14 @@ import io
 import re
 import sys
 
+# ★ 显式排除（**写明原因**；且每个被排除的符号必须真的出现在日志里 —— 否则是过期名单 ⇒ 报错）
+EXCLUDE = {
+    "zdotu_": "两个调用方约定互斥：lane 的 LAPACK 按 `(6 参) -> void`（sret）调它，而 qrupdate 的 "
+              "`zgqvec.o` 按 `(5 参) -> f64` 调它；**OpenBLAS 原生正是 `(6 参) -> void`** ⇒ 不包它，"
+              "让它与 LAPACK 对上。qrupdate 那条**是既有不匹配**（实测：拿同样的 5 参写法去链"
+              "**车道** refblas 也报同一条；6 参写法 0 条）⇒ 与 E2 换库无关，别在这里修。",
+}
+
 MISMATCH_RE = re.compile(
     r"function signature mismatch:\s*(\S+)\s*\n"
     r"\s*>>>\s*defined as\s*\(([^)]*)\)\s*->\s*(\S+)\s+in\s+(\S+)\s*\n"
@@ -77,9 +85,21 @@ def parse_log(text):
     return out
 
 
-def render(pairs):
-    """返回 (C 源码, 各规则命中数)。形状不认识就抛 SystemExit。"""
+def render(pairs, exclude=None):
+    """返回 (C 源码, 各规则命中数)。形状不认识就抛 SystemExit。`exclude` 可注入（自证用）。"""
+    exclude = EXCLUDE if exclude is None else exclude
+    seen_syms = {p[0] for p in pairs}
+    stale = [k for k in exclude if k not in seen_syms]
+    if stale:
+        raise SystemExit("FATAL: 排除名单里有日志里不存在的符号 %s ⇒ 名单过期了，别当没看见"
+                         % ", ".join(stale))
+    pairs = [p for p in pairs if p[0] not in exclude]
     lines = [HEAD]
+    if exclude:
+        lines.append("/* 显式排除（原因见 build/113/gen-f77-wrappers.py 的 EXCLUDE）：")
+        for k, why in sorted(exclude.items()):
+            lines.append(" *   %s —— %s" % (k, why))
+        lines.append(" */")
     stats = {"1": 0, "2": 0, "3": 0, "4": 0}
     for sym, ca, cr, oa, orr in pairs:
         k = min(len(ca), len(oa))
@@ -137,11 +157,13 @@ def main(argv):
         # 零值守卫：一条都没解析到 ⇒ **别写空文件**（"少包装"会让链接继续报错，却有产物）
         print("FATAL: 日志里一条 signature mismatch 都没解析到（日志给错了？）", file=sys.stderr)
         return 3
+    emitted = len([p for p in pairs if p[0] not in EXCLUDE])
     src, stats = render(pairs)
     out = argv[argv.index("--out") + 1]
     io.open(out, "w", encoding="utf-8").write(src)
-    print("已写出 %s：%d 个包装（①%d ②%d ③%d ④%d）"
-          % (out, len(pairs), stats["1"], stats["2"], stats["3"], stats["4"]))
+    print("已写出 %s：发出 %d 个包装（①%d ②%d ③%d ④%d），显式排除 %d 个（%s）"
+          % (out, emitted, stats["1"], stats["2"], stats["3"], stats["4"],
+             len(pairs) - emitted, ", ".join(sorted(EXCLUDE))))
     return 0
 
 
@@ -165,7 +187,8 @@ wasm-ld: warning: function signature mismatch: ztrsv_
 
 
 def selftest():
-    src, stats = render(parse_log(_L))
+    src, stats = render(parse_log(_L), exclude={})          # 形状测试不看排除名单
+    src2, _st2 = render(parse_log(_L))
     cases = [
         ("① 子程序：转发 + `return 0;`",
          lambda: "int dgemm_(void *a1, void *a2, void *a3, void *a4, void *a5) "
@@ -190,6 +213,11 @@ def selftest():
                         ">>> defined as (i32,i32) -> i32   in /x/liblapack.a(c.o)").replace(
                  ">>> defined as (i32,i32) -> i32   in /y/librefblas.a(lsame.o)",
                  ">>> defined as (i32,i32,i32,i32) -> i32   in /y/librefblas.a(lsame.o)"))))),
+        ("★ **排除名单里的符号确实不生成包装**（`zdotu_`）+ 输出里写明原因",
+         lambda: "double zdotu_(" not in src2
+         and "两个调用方约定互斥" in src2[:src2.index("extern")]),
+        ("★ **排除名单过期（符号不在日志里）⇒ 必须拒**",
+         lambda: _raises(lambda: render(parse_log(_L.replace("zdotu_", "zzz_")), exclude={"zdotu_": "x"}))),
         ("★ **前缀性质被破坏 ⇒ 必须拒**（别静默拼一个）",
          lambda: _raises(lambda: render(parse_log(_L.replace(
              ">>> defined as (i32,i32) -> i32   in /y/librefblas.a(lsame.o)",
