@@ -111,12 +111,23 @@ await ev('disp(which("plot"))', 'plot 桥', 'plotbridge');
 console.log('--- 真 .oct 动态装载 ---');
 const n = await page.evaluate(async () => {
   try { Module.FS.mkdir('/oct'); } catch (e) {}
-  let resp = await fetch('dldprobe.oct');
-  if (!resp.ok) resp = await fetch('oct/dldprobe.oct');
+  // ★ B6 双档：夹具本身是 side module（会被 dlopen）⇒ 线程档必须取 `-pthread` 版，
+  //   否则 `LinkError: Import #17 "env" "memory"`（实测：线程档首跑这条就是红的）。
+  //   站点根的 `dldprobe.oct` 是基础档老件 ⇒ 按档取（同 accept-113-oct 的修法）。
+  const lane = (window.__octaveCaps && window.__octaveCaps.lane
+                && window.__octaveCaps.lane.chosen) || 'base';
+  const cands = (lane === 'threads') ? ['threads/dldprobe.oct', 'dldprobe.oct']
+                                      : ['dldprobe.oct', 'oct/dldprobe.oct'];
+  let resp = null;
+  for (const u of cands) {
+    resp = await fetch(u);
+    if (resp.ok) break;
+  }
+  if (!resp || !resp.ok) throw new Error('dldprobe.oct 取不到（试过 ' + cands.join(', ') + '）');
   const b = new Uint8Array(await resp.arrayBuffer());
   Module.FS.writeFile('/oct/dldprobe.oct', b);
   return b.length;
-}).catch(e => 'ERR ' + String(e).slice(0, 80));
+}).catch(e => 'ERR ' + String(e).slice(0, 120));
 console.log('  dldprobe.oct 写入:', n);
 await ev('addpath("/oct"); disp(exist("dldprobe"))', 'exist dldprobe（来自 .oct）', '3');
 await ev('disp(dldprobe())', '★ 调用 .oct 里的函数', '42');

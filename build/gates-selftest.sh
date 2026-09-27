@@ -31,9 +31,16 @@ cat >"$LIST" <<'EOF'
 .githooks/check-facts.py --selftest
 build/check-site-parity.sh --selftest
 build/check_m.py --selftest
+build/serve-coi.py --selftest
 build/113/check-build-manifest.py --selftest
 build/113/check-oct-imports.py --selftest
 build/113/check-dylink-signatures.py --selftest
+build/113/check-oct-lane.py --selftest
+build/113/atomics_scan.py --selftest
+build/113/stage-oct-by-manifest.py --selftest
+build/113/make-lane-manifest.py --selftest
+build/113/unpatch-ax-pthread.py --selftest
+build/113/lane-shim.sh --selftest
 build/113/relink.sh --selftest
 build/facts.py --selftest
 build/lib/sweep_select.py --selftest

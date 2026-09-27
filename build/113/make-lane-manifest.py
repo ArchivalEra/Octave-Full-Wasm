@@ -24,6 +24,7 @@
   python3 build/113/make-lane-manifest.py <站点 assets 目录> --check    # 只校验（不写）
   python3 build/113/make-lane-manifest.py --selftest
 """
+import hashlib
 import io
 import json
 import os
@@ -52,7 +53,56 @@ def rewrite_entry(a):
     return b, changed
 
 
-def build_lane_manifest(man):
+def rel_to_assets(url, assets_dir):
+    """清单里的 url 是**相对站点根**的（`assets/oct-threads/x.oct`），而本模块的入参是
+    `<站点>/assets` ⇒ 必须把开头的 `assets/` 剥掉再接，否则得到 `assets/assets/...`
+    （实测踩到：判据把**已经落好的**文件全报成"不存在"）。"""
+    rel = url.split("assets/", 1)[-1] if url.startswith("assets/") else url
+    return os.path.join(assets_dir, rel)
+
+
+def path_of(a, assets_dir):
+    """条目在磁盘上的路径（url 型取 url，octdir 型取 base_url）；取不到返回 None。"""
+    if a.get("kind") == "oct":
+        return rel_to_assets(a.get("url") or "", assets_dir)
+    if a.get("kind") == "octdir":
+        return rel_to_assets(a.get("base_url") or "", assets_dir)
+    return None
+
+
+def _sha_of_path(p):
+    """**整文件**分块读（不是只读头 1MB —— `atomics_scan.py` 曾在截断读上假红过一次）。"""
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def sync_shas(lane, assets_dir, sha_of=None, exists=os.path.exists):
+    """把**改写后**的条目 sha256 按磁盘实际字节重算，返回改了几条。
+
+    ★ 本生成器的头号陷阱（2026-09-27 实测事故）：只改 `url` 不改 `sha256` ⇒ 加载器
+      **fail-closed 拒载**（"资产校验失败 webio（期望 d6efe987… 实得 4e1bde27…）"），
+      线程档于是"页面能开、所有 .oct 功能全无"：accept-archive 0/20、accept-dldfcn 11/60。
+      所以"生成"这一步就必须同步，不能只靠事后校验。
+    """
+    sha_of = sha_of or _sha_of_path
+    n = 0
+    for a in lane.get("assets", []):
+        if a.get("kind") not in REWRITE or "sha256" not in a:
+            continue
+        p = path_of(a, assets_dir)
+        if not p or not exists(p):
+            continue                       # 缺件由 `checks()` 报，这里不掩盖
+        new = sha_of(p)
+        if new != a.get("sha256"):
+            a["sha256"] = new
+            n += 1
+    return n
+
+
+def build_lane_manifest(man, assets_dir=None, sha_of=None):
     out = dict(man)
     out["assets"] = []
     n = 0
@@ -63,11 +113,14 @@ def build_lane_manifest(man):
     out["_lane"] = {"for": "threads",
                     "why": "只有 `.oct`（oct/octdir）分档；其余与基础清单逐字相同",
                     "rewritten": n}
+    if assets_dir:
+        out["_lane"]["sha_resynced"] = sync_shas(out, assets_dir, sha_of)
     return out, n
 
 
-def checks(man, lane, assets_dir, exists=os.path.exists):
-    """返回问题清单。三类判据都能证伪。"""
+def checks(man, lane, assets_dir, exists=os.path.exists, sha_of=None):
+    """返回问题清单。四类判据都能证伪。"""
+    sha_of = sha_of or _sha_of_path
     bad = []
     base_oct = [a for a in man.get("assets", []) if a.get("kind") in LANE_KEYS]
     lane_oct = [a for a in lane.get("assets", []) if a.get("kind") in LANE_KEYS]
@@ -85,12 +138,8 @@ def checks(man, lane, assets_dir, exists=os.path.exists):
     for a in lane_oct:
         kind = a.get("kind")
         if kind == "oct":
-            # ⚠️ 清单里的 url 是**相对站点根**的（`assets/oct-threads/x.oct`），而本函数的入参是
-            #    `<站点>/assets` ⇒ 直接 join 会得到 `assets/assets/...`（实测踩到：判据把**已经落好的**
-            #    文件全报成"不存在"）。这里把开头的 `assets/` 剥掉再接。
             url = a.get("url", "")
-            rel = url.split("assets/", 1)[-1] if url.startswith("assets/") else url
-            p = os.path.join(assets_dir, rel)
+            p = rel_to_assets(url, assets_dir)
             if not exists(p):
                 bad.append("线程档资产不存在：%s（找的是 %s）" % (url, p))
         else:
@@ -106,6 +155,19 @@ def checks(man, lane, assets_dir, exists=os.path.exists):
     keep = lambda lst: [a for a in lst if a.get("kind") not in LANE_KEYS]
     if keep(man.get("assets", [])) != keep(lane.get("assets", [])):
         bad.append("非 oct/octdir 的条目**不一致** ⇒ 分档改动面超出预期（应逐字相同）")
+    # ④ **两档清单里带 sha256 的条目，sha 必须与磁盘字节一致**（实测事故：只改路径不改 sha ⇒
+    #    加载器 fail-closed 拒载 ⇒ 线程档"页面能开、.oct 功能全无"，而所有构建自检都是绿的）
+    for tag, m in (("基础", man), ("线程档", lane)):
+        for a in m.get("assets", []):
+            if a.get("kind") not in LANE_KEYS or "sha256" not in a:
+                continue
+            p = path_of(a, assets_dir) or ""
+            if not exists(p):
+                continue                   # 缺件由 ② / 落地判据负责
+            got = sha_of(p)
+            if got != a.get("sha256"):
+                bad.append("%s清单的 %s 的 sha256 与磁盘不符（清单 %s… 磁盘 %s…）"
+                           % (tag, a.get("name"), str(a.get("sha256"))[:12], str(got)[:12]))
     return bad
 
 
@@ -134,28 +196,42 @@ def main(argv):
         n = sum(1 for a in lane.get("assets", []) if a.get("kind") in LANE_KEYS)
         print("线程档清单 OK：%d 条 oct/octdir 已分档，其余条目与基础清单逐字相同" % n)
         return 0
-    lane, n = build_lane_manifest(man)
+    lane, n = build_lane_manifest(man, d)
     with io.open(p_lane, "w", encoding="utf-8") as fh:
         json.dump(lane, fh, indent=1, ensure_ascii=False)
         fh.write("\n")
-    print("已写出 %s（改写 %d 条 oct/octdir）" % (p_lane, n))
+    print("已写出 %s（改写 %d 条 oct/octdir，sha 按磁盘重算 %d 条）"
+          % (p_lane, n, (lane.get("_lane") or {}).get("sha_resynced", 0)))
     bad = checks(man, lane, d)
     for b in bad:
         print("   ⚠️ %s" % b)
-    return 1 if any("不存在" in b or "缺文件" in b for b in bad) else 0
+    return 1 if bad else 0
 
 
 # ── 自证（三类：改写正确 / 漏改必须被抓 / 空清单必须报）────────────────────────
 _MAN = {"assets": [
-    {"name": "a", "kind": "oct", "url": "assets/oct/a.oct"},
+    {"name": "a", "kind": "oct", "url": "assets/oct/a.oct", "sha256": "AA"},
     {"name": "d", "kind": "octdir", "base_url": "assets/octdir/d", "files": ["x.oct"]},
     {"name": "m", "kind": "js", "url": "assets/pkg/m.js"},
 ]}
-_ALL = lambda _p: True      # noqa: E731
+_ALL = lambda _p: True                                    # noqa: E731
+# 假 sha：`BB` 就是"磁盘上的真实字节"，用来构造"清单写 AA / 磁盘是 BB"的事故形状。
+_SHA = lambda _p: "BB"                                    # noqa: E731
 
 
 def _lane_of(env=None):
     return build_lane_manifest(_MAN)[0]
+
+
+def _man_synced():
+    """基础清单也带**正确** sha（BB）的版本 —— 用来测"正常不报"那一档。"""
+    m = {"assets": [dict(a) for a in _MAN["assets"]]}
+    m["assets"][0]["sha256"] = "BB"
+    return m
+
+
+def _lane_synced():
+    return build_lane_manifest(_man_synced(), "/tmp", _SHA)[0]
 
 
 CASES = [
@@ -164,16 +240,27 @@ CASES = [
     ("非 oct 条目**逐字不动**", lambda: _lane_of()["assets"][2] == _MAN["assets"][2]),
     ("★ 漏改一条 ⇒ --check 必须报", lambda: bool(checks(
         _MAN, {"assets": [_MAN["assets"][0], _MAN["assets"][1], _MAN["assets"][2]]},
-        "/tmp", _ALL))),
+        "/tmp", _ALL, _SHA))),
     ("★ 改写后路径不存在 ⇒ 必须报", lambda: bool(checks(
-        _MAN, _lane_of(), "/tmp", lambda p: False))),
+        _MAN, _lane_of(), "/tmp", lambda p: False, _SHA))),
     ("★ 非 oct 条目被改动 ⇒ 必须报（证明分档只动 .oct）", lambda: bool(checks(
         _MAN, {"assets": [dict(_MAN["assets"][0], url="assets/oct-threads/a.oct"),
-                          _MAN["assets"][1], dict(_MAN["assets"][2], url="x.js")]}, "/tmp", _ALL))),
-    ("正常清单（路径都在）⇒ 不报", lambda: not checks(
-        _MAN, _lane_of(), "/tmp", _ALL)),
+                          _MAN["assets"][1], dict(_MAN["assets"][2], url="x.js")]},
+        "/tmp", _ALL, _SHA))),
+    # ★ 本轮真事故的形状：只换路径、sha 留着基础档的 ⇒ 加载器 fail-closed 拒载（必须报）
+    ("★ 只改路径不改 sha ⇒ **必须报**（8768 首跑 0/20 的真因）", lambda: bool(checks(
+        _man_synced(), _lane_of(), "/tmp", _ALL, _SHA))),
+    ("★ sha 按磁盘重算过 ⇒ 不报", lambda: not checks(
+        _man_synced(), _lane_synced(), "/tmp", _ALL, _SHA)),
+    ("★ sync_shas 真的把 sha 换成了磁盘值（返回条数也计）", lambda: (
+        lambda l: sync_shas(l, "/tmp", _SHA, _ALL) == 1
+        and l["assets"][0]["sha256"] == "BB")(_lane_of())),
+    ("★ sync_shas 在**没有 oct 条目**时不空转报成功", lambda: sync_shas(
+        {"assets": [{"name": "m", "kind": "js", "url": "x.js", "sha256": "AA"}]}, "/tmp", _SHA, _ALL) == 0),
+    ("正常清单（路径都在 + sha 一致）⇒ 不报", lambda: not checks(
+        _man_synced(), _lane_synced(), "/tmp", _ALL, _SHA)),
     ("**空清单** ⇒ 必须报（零值守卫：生成器空转）", lambda: bool(checks(
-        {"assets": []}, {"assets": []}, "/tmp", _ALL))),
+        {"assets": []}, {"assets": []}, "/tmp", _ALL, _SHA))),
 ]
 
 

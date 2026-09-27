@@ -105,10 +105,16 @@ const loadRes = await page.evaluate(async (mods) => {
   const dir = '/usr/src/octave/m/oct';
   try { FS.mkdir('/usr/src/octave/m'); } catch (e) {}
   try { FS.mkdir(dir); } catch (e) {}
+  // ★ B6 双档：本套件**自己**拉 .oct 再 dlopen（手写了加载器那一步）⇒ 也必须按档取。
+  //   线程档的主模块是 shared-memory，非 `-pthread` 的 side module 连 dlopen 都过不去
+  //   （实测：线程档首跑这条 4 FAIL）。
+  const lane = (window.__octaveCaps && window.__octaveCaps.lane
+                && window.__octaveCaps.lane.chosen) || 'base';
+  const prefix = (lane === 'threads') ? 'assets/oct-threads/' : 'assets/oct/';
   const out = [];
   for (const m of Object.keys(mods)) {
     try {
-      const buf = await fetch('assets/oct/' + m + '.oct').then(r => r.arrayBuffer());
+      const buf = await fetch(prefix + m + '.oct').then(r => r.arrayBuffer());
       const mount = dir + '/' + m + '.oct';
       FS.writeFile(mount, new Uint8Array(buf));
       for (const fn of mods[m]) {
