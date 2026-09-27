@@ -463,14 +463,47 @@ wasm-ld: error: --shared-memory is disallowed by libglpk_la-tls.o because it was
 但 `.oct` 资产本身也是**非 atomics** 编的，能不能载入 shared-memory 主模块要**浏览器实测**（验收矩阵）。
 ⇒ 待测项明确列在下面"判据"里，**没测完不算数**。
 
-**判据（红/绿 + 待测标记）**：
-· ✅ 机制绿：撤销差分复核 0 行 pthread 差异；`relink.sh --selfcheck/--selftest` 绿；身份证 threads 轴
-  正反 3 条自证；`serve-coi.py` 头部实测（带头 2 个头 / 不带头 0 个）；`lane.js` 5 条合成输入全过。
-· ⏳ **待测**：线程产物链接+`verdict=ok`；浏览器侧"选档正确 + `HEAP8.buffer instanceof SharedArrayBuffer`"
-  （`probe-lane`）；两档验收矩阵（43 套 accept 各跑一遍）；**`.oct` 资产在 shared-memory 主模块里能否装载**
-  （这是上面那条硬约束的落点）；三引擎（chromium/firefox/webkit）。
-· 回退点：`/src/libwork/config.h.pre-threads` 还原 + 重编回非线程档（或直接丢弃线程产物目录）；
-  **8761 在 promote 之前一动不动**。
+**★★ 结局（2026-09-27 实测）：机制全绿，但产物被"整条依赖链"卡住 ⇒ 本轮**不 promote**，机制封存待令。**
+
+三件事实测：
+
+1. **Octave 自身的重编是成功的**：configure 通过（`-pthread` 进 5 个消费点），`make clean` +
+   `make -k -j12` 把库都建出来了；唯一失败的目标是 `src/octave-cli`，两个原因**都与线程无关**：
+   · `undefined symbol: zgejsv_/cgejsv_` —— 两个 lapack（`/usr/local/lib` 与 `lapack-simd`）**都没有**这两个
+     符号（实测 `llvm-nm --defined-only | grep -c` = 0），而 `liboctave` 的 svd.cc 引用它们 ⇒ cli 链接
+     本来就过不去（web 链接因为 `-sERROR_ON_UNDEFINED_SYMBOLS=0` 容忍它，所以从没暴露）。
+   · `--shared-memory is disallowed by fccache.o`（fontconfig）—— 见下。
+2. **web 链接（`relink.sh link threads`）失败**，第一个被拒的对象是 **freetype 的 `src_sfnt_sfnt.c.o`**：
+   `--shared-memory is disallowed by src_sfnt_sfnt.c.o because it was not compiled with
+   'atomics' or 'bulk-memory' features.`
+3. **为什么不是"重编 Octave 就行"**：`-pthread` 要求**链上每个对象**都声明 `atomics`（实测判据：
+   对象字节里有没有 `atomics` 特征段 —— 重编过的 `svd.o` 有、预编译的 `fccache.o` 没有，与 wasm-ld 的
+   行为**一一对应**）。我把整条依赖链扫了一遍（`ar x` 逐成员读字节）：
+
+   | 库 | wasm 成员 / 缺 atomics | 库 | wasm 成员 / 缺 atomics |
+   |---|---|---|---|
+   | `librefblas.a` | 149 / **149** | `liblapack.a` | 1632 / **1632** |
+   | `libfontconfig.a` | 28 / **28** | `libfreetype.a` | 42 / **42** |
+   | `libexpat.a` | 3 / **3** | `libz.a` | 15 / **15** |
+   | `libgl2ps.a` | 1 / **1** | `libGL.a`（gl4es） | 784 / **199** |
+   | `libglpk.a` | 191 / **191** | `libhdf5.a` | 327 / **327** |
+   | `libfftw3.a` / `fftw3f.a` | 426 / **426**（各） | `libarpack.a` | 81 / **81** |
+   | `libqrupdate.a` | 74 / **74** | `libpcre2-8.a` | 29 / **29** |
+   | `libf2c.a` | 156 / **156** | suitesparse 9 个 | 全部成员缺（`libumfpack` 316/316 等） |
+
+   ⇒ **线程档不是"product + 线程"，而是"整条依赖链 + Octave + .oct 车道全部重编"**。
+   这是一次**独立的大批次**（不是原来的"数小时重链"量级）；`__glpk__`/`__delaunayn__` 那几个函数在
+   本站走 `.oct` 资产车道，但**资产本身也是非 atomics 编的**，能否载入 shared-memory 主模块同样要重编 + 实测。
+
+**因此本轮的决定（执行方按纪律自行判定，不 promote）**：机制侧**全部保留**（选档/双档/带头服务/
+身份证 threads 轴/可逆补丁/threads 模式都已落地且自证），**产物侧封存**：容器已回滚到非线程档配置
+（`WITH_THREADS=0` 重配 + 重编，判据是 `config.h` 与 `config.h.pre-threads` 逐字节相同）；
+8761/site/ 一字未动；`probe-lane` 的输入契约要求**线程档产物存在**，所以它在 B6 落地前**跳过并报明原因**
+（不是变红）—— `--check-inputs` 里一眼能看到缺什么。
+
+**待用户拍板的是下一批的规模**：要不要排"依赖链 atomics 重编"这一批（重编清单 = 上表 20+ 个库 + Octave
++ .oct 车道；其中 `build-deps.sh` 一张表覆盖 15 个、BLAS/LAPACK 有现成脚本；风险点是那几个自带补丁的：
+gl4es / suitesparse / slicot）。**E2（线程版 BLAS 链进主模块）与它的前置完全相同**，所以两件事应当同批做。
 
 ---
 

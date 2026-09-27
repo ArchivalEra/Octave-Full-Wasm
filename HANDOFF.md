@@ -47,16 +47,21 @@
    跑完全绿；**accept-only 口径**（验收底线那对数字）见 `build/FACTS.json` 的
    `accept_suites` / `accept_pass`，全量合计（含探针/基准）见文末 `AUTO:STATE` 那一行的括号。
    `--check-inputs` 一行回答"要跑全套我缺什么"。
-3. **B6 线程版构建 —— 已在做**（用户拍板：**要求宿主发 COI 头**）
-   · 机制侧已落地：`WITH_THREADS=1` 配置开关、`relink.sh` 的 `threads` 模式、身份证 `threads` 轴
-     （读 wasm 内存段的 shared 位）、`bridge/lane.js` 同步选档 + 两适配器接线、`build/serve-coi.py`、
-     `test/browser/probe-lane.mjs`（4 格含反证）。
-   · **8761/8768 起服务必须带头**：`python3 build/serve-coi.py --dir <站点> --port 8761`
-     （`python3 -m http.server` 发不了 COOP/COEP ⇒ 线程档选不中，且**静默**）。
-   · ⚠️ 实测硬约束：`-pthread` 要求链上**每个静态库**都带 atomics —— `libglpk.a`/`libqhull.a` 没有
-     ⇒ configure 静默关掉 `HAVE_GLPK`/`HAVE_QHULL`（证据：`--shared-memory is disallowed by
-     libglpk_la-tls.o`）。那四个函数在本站是 `.oct` 资产车道，但**资产能否载入 shared-memory
-     主模块待浏览器实测**。全量重编在跑，结论以实测为准（见 `PLAN-arch.md` §2 B6 的 2026-09-27 节）。
+3. **B6 线程版构建 —— 机制已就绪，产物**被封存**（等你拍下一批的规模）**
+   · ✅ 机制侧全落地：可逆补丁（`patch-ax-pthread.sh --revert` + 差分复核）、`WITH_THREADS=1`、
+     `relink.sh` 第 4 个模式 `threads`、身份证 `threads` 轴（读 wasm 内存段的 shared 位）、
+     `bridge/lane.js` 同步选档 + 两适配器接线 + 身份证按档读、`build/serve-coi.py`、
+     `test/browser/probe-lane.mjs`（4 格含反证）；**8761/8768 起服务必须带头**。
+   · ⛔ **产物卡住，原因不是 Octave**：`-pthread` 要求**链上每个对象**都声明 `atomics`，
+     而**整条依赖链**（refblas 149/149、lapack 1632/1632、fontconfig、freetype、expat、zlib、
+     gl4es、gl2ps、glpk、hdf5、fftw、arpack、qrupdate、pcre2、f2c、suitesparse×9）**全部缺** ⇒
+     web 链接被 freetype 的 `src_sfnt_sfnt.c.o` 拒掉（原文见 `PLAN-arch.md` §2 B6 的 2026-09-27 节，
+     附完整扫描表）。⇒ 线程档 = "整条依赖链 + Octave + .oct 车道**全部重编**"，是**独立大批次**。
+   · 现状：容器已回滚非线程档（`config.h` 与备份逐字节相同）；**8761 / `site/` 一字未动**；
+     `probe-lane` 因输入（线程档产物）不存在而**跳过并报明原因**（`--check-inputs` 可见）。
+   · **待你拍**：要不要排"依赖链 atomics 重编"这一批（20+ 库 + Octave + .oct 车道；`build-deps.sh`
+     一张表覆盖 15 个、BLAS/LAPACK 有现成脚本；风险点是自带补丁的 gl4es / suitesparse / slicot）。
+     **E2 的前置与它完全相同** ⇒ 建议同批做。
 4. **E2 悬案（用户定：**另开分支**做）**：把线程版 BLAS 链进 Octave 的最后一步 —— 那是**性能收益
    真正兑现的那一步**（现役 BLAS 是 f2c 出的标量代码，光有线程运行时**一分钱买不到**）。
    **根因已锁定**：不是重复定义、也不是 Fortran 接口，而是**子程序返回类型**（f2c 的 `-> i32` vs

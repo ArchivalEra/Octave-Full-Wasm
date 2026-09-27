@@ -3044,3 +3044,51 @@ HEAD 还是旧提交（写进去的必然是昨天的日期），提交完成后
 "HEAD 的 sha 与日期以 `git log -1` 为准"）—— 它与 `handoff_facts.py` 文件头那条纪律
 "**不引入会自己在变的输入**（墙上时钟、HEAD 的 sha）"本来就是同一条：**从 HEAD 派生的日期属于同一类**。
 修完 `update-handoff.py --check` 在同一个提交里就新鲜了（实测：`HANDOFF 机器块新鲜`）。
+
+---
+
+### 5.62 B6 线程档：用户拍板"要求宿主发 COI 头" ⇒ 机制全绿，产物卡在依赖链（2026-09-27）
+
+**起因**：用户"要求宿主发 COI 头以启用多线程 做一下咯"，并指定 E2 另开分支。
+
+**机制侧（全部落地并自证）**：
+- **补丁工具可逆**：闸门③（"不引入 COI/SAB"）是往 `configure` 里插一段覆盖实现的，线程档要它反过来 ⇒
+  `patch-ax-pthread.sh --revert` + `build/113/unpatch-ax-pthread.py`（6 条自证）。判据是**差分**：
+  撤销后与**原始 tarball** 的差异里 0 行与 pthread 有关（⚠️ `ax_pthread_ok=no` 不是判据 —— 那是
+  AX_PTHREAD 宏自己的初始化；我第一版判错，已在注释里留档）。
+- **`WITH_THREADS=1`**（`configure-113-full.sh`）：状态由旗标强制（撤销覆盖 + `--enable-threads`），
+  实测 `-pthread` 进 **5 个消费点**（`BUILD_CFLAGS`/`BUILD_CXXFLAGS`/`XTRA_CFLAGS`/`XTRA_CXXFLAGS`/`PTHREAD_CFLAGS`）。
+- **`relink.sh` 第 4 个模式 `threads`**：表推 9 变量 + `-pthread -sPTHREAD_POOL_SIZE=4`（不设池大小则主线程
+  `pthread_create` 不可用 ⇒ "线程档"名不副实）；`--selfcheck` 仍绿。
+- **身份证 `threads` 轴，双向判定**：实测读 **wasm 内存段的 shared 标志位**（`mem_shared_flags()`）。
+  ⚠️ 连着踩了两个**假判据**：`b"atomics" in wasm` 会被 `wasm-opt -O2` 精简掉；`grep -c PThread` 数的是
+  **行数**（混淆后 38 行→1 行）。两条都实测过。
+- **双档 + 选档 + 带头服务**：`bridge/lane.js`（同步判据 = `crossOriginIsolated` + `SharedArrayBuffer`；
+  `?lane=` 可覆盖）、内核/页面/worker 三处接线、`locateFile` 只重写 `octave.data`、身份证**按档读**、
+  `build/serve-coi.py`（带头/不带头两台同一目录，5 条自证）、`test/browser/probe-lane.mjs`（4 格含**反证**：
+  没 COI 时强选线程档必须响亮失败）；`promote-webgl.sh` 落 `threads/` 前**先验 verdict=ok**（fail-closed）。
+
+**★★ 产物侧的实测结论（本批最有价值的产出）**：线程档**不是"重编 Octave"就能成的**。
+1. Octave 自身重编成功（configure + `make clean` + `make -k -j12` 把库都建出来了）；唯一失败的
+   `src/octave-cli` 与线程**无关**：`undefined symbol: zgejsv_/cgejsv_`（两个 lapack 都**没有**这两个
+   符号 —— 实测 `llvm-nm | grep -c` = 0；web 链接因 `-sERROR_ON_UNDEFINED_SYMBOLS=0` 容忍它，故从未暴露）。
+2. `relink.sh link threads` 的 web 链接**失败**，第一个被拒对象 = freetype 的 `src_sfnt_sfnt.c.o`：
+   `--shared-memory is disallowed by … because it was not compiled with 'atomics' or 'bulk-memory' features.`
+3. **判据**：`-pthread` 要求链上**每个对象**都声明 `atomics`（对象字节里的特征段 —— 重编过的 `svd.o`
+   有、预编译的 `fccache.o` 没有，与 wasm-ld 行为一一对应）。逐成员扫描**整条依赖链**的结果：
+   `refblas 149/149`、`lapack 1632/1632`、`fontconfig 28/28`、`freetype 42/42`、`expat 3/3`、`zlib 15/15`、
+   `gl2ps 1/1`、`gl4es 199/784`、`glpk 191/191`、`hdf5 327/327`、`fftw3/fftw3f 426/426`、`arpack 81/81`、
+   `qrupdate 74/74`、`pcre2-8 29/29`、`f2c 156/156`、suitesparse 9 个全缺（`umfpack 316/316`…）
+   ⇒ **全部缺**。线程档 = 整条依赖链 + Octave + `.oct` 车道全部重编，是**独立大批次**。
+   （`.oct` 资产也是非 atomics 编的；它们能否载入 shared-memory 主模块，要重编后实测。）
+
+**执行方按纪律自行判定（不 promote、不碰 8761）**：机制**保留**，产物**封存**；容器回滚非线程档
+（判据：`config.h` 与 `config.h.pre-threads` **逐字节相同**）；`probe-lane` 的输入契约要求线程档产物存在
+⇒ B6 落地前它**跳过并报明原因**（不是变红）。下一批规模（依赖链 atomics 重编）留给用户拍板；
+**E2 的前置与它完全相同**，两件事应同批做。
+
+**顺带修的**：`check-consistency.py` 的"页面引用必须入库"正则**只认字面量**（B6 引入了
+`document.write` 拼出的 `src=` 与 `importScripts(LANE.js)` 两种动态引用 ⇒ 旧写法报假阳性），并新增
+"跳过 N 个动态引用"的显形输出；`.gitignore` 补 `!bridge/lane.js`、`!build/serve-coi.py`。
+**纪律事故自记**：我在起服务时用了两次 `sleep` 等进程就绪 —— 违反了本轮刚写进 `AGENTS.md` 的禁令，
+后续改用探针那种"轮询就绪"的写法。

@@ -76,7 +76,10 @@
     ],
     "probe-lane": [
       { "kind": "path", "env": "SITE_DIR", "value": "/mnt/hdd/octave-wasm-build/siteWebGL",
-        "why": "**双档**站点目录（必须已部署 `threads/` 子目录）；探针自己起两台服务（带头/不带头，用 build/serve-coi.py ⇒ 顺带把发头脚本本身也测了）" }
+        "why": "**双档**站点目录；探针自己起两台服务（带头/不带头，用 build/serve-coi.py ⇒ 顺带把发头脚本本身也测了）" },
+      { "kind": "path", "env": "THREADS_ARTIFACT",
+        "value": "/mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm",
+        "why": "**线程档产物**（B6）。⚠️ 它不在 ⇒ 本探针**跳过**（「还没做线程档」不是回归）；B6 未落地前它一直会是这个状态 —— 见 PLAN-arch §2 B6 的 2026-09-27 节：线程档卡在「整条依赖链要用 atomics 重编」" }
     ],
     "probe-coi-sw": [
       { "kind": "env", "value": "PLAYWRIGHT_BROWSERS_PATH",
