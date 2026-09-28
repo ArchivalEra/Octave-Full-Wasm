@@ -428,6 +428,21 @@ fi
 #  CXXFLAGS 的口径一致。
 EXC_FLAGS=( -O2 -fPIC -std=c++17 -fwasm-exceptions )
 
+# MEMORY64=1（2026-09-28，branch `wasm64`）：产出 wasm64 产物。
+# ★ 它是 **[compile+link]** 设置 —— 「对象也必须用它编」不是可选项。实测（`probe-wasm64-link.sh`）：
+#   拿现成的 wasm32 对象去 memory64 链接，wasm-ld **当场拒**：
+#     `wasm32 object file can't be linked in wasm64 mode`
+#   ⇒ （a）farm 那批对象靠 `build-w64-lane.sh` 里 lane-shim 的影子注入同旗标重编；
+#      （b）**本脚本编的 `main.o` 与最终链接行也必须带上它**。
+# ⚠️ 只在一处加 = 混编产物或链接失败 —— 这正是本仓反复踩的"两处旗标不对称"
+#    （`-sEXPORTED_RUNTIME_METHODS` 与 `-sJSPI_EXPORTS` 那次的形状）。所以这里用**一个数组**、
+#    两处引用同一个变量，而不是抄两遍旗标。
+MEM64=()
+if [ "${MEMORY64:-0}" = "1" ]; then
+  MEM64=( -sMEMORY64=1 )
+  echo "== MEMORY64=1：wasm64（main.o 与链接行都必须带它，否则 wasm-ld 拒混编）"
+fi
+
 # P5_TOOLKIT=1：把 **webgl graphics toolkit 编进主模块**（不是 `.oct`）。
 # 为什么必须进主模块：`opengl_functions`（GL 函数表）的**虚表跨模块会失效** ——
 # `opengl_renderer`（opengl-on 后编在主模块里）通过 `m_glfcns.xxx()` 回调，
@@ -462,6 +477,7 @@ fi
 echo "== 编 main.cc"
 em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
      ${P5_OBJS:+ $P5_DEF} \
+     ${MEM64[@]+"${MEM64[@]}"} \
      "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
@@ -558,6 +574,7 @@ em++ --bind \
   "${PRELOAD[@]}" \
   --post-js "$SRC/post.js" \
   ${JSPI_JSLIB[@]+"${JSPI_JSLIB[@]}"} \
+  ${MEM64[@]+"${MEM64[@]}"} \
   "${EXC_FLAGS[@]}" -Wl,--allow-multiple-definition \
   "${LIBS[@]}" \
   "${IDBFS_FLAGS[@]}" \

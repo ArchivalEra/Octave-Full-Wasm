@@ -72,6 +72,37 @@ bash build/113/probe-wasm64-link.sh threads   # 环境从模式表推出（不�
 
 ---
 
+### 农场重编的第一批结果（2026-09-28，**已跑过**：`build-w64-lane.sh shim deps libs`）
+
+**✅ `deps` 阶段成功** —— `/usr/local-w64` 建出来了（`libf2c.a` / `liblapack.a` / `librefblas.a` /
+`libpcre2-8.a` / `libpcre2-posix.a`，且自检确认 `dgemm_` / `dgesv_` / `dlamch_` 都在）。
+⇒ **memory64 下 f2c / LAPACK / BLAS 编得过**，这是好消息。
+
+**❌ `libs` 阶段停在 `glpk-5.0`** —— 而且是**静默**的（日志里没有任何 error 文本；
+它本该写的 `$WORK/glpk-conf.log` 根本没生成）。**这是 build-libs.sh 的一个可用性缺口**：
+失败时它不告诉你为什么。
+
+**判别实验（三步，证伪式）** —— 同一个 glpk 步骤：
+
+| 姿势 | 结果 |
+|---|---|
+| 不用影子（基线） | ✅ 成功 |
+| B6 的 `-pthread` 影子（**无** memory64） | ✅ 成功 |
+| w64 影子（`-pthread -sMEMORY64=1`） | ❌ 失败 |
+
+⇒ **确认这面墙由 memory64 造成**，不是既有问题。（这一步值得照做：不做就分不清
+"memory64 的墙"和"这个库本来就这样"。）
+
+**⚠️ 顺带一个必须知道的污染**：判别实验的 ①② 把 **wasm32 的 glpk** 建进了
+`/src/deps-w64/glpk/`。⇒ **当前 `/src/deps-w64` 是混编的**（其余库是 memory64，glpk 是 wasm32）。
+这正是本仓 R-009 那条"非 atomics 的纯计算库会静默链进"的同族危险。
+**接手第一步：把 `glpk`（以及它之后未建的库）清掉重来**，别在混编的 farm 上继续。
+
+**下一步要查的**（本单的下一面墙）：glpk 为什么在 memory64 下静默死。
+先让 `build-libs.sh` 把错误打出来（它现在吞了），再判是"glpk 的代码假设"还是"mem64 的某个工具链问题"。
+
+---
+
 ## §2 两条轴 —— 先想清楚要发几份产物
 
 选档现在只判**一条轴**（`bridge/lane.js`：COI 有/无）。memory64 加上**第二条轴**（引擎支持/不支持），

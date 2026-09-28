@@ -64,11 +64,12 @@ out_default() {
     scalar)  echo /src/websrc/scalar ;;
     m1)      echo /src/websrc/m1 ;;
     threads) echo /src/websrc/m2fc-threads-out ;;    # B6：线程档（PLAN-threads §5 步骤④）
+    w64)     echo /src/websrc/w64-out ;;              # wasm64 车道（PLAN-wasm64）
     *)       echo "" ;;
   esac
 }
 
-modes_list() { echo "product scalar m1 threads"; }
+modes_list() { echo "product scalar m1 threads w64"; }
 
 # 基线：结构优先 —— 下一级模式自己的产物在就用它，否则退回表里记录的现存路径。
 pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
@@ -80,7 +81,7 @@ pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
 # ── 模式表：**唯一**的真值来源。22 个变量全在这里推出来，调用方一个都不许传 ──────────
 mode_table() {      # 输出 KEY=VALUE 行（供 export）
   local m="$1"
-  case "$m" in product|scalar|m1|threads) ;; *)
+  case "$m" in product|scalar|m1|threads|w64) ;; *)
     echo "FATAL: 未知模式 '$m'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 
   # 三模式共有：都是"完整产品形态"的能力面（区别只在 DCE / SIMD 两条轴，
@@ -182,7 +183,39 @@ EOF
       # A1 那份逐字节复现的 product 产物（sha 与 8761 现役件相同）。
       echo "BASELINE_WASM=$(pick_baseline product /src/websrc/a1-verify-product/octave.wasm)"
       ;;
+    w64)
+      # ★ wasm64 车道（2026-09-28，branch `wasm64`）：= threads 的形态 **+ memory64**。
+      #   目标形态见 `build/113/PLAN-wasm64.md` §0（memory64 主路径 + 单线程回退）。
+      #   两个**新 prefix**（绝不覆盖现役）：farm `/usr/local-w64` + `/src/deps-w64`，
+      #   由 `build-w64-lane.sh` 用 `-pthread -sMEMORY64=1` 的影子重编出来。
+      #   ⚠️ memory64 是 [compile+link] ⇒ 对象必须同旗标（那面实测墙见 PLAN-wasm64.md §1）。
+      #   ⚠️ **GL4ES_A / GLU_A 现在指的是 threads 那份（wasm32）** —— w64 需要重编它们；
+      #      先用它把链接跑通、看下一面墙在哪，别当作"w64 的 GL 已经好了"。
+      cat <<'EOF'
+MAIN_MODULE_LEVEL=2
+WITH_JSPI=1
+KEEP_LIST=/src/libwork/keep.txt
+LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
+EXPORT_IF_DEFINED=
+EXPORTED_FUNCS=_main
+OCT_SCAN_DIRS=/src/octs-site
+DEPS=/usr/local-w64
+DEPS_ROOT=/src/deps-w64
+GL4ES_A=/src/libwork/gl4es-src-threads/lib/libGL.a
+GLU_A=/src/libwork/glu-webgl-threads/lib/libGLU.a
+EOF
+      echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      echo "MEMORY64=1"
+      echo "BASELINE_WASM=$(pick_baseline threads /src/websrc/m2fc-threads-out/octave.wasm)"
+      ;;
   esac
+
+  # ★ `MEMORY64` 的默认值放在**模式分支之后**给，且 w64 自己给过 1 就不再给 ——
+  #   这样表里**同一个变量只会出现一行**。为什么强调：第一版把它写进共有块、又在 w64 分支里
+  #   写了 1 ⇒ 表里两行 `MEMORY64`（0 与 1），靠"后导出者覆盖前者"才生效。
+  #   那正是本仓记过的"同一旗标两处"的形状（消费者若 `grep -m1` 就会拿到 0）；
+  #   而且 `exports` 的条数也会比别的模式多一条（自证/对比会莫名其妙地不一致）。
+  case "$m" in w64) ;; *) echo "MEMORY64=0" ;; esac
 }
 
 # ── 声明（declared）：模式**承诺**产物里该有什么。由 check-build-manifest.py 逐条核对 ──
@@ -204,9 +237,12 @@ EOF
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
       ;;
-    threads)
+    threads|w64)
       # `E2_OPENBLAS` 有值时多声明一条 `e2_openblas` ⇒ `check-build-manifest.py` 据此换判据
       # （BLAS 溯源从"必须含 -threads"改成"必须指向 E2 目录"）。
+      # ⚠️ `w64` 复用这份声明：**身份证现在还不会记"这是 64 位"** —— 缺一条
+      #    `measured.wasm64` + 对应的声明键与判据。这是本批的**已知缺口**（别把它当"已验"）：
+      #    在补上之前，一份 w64 产物和一份 wasm32 产物在身份证上**分不开**。
       _e2=""
       [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
       cat <<EOF
@@ -563,7 +599,7 @@ case "$SUB" in
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }
-case "$MODE" in product|scalar|m1|threads) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
+case "$MODE" in product|scalar|m1|threads|w64) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || OUT="$(out_default "$MODE")"
 
 case "$SUB" in
