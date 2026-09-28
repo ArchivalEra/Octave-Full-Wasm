@@ -46,32 +46,34 @@ def index_sources(dirs):
     return idx, dup
 
 
-def wanted(manifest):
+def wanted(manifest, lane="threads"):
     """从基础清单推出 (文件名, 目标相对 assets 的路径) 列表。"""
     out = []
+    oct_dir = "oct-%s" % lane
+    octdir_dir = "octdir-%s" % lane
     for a in manifest.get("assets", []):
         if a.get("kind") == "oct":
             fn = a["url"].rsplit("/", 1)[-1]
-            out.append((fn, os.path.join("oct-threads", fn)))
+            out.append((fn, os.path.join(oct_dir, fn)))
         elif a.get("kind") == "octdir":
             # ⚠️ 用 **base_url 的末段**（磁盘上就是这个目录名），**不是** `name`：
             #    实测清单里 `name="control-oct"` 而 `base_url="assets/octdir/control"`
             #    —— 两处各取一半就会打架（stager 建 `control-oct/`、改写器指 `control/`，
             #    于是 `--check` 报"目录不存在"）。基础档的磁盘结构以 base_url 为准。
             seg = (a.get("base_url") or "").rstrip("/").rsplit("/", 1)[-1]
-            d = os.path.join("octdir-threads", seg)
+            d = os.path.join(octdir_dir, seg)
             for f in (a.get("files") or []):
                 if f.endswith(".oct"):
                     out.append((f, os.path.join(d, f)))
     return out
 
 
-def stage(site, srcs, copy=shutil.copyfile):
+def stage(site, srcs, copy=shutil.copyfile, lane="threads"):
     """返回 (落件数, 缺件列表, 冲突列表)。`copy` 可注入 ⇒ 自证不碰真文件。"""
     man = json.load(open(os.path.join(site, "assets", "manifest.json"), encoding="utf-8"))
     idx, dup = index_sources(srcs)
     missing, n = [], 0
-    for fn, rel in wanted(man):
+    for fn, rel in wanted(man, lane=lane):
         srcp = idx.get(fn)
         if not srcp:
             missing.append(fn)
@@ -86,11 +88,24 @@ def stage(site, srcs, copy=shutil.copyfile):
 def main(argv):
     if "--selftest" in argv:
         return selftest()
-    if len(argv) < 2:
+    lane_name = "threads"
+    args = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--lane":
+            i += 1
+            if i < len(argv):
+                lane_name = argv[i]
+        elif argv[i].startswith("--lane="):
+            lane_name = argv[i].split("=", 1)[1]
+        else:
+            args.append(argv[i])
+        i += 1
+    if len(args) < 2:
         print(__doc__.strip().split("用法：")[-1].strip(), file=sys.stderr)
         return 2
-    site, srcs = argv[0], argv[1:]
-    n, missing, dup = stage(site, srcs)
+    site, srcs = args[0], args[1:]
+    n, missing, dup = stage(site, srcs, lane=lane_name)
     for f, a, b in dup:
         print("   ⚠️ 源里有两个同名 .oct：%s（%s / %s）" % (f, a, b))
     print("   落件 %d 个；缺 %s" % (n, missing or "无"))
@@ -144,6 +159,10 @@ def selftest():
         open(os.path.join(d2, "gzip.oct"), "wb").write(b"\0asm")
         cases.append(("★ 同名 .oct 出现两次 ⇒ 必须报出来",
                       lambda: stage(d, srcs + [d2])[2] != []))
+        n_w64, _, _ = stage(d, srcs, lane="w64")
+        cases.append(("★ --lane w64 落件进 oct-w64/ 与 octdir-w64/",
+                      lambda: n_w64 == 3 and os.path.exists(os.path.join(d, "assets", "oct-w64", "gzip.oct"))
+                      and os.path.exists(os.path.join(d, "assets", "octdir-w64", "control", "__control_slicot_functions__.oct"))))
         bad = 0
         for name, fn in cases:
             try:

@@ -65,11 +65,12 @@ out_default() {
     m1)      echo /src/websrc/m1 ;;
     threads) echo /src/websrc/m2fc-threads-out ;;    # B6：线程档（PLAN-threads §5 步骤④）
     w64)     echo /src/websrc/w64-out ;;              # wasm64 车道（PLAN-wasm64）
+    w64-base) echo /src/websrc/w64-base-out ;;         # wasm64 基础档（单线程）
     *)       echo "" ;;
   esac
 }
 
-modes_list() { echo "product scalar m1 threads w64"; }
+modes_list() { echo "product scalar m1 threads w64 w64-base"; }
 
 # 基线：结构优先 —— 下一级模式自己的产物在就用它，否则退回表里记录的现存路径。
 pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
@@ -81,7 +82,7 @@ pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
 # ── 模式表：**唯一**的真值来源。22 个变量全在这里推出来，调用方一个都不许传 ──────────
 mode_table() {      # 输出 KEY=VALUE 行（供 export）
   local m="$1"
-  case "$m" in product|scalar|m1|threads|w64) ;; *)
+  case "$m" in product|scalar|m1|threads|w64|w64-base) ;; *)
     echo "FATAL: 未知模式 '$m'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 
   # 三模式共有：都是"完整产品形态"的能力面（区别只在 DCE / SIMD 两条轴，
@@ -183,7 +184,7 @@ EOF
       # A1 那份逐字节复现的 product 产物（sha 与 8761 现役件相同）。
       echo "BASELINE_WASM=$(pick_baseline product /src/websrc/a1-verify-product/octave.wasm)"
       ;;
-    w64)
+    w64|w64-base)
       # ★ wasm64 车道（2026-09-28，branch `wasm64`）：= threads 的形态 **+ memory64**。
       #   目标形态见 `build/113/PLAN-wasm64.md` §0（memory64 主路径 + 单线程回退）。
       #   两个**新 prefix**（绝不覆盖现役）：farm `/usr/local-w64` + `/src/deps-w64`，
@@ -204,18 +205,22 @@ DEPS_ROOT=/src/deps-w64
 GL4ES_A=/src/libwork/gl4es-src-w64/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl-w64/lib/libGLU.a
 EOF
-      echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      if [ "$m" = w64 ]; then
+        echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+      else
+        echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib"
+      fi
       echo "MEMORY64=1"
       echo "BASELINE_WASM=$(pick_baseline threads /src/websrc/m2fc-threads-out/octave.wasm)"
       ;;
   esac
 
-  # ★ `MEMORY64` 的默认值放在**模式分支之后**给，且 w64 自己给过 1 就不再给 ——
+  # ★ `MEMORY64` 的默认值放在**模式分支之后**给，且 w64/w64-base 自己给过 1 就不再给 ——
   #   这样表里**同一个变量只会出现一行**。为什么强调：第一版把它写进共有块、又在 w64 分支里
   #   写了 1 ⇒ 表里两行 `MEMORY64`（0 与 1），靠"后导出者覆盖前者"才生效。
   #   那正是本仓记过的"同一旗标两处"的形状（消费者若 `grep -m1` 就会拿到 0）；
   #   而且 `exports` 的条数也会比别的模式多一条（自证/对比会莫名其妙地不一致）。
-  case "$m" in w64) ;; *) echo "MEMORY64=0" ;; esac
+  case "$m" in w64|w64-base) ;; *) echo "MEMORY64=0" ;; esac
 }
 
 # ── 声明（declared）：模式**承诺**产物里该有什么。由 check-build-manifest.py 逐条核对 ──
@@ -254,6 +259,15 @@ EOF
       cat <<'EOF'
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
  "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true,
+ "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
+           "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
+EOF
+      ;;
+    w64-base)
+      # ★ wasm64 基础档：单线程 + wasm64=true
+      cat <<'EOF'
+{"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false, "wasm64": true,
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -356,6 +370,8 @@ cmd_list() {
   echo "scalar   $(out_default scalar)    同上但**无 SIMD**（product 的 A/B 对照，也是 product 的保活基线）"
   echo "m1       $(out_default m1)        M1（无 DCE），导出面最全（保活闸门差分基线；scalar 的基线）"
   echo "threads  $(out_default threads)  B6 线程档：product + -pthread（内存 shared ⇒ 宿主必须发 COOP/COEP）"
+  echo "w64      $(out_default w64)      wasm64 线程档：w64 + -pthread（MEMORY64=1）"
+  echo "w64-base $(out_default w64-base) wasm64 基础档：单线程 + MEMORY64=1"
 }
 
 # ★ D1 的**反向断言**（静态、不需要容器）：link-web.sh 读的每个环境变量都必须由模式表推出。
@@ -382,13 +398,13 @@ cmd_selfcheck() {
     grep -qF -- "\${$v:-" "$LINK_WEB" || grep -qF -- "\${$v:+" "$LINK_WEB" || {
       echo "✗ 模式表声明了 \$$v，但 link-web.sh 根本不读它（表在骗人）" >&2; bad=1; }
   done < <(mode_table product | cut -d= -f1)
-  # 三个模式的变量集合必须完全一致（否则"换模式"会悄悄多/少一个变量）
-  if [ "$(mode_table product | cut -d= -f1 | sort | tr '\n' ' ')" \
-     != "$(mode_table scalar | cut -d= -f1 | sort | tr '\n' ' ')" ] \
-  || [ "$(mode_table product | cut -d= -f1 | sort | tr '\n' ' ')" \
-     != "$(mode_table m1 | cut -d= -f1 | sort | tr '\n' ' ')" ]; then
-    echo "✗ 三个模式推出的变量集合不一致" >&2; bad=1
-  fi
+  # 各模式的变量集合必须完全一致（否则"换模式"会悄悄多/少一个变量）
+  for check_m in scalar m1 threads w64 w64-base; do
+    if [ "$(mode_table product | cut -d= -f1 | sort | tr '\n' ' ')" \
+       != "$(mode_table "$check_m" | cut -d= -f1 | sort | tr '\n' ' ')" ]; then
+      echo "✗ 模式 product 与 $check_m 推出的变量集合不一致" >&2; bad=1
+    fi
+  done
   local n
   n="$(mode_table product | grep -c '=')"
   if [ "$bad" = "0" ]; then
@@ -432,6 +448,15 @@ cmd_link() {
       echo "  车道影子：$shim_w64（注入 -pthread -sMEMORY64=1 —— w64 前置）"
     else
       echo "FATAL: w64 模式需要**车道影子**（$shim_w64 不存在）" >&2
+      exit 2
+    fi
+  elif [ "$m" = w64-base ]; then
+    local shim_w64_single="${LANE_SHIM_W64_SINGLE:-/src/libwork/lane-shim-w64-single}"
+    if [ -d "$shim_w64_single" ]; then
+      export PATH="$shim_w64_single:$PATH"
+      echo "  车道影子：$shim_w64_single（注入 -sMEMORY64=1 —— w64-base 前置）"
+    else
+      echo "FATAL: w64-base 模式需要**车道影子**（$shim_w64_single 不存在）" >&2
       exit 2
     fi
   fi
@@ -606,6 +631,14 @@ cmd_selftest() {
   else
     echo "fail | w64 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
   fi
+  # ⑧ ★ w64-base 模式的隐形前置必须在入口里被点名（LANE_SHIM_W64_SINGLE）
+  n=$((n + 1))
+  msg="$(LANE_SHIM_W64_SINGLE=/nonexistent-w64-single-shim bash "$0" link w64-base --out /tmp/_zr_shim_probe 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q '车道影子'; then
+    echo "PASS | ★ w64-base 缺车道影子 ⇒ 入口**点名** FATAL"
+  else
+    echo "fail | w64-base 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
+  fi
   rm -rf "$tmp"
   echo ""
   echo "=== relink 自证：$((n - bad)) PASS / $bad fail ==="
@@ -622,7 +655,7 @@ case "$SUB" in
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }
-case "$MODE" in product|scalar|m1|threads|w64) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
+case "$MODE" in product|scalar|m1|threads|w64|w64-base) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || OUT="$(out_default "$MODE")"
 
 case "$SUB" in

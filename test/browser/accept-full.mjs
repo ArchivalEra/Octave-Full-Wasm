@@ -116,8 +116,10 @@ const n = await page.evaluate(async () => {
   //   站点根的 `dldprobe.oct` 是基础档老件 ⇒ 按档取（同 accept-113-oct 的修法）。
   const lane = (window.__octaveCaps && window.__octaveCaps.lane
                 && window.__octaveCaps.lane.chosen) || 'base';
-  const cands = (lane === 'threads') ? ['threads/dldprobe.oct', 'dldprobe.oct']
-                                      : ['dldprobe.oct', 'oct/dldprobe.oct'];
+  const cands = (lane === 'w64' || lane === 'w64-threads') ? ['w64/dldprobe.oct', 'threads/dldprobe.oct', 'dldprobe.oct']
+              : (lane === 'w64-base') ? ['w64-base/dldprobe.oct', 'w64/dldprobe.oct', 'dldprobe.oct']
+              : (lane === 'threads') ? ['threads/dldprobe.oct', 'dldprobe.oct']
+              : ['dldprobe.oct', 'oct/dldprobe.oct'];
   let resp = null;
   for (const u of cands) {
     resp = await fetch(u);

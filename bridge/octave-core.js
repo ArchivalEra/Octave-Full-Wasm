@@ -81,7 +81,8 @@
         sharedArrayBuffer: (typeof global.SharedArrayBuffer === 'function'),
       },
       lane: { chosen: lane.lane, dir: lane.dir || '', js: lane.js,
-              threads: lane.lane === 'threads' },
+              threads: (lane.lane === 'threads' || lane.lane === 'w64' || lane.lane === 'w64-threads'),
+              wasm64: (lane.lane === 'w64' || lane.lane === 'w64-threads' || lane.lane === 'w64-base') },
       sharedMemory: null,      // 实例化后填（见 instantiateWasm 的 .then）
       artifact: null,     // 由 octave.build.json 填充（读不到就是 null，绝不因此报错）
     };
@@ -114,6 +115,7 @@
             v128: (me.simd || {}).v128,
             jspiEntry: !!me.jspi_entry,
             threads: !!((me.threads || {}).shared_memory),   // 产物侧实测（内存 shared）
+            wasm64: !!me.wasm64,
             gl4es: !!((me.gl4es || {}).symbol_hits > 0),
             idbfs: !!me.idbfs,
             fontconfig: !!me.fontconfig,

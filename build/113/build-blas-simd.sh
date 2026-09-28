@@ -15,7 +15,7 @@
 # 产物：<prefix>/lib/{librefblas.a,liblapack.a}
 set -euo pipefail
 
-PREFIX="${PREFIX:-/src/deps/lapack-simd}"
+PREFIX="${1:-${PREFIX:-/src/deps/lapack-simd}}"
 SRC="${SRC:-/src/third_party/lapack-3.4.2}"
 [ -d "$SRC" ] || SRC=/src/work/lapack-3.4.2
 WORK="${WORK:-/src/work}"
