@@ -40,11 +40,18 @@ for spec in "1b:-pthread -sSHARED_MEMORY=1:a.c:p.js" "1c:-sSIDE_MODULE=1:s.c:s.w
   ck "链接实验 $tag" "$?"
 done
 
-say "== 2) 运行时对照（宿主 node；容器里的 node 是 22，装不进 memory64）"
+say "== 2) 运行时**冒烟**（宿主 node）—— ⚠️ 这不是判据：oracle 是 chromium"
+# 为什么仍值得跑这一节：它是秒级的廉价冒烟，能立刻回答"产物是不是根本装不进去"。
+# 为什么它不是判据：目标环境是浏览器；而 node 只是手上顺手的运行器。
+#   · 本机系统 node = /usr/bin/node（v26 系）→ 跑得动 memory64
+#   · 容器里唯一的 node 是 **emsdk 自带的** /emsdk/node/22.16.0_64bit/bin/node（v22）
+#     它装不进 memory64 模块（invalid table elements limits flags）——
+#     这**不影响任何验收**，只是意味着"想冒烟得用宿主那个 node"。
 NODEV=$(node --version 2>/dev/null || echo none)
-echo "  宿主 node：$NODEV"
+NODEPATH=$(command -v node 2>/dev/null || echo "找不到 node")
+echo "  宿主 node：$NODEV（$NODEPATH）"
 case "$NODEV" in
-  v1[0-9]*|v2[0-2]*|none) echo "  ⚠️ 宿主 node 是 $NODEV（预期 ≥ v26）⇒ 下面的运行时判据不成立，只作记录";;
+  v1[0-9]*|v2[0-2]*|none) echo "  ⚠️ 宿主 node 是 $NODEV（memory64 冒烟需要 ≥ v23 一类的引擎）⇒ 本节结果只作记录，不构成结论";;
 esac
 
 # dlopen 的 main 与 side：用相对路径（emscripten 的 FS 相对进程 CWD 解析绝对路径会踩坑 —— 实测）
@@ -79,10 +86,11 @@ rm -rf "$H"
 
 say ""
 if [ "$bad" = "0" ]; then
-  echo "=== 基线 OK（$((ok+bad))/$((ok+bad))）===  ⇒ 起点正常，按 PLAN-wasm64.md §2 开工（Q1 浏览器）"
-  echo "    注：这只是「最小情形」，**不构成** .oct 在 memory64 下可用的证据（那是 Q2 的事）。"
+  echo "=== 基线 OK（$((ok+bad))/$((ok+bad))）===  ⇒ 起点正常，按 PLAN-wasm64.md §3 开工（Q1 浏览器）"
+  echo "    注 1：这只是「最小情形」，**不构成** .oct 在 memory64 下可用的证据（那是 Q2 的事）。"
+  echo "    注 2：目标形态是 memory64 **+ 多线程**、并保留**单线程兼容回退** ⇒ Q2/Q3 要**两种配置各跑一遍**。"
   exit 0
 fi
 echo "=== 基线有问题：$ok 过 / $bad 败 ==="
-echo "    环境与需求书 §5 记录的不一致 ⇒ 按 §0 写否证并停，别在坏基线上做 Q2/Q3。"
+echo "    环境与需求书 §1 记录的不一致 ⇒ 按 §0 写否证并停，别在坏基线上做 Q2/Q3。"
 exit 1
