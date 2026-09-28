@@ -1,0 +1,33 @@
+# 18: wasm64 最终版集成 —— 两轴选档 + 全量回归 + 资产装配
+
+**What to build:** 工单 14 的可行性门已过（Q1/Q2/Q3 全绿，见其 Answer），但"最终版本"还没交付：
+把 memory64 产物**真正装进站点**，选档机器扩到**两条轴**，并跑一遍**全量数值回归**。
+
+**Blocked by:** 14（可行性判决已出，本单是它的后续）
+
+**Status:** ready-for-agent
+
+**Settling:** 不存在 —— 本工单第一交付物就是造它：`test/browser/probe-lane.mjs` 的两轴版
+（COI × memory64 ⇒ 四格各一格；rc=0 ⇒ 四格选档全对；rc=7 ⇒ 任一格选错）
+
+**Type:** task
+
+## 要做的事（按序）
+
+1. **选档机器两条轴**：`bridge/lane.js` 现在只判 COI。加第二条（memory64 支持——可用
+   `WebAssembly.Memory({initial:1n,address:"i64"})` 的可用性做**同步**探针，或按引擎版本）。
+   照现有做法：**同步判据 + 选错响亮失败 + `?lane=` 覆盖仍可用**。
+2. **产物装配**：w64 的两份（线程 / 单线程）进站点，`make-lane-manifest.py` 的前缀机制要认
+   `octave-install-w64`（现在只认 base 与 -threads 两个前缀）。
+3. **全量回归**：`sh build/sweep.sh http://127.0.0.1:<w64站点>/` —— 43 套全绿才算过。
+   ⚠️ `accept-*` 里凡是断言"导出数 = 725"或"v128 = N"的，都要按 w64 实测值**翻面**
+   （w64 导出 734、i64 密度 4,189,800 —— 见工单 17 的 Answer）。
+4. **wasm32 双档回退不许退化**：改完 `lane.js` 之后，现役 8761 的双档探针
+   （`probe-lane`）必须**仍然全绿**（它现在 17 PASS）。
+
+## 已知坑
+
+- `build-libs.sh` 的 glpk 在 memory64 下**静默**失败（根因未查）⇒ `/src/deps-w64` 目前混编
+  （判别实验把 wasm32 glpk 建了进去）。**先清掉 glpk 重来**，别在混编 farm 上继续。
+- 身份证现在**会**记 `measured.wasm64`（工单 17 补的）；`accept-*` 若有引用旧键的地方要跟着翻。
+- **不动 8761/8768**（先在独立端口验），promote 是单独一批。

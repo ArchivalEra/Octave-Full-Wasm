@@ -469,6 +469,7 @@ if [ "${P5_TOOLKIT:-0}" = "1" ]; then
        ${P5_TK_INCS[@]+"${P5_TK_INCS[@]}"} \
        -I/src/vendor/stb \
        -DHAVE_CONFIG_H ${P5_DEF} ${P5_GLPROBE:+ -DP5TK_GLPROBE} ${P5_TRACE:+ -DP5TK_TRACE} -std=c++17 \
+       ${MEM64[@]+"${MEM64[@]}"} \
        "${EXC_FLAGS[@]}" -c "$P5_SRC" -o "$P5_TK_OBJ"
   echo "   $(basename "$P5_TK_OBJ") = $(stat -c%s "$P5_TK_OBJ") 字节"
   P5_OBJS=( "$P5_TK_OBJ" )

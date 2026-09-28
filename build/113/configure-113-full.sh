@@ -273,7 +273,7 @@ fi
 
 echo "=== configure（全开）"
 emconfigure ./configure \
-  --host=wasm32-unknown-emscripten \
+  --host="${TARGET_HOST:-wasm32-unknown-emscripten}" \
   --prefix="$PREFIX" \
   --enable-fortran-calling-convention=f2c \
   --with-pcre2=-lpcre2-8 \

@@ -64,6 +64,7 @@ OCT_DEFS="$DEFS" \
 OCT_INCS="-I$SUNDIALS_PREFIX/include" \
 OCT_LIBS="-L$SUNDIALS_PREFIX/lib -lsundials_ida" \
 OUT="$OUT" \
+INST="${INST:-${PREFIX:-/src/work/octave-install}}" \
   bash "$HERE/build-oct.sh" __ode15__
 
 echo

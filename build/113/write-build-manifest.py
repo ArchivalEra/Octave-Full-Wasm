@@ -154,6 +154,56 @@ def mem_shared_flags(path):
     return out
 
 
+def mem_wasm64_flags(path):
+    """wasm 里每个内存（定义的 + 导入的）的 wasm64 标志位（limits flags 的 bit2 / 0x04）。
+    64 位 WebAssembly 下内存索引是 i64，limits flags 包含 0x04。
+    """
+    b = read_bytes(path)
+    if b[:4] != b"\0asm":
+        return None
+    i, out = 8, []
+    while i < len(b):
+        sid = b[i]
+        i += 1
+        size, i = _uleb(b, i)
+        end = i + size
+        if sid == 5:                      # memory section
+            n, j = _uleb(b, i)
+            for _ in range(n):
+                flags, j = _uleb(b, j)
+                out.append(bool(flags & 0x04))
+                _mn, j = _uleb(b, j)
+                if flags & 0x01:
+                    _mx, j = _uleb(b, j)
+        elif sid == 2:                    # import section
+            n, j = _uleb(b, i)
+            for _ in range(n):
+                l, j = _uleb(b, j)
+                j += l
+                l, j = _uleb(b, j)
+                j += l
+                kind = b[j]
+                j += 1
+                if kind == 0x02:
+                    flags, j = _uleb(b, j)
+                    out.append(bool(flags & 0x04))
+                    _mn, j = _uleb(b, j)
+                    if flags & 0x01:
+                        _mx, j = _uleb(b, j)
+                elif kind == 0x00:
+                    _t, j = _uleb(b, j)
+                elif kind == 0x01:
+                    _e, j = _uleb(b, j)
+                    fl, j = _uleb(b, j)
+                    _mn, j = _uleb(b, j)
+                    if fl & 0x01:
+                        _mx, j = _uleb(b, j)
+                elif kind == 0x03:
+                    j += 2
+        i = end
+    return out
+
+
 def count_wasm_exports(path):
     """量 wasm **导出段**的条目数 —— 这是 `MAIN_MODULE=1/2` 唯一可测的判据。
     为什么不能读环境变量 `MAIN_MODULE_LEVEL`：那只是"命令行上传过什么"，
@@ -257,6 +307,7 @@ def main():
                     "worker_glue": count_bytes(js, b"new Worker"),
                     "shared_memory": any(mem_shared_flags(os.path.join(OUT, "octave.wasm")) or [])},
         "fonts": font_names,
+        "wasm64": any(mem_wasm64_flags(os.path.join(OUT, "octave.wasm")) or []),
         "preload_atftp_misplaced": b'filename:"/ftp@' in js,
         "files": files,
     }

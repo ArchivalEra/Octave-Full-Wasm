@@ -62,11 +62,11 @@ OUT="$OUT_CORE" PREFIX="$OCT_INSTALL" CC_SRCS="$CC_SRCS" bash /src/bin/build-oct
 
 echo "== ③ __ode15__（要车道版 sundials；build-ode15.sh 自己建 sundials 到 SUNDIALS_PREFIX）"
 # ⚠️ build-ode15.sh 的用法是**无参数**：输出目录走 `OUT` 环境变量（实测踩过：传位置参数被忽略）
-OUT="$OUT_CORE" SUNDIALS_PREFIX="$SUNDIALS_PREFIX" bash /src/bin/build-ode15.sh > /tmp/oct-lane-ode15.log 2>&1 \
+OUT="$OUT_CORE" PREFIX="$OCT_INSTALL" INST="$OCT_INSTALL" SUNDIALS_PREFIX="$SUNDIALS_PREFIX" bash /src/bin/build-ode15.sh > /tmp/oct-lane-ode15.log 2>&1 \
   || { echo "FATAL: __ode15__ 失败（见 /tmp/oct-lane-ode15.log）" >&2; tail -20 /tmp/oct-lane-ode15.log >&2; exit 1; }
 
 echo "== ④ Forge 包（含 control 的 slicot 调度模块）→ $OUT_PKG"
-OUTROOT="$OUT_PKG" PREFIX="$OCT_INSTALL" bash /src/bin/build-pkg-oct.sh all > /tmp/oct-lane-pkg.log 2>&1 \
+OUTROOT="$OUT_PKG" PREFIX="$OCT_INSTALL" DEPS="${DEPS:-/usr/local}" bash /src/bin/build-pkg-oct.sh all > /tmp/oct-lane-pkg.log 2>&1 \
   || { echo "FATAL: 包车道失败（见 /tmp/oct-lane-pkg.log）" >&2; tail -20 /tmp/oct-lane-pkg.log >&2; exit 1; }
 
 echo "== ④b slicot 调度模块（唯一需要**静态链库**的那个 .oct）"
@@ -101,7 +101,7 @@ if [ -d "$SLICOT_C_SRC" ] && [ ! -s "$SLICOT_LIB" ]; then
   mkdir -p "$SLICOT_OBJ"
   ls "$SLICOT_C_SRC"/*.c | xargs -P "$(nproc)" -I{} sh -c '
     f="$1"; o="'"$SLICOT_OBJ"'/$(basename "${f%.c}").o"
-    [ -s "$o" ] || emcc -O1 -fPIC -fwasm-exceptions -I/usr/local/include -w -c "$f" -o "$o"
+    [ -s "$o" ] || emcc -O1 -fPIC -fwasm-exceptions -I'"${DEPS:-/usr/local}"'/include -w -c "$f" -o "$o"
   ' _ {}
   emar rcs "$SLICOT_LIB" "$SLICOT_OBJ"/*.o
   echo "   ✅ 车道 slicotlibrary.a（$(stat -c%s "$SLICOT_LIB") 字节）"

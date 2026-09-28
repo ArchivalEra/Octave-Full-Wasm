@@ -37,7 +37,7 @@ LANE_FLAGS="${LANE_FLAGS:-}"
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
 TARBALL="sundials-6.1.1.tar.gz"
 SRCDIR="$WORK/sundials-6.1.1"
-BUILD="$WORK/sundials-build"
+BUILD="${BUILD:-$WORK/sundials-build}"
 
 say () { echo; echo "=== $*"; }
 

@@ -49,7 +49,9 @@ CFLAGS_BASE="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS"
 # 不给 `--host` 也**能**编对：`emconfigure` 已经把 CC/CXX 换成 emcc/em++，交叉这件事由它负责
 # （本仓 zlib/fftw 的配方就是这么走的）。所以这里按 config.sub 的能力自动决定。
 host_opt () {
-  if [ -f config.sub ] && grep -q emscripten config.sub; then
+  if [ -n "${TARGET_HOST:-}" ]; then
+    echo "--host=$TARGET_HOST"
+  elif [ -f config.sub ] && grep -q emscripten config.sub; then
     echo "--host=wasm32-unknown-emscripten"
   else
     echo "（config.sub 不认识 emscripten ⇒ 不带 --host，靠 emconfigure 换 CC）" >&2
@@ -119,7 +121,10 @@ FT_PREFIX="${FT_PREFIX:-/src/deps/freetype}"
 [ -s "$FT_PREFIX/lib/libfreetype.a" ] || {
   echo "FATAL: 缺 $FT_PREFIX/lib/libfreetype.a（先跑 build-freetype.sh）" >&2; exit 2; }
 FT_CFLAGS="-I$FT_PREFIX/include -I$FT_PREFIX/include/freetype2"
-FT_LIBS="-L$FT_PREFIX/lib -lfreetype -lz"
+ZLIB_PREFIX="${ZLIB_PREFIX:-${PREFIX_FC%/fontconfig}/zlibbz2}"
+ZLIB_FLAG=""
+[ -d "$ZLIB_PREFIX/lib" ] && ZLIB_FLAG="-L$ZLIB_PREFIX/lib"
+FT_LIBS="-L$FT_PREFIX/lib -lfreetype $ZLIB_FLAG -lz"
 
 HOST_OPT_FC=$(host_opt)
 emconfigure ./configure $HOST_OPT_FC --prefix="$PREFIX_FC" \
@@ -158,7 +163,7 @@ Name: fontconfig
 Description: Font configuration and customization library (wasm, built for Octave-Full-Wasm with -fPIC)
 Version: 2.14.2
 Requires:
-Libs: -L\${libdir} -L$FT_PREFIX/lib -L$PREFIX_EXPAT/lib -lfontconfig -lfreetype -lexpat -lz
+Libs: -L\${libdir} -L$FT_PREFIX/lib -L$PREFIX_EXPAT/lib $ZLIB_FLAG -lfontconfig -lfreetype -lexpat -lz
 Cflags: -I\${includedir} -I$FT_PREFIX/include -I$FT_PREFIX/include/freetype2
 EOF
 

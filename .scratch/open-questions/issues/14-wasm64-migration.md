@@ -6,7 +6,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** 不存在 —— 本工单第一交付物就是造它：`build/113/NOTES-wasm64.md`
 （rc=0 ⇒ Q1/Q2/Q3 都有实测结论；rc=7 ⇒ 至少 Q1 给出"引擎不支持"，写成否证）
@@ -38,3 +38,22 @@
 - [ ] 结论写进 `build/113/NOTES-wasm64.md`（实测/推断分开，每条带复跑命令）
 - [ ] `Status:` 置 `resolved`；不确定的另开新工单（挂 `Settling:` 行，
       格式见 `docs/agents/issue-tracker.md` 的 `Settling:` 一节）
+
+## Answer（2026-09-28，主会话独立复核）
+
+**判决：过。** Q1/Q2/Q3 三问全部有实测背书（主会话用自己的 chromium 复测了 Q1/Q3，用自己的
+`llvm-readobj` 复测了 Q2 的 44 个 `.oct`）：
+
+- **Q1**：本机 Chromium 153 默认支持 memory64（无须 experimental flags）；COI 下
+  `SharedArrayBuffer` 正常。
+- **Q2**：44/44 `.oct` = `Arch: wasm64`；最小 memory64 主模块 + side module 在浏览器里
+  `dlopen OK, f()=42`。
+- **Q3**：单线程 **5,242,880,000**（4.88 GiB）与 **8,589,934,592**（8 GiB）字节分配成功；
+  **多线程共享**（COI 页）**5,242,880,000 字节且 `buffer instanceof SharedArrayBuffer === true`**。
+  主会话用自己的 playwright 跑了单线程 5G/8G 与共享 5G，数字与交付一致。
+- API 关键发现（写进 NOTES）：`address: "i64"`（旧写法 `index:` 会被 V8 忽略并退回 32 位检查）、
+  `initial/maximum` 必须是 **BigInt**。
+
+**但"最终版本"还没交付** —— 这份判决只覆盖了可行性门 + 全量重编。还差：
+**两轴选档机器**（§2 四格，`lane.js` 还只判 COI 一条轴）、w64 产物的**完整数值回归**
+（8768 上一轮全量）、以及 `.oct` 车道进站点的资产装配。⇒ **工单 18**。

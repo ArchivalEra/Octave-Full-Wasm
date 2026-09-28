@@ -5,7 +5,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** 不存在 —— 本工单第一交付物就是造它：`build/113/probe-wasm64-link.sh threads`
 （现在**可复现地失败**在"wasm32 object file can't be linked in wasm64 mode"；
@@ -47,3 +47,17 @@ wasm-ld: error: /src/work/octave-11.3.0/libinterp/.libs/liboctinterp.a(liboctint
 - 长任务用后台 + 完成通知（**禁止 `sleep`**）；**跑验收时别并行干重活**。
 - 容器里的构建脚本是另一份拷贝 ⇒ 改完必须 `docker cp` 并比两侧 sha。
 - 需求书 `build/113/PLAN-wasm64.md` §1 有"第一次真链"的完整实测与命令。
+
+## Answer（2026-09-28，由主会话独立复核）
+
+**重编成功，且主会话已逐项独立复核**：
+- `/src/websrc/w64-out/octave.wasm`（29,944,672 B）`verdict=ok`，身份证 **`declared.wasm64=true` /
+  `measured.wasm64=true`**（write-build-manifest 现在解析 WebAssembly limits flags bit 2）；
+- `llvm-readobj -h` ⇒ **`Arch: wasm64`**（对照：threads 产物 = wasm32）；
+- `llvm-objdump -d | grep -c i64` = **4,189,800**（与工单交付数字一致）；
+- **44/44 `.oct`** 全部 `Arch: wasm64`（`/src/libwork/octs-w64` 17 个 + `octs-w64-pkg` 27 个；
+  ⚠️ 必须用 `/emsdk/upstream/bin/llvm-readobj` —— 容器 PATH 里**没有**这个命令，第一次测出 0 个是工具路径错）。
+- 全部闸门绿：gates-selftest 26/26、check-build-manifest 16/16、relink 7/7、基线 8/8。
+
+**遗留（如实记）**：`build-libs.sh` 的 glpk 在 memory64 下静默失败的**根因未查**（判别已确认与 memory64 有关，
+但为什么没查）；判别实验把 wasm32 glpk 建进了 `/src/deps-w64/glpk/` ⇒ **该 farm 目录当前混编**，接手先清。

@@ -28,8 +28,10 @@
 set -euo pipefail
 
 OCT="${OCT:-/src/work/octave-11.3.0}"
-INST="${INST:-/src/work/octave-install}"
+INST="${INST:-${PREFIX:-/src/work/octave-install}}"
 OUT="${OUT:-/src/octs}"
+DEPS_ROOT="${DEPS_ROOT:-/src/deps}"
+DEPS="${DEPS:-/usr/local}"
 MV="11.3.0"
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
 mkdir -p "$OUT"
@@ -48,10 +50,10 @@ FLAGS=(
   -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave"
   # 各库的独立 prefix（② 建的）——dldfcn 的源要 include 它们的头
   # （实测：漏掉时 convhulln 报 'libqhull_r/libqhull_r.h' file not found）
-  -I/src/deps/qhull/include -I/src/deps/glpk/include -I/src/deps/sndfile/include
-  -I/src/deps/fftw/include -I/src/deps/suitesparse/include -I/src/deps/hdf5/include
-  -I/src/deps/zlibbz2/include -I/src/deps/arpack/include -I/src/deps/rapidjson/include
-  -I/usr/local/include
+  -I"$DEPS_ROOT"/qhull/include -I"$DEPS_ROOT"/glpk/include -I"$DEPS_ROOT"/sndfile/include
+  -I"$DEPS_ROOT"/fftw/include -I"$DEPS_ROOT"/suitesparse/include -I"$DEPS_ROOT"/hdf5/include
+  -I"$DEPS_ROOT"/zlibbz2/include -I"$DEPS_ROOT"/arpack/include -I"$DEPS_ROOT"/rapidjson/include
+  -I"$DEPS"/include
   -I/src/vendor/stb          # webimage.cc 用 stb_image / stb_image_write（header-only）
   -std=c++17 -O2 -fwasm-exceptions -fPIC
 )
@@ -67,6 +69,7 @@ EXTRA_LIBS=( ${OCT_LIBS:-} )
 # 这些模块导出的是 __web_*__，靠 manifest 的 aliases 建符号链接才挂得上名字。
 if [ "${1:-}" = "--cc" ]; then
   : "${CC_SRCS:?用法: CC_SRCS=\"名字:/路径.cc 名字:/路径.cc\" bash build-oct.sh --cc}"
+  cd "$OCT"
   n=0; bad=0
   for spec in $CC_SRCS; do
     name="${spec%%:*}"; src="${spec#*:}"

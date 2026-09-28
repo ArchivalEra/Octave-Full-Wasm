@@ -35,7 +35,7 @@ import time
 
 # 声明键 → 判定规则。**未列出的声明键一律判 mismatch**（fail-closed：
 # 拼错的键名不许被静默忽略，否则"声明了却没检查"会变成新的静默退化）。
-BOOL_KEYS = ("jspi_entry", "idbfs", "fontconfig")
+BOOL_KEYS = ("jspi_entry", "idbfs", "fontconfig", "wasm64")
 INT_KEYS = ("jspi_glue_suspending",)   # main_module 单独判定：从导出条目数推导（见下）
 
 
@@ -65,7 +65,7 @@ def lane_blas_problem(declared, man):
         if "openblas" not in rd.lower():
             return ("声明 e2_openblas=true，但链进去的 BLAS 在 `%s` ⇒ 不是 E2 那份 OpenBLAS" % rd)
         return None
-    if "-threads" not in rd:
+    if "-threads" not in rd and "-w64" not in rd:
         return ("声明 threads=true，但链进去的 BLAS 在 `%s`（**基础档**）"
                 "⇒ 产物里混着基础档对象，口径不一致" % rd)
     return None
@@ -80,7 +80,7 @@ def compare(declared, measured, man=None):
 
     for k in sorted(declared):
         if k in BOOL_KEYS:
-            want, got = bool(declared[k]), measured.get(k)
+            want, got = bool(declared[k]), bool(measured.get(k))
             if want != got:
                 add(k, want, got, "能力面不一致：声明 %s，产物里量到 %s" % (want, got))
         elif k in INT_KEYS:
@@ -262,7 +262,8 @@ def main(argv):
 _MEAS = {"exported_functions": 710, "jspi_entry": True, "jspi_glue_suspending": 0,
          "idbfs": True, "fontconfig": True, "gl4es": {"symbol_hits": 5},
          "simd": {"v128": 4752}, "fonts": ["a.otf"], "main_module": 2,
-         "threads": {"pthread_glue": 0, "worker_glue": 0, "shared_memory": False}}
+         "threads": {"pthread_glue": 0, "worker_glue": 0, "shared_memory": False},
+         "wasm64": False}
 _THREADS_MEAS = {**_MEAS, "threads": {"pthread_glue": 38, "worker_glue": 1, "shared_memory": True}}
 _DECL = {"simd": True, "jspi_entry": True, "jspi_glue_suspending": 0, "gl4es": True,
          "idbfs": True, "fontconfig": True, "fonts": ["a.otf"], "main_module": 2,
@@ -308,6 +309,12 @@ CASES = [
      lambda: _lane_blas_bad(False, "/src/deps/lapack-simd/lib") == 0),
     ("★ 量不到线程事实 ⇒ 必须报（不许当通过）",
      lambda: len(compare({**_DECL, "threads": True}, {**_MEAS, "threads": {}})) == 1),
+    ("★ 声明 wasm64=true 且产物是 wasm64 ⇒ 不报",
+     lambda: len(compare({**_DECL, "wasm64": True}, {**_MEAS, "wasm64": True})) == 0),
+    ("★ 声明 wasm64=true 但产物是 wasm32 ⇒ 必须报",
+     lambda: len(compare({**_DECL, "wasm64": True}, _MEAS)) == 1),
+    ("★ 声明 wasm64=false 但产物是 wasm64 ⇒ 必须报",
+     lambda: len(compare({**_DECL, "wasm64": False}, {**_MEAS, "wasm64": True})) == 1),
     ("**空声明** ⇒ 必须报（零值守卫）", lambda: True),      # 由 main 的守卫覆盖，这里只作占位
 ]
 

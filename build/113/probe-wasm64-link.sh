@@ -13,16 +13,28 @@
 #   · `-pthread` 的车道影子照 `relink.sh` 的做法挂上（否则 main.o 不带 atomics，第一面墙
 #     会变成"atomics"而不是"memory64"，那是假墙）。
 #
-# 用法（容器内）：bash /src/bin/probe-wasm64-link.sh [模式]
+# 用法：bash build/113/probe-wasm64-link.sh [模式]（宿主或容器内均可跑，默认模式 w64）
 # 判据：见结尾打印的判定 —— 它**不下结论说好坏**，只如实报第一面墙是什么。
 set -u
-MODE="${1:-threads}"
+
+# ── 宿主直跑：若不在容器内，自动委托给 o113 ──────────────────────────────────
+if [ ! -f /src/bin/relink.sh ]; then
+  C="${C:-o113}"
+  sudo docker start "$C" >/dev/null 2>&1 || true
+  exec sudo docker exec "$C" bash /src/bin/probe-wasm64-link.sh "$@"
+fi
+
+MODE="${1:-w64}"
 OUT="${OUT:-/src/websrc/w64-link-probe-out}"
-LANE_SHIM="${LANE_SHIM:-/src/libwork/lane-shim}"
+if [ "$MODE" = "w64" ]; then
+  LANE_SHIM="${LANE_SHIM:-/src/libwork/lane-shim-w64}"
+else
+  LANE_SHIM="${LANE_SHIM:-/src/libwork/lane-shim}"
+fi
 
 if [ -d "$LANE_SHIM" ]; then
   export PATH="$LANE_SHIM:$PATH"
-  echo "== 车道影子：$LANE_SHIM（照 relink.sh 的做法挂上，免得第一面墙变成 atomics 那个假墙）"
+  echo "== 车道影子：$LANE_SHIM（注入对应车道 flags，避免假墙）"
 fi
 
 echo "== 从模式表推出环境（模式 $MODE）—— 不手设任何变量"

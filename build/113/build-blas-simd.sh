@@ -51,7 +51,7 @@ build_dir () {
     | xargs -0 -P "$JOBS" -I{} sh -c '
         f="$1"; shift; o="${f%.f}.simd.o"
         if ! emf77 -O2 "$@" -c "$f" -o "$o" >/dev/null 2>&1; then echo "$f"; fi
-      ' _ {} "$SIMD_FLAG" > "$WORK/simd-failed-$(basename "$outlib").txt" || true
+      ' _ {} $SIMD_FLAG > "$WORK/simd-failed-$(basename "$outlib").txt" || true
   local failed; failed="$(wc -l < "$WORK/simd-failed-$(basename "$outlib").txt")"
   [ "$failed" -le "$maxfail" ] || {
     echo "FATAL: $srcdir 有 $failed 个文件被拒编（上限 $maxfail）" >&2
@@ -67,7 +67,7 @@ build_dir "$d/SRC"      "$PREFIX/lib/liblapack.a"  30
 # dlamch/slamch 是机器常数，LAPACK 的 SRC 不含它们（在 INSTALL/ 下）
 echo "=== dlamch/slamch"
 for f in dlamch slamch; do
-  emf77 -O2 "$SIMD_FLAG" -c "$d/INSTALL/$f.f" -o "$d/INSTALL/$f.simd.o"
+  emf77 -O2 $SIMD_FLAG -c "$d/INSTALL/$f.f" -o "$d/INSTALL/$f.simd.o"
 done
 emar rcs "$PREFIX/lib/liblapack.a" "$d/INSTALL/dlamch.simd.o" "$d/INSTALL/slamch.simd.o"
 

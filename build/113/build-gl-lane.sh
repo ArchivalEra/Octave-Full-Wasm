@@ -16,6 +16,7 @@
 #   bash /src/bin/build-gl-lane.sh
 set -euo pipefail
 
+LANE_FLAGS="${LANE_FLAGS:--pthread}"
 GL4ES_VENDOR="${GL4ES_VENDOR:-/src/vendor/gl4es-master}"
 LANE_SRC="${LANE_SRC:-/src/libwork/gl4es-src-threads}"
 BUILD="${BUILD:-/src/libwork/gl4es-build-threads}"
@@ -39,9 +40,9 @@ echo "   $LANE_SRC"
 
 echo "== ② gl4es（cmake，-DSTATICLIB=ON；输出写回源码树 lib/libGL.a）"
 rm -rf "$BUILD"; mkdir -p "$BUILD"; cd "$BUILD"
-# 显式给 -pthread（不依赖 PATH 解析：emcmake 可能把 CMAKE_C_COMPILER 记成绝对路径）
+# 显式给 LANE_FLAGS（不依赖 PATH 解析：emcmake 可能把 CMAKE_C_COMPILER 记成绝对路径）
 emcmake cmake "$LANE_SRC" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DNOX11=ON -DNOEGL=ON -DSTATICLIB=ON -DCMAKE_C_FLAGS="-pthread" > "$BUILD/cmake.log" 2>&1 \
+  -DNOX11=ON -DNOEGL=ON -DSTATICLIB=ON -DCMAKE_C_FLAGS="$LANE_FLAGS" > "$BUILD/cmake.log" 2>&1 \
   || { echo "FATAL: gl4es cmake 失败（见 $BUILD/cmake.log）" >&2; tail -20 "$BUILD/cmake.log" >&2; exit 1; }
 make -j"$JOBS" > "$BUILD/make.log" 2>&1 \
   || { echo "FATAL: gl4es make 失败（见 $BUILD/make.log）" >&2; tail -20 "$BUILD/make.log" >&2; exit 1; }

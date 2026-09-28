@@ -194,15 +194,15 @@ EOF
       cat <<'EOF'
 MAIN_MODULE_LEVEL=2
 WITH_JSPI=1
-KEEP_LIST=/src/libwork/keep.txt
+KEEP_LIST=/src/libwork/keep-w64.txt
 LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
-OCT_SCAN_DIRS=/src/octs-site
+OCT_SCAN_DIRS=/src/libwork/octs-w64 /src/libwork/octs-w64-pkg
 DEPS=/usr/local-w64
 DEPS_ROOT=/src/deps-w64
-GL4ES_A=/src/libwork/gl4es-src-threads/lib/libGL.a
-GLU_A=/src/libwork/glu-webgl-threads/lib/libGLU.a
+GL4ES_A=/src/libwork/gl4es-src-w64/lib/libGL.a
+GLU_A=/src/libwork/glu-webgl-w64/lib/libGLU.a
 EOF
       echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
       echo "MEMORY64=1"
@@ -237,17 +237,23 @@ EOF
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
       ;;
-    threads|w64)
+    threads)
       # `E2_OPENBLAS` 有值时多声明一条 `e2_openblas` ⇒ `check-build-manifest.py` 据此换判据
       # （BLAS 溯源从"必须含 -threads"改成"必须指向 E2 目录"）。
-      # ⚠️ `w64` 复用这份声明：**身份证现在还不会记"这是 64 位"** —— 缺一条
-      #    `measured.wasm64` + 对应的声明键与判据。这是本批的**已知缺口**（别把它当"已验"）：
-      #    在补上之前，一份 w64 产物和一份 wasm32 产物在身份证上**分不开**。
       _e2=""
       [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
       cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
  "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true${_e2},
+ "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
+           "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
+EOF
+      ;;
+    w64)
+      # ★ wasm64 车道：显式声明 wasm64=true，与 wasm32 各档明确区分
+      cat <<'EOF'
+{"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true,
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -419,6 +425,15 @@ cmd_link() {
       echo "       建它：export PATH=/src/bin:\$PATH && bash build/113/lane-shim.sh -pthread" >&2
       exit 2
     fi
+  elif [ "$m" = w64 ]; then
+    local shim_w64="${LANE_SHIM_W64:-/src/libwork/lane-shim-w64}"
+    if [ -d "$shim_w64" ]; then
+      export PATH="$shim_w64:$PATH"
+      echo "  车道影子：$shim_w64（注入 -pthread -sMEMORY64=1 —— w64 前置）"
+    else
+      echo "FATAL: w64 模式需要**车道影子**（$shim_w64 不存在）" >&2
+      exit 2
+    fi
   fi
 
   [ -f "$LINK_WEB" ] || {
@@ -582,6 +597,14 @@ cmd_selftest() {
     echo "PASS | ★ exports 机器可读（无占位符；空变量是真空）"
   else
     echo "fail | exports 被渲染过了（占位符 $ph 处；空 EXPORT_IF_DEFINED 命中 $em 处）"; bad=1
+  fi
+  # ⑦ ★ w64 模式的隐形前置必须在入口里被点名（LANE_SHIM_W64）
+  n=$((n + 1))
+  msg="$(LANE_SHIM_W64=/nonexistent-w64-shim bash "$0" link w64 --out /tmp/_zr_shim_probe 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q '车道影子'; then
+    echo "PASS | ★ w64 缺车道影子 ⇒ 入口**点名** FATAL"
+  else
+    echo "fail | w64 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
   fi
   rm -rf "$tmp"
   echo ""

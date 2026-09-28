@@ -105,10 +105,13 @@ do_glpk () {
   # -fwasm-exceptions 必须与整棵树一致：glpk 用了 setjmp/longjmp，不统一就会带进
   # legacy 的 invoke_*/emscripten_longjmp（实测扫出 117 处），web 终链报
   #   invoke_ functions exported but exceptions and longjmp are both disabled
-  emconfigure ./configure --prefix="$P" --disable-shared --enable-static \
-      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" > "$WORK/glpk-conf.log" 2>&1
-  emmake make -j"$JOBS" > "$WORK/glpk-make.log" 2>&1
-  emmake make install > "$WORK/glpk-inst.log" 2>&1
+  emconfigure ./configure --host=none --prefix="$P" --disable-shared --enable-static \
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" > "$WORK/glpk-conf.log" 2>&1 \
+      || { echo "FATAL: glpk configure 失败，见 $WORK/glpk-conf.log" >&2; tail -20 "$WORK/glpk-conf.log" >&2; exit 1; }
+  emmake make -j"$JOBS" > "$WORK/glpk-make.log" 2>&1 \
+      || { echo "FATAL: glpk make 失败，见 $WORK/glpk-make.log" >&2; tail -20 "$WORK/glpk-make.log" >&2; exit 1; }
+  emmake make install > "$WORK/glpk-inst.log" 2>&1 \
+      || { echo "FATAL: glpk install 失败，见 $WORK/glpk-inst.log" >&2; tail -20 "$WORK/glpk-inst.log" >&2; exit 1; }
   local s; s="$(emnm "$P/lib/libglpk.a")"
   grep -q ' glp_simplex$' <<<"$s" || { echo "FATAL: libglpk.a 缺 glp_simplex" >&2; exit 1; }
   echo "  ✅ glpk → $P（glp_simplex 在）"
@@ -124,11 +127,14 @@ do_fftw () {
   cd "$WORK/fftw-3.3.10"
   for variant in "" "--enable-single"; do
     emmake make distclean >/dev/null 2>&1 || true
-    emconfigure ./configure --prefix="$P" --disable-fortran --disable-threads \
+    emconfigure ./configure --host=none --prefix="$P" --disable-fortran --disable-threads \
         --disable-openmp --disable-shared --enable-static $variant \
-        CC="$CCACHE_CC" CFLAGS="-O2 -fPIC $LANE_FLAGS" > "$WORK/fftw-conf.log" 2>&1
-    emmake make -j"$JOBS" > "$WORK/fftw-make.log" 2>&1
-    emmake make install > "$WORK/fftw-inst.log" 2>&1
+        CC="$CCACHE_CC" CFLAGS="-O2 -fPIC $LANE_FLAGS" > "$WORK/fftw-conf.log" 2>&1 \
+        || { echo "FATAL: fftw configure 失败，见 $WORK/fftw-conf.log" >&2; tail -20 "$WORK/fftw-conf.log" >&2; exit 1; }
+    emmake make -j"$JOBS" > "$WORK/fftw-make.log" 2>&1 \
+        || { echo "FATAL: fftw make 失败，见 $WORK/fftw-make.log" >&2; tail -20 "$WORK/fftw-make.log" >&2; exit 1; }
+    emmake make install > "$WORK/fftw-inst.log" 2>&1 \
+        || { echo "FATAL: fftw install 失败，见 $WORK/fftw-inst.log" >&2; tail -20 "$WORK/fftw-inst.log" >&2; exit 1; }
   done
   grep -q ' fftw_plan_dft_1d$'  <(emnm "$P/lib/libfftw3.a")  || { echo "FATAL: libfftw3.a 缺 fftw_plan_dft_1d" >&2; exit 1; }
   grep -q ' fftwf_plan_dft_1d$' <(emnm "$P/lib/libfftw3f.a") || { echo "FATAL: libfftw3f.a 缺 fftwf_plan_dft_1d" >&2; exit 1; }
@@ -212,12 +218,13 @@ do_hdf5 () {
   unpack "hdf5-1.14.2.tar.gz" hdf5-1.14.2
   local P="$DEPS/hdf5"
   cd "$WORK/hdf5-1.14.2"
-  emconfigure ./configure --host=wasm32-unknown-emscripten --prefix="$P" \
+  emconfigure ./configure --host=none --prefix="$P" \
       --disable-shared --enable-static --disable-tools --disable-tests \
       --disable-fortran --disable-cxx --disable-hl --disable-docs \
       --disable-parallel --disable-threadsafe --with-pic \
-      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions" \
-      > "$WORK/hdf5-conf.log" 2>&1
+      CC="$CCACHE_CC" CFLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" \
+      > "$WORK/hdf5-conf.log" 2>&1 \
+      || { echo "FATAL: hdf5 configure 失败，见 $WORK/hdf5-conf.log" >&2; tail -20 "$WORK/hdf5-conf.log" >&2; exit 1; }
   # ⚠️ 实测坑（交叉编译经典问题）：H5lib_settings.c / H5Tinit.c 是由**刚编出来的
   #   程序**（H5make_libsettings / H5detect）在**运行时**生成的；而 Emscripten/Node 下
   #   那个程序看不到宿主目录里的 libhdf5.settings → 报
@@ -232,8 +239,10 @@ do_hdf5 () {
   "$WORK/h5det"  H5Tinit.c
   touch -d "now + 2 hour" H5lib_settings.c H5Tinit.c libhdf5.settings
   cd "$WORK/hdf5-1.14.2"
-  HDF5_Make_Ignore=1 emmake make -j"$JOBS" > "$WORK/hdf5-make.log" 2>&1
-  HDF5_Make_Ignore=1 emmake make install > "$WORK/hdf5-inst.log" 2>&1
+  HDF5_Make_Ignore=1 emmake make -j"$JOBS" > "$WORK/hdf5-make.log" 2>&1 \
+      || { echo "FATAL: hdf5 make 失败，见 $WORK/hdf5-make.log" >&2; tail -20 "$WORK/hdf5-make.log" >&2; exit 1; }
+  HDF5_Make_Ignore=1 emmake make install > "$WORK/hdf5-inst.log" 2>&1 \
+      || { echo "FATAL: hdf5 install 失败，见 $WORK/hdf5-inst.log" >&2; tail -20 "$WORK/hdf5-inst.log" >&2; exit 1; }
   grep -q ' H5Fopen$' <(emnm "$P/lib/libhdf5.a") || { echo "FATAL: libhdf5.a 缺 H5Fopen" >&2; exit 1; }
   echo "  ✅ hdf5 → $P（H5Fopen 在）"
 }
@@ -256,16 +265,16 @@ do_arpack () {
   local o=() f
   # f2c 的 INCLUDE 相对 cwd 解析 → 必须在本目录里编（归一化器已把 debug.h 一起拷来）
   cd "$WORK/arpack-src"
-  for f in *.f; do emf77 -O2 -fPIC -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
+  for f in *.f; do emf77 -O2 -fPIC $LANE_FLAGS -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
   cd "$WORK/arpack-util"
   for f in *.f; do
     # 跳过 second.f：它用系统计时函数 etime，f2c 报
     #   "Declaration error for etime: unknown intrinsic function"
     # 我们用自己的 second_stub.f 代替（7.2 也是这么做的）
     [ "$f" = "second.f" ] && { echo "   （跳过 UTIL/second.f，用 second_stub.f 代替）"; continue; }
-    emf77 -O2 -fPIC -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o")
+    emf77 -O2 -fPIC $LANE_FLAGS -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o")
   done
-  emf77 -O2 -fPIC -c /src/bin/second_stub.f -o "$WORK/second_stub.o"; o+=("$WORK/second_stub.o")
+  emf77 -O2 -fPIC $LANE_FLAGS -c /src/bin/second_stub.f -o "$WORK/second_stub.o"; o+=("$WORK/second_stub.o")
   emar rcs "$P/lib/libarpack.a" "${o[@]}"
   for sym in dsaupd_ dseupd_ dnaupd_; do
     grep -q " $sym$" <(emnm "$P/lib/libarpack.a") || { echo "FATAL: libarpack.a 缺 $sym" >&2; exit 1; }
@@ -285,7 +294,7 @@ do_qrupdate () {
   local P="$DEPS/qrupdate"; mkdir -p "$P/lib"
   cd "$WORK/qrupdate-1.1.2/src"
   local o=() f
-  for f in *.f; do emf77 -O2 -fPIC -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
+  for f in *.f; do emf77 -O2 -fPIC $LANE_FLAGS -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
   emar rcs "$P/lib/libqrupdate.a" "${o[@]}"
   grep -q ' dqrinc_$' <(emnm "$P/lib/libqrupdate.a") || { echo "FATAL: libqrupdate.a 缺 dqrinc_" >&2; exit 1; }
   echo "  ✅ qrupdate → $P（dqrinc_ 在）"
@@ -348,14 +357,16 @@ do_suitesparse () {
              CFOPENMP=
              CHOLMOD_CONFIG="-DNPARTITION -DNSUPERNODAL"
              UMFPACK_CONFIG="-DNBLAS"
-             CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC"
+             CFLAGS="-O2 -fPIC $LANE_FLAGS" CXXFLAGS="-O2 -fPIC $LANE_FLAGS"
              BLAS="-lrefblas" LAPACK="-llapack" )
   # ⚠️ 改了 config 宏就必须**先删旧 .o 再编**：SuiteSparse 的 make 不会因为
   #   "命令行里多了一个 -D" 就重编已有对象（与 HISTORY §10.3 坑 2 同源）。
   #   只清受影响的两个库的 .o，精确且可解释。
-  for _l in UMFPACK CHOLMOD; do
-    [ -d "$_l/Lib" ] && { rm -f "$_l"/Lib/*.o; echo "  清了 $_l/Lib/*.o（config 变了，必须重编）"; }
+  for _l in SuiteSparse_config AMD CAMD COLAMD CCOLAMD CHOLMOD UMFPACK KLU CXSparse; do
+    rm -f "$_l"/*.o "$_l"/Lib/*.o 2>/dev/null || true
+    echo "  清了 $_l 中的旧 .o（确保带 LANE_FLAGS 重编）"
   done
+  rm -f "$P/lib"/*.a
   # 用 **static** 目标，不用 library：后者末尾会 `make install` 去编 .so，
   # 而 SO_OPTS 里带 `-Wl,--no-undefined`（wasm-ld 不认识）→ 必失败。
   # static 只产 .a，正好是我们要的。
