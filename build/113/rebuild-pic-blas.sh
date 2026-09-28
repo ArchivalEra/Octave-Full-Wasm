@@ -51,8 +51,8 @@ build_libf2c () {
   tar -C "$F2CSRC" -cf - . | tar -C "$d" -xf -
   cd "$d"
   cp f2c.h0 f2c.h; cp signal1.h0 signal1.h; cp sysdep1.h0 sysdep1.h
-  # ⚠️ 只改 1-30 行的 integer 和 logical，不改 59 行的 ftnlen（Octave f77-fcn.h 硬要求 F77_CHAR_ARG_LEN_TYPE long）
-  sed -i '1,30s/defined(__ia64__)/defined(__ia64__) || defined(__wasm64__) || defined(__LP64__)/g' f2c.h
+  # 全局替换 4 处 #if：让 integer, logical, flag, ftnlen, ftnint 在 wasm64/LP64 下一致为 int (32-bit i32)
+  sed -i 's/defined(__ia64__)/defined(__ia64__) || defined(__wasm64__) || defined(__LP64__)/g' f2c.h
   # arithchk 用**宿主** cc 跑（只探测本机浮点格式，不产 wasm 码）
   cc -O2 -DNO_FPINIT arithchk.c -lm -o arithchk
   ./arithchk > arith.h

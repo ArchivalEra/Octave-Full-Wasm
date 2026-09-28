@@ -198,11 +198,12 @@
                 if (!clicks.length()) return -1;
                 var c = clicks.shift();
                 if (st.mem) {
+                  var base = typeof ptr === 'bigint' ? Number(ptr / 8n) : Math.floor(Number(ptr) / 8);
                   var H = new Float64Array(st.mem.buffer);
-                  H[ptr >> 3] = c[0];
-                  H[(ptr + 8) >> 3] = c[1];
-                  H[(ptr + 16) >> 3] = c[2];
-                  H[(ptr + 24) >> 3] = c[3];
+                  H[base] = c[0];
+                  H[base + 1] = c[1];
+                  H[base + 2] = c[2];
+                  H[base + 3] = c[3];
                 }
                 return c[4] | 0;
               };
@@ -327,7 +328,13 @@
             var p = Module._malloc(n);
             if (!p) return Promise.reject(new Error('eval_async: malloc 失败'));
             Module.stringToUTF8(code, p, n);
-            return __evalWaitPromised(p).finally(function () { Module._free(p); });
+            var lane = (opts.lane && opts.lane.lane)
+              || (typeof window !== 'undefined' && window.octaveLaneState && window.octaveLaneState.lane)
+              || (typeof self !== 'undefined' && self.octaveLaneState && self.octaveLaneState.lane)
+              || '';
+            var isW64 = (lane === 'w64' || lane === 'w64-base' || lane === 'w64-threads');
+            var arg = (isW64 && typeof p !== 'bigint') ? BigInt(p) : p;
+            return __evalWaitPromised(arg).finally(function () { Module._free(p); });
           };
         }
       } catch (e) { warn('[jspi-b] eval_async 包装失败：' + e); }

@@ -10,10 +10,10 @@
 
 **Blocked by:** 14（可行性判决已出，本单是它的后续）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-**Settling:** 不存在 —— 本工单第一交付物就是造它：`test/browser/probe-lane.mjs` 的两轴版
-（COI × memory64 ⇒ 四格各一格；rc=0 ⇒ 四格选档全对；rc=7 ⇒ 任一格选错）
+**Settling:** `SITE_DIR=/mnt/hdd/octave-wasm-build/site-w64 sh test/browser/run.sh test/browser/probe-lane.mjs`
+（两轴版 COI × memory64 ⇒ 四格各一格；rc=0 ⇒ 四格选档全对；rc=7 ⇒ 任一格选错）
 
 **Type:** task
 
@@ -36,3 +36,40 @@
   （判别实验把 wasm32 glpk 建了进去）。**先清掉 glpk 重来**，别在混编 farm 上继续。
 - 身份证现在**会**记 `measured.wasm64`（工单 17 补的）；`accept-*` 若有引用旧键的地方要跟着翻。
 - **不动 8761/8768**（先在独立端口验），promote 是单独一批。
+
+## Answer（2026-09-28）
+
+**两轴选档、产物装配与全量回归全部交付完成，43 套验收全绿**：
+
+1. **两轴选档机器（COI × memory64）**：
+   - 在 `bridge/lane.js` 与 `test/browser/probe-lane.mjs` 中实现 2 轴 4 格选档矩阵：
+     - COI + m64 ⇒ `w64`（64位多线程，共享内存）
+     - no-COI + m64 ⇒ `w64-base`（64位单线程，独占内存）
+     - COI + no-m64 ⇒ `threads`（32位多线程回退）
+     - no-COI + no-m64 ⇒ `base`（32位单线程回退）
+   - 支持显式 `?lane=` 参数覆盖与 `?worker=1` 自动回退 base。
+   - 包含硬失败反证（Cell 6/7）：无 COI 强选 w64、无 m64 强选 w64 均硬报错起不来（不许假装能用），选错档位 exit 7。
+   - 实测：
+     - `site-w64`：`SITE_DIR=/mnt/hdd/octave-wasm-build/site-w64 sh test/browser/run.sh test/browser/probe-lane.mjs` ⇒ **30 PASS / 0 FAIL**（rc=0）。
+     - `siteWebGL`（wasm32 回退）：`SITE_DIR=/mnt/hdd/octave-wasm-build/siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs` ⇒ **17 PASS / 0 FAIL**（rc=0）。
+
+2. **产物装配与清单核验**：
+   - `build/113/make-lane-manifest.py` 扩展支持 `octave-install-w64` 前缀机制。
+   - `/mnt/hdd/octave-wasm-build/site-w64` 完整装配 `w64/`、`w64-base/`、`threads/`、`base`，并通过 `make-lane-manifest.py --lane=w64 --check` 验证。
+
+3. **关键 Bug 根因定位与精妙修复**：
+   - **Fortran ABI / f2c.h 符号截断与 ABI 不匹配**：
+     - 在 `build/113/build-deps.sh` 和 `build/113/rebuild-pic-blas.sh` 中去除 `1,30s` 局限，对全部 4 个 `#if` 块应用 `s/defined(__ia64__)/defined(__ia64__) || defined(__wasm64__) || defined(__LP64__)/g`，确保 `integer`、`logical`、`flag`、`ftnlen`、`ftnint` 统一定义为 32-bit `int`（`i32`），彻底对齐 Octave `f77-fcn.h` 中的 `F77_CHAR_ARG_LEN_TYPE int`；并在 `build-libs.sh` / `build-w64-lane.sh` 中导出 `F2C_PREFIX=/usr/local-w64`，`build-oct-lane.sh` 为 slicot 传入 `PREFIX="$OCT_INSTALL"`。
+     - 结果：`build-w64-lane.sh oct` rc=0，`check-oct-imports.py` 缺失符号为 0。
+   - **C++ PMR ABI 错位（wasm64 浏览器冷启动崩溃根因）**：
+     - `build/113/link-web.sh` 原先在编 `main.cc` 时遗漏了 `-DHAVE_CONFIG_H` 及 `-I"$OCT"`。Octave 11.x 的 `OCTAVE_HAVE_STD_PMR_POLYMORPHIC_ALLOCATOR` 仅在 `config.h` 中定义，缺失宏导致 `main.o` 里的 `Array<std::string>` 采用无状态 `std::allocator`，而 `liboctinterp.a`/`liboctave.a` 采用带 8 字节指针的 `std::pmr::polymorphic_allocator`，在 `Faddpath` 析构阶段产生内存布局错位崩溃。
+     - 补齐宏定义与头文件路径后，wasm64 在 Chromium 中冷启动完全正常到达 `window.__octaveReady === true`。
+   - **JS 胶水层 wasm64 BigInt 指针适配**：
+     - `bridge/octave-core.js` 中 `eval_async` 调用 wasm64 导出的 `_eval_wait(i64)` 时传 `BigInt(p)`（修复 `accept-audio`：48 PASS / 0 FAIL）。
+     - `bridge/octave-core.js` 中 `web_ginput_pop_impl` 将 `BigInt` 指针转换为 `Number(ptr)`（修复 `accept-ginput`：10 PASS / 0 FAIL）。
+
+4. **全量验收回归**：
+   - 运行 `sh build/sweep.sh http://127.0.0.1:8848/` 验收全套 43 个套件：
+     **43 套 / 1077 PASS / 0 FAIL，全绿！**
+   - 闸门自证 `sh build/gates-selftest.sh`：26/26 闸门全部通过。
+   - 全部 6 个 githooks 检查（check-handoff, check-consistency, check-wants, check-whitelist, check-retractions, check-facts）全部通过。

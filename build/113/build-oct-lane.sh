@@ -125,7 +125,7 @@ if [ ! -s "$COMMON_OBJ" ]; then
 fi
 echo "   common.oct.o: $(stat -c%s "$COMMON_OBJ") 字节"
 if [ -s "$SLICOT_NODUP" ]; then
-  OUT="$OUT_CORE" OCT_INCS="-I$CTRL_SRC" \
+  OUT="$OUT_CORE" OCT_INCS="-I$CTRL_SRC" PREFIX="$OCT_INSTALL" \
     OCT_LIBS="$COMMON_OBJ $SLICOT_NODUP $LAPACK_PIC/liblapack.a $LAPACK_PIC/librefblas.a $LAPACK_PIC/libf2c-subset.a $F2C_SHIM" \
     CC_SRCS="__control_slicot_functions__:$CTRL_SRC/__control_slicot_functions__.cc" \
     bash /src/bin/build-oct.sh --cc || { echo "FATAL: slicot 调度模块构建失败" >&2; exit 1; }

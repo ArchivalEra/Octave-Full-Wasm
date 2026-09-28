@@ -55,7 +55,7 @@ stage_libs() {
   ensure_shim || return 1
   echo "── [libs] 其余 farm → $DEPS_W64"
   rm -rf "$DEPS_W64/suitesparse"
-  PATH="$SHIM_DIR:$PATH" LANE_FLAGS="$FLAGS" DEPS="$DEPS_W64" bash /src/bin/build-libs.sh all
+  PATH="$SHIM_DIR:$PATH" LANE_FLAGS="$FLAGS" DEPS="$DEPS_W64" F2C_PREFIX="$PREFIX_W64" bash /src/bin/build-libs.sh all
 }
 
 stage_tree() {

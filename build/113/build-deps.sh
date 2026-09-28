@@ -59,8 +59,8 @@ build_libf2c () {
   cd "$d"
 
   cp f2c.h0 f2c.h
-  # ⚠️ 只改 1-30 行的 integer 和 logical，不改 59 行的 ftnlen（Octave f77-fcn.h 硬要求 F77_CHAR_ARG_LEN_TYPE long）
-  sed -i '1,30s/defined(__ia64__)/defined(__ia64__) || defined(__wasm64__) || defined(__LP64__)/g' f2c.h
+  # 全局替换 4 处 #if：让 integer, logical, flag, ftnlen, ftnint 在 wasm64/LP64 下一致为 int (32-bit i32)
+  sed -i 's/defined(__ia64__)/defined(__ia64__) || defined(__wasm64__) || defined(__LP64__)/g' f2c.h
   cp signal1.h0 signal1.h
   cp sysdep1.h0 sysdep1.h
 

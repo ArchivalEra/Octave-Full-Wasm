@@ -35,6 +35,13 @@ CCACHE_CXX="ccache em++"
 #   仍 100% 缺 atomics —— 凡是脚本**自己给 CFLAGS/CMAKE_C_FLAGS** 的地方都得拼 $LANE_FLAGS。
 LANE_FLAGS="${LANE_FLAGS:-}"
 
+# ★ emf77 找 f2c.h 依赖 $F2C_PREFIX：w64 车道必须指向 /usr/local-w64，否则会捡到 wasm32 的 f2c.h
+if [[ "${DEPS:-}" == *"w64"* ]] || [[ "${LANE_FLAGS:-}" == *"MEMORY64"* ]]; then
+  export F2C_PREFIX="${F2C_PREFIX:-/usr/local-w64}"
+else
+  export F2C_PREFIX="${F2C_PREFIX:-/usr/local}"
+fi
+
 say () { echo; echo "=== $*"; }
 need () { [ -f "$1" ] || { echo "FATAL: 缺 $1" >&2; exit 2; }; }
 

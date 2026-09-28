@@ -94,8 +94,8 @@ const wrote = await page.evaluate(async () => {
   try {
     // ★ B6 双档：**夹具本身是 side module**（会被 dlopen）⇒ 线程档必须用 `-pthread` 版，
     //   否则载入失败（`failed to load Incompatible version or missing dependencies` —— 实测
-    //   首跑 3 PASS / 5 FAIL 就是这个）。按档取（内核把选档结果暴露在 `__octaveCaps.lane`）。
     var lane = (window.__octaveCaps && window.__octaveCaps.lane
+                && window.__octaveCaps.lane.chosen) || 'base';
     var fx = (lane === 'w64' || lane === 'w64-threads') ? 'w64/minioct.oct'
            : (lane === 'w64-base') ? 'w64-base/minioct.oct'
            : (lane === 'threads') ? 'threads/minioct.oct' : 'minioct.oct';

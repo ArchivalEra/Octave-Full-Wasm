@@ -20,6 +20,8 @@
 //       /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/probe-lane.mjs
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const REPO = process.env.REPO || '/mnt/hdd/zcode-projects/Octave-Full-Wasm';
 const SITE_DIR = process.env.SITE_DIR || '/mnt/hdd/octave-wasm-build/siteWebGL';
@@ -28,7 +30,10 @@ const PORT_NOCOI = Number(process.env.PORT_NOCOI || 8832);
 const A = `http://127.0.0.1:${PORT_COI}`;
 const B = `http://127.0.0.1:${PORT_NOCOI}`;
 
+const hasW64 = fs.existsSync(path.join(SITE_DIR, 'w64'));
+
 let pass = 0, fail = 0;
+let laneWrong = false;
 const check = (ok, label, detail) => {
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${String(detail).slice(0, 260)}`);
@@ -54,12 +59,24 @@ async function waitUp(url, ms = 15000) {
 }
 
 /** 打开一页，等就绪，汇报"选档 + 事实"。neverReady=true 时只等固定时长（反证档用）。 */
-async function probeLane(browser, url, { expectReady = true, waitMs = 90000 } = {}) {
+async function probeLane(browser, url, { expectReady = true, waitMs = 90000, disableMemory64 = false } = {}) {
   const ctx = await browser.newContext();
+  if (disableMemory64) {
+    await ctx.addInitScript(() => {
+      const origMem = WebAssembly.Memory;
+      WebAssembly.Memory = function (desc) {
+        if (desc && (desc.address === 'i64' || desc.indexType === 'i64' || typeof desc.initial === 'bigint')) {
+          throw new RangeError('memory64 is not supported');
+        }
+        return new origMem(desc);
+      };
+      WebAssembly.Memory.prototype = origMem.prototype;
+    });
+  }
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e).slice(0, 200)));
-  page.on('console', m => { if (/SharedArrayBuffer|crossOriginIsolated|shared|线程/.test(m.text())) errs.push(m.text().slice(0, 200)); });
+  page.on('console', m => { if (/SharedArrayBuffer|crossOriginIsolated|shared|线程|memory64/.test(m.text())) errs.push(m.text().slice(0, 200)); });
   await page.goto(url, { waitUntil: 'load', timeout: 60000 }).catch(e => errs.push('goto:' + String(e).slice(0, 120)));
   const t0 = Date.now();
   let ready = false;
@@ -83,6 +100,7 @@ async function probeLane(browser, url, { expectReady = true, waitMs = 90000 } = 
       lanePlan: (window.__octaveLanePlan || {}).lane || null,
       capsLane: c && c.lane ? c.lane.chosen : null,
       capsArtifactThreads: c && c.artifact ? c.artifact.threads : null,
+      capsArtifactWasm64: c && c.artifact ? c.artifact.wasm64 : null,
       capsVerdict: c && c.artifact ? c.artifact.verdict : null,
       sharedMemory: c ? c.sharedMemory : null,
       buf,
@@ -101,6 +119,114 @@ check(upA && upB, '★ 两台服务都起来了（带头 / 不带头，同一目
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage'] });
+
+if (hasW64) {
+  console.log('--- wasm64 两轴探针 (COI × memory64 四格矩阵) ---');
+
+  // ── Cell 1: COI + native m64 ⇒ w64 (shared memory) ──────────────────────
+  {
+    const r = await probeLane(browser, `${A}/index.html`);
+    const i = r.info;
+    const ok = i.laneState === 'w64' && i.lanePlan === 'w64' && i.capsLane === 'w64';
+    if (!ok) laneWrong = true;
+    check(i.coi === true, 'Cell 1: 带头站点 crossOriginIsolated = true', JSON.stringify({ coi: i.coi, sab: i.sab }));
+    check(ok, 'Cell 1: ★ COI + m64 ⇒ 选中 w64 档', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+    check(r.ready === true, 'Cell 1: 页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
+    check(i.sharedMemory === true, 'Cell 1: ★★ w64 真的拿到 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory, heap8: i.buf }));
+    check(i.capsArtifactWasm64 === true, 'Cell 1: 产物实测为 wasm64', JSON.stringify({ wasm64: i.capsArtifactWasm64, verdict: i.capsVerdict }));
+  }
+
+  // ── Cell 2: no-COI + native m64 ⇒ w64-base (non-shared) ─────────────────
+  {
+    const r = await probeLane(browser, `${B}/index.html`);
+    const i = r.info;
+    const ok = i.laneState === 'w64-base' && i.lanePlan === 'w64-base' && i.capsLane === 'w64-base';
+    if (!ok) laneWrong = true;
+    check(i.coi === false, 'Cell 2: 不带头站点 crossOriginIsolated = false', JSON.stringify({ coi: i.coi, sab: i.sab }));
+    check(ok, 'Cell 2: ★ no-COI + m64 ⇒ 选中 w64-base 档', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+    check(r.ready === true, 'Cell 2: 页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
+    check(i.sharedMemory === false, 'Cell 2: w64-base 不是 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory }));
+    check(i.capsArtifactWasm64 === true, 'Cell 2: 产物实测为 wasm64', JSON.stringify({ wasm64: i.capsArtifactWasm64, verdict: i.capsVerdict }));
+  }
+
+  // ── Cell 3: COI + no-m64 ⇒ threads (shared memory wasm32) ───────────────
+  {
+    const r = await probeLane(browser, `${A}/index.html`, { disableMemory64: true });
+    const i = r.info;
+    const ok = i.laneState === 'threads' && i.lanePlan === 'threads' && i.capsLane === 'threads';
+    if (!ok) laneWrong = true;
+    check(i.coi === true, 'Cell 3: 带头站点 crossOriginIsolated = true', JSON.stringify({ coi: i.coi, sab: i.sab }));
+    check(ok, 'Cell 3: ★ COI + no-m64 ⇒ 回退到 threads 档', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+    check(r.ready === true, 'Cell 3: 页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
+    check(i.sharedMemory === true, 'Cell 3: threads 真的拿到 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory }));
+    check(i.capsArtifactThreads === true, 'Cell 3: 产物实测为 threads', JSON.stringify({ threads: i.capsArtifactThreads, verdict: i.capsVerdict }));
+  }
+
+  // ── Cell 4: no-COI + no-m64 ⇒ base (non-shared wasm32) ──────────────────
+  {
+    const r = await probeLane(browser, `${B}/index.html`, { disableMemory64: true });
+    const i = r.info;
+    const ok = i.laneState === 'base' && i.lanePlan === 'base' && i.capsLane === 'base';
+    if (!ok) laneWrong = true;
+    check(i.coi === false, 'Cell 4: 不带头站点 crossOriginIsolated = false', JSON.stringify({ coi: i.coi, sab: i.sab }));
+    check(ok, 'Cell 4: ★ no-COI + no-m64 ⇒ 回退到 base 档', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+    check(r.ready === true, 'Cell 4: 页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
+    check(i.sharedMemory === false, 'Cell 4: base 不是 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory }));
+  }
+
+  // ── Cell 5: 显式覆盖 ?lane=base ──────────────────────────────────────────
+  {
+    const r = await probeLane(browser, `${A}/index.html?lane=base`);
+    const i = r.info;
+    check(i.laneState === 'base' && i.capsLane === 'base', 'Cell 5: ★ `?lane=base` 覆盖生效', JSON.stringify({ state: i.laneState, caps: i.capsLane }));
+    check(r.ready === true && i.sharedMemory === false, 'Cell 5: 带头站点上基础档照常可用', JSON.stringify({ ready: r.ready, sharedMemory: i.sharedMemory }));
+  }
+
+  // ── Cell 6: 反证：no-COI 下显式 ?lane=w64 必须硬失败 ────────────────────
+  {
+    const r = await probeLane(browser, `${B}/index.html?lane=w64`, { expectReady: false });
+    const i = r.info;
+    check(i.laneState === 'w64', 'Cell 6: 反证档：选档确实被覆盖成 w64', JSON.stringify({ state: i.laneState }));
+    check(r.ready === false, 'Cell 6: ★★ 没有 COI 时强行选 w64 ⇒ 起不来', JSON.stringify({ ready: r.ready }));
+    const why = (r.errs || []).join(' | ');
+    check(/SharedArrayBuffer|crossOriginIsolated|shared|DataClone/i.test(why), 'Cell 6: ★ 失败原因指向隔离/共享内存', why.slice(0, 200) || '(无错误文本)');
+  }
+
+  // ── Cell 7: 反证：no-m64 下显式 ?lane=w64 必须硬失败 ────────────────────
+  {
+    const r = await probeLane(browser, `${A}/index.html?lane=w64`, { expectReady: false, disableMemory64: true });
+    const i = r.info;
+    check(i.laneState === 'w64', 'Cell 7: 反证档：选档确实被覆盖成 w64', JSON.stringify({ state: i.laneState }));
+    check(r.ready === false, 'Cell 7: ★★ 没有 memory64 时强行选 wasm64 档 ⇒ 起不来', JSON.stringify({ ready: r.ready }));
+    const why = (r.errs || []).join(' | ');
+    check(/memory64/i.test(why), 'Cell 7: ★ 失败原因指向 memory64 不支持', why.slice(0, 200) || '(无错误文本)');
+  }
+
+  // ── Cell 8: 带头 + ?worker=1 ⇒ 自动落 base ───────────────────────────────
+  {
+    const page = await (await browser.newContext()).newPage();
+    await page.goto(`${A}/index.html?worker=1`, { waitUntil: 'load', timeout: 60000 }).catch(() => {});
+    const i = await page.evaluate(() => ({
+      coi: typeof crossOriginIsolated === 'boolean' ? crossOriginIsolated : null,
+      lane: window.octaveLaneState && window.octaveLaneState.lane,
+      workerMode: window.octaveLaneState && window.octaveLaneState.workerMode,
+      why: window.octaveLaneState && window.octaveLaneState.why,
+    })).catch(e => ({ err: String(e).slice(0, 120) }));
+    check(i.coi === true, 'Cell 8: 前提：带头站点确实是 COI', JSON.stringify(i));
+    check(i.lane === 'base' && i.workerMode === true,
+          'Cell 8: ★ 带头 + ?worker=1 ⇒ 自动落基础档',
+          JSON.stringify({ lane: i.lane, workerMode: i.workerMode, why: i.why }));
+  }
+
+  await browser.close();
+  for (const k of kids) { try { k.kill('SIGTERM'); } catch (e) { /* 已退出 */ } }
+  console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
+  if (laneWrong) {
+    console.log('FATAL: 四格选档有错误 ⇒ exit 7');
+    process.exit(7);
+  }
+  process.exit(fail ? 1 : 0);
+}
 
 // ── 格 1：带头 ⇒ 线程档，且**真的**是 shared 内存 ────────────────────────────────
 {

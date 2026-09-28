@@ -36,7 +36,7 @@ SRC=/src/websrc
 DEPS="${DEPS:-/usr/local}"   # ★ 早期四件（libf2c/refblas/lapack/pcre2-8）的 prefix；
                             #   B6 线程档传 `/usr/local-threads`（原先**写死**，模式表管不到）
 
-[ -f "$SRC/main.o" ] || { echo "FATAL: 缺 $SRC/main.o（先编 main.cc）" >&2; exit 2; }
+[ -f "$SRC/main.cc" ] || { echo "FATAL: 缺 $SRC/main.cc" >&2; exit 2; }
 [ -f "$SRC/post.js" ] || { echo "FATAL: 缺 $SRC/post.js" >&2; exit 2; }
 [ -d "$M_SRC" ] || { echo "FATAL: 缺 $M_SRC（Octave 装了没 / staged 树生成了没）" >&2; exit 2; }
 
@@ -476,7 +476,12 @@ if [ "${P5_TOOLKIT:-0}" = "1" ]; then
 fi
 
 echo "== 编 main.cc"
-em++ -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
+em++ -DHAVE_CONFIG_H \
+     -I"$OCT" -I"$OCT/liboctave" -I"$OCT/liboctave/array" -I"$OCT/liboctave/numeric" \
+     -I"$OCT/liboctave/operators" -I"$OCT/liboctave/system" -I"$OCT/liboctave/util" \
+     -I"$OCT/liboctave/wrappers" -I"$OCT/libinterp" -I"$OCT/libinterp/octave-value" \
+     -I"$OCT/libinterp/operators" -I"$OCT/libinterp/parse-tree" -I"$OCT/libinterp/corefcn" \
+     -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
      ${P5_OBJS:+ $P5_DEF} \
      ${MEM64[@]+"${MEM64[@]}"} \
      "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
