@@ -46,34 +46,54 @@
   不是多线程；**线程版仍不可用**（`e2_threaded_oct_rc`），"为什么"未结案 ⇒ 工单 02。
   **基础档本次一字未换**（`wasm_sha` 逐字节未变，promote 的 §1b 判据核过）⇒ 这是一次
   **只换线程档**的换产物。
-- 现役 farm（`/usr/local`、`/src/deps`）**一字未动**（实测仍 100% 缺 atomics）；车道在
-  `/usr/local-threads` + `/src/deps-threads`；两档 prefix 分开是硬要求。
-- 事实系统：`build/FACTS.json`（源）+ `AUTO:FACTS`（渲染）+ 翻案台账 `build/lib/retractions.json`
-  （本轮新增 R-009：更正了「每个对象都必须带 atomics」这句过度概括）。
+- ★ **wasm64 已建成并集成**（工单 14/17/18 全 `resolved`，2026-09-28，**branch `wasm64`**）：
+  · **可行性三问全绿**：Q1 引擎支持（本机 Chromium 默认支持 memory64）、Q2 `.oct`
+    （`w64_oct_wasm64` / `w64_oct_files`，且 `dlopen OK, f()=42`）、Q3 **>4 GiB 确凿**
+    （⚠️ **Q3 那几个内存上限还没上键**，仍是散文，见 §1）；
+  · **全量重编成**（`/usr/local-w64` + `/src/deps-w64`，影子 `/src/libwork/lane-shim-w64`
+    注入 `-pthread -sMEMORY64=1`）；产物事实看台账 **`w64_*` 组**（10 条，含复跑命令）；
+  · **两轴选档**（`bridge/lane.js`：COI × memory64）⇒ 最多四格；**`site-w64` 上四档物理齐备**：
+    `base`(wasm32 单线程) / `threads`(wasm32+pthread) / **`w64`(memory64+pthread，目标形态)** /
+    **`w64-base`(memory64 单线程，回退)**；
+  · **验绿**：w64 站点全量回归全绿（套件数 / PASS 看台账 `accept_suites` / `accept_pass`）；四格矩阵探针 **30 PASS / 0 FAIL**
+    （含"缺 COI 强选 w64 硬失败"与"引擎无 memory64 强选 w64 硬失败"两条反证）；
+    **wasm32 回退没退化**（8761 上 `probe_lane_pass` / `probe_lane_fail`）；
+  · **8761/8768 一字未动**（w64 全程在独立端口 **8848** 验）；**w64 尚未 promote**。
+- **车道影子是本轮的关键机制**（`build/113/lane-shim.sh`）：给"没地方传编译旗标"的 farm 脚本
+  用 PATH 影子注入旗标。B6 用它注 `-pthread`，wasm64 用它注 `-pthread -sMEMORY64=1`。
+  ⚠️ `relink.sh link threads` 以前**依赖操作员手工把影子挂上 PATH**（否则 `main.o` 不带 atomics，
+  报一个离根因很远的错）⇒ 已**搬进入口**：入口自己挂，缺了就点名 FATAL（工单级教训见 HISTORY §5.67）。
+- ⚠️ **读 `AUTO:STATE` / `accept_*` 时注意口径**：那两个"最近一次全绿回归"取的是**最新的全绿扫描目录**，
+  而 2026-09-28 最新那次是 **w64 实验站点（8848）**的，不是 8761 的。两者套件数/PASS **恰好相同**
+  （所以数字没错），但**URL 列写着 8848** —— 看到它别以为 8761 的回归被什么替代了。
+  8761 自己的最近一次全绿是 `20260928-083050`（数字见 HISTORY §5.66）。
+- **F4 输入契约已接线**（2026-09-28 修）：`sweep_select.py --inputs-for` + `sweep.sh` 的
+  `env $INPUTS`。**不接这一步，探针会退回它自己的内部默认** —— 实测差点骗过复核（把另一个站点的
+  17 PASS 当成目标站点的）。⇒ 要跑 w64 四格：`SITE_DIR=…/site-w64 PROBES=1 sh build/sweep.sh <URL> probe-lane`。
+- 现役 farm（`/usr/local`、`/src/deps`）**一字未动**；四条车道 prefix 分开：
+  `/usr/local`+`/src/deps`（base）、`-threads`（B6）、`-w64`（wasm64）—— **这是硬要求**。
+- 事实系统：`build/FACTS.json`（源）+ `AUTO:FACTS`（渲染）+ 翻案台账
+  `build/lib/retractions.json`（R-009/R-010）+ **`docs/agents/fact-system.md`**（给接手工单的 agent 的入门）。
 
 ## 1. 下一步（按此顺序）
 
-**E2（单线程形态）已上线 2026-09-28**：8768 验绿（套件数 / PASS 见 `accept_suites` / `accept_pass`，
-全 0 FAIL）→ promote（只换线程档）→ boot → SHA 三层 → 台账 `threads_*` 那几条按实测**接受改口**。
-⇒ 下一步两条线：
+**当前分支 `wasm64`**（`open-questions` → `e2-openblas` → `threads` 的线上），mirror 与 origin 都同步。
+E2 上线、wasm64 三件（可行性 / 重编 / 集成）都已收尾。⇒ 下一步：
 
-1. **多线程版（独立课题，收益最大：小尺寸见 `e2_threaded_matmul500_ratio`）** —— 按工单 **01 → 02** 走：
-   · **01** = 把诊断/额外导出这类旗标收进 `relink.sh` 的模式表（`explain` 打得出来、`--selfcheck`
-     覆盖得到）。它是 02 与 03 的**共同前置**，本身不碰产物；
-   · **02** = 线程版在 dlopen 的 `.oct` 路径上不返回的**定位**。
-     ⚠️ **第一步是一次重链** —— 三个产物的导出表里**一条 BLAS 都没有**（实测，见工单 02），
-     所以「页面里先 `openblas_set_num_threads(1)`」今天敲不下去，得先把那个符号导出来。
-     ⇒ 这次重链可**顺带做掉工单 11**（B5 worker 渲染后端），省一次 29MB。
-2. **wasm64**：需求书 + 容器内实测在 `build/113/PLAN-wasm64.md`，工单 **14**，交外部 agent 在**新分支**做。
-   结论方向已定：**不是工具链挡的，挡的是引擎版本**（容器内 node 22 装不进、宿主 node 26 跑得动，
-   memory64 的 side module + dlopen 与 wasm32 对照行为一致）。**不动 8761/8768。**
-3. **其余前沿**（各自独立、互不阻塞）：工单 04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、
-   08（外审 4 项补判据）、10（Firefox COI 矛盾）；需要设备的 07 / 12 / 13。
-   **不要与上面那次重链并行**（本仓实测过并发会让套件假崩）。
-
-**本轮顺带发现并登记的**：工单 **15** —— `relink.sh verify --out <副本>` **假红，并把 `verdict`
-写成 `rejected`**（根因：`check-build-manifest.py` 的配对检查按身份证里记录的 `build.out` 找兄弟文件，
-而 `cmd_verify` 不转发 `--out-dir`）。⇒ **验副本必须在产物原位验。**
+1. **w64 上线（要拍板；独立批次）**：`site-w64` 已验绿（全量回归 + 四格矩阵探针都全绿），
+   但是否把 w64 当**新的线程档**推上 8761、以及发几档（四格 vs 砍到两三档），**是产品决定**。
+   走批次收尾那套（8768 验绿 → promote → boot/SHA 三层 → 同步 `site/` → dist → parity → 六道闸门）。
+2. **Q3 的内存上限上键**（唯一还没上键的一组）：5 GiB / 8 GiB / 共享 5 GiB 现在仍是散文。
+   生产者需要一个**真的内存探针脚本**（现在是 `node -e` + playwright 的一次性命令）。
+3. **glpk 的 memory64 静默失败**（工单 17 的遗留）：判别已确认与 memory64 有关（无影子 ✅ /
+   `-pthread` 影子 ✅ / 带 memory64 ❌），但**根因没查**；farm 后来建成了，所以它**不再阻塞**，
+   但那个"失败不告诉你为什么"的缺口还在（`build-libs.sh` 吞掉了错误）。
+4. **工单 16**（线程版的卡点在"代码路径本身"，与线程数无关 —— R-010 推翻了"多线程唤醒"那条推断）。
+   ⚠️ 注意它与 **wasm64 是同一个 OpenBLAS**：w64 那条路要是稳，可能反过来给 16 提供线索。
+5. **其余前沿**（各自独立）：04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、08（外审判据）、
+   10（Firefox COI 矛盾）、15（`relink.sh verify --out <副本>` 假红并污染 verdict）、
+   01/03（诊断仪器与其两个下游）；需要设备的 07 / 12 / 13。
+   **不要与重链类活并行**（本仓实测过并发会让套件假崩）。
 
 ## 2. 铁律（违反会被拦或返工）
 
