@@ -48,6 +48,30 @@ bash build/113/probe-wasm64-baseline.sh
 
 ---
 
+### 第一次真链的结果（2026-09-28，**已跑过两遍、结果一致 —— 别自己再撞一次**）
+
+```bash
+bash build/113/probe-wasm64-link.sh threads   # 环境从模式表推出（不手设），只额外加 -sMEMORY64=1
+```
+
+- **rc=1**。第一面墙**不是** memory64 本身，而是「我们的对象不是 memory64」：
+
+  ```
+  wasm-ld: error: /src/work/octave-11.3.0/libinterp/.libs/liboctinterp.a(liboctinterp_la-octave.o):
+                wasm32 object file can't be linked in wasm64 mode
+  ```
+
+  ⇒ `-sMEMORY64=1` 是 **[compile+link]** 设置，**对象也必须用它编**。
+  要真链成，先做一条 **farm + Octave 树的全量重编**（形状与 B6 车道重建一样：
+  把 `lane-shim.sh` 的旗标换成 `-sMEMORY64=1` → 重建依赖 → 重建树 → 重链）。
+  **那是你的第一个批次**，见工单 17。
+
+- ✅ **好消息（也已实测）**：emcc **自动为 memory64 编好了它自己的 sysroot 库**
+  （`wasm64-emscripten/pic/libsockets-mt.a`）。⇒ **工具链那侧是准备好的**，
+  不准备好的只有我们自己的对象。所以这一批的性质是"重编"，不是"移植"。
+
+---
+
 ## §2 两条轴 —— 先想清楚要发几份产物
 
 选档现在只判**一条轴**（`bridge/lane.js`：COI 有/无）。memory64 加上**第二条轴**（引擎支持/不支持），

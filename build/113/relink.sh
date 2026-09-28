@@ -300,6 +300,15 @@ cmd_explain() {
   mode_declared "$m" | sed 's/^/  /'
 }
 
+# ★ `exports <模式>`：**机器可读**的模式表导出（`KEY=VALUE` 行，空值是**真空**）。
+#   为什么需要它（2026-09-28 实测踩到）：`explain` 是**给人看的** —— 它把空值渲染成 `（空）`。
+#   拿 `explain` 的输出当数据源，会让每个空变量变成**字面量** `（空）`：真踩到
+#   `-Wl,--export-if-defined=（空）`，而 `P5_GLPROBE=（空）` 更坏 —— `[ -n ]` 判真 ⇒ 悄加一个 -D。
+#   ⇒ 想驱动 link-web.sh 的调用方（探针、诊断档）**用 `exports`，别解析 `explain`**。
+cmd_exports() {
+  mode_table "$1"
+}
+
 cmd_list() {
   echo "product  $(out_default product)   现役形态：M2 + JSPI + 字体 + GL + IDBFS + SIMD BLAS"
   echo "scalar   $(out_default scalar)    同上但**无 SIMD**（product 的 A/B 对照，也是 product 的保活基线）"
@@ -449,6 +458,7 @@ SUB="link"
 case "${1:-}" in
   link|verify|rebuild) SUB="$1"; shift ;;
   explain|--explain)   SUB="explain"; shift ;;
+  exports|--exports)   SUB="exports"; shift ;;
   --selfcheck)         SUB="selfcheck"; shift ;;
   --selftest)          SUB="selftest"; shift ;;
   --list|-l)           SUB="list"; shift ;;
@@ -526,18 +536,30 @@ cmd_selftest() {
   else
     echo "fail | 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
   fi
+  # ⑥ ★ `exports` 必须是**机器可读**的（空值是真空，不是占位符）
+  #    实测背景：`explain` 把空值渲染成 `（空）`，我拿它当数据源驱动探针 ⇒
+  #    `-Wl,--export-if-defined=（空）`，而 `P5_GLPROBE=（空）` 会让 `[ -n ]` 判真、悄加一个 -D。
+  n=$((n + 1))
+  ph="$(bash "$0" exports threads 2>/dev/null | grep -c '（空）' || true)"
+  em="$(bash "$0" exports threads 2>/dev/null | grep -c '^EXPORT_IF_DEFINED=$' || true)"
+  if [ "${ph:-1}" -eq 0 ] && [ "${em:-0}" -ge 1 ]; then
+    echo "PASS | ★ exports 机器可读（无占位符；空变量是真空）"
+  else
+    echo "fail | exports 被渲染过了（占位符 $ph 处；空 EXPORT_IF_DEFINED 命中 $em 处）"; bad=1
+  fi
   rm -rf "$tmp"
   echo ""
   echo "=== relink 自证：$((n - bad)) PASS / $bad fail ==="
   return $bad
 }
-
 case "$SUB" in
   list)      cmd_list; exit 0 ;;
   selfcheck) cmd_selfcheck; exit $? ;;
   selftest)  cmd_selftest; exit $? ;;
   explain)   [ -n "$MODE" ] || { echo "FATAL: explain 要一个模式名" >&2; exit 2; }
              cmd_explain "$MODE" "$DIAG"; exit 0 ;;
+  exports)   [ -n "$MODE" ] || { echo "FATAL: exports 要一个模式名" >&2; exit 2; }
+             cmd_exports "$MODE"; exit 0 ;;
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }
