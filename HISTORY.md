@@ -3338,3 +3338,82 @@ mismatch 同为 `zdotu_`）⇒ **零新增**。闸门自证 22 → **26 个**（
 2. **闸门的文档与实现对不上，就是一次假红或假绿** —— 约定写「的第一个交付物」而检查器认
    「第一交付物」，结果是**完全合规的悬案被判成不合规**。凡「约定文本 + 检查器」成对出现的地方，
    两边必须各有一条用例把对方钉住。
+
+### 5.67 多线程版推进：诊断口子（工单 01）→ 线程版卡点定位（工单 02）+ **翻出一个"隐形唯一入口"**（2026-09-28）
+
+**用户定序**：E2 上线 → 推进多线程版 → wasm64 纳入考量。（E2 上线与 wasm64 见 §5.66。）
+
+**0) 开工前的状态**：三个产物的导出表各 725 条，**一条 BLAS 都没有**（实测）⇒ NOTES 里那句
+「在页面里先调 `openblas_set_num_threads(1)` 再跑同一路径」**当时敲不下去**。所以工单 02 的第一
+交付物是"让页面够得到那个旋钮"，而那是工单 01 的事。
+
+**1) 工单 01：`DIAG_EXPORTS` 进模式表。**
+- `--diag` 以前只改 `DIAG_NAMES/ASSERT/SOURCEMAP`（而这三个**本来就已在模式表里**）⇒ 真实缺口是
+  **没有"额外导出符号"的口子**。新增 `DIAG_EXPORTS`（表里默认空，`--diag` 时非空），
+  `link-web.sh` 把它并入 `--export-if-defined`（**未定义的符号静默忽略** ⇒ 对不定义它的模式无害）。
+- 修饰的定义**只写一处**（`diag_overrides()`），`apply_mode`（导出环境）与 `cmd_explain`（打文档）
+  同读那一份 —— 免得"文档说的"与"实际导出的"分叉。
+- `explain <模式> --diag` 现在打得出来；`--selfcheck` 自动覆盖（它按"link-web.sh 读了哪些 `${VAR:-`"
+  反查模式表）⇒ `env_vars` 27 → **28**（台账按实测接受改口）。
+- `relink.sh --selftest` 3 → **5** 条：新增 ④`--diag` 修饰必须**看得见**（不带 `--diag` 时打不出来）。
+
+**★ 自证当场抓到我一次**：④ 第一版 grep 模式写成 `DIAG_EXPORTS=openblas_set_num_threads`，
+而 `explain` 是**列对齐打印**（`printf '%-20s %s'`）——行里**没有等号** ⇒ 断言"恒失败"，
+看起来像功能没做。改成 `DIAG_EXPORTS.*openblas_set_num_threads` 后 5/0。**假红和假绿一样坏。**
+
+**2) ★★ 本轮最大的发现：`relink.sh` 自称的"唯一入口"在 threads 模式上是假的 ★★**
+
+现象：造诊断档时链接失败 ——
+`wasm-ld: error: --shared-memory is disallowed by /src/websrc/main.o because it was not compiled
+with 'atomics' or 'bulk-memory' features.`
+
+排除过程（三步闭合，每一步都留了证据）：
+1. **先怀疑自己**：不带 `--diag` 重链一次 —— **同样失败** ⇒ 与本次改动无关；
+2. **查"同一个脚本当时链得成、现在链不成"**：产物身份证里记着 `inputs.link_web_sh.sha256`，
+   `git show HEAD:build/113/link-web.sh | sha256sum` 与它**逐字相同** ⇒ **脚本没被改过**（假设 A 死了）；
+3. **变量只能在脚本之外** ⇒ 查 `em++` ⇒ 发现 `build/113/lane-shim.sh` 是个 **PATH 影子包装**，
+   文件头写着"给**没有地方传编译旗标**的 farm 脚本注入 `-pthread`，**一个仓库脚本都不用改**"。
+   而 **`main.cc` 的编译也在 `link-web.sh` 里**，它的 `EXC_FLAGS` 里**没有 `-pthread`** ⇒
+   新开的 shell 没有影子 ⇒ `main.o` 不带 atomics ⇒ 链接期才报（错误信息离根因很远）。
+
+**修法（口径搬进代码）**：`relink.sh` 在 `threads` 模式下**自己挂影子**（`LANE_SHIM` 默认
+`/src/libwork/lane-shim`）；缺影子就**点名 FATAL** 并附可直接复制的建法；检查放在 `LINK_WEB` 检查
+**之前**，好让 `--selftest` 第 ⑤ 条在**宿主**上就能证明它会红。`--selftest` → **5 PASS / 0 fail**。
+
+**顺带拿到一个没预期的东西 —— 可复现性证明**：修完后跑一次**不带 `--diag`** 的重链，产物 sha =
+**`bce7e4cc252d6481…`** = 台账登记值 = 当时手挂影子的原件，**逐字节相同** ⇒ 这份线程版产物
+**确实能从仓库脚本复现**，缺的只是那条没被写下来的 PATH 前置。
+
+**3) 工单 02：线程版卡点定位 —— 结论：不是多线程唤醒。**
+- 诊断档：`E2_OPENBLAS=/src/work/e2-openblas-lib relink.sh link threads --out … --diag` ⇒
+  `85e64295…`、`verdict=ok`；wasm 导出表 **735 条**（对照线上 725），含 `openblas_set_num_threads`，
+  且 `octave.js` 里有 `_openblas_set_num_threads` 包装 ⇒ **页面侧够得到**（两层都验了）。
+- 新探针 `test/browser/probe-e2-threads.mjs`。关键设计：**检测挂死而自己不被挂死** ——
+  挂住的是 wasm 主线程 ⇒ `page.evaluate` 的 Promise **永不 settle**（`accept-113-oct` 的
+  "轮询哨兵" `run()` 正是这么挂住的）⇒ 必须 `Promise.race` 硬超时 + **每格独立浏览器** +
+  结尾**显式 `process.exit`**；并自带 **SKIP 闸**（非诊断档站点上打 SKIP 并 `exit 0`，不产生假红
+  —— 拿线上单线程站点跑，格 A 会瞬间返回，那条断言会报一个纯粹的假红）。
+- 实测（两格用**同一份产物** ⇒ 诊断档更慢在 A/B 之间抵消）：
+
+| 格 | 做什么 | 结果 |
+|---|---|---|
+| A | 裸跑 dlopen 的 `.oct` 路径 | **>300 s 未返回**（复现 `e2_threaded_oct_rc`） |
+| B | 先 `Module._openblas_set_num_threads(1)` 再跑同一路径 | **>300 s 未返回**（导出确实可调） |
+
+⇒ **设成单线程仍不返回** ⇒ 卡点在**线程版代码路径本身，与线程数无关**。7 PASS / 0 FAIL。
+
+- **原推断被证伪**："像 OpenBLAS 的 worker 唤醒/自旋等待"（若卡在唤醒，设 1 线程就该返回）
+  ⇒ 登记 **R-010**，NOTES 的 E2 节改正、原文保留但标明"别当结论读"。
+- 工单 02 → `resolved`（追加 `## Answer`）；问题收窄成**工单 16**（"`USE_THREAD=1` 在哪一段
+  改变了行为"），`Settling` 指向同一个探针扩成**逐段二分**。
+
+**4) 状态**：8761 / 8768 **一字未动**（诊断站点另起在 **8792**，`site-e2diag`）；
+悬案台账 16 张全合规（工单 16 的 `Settling` 首次也被闸门拦下：没写 `rc=` 且首词被中文括号粘连）。
+
+**教训（本轮新增三条）**：
+1. **"唯一入口"这个说法必须能被证伪** —— `relink.sh` 自称唯一，实际有一个只在人脑子里的
+   PATH 前置。**凡是"入口"都必须配一条"缺前置就点名"的断言**，否则它只是一段更长的口令。
+2. **判据里的字面量要对着真实输出写** —— 自证 ④ 的 grep 写 `KEY=VALUE`，而 explain 是列对齐
+   打印；断言于是"恒失败"，比没有断言更误导（看起来像功能没做）。
+3. **检测挂死的工具必须自己不会挂** —— `accept-113-oct` 那套 `run()` 用轮询哨兵，在被测对象
+   挂住时它一起挂；新探针用硬超时 + 独立浏览器 + `process.exit` 才对得起"检测"两个字。

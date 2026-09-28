@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-09-28T08:31:04+0800",
+ "generated": "2026-09-28T09:44:19+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -57,19 +57,19 @@
    "source": "site/matrix-android.html"
   },
   "env_vars": {
-   "value": 27,
+   "value": 28,
    "cmd": "grep -oE '\\$\\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh | sort -u（去掉位置参数）",
    "source": "build/113/link-web.sh"
   },
   "accept_suites": {
    "value": 43,
-   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-081214 里带汇总行的套件（且 0 FAIL）",
-   "source": "sweep-logs/20260928-081214"
+   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-084847 里带汇总行的套件（且 0 FAIL）",
+   "source": "sweep-logs/20260928-084847"
   },
   "accept_pass": {
    "value": 1077,
    "cmd": "同上，把每个套件的 PASS 相加",
-   "source": "sweep-logs/20260928-081214",
+   "source": "sweep-logs/20260928-084847",
    "note": "最近一次**全绿**扫描的 PASS 合计"
   },
   "threads_verdict": {

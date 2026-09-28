@@ -252,6 +252,17 @@ echo "== EXPORTED_FUNCTIONS = $EF_JSON"
 #  from command line`）。直接用 lld 的 `-Wl,--export-if-defined=`（emscripten 自己的
 # 链接行里就是这么传 `__start_em_asm` 那一串的）。
 EXPORT_IF_DEFINED="${EXPORT_IF_DEFINED:-}"
+# DIAG_EXPORTS（工单 01，2026-09-28）：**诊断专用的额外导出**，走同一条 `--export-if-defined`。
+# 为什么单列而不直接塞进 EXPORT_IF_DEFINED：两者的**生命周期不同** —— EXPORT_IF_DEFINED 是
+# 「模式的一部分」（产物该有什么能力，写进口径），而 DIAG_EXPORTS 只在 `--diag` 时非空，
+# 它决定的是「这份产物能不能被诊断」。合成一条会让产物身份证说不清自己是哪一种。
+# 实测背景：E2 的线程版三个产物导出表里**一条 BLAS 都没有** ⇒ 页面侧够不到
+# `openblas_set_num_threads` ⇒ "先设成单线程再跑同一路径"这个结案实验**今天敲不下去**。
+DIAG_EXPORTS="${DIAG_EXPORTS:-}"
+if [ -n "$DIAG_EXPORTS" ]; then
+  EXPORT_IF_DEFINED="${EXPORT_IF_DEFINED:+$EXPORT_IF_DEFINED,}$DIAG_EXPORTS"
+  echo "== DIAG_EXPORTS：并入 [$DIAG_EXPORTS]（诊断专用导出；未定义则静默忽略）"
+fi
 EID_FLAGS=()
 if [ -n "$EXPORT_IF_DEFINED" ]; then
   IFS=',' read -r -a _eid <<< "$EXPORT_IF_DEFINED"

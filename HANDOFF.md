@@ -165,7 +165,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | 键 | 值 | 复跑命令 |
 |---|---|---|
 | `accept_pass` | **1077**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-081214 里带汇总行的套件（且 0 FAIL）` |
+| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-084847 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
 | `e2_lu800_ratio` | **1.4** | `上面两行的比值（车道 / E2）` |
@@ -182,7 +182,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `e2_threaded_verdict` | **ok** | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.build.json）` |
 | `e2_threaded_wasm_bytes` | **29908917** | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm` |
 | `e2_threaded_wasm_sha` | `bce7e4cc252d6481…` | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm` |
-| `env_vars` | **27** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
+| `env_vars` | **28** | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh \| sort -u（去掉位置参数）` |
 | `exported_functions` | **710**（M2 保活集大小（M1 约 44987）） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.exported_functions` |
 | `fonts_count` | **8** | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.fonts` |
 | `js_sha` | `caac68bf62015859…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.js` |
@@ -209,7 +209,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-28T08:31:04+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-28T09:44:19+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态

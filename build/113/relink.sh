@@ -54,6 +54,8 @@ OCT="${OCT:-/src/work/octave-11.3.0}"
 #   不许为了自证去临时改真文件（本会话真这么干过，改完还得记得还原）。
 LINK_WEB="${LINK_WEB:-$HERE/link-web.sh}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 8)}"
+# ★ 车道影子目录（线程档的**隐形前置**，2026-09-28 实测被它咬）。见 cmd_link 里的长注释。
+LANE_SHIM="${LANE_SHIM:-/src/libwork/lane-shim}"
 
 # ── 产物目录默认值：**目录名 == 模式名** ────────────────────────────────────────
 out_default() {
@@ -97,6 +99,7 @@ P5_TRACE=
 DIAG_NAMES=0
 DIAG_ASSERT=0
 DIAG_SOURCEMAP=0
+DIAG_EXPORTS=
 EOF
 
   case "$m" in
@@ -224,15 +227,35 @@ EOF
   esac
 }
 
-apply_mode() {      # 把模式表导出成环境（22 个变量）；$2 = --diag?
+# ★ `--diag` 的**正交修饰**：不属于任何模式，但会改变产物。这里是它**唯一**的定义处 ——
+#   `apply_mode`（导出环境）与 `cmd_explain`（打印文档）都读这一份，免得"文档说的"与
+#   "实际导出的"分叉（那就是本仓反复出错的形状）。
+#
+#   为什么诊断还需要**导出符号**（工单 01，2026-09-28）：一个够不到的符号会让诊断**做不下去** ——
+#   实测 E2 的线程版：三个产物的导出表里**一条 BLAS 都没有**，于是"在页面里先调
+#   `openblas_set_num_threads(1)` 再跑同一路径"这句结论写法**今天无法执行**。
+#   走 `--export-if-defined`（未定义的**静默忽略**）⇒ 对不定义它的模式无害，可以安全地只在诊断档开。
+diag_overrides() {
+  cat <<'EOF'
+DIAG_NAMES=1
+DIAG_ASSERT=1
+DIAG_SOURCEMAP=1
+DIAG_EXPORTS=openblas_set_num_threads
+EOF
+}
+
+apply_mode() {      # 把模式表导出成环境（全表变量）；$2 = --diag?
   local m="$1" diag="${2:-}" k v
   while IFS='=' read -r k v; do
     [ -n "$k" ] || continue
     export "$k=$v"
   done < <(mode_table "$m")
-  # --diag：正交修饰（不属于任何模式）—— 保留 name 段 / 断言 / sourcemap，产物更大更慢
+  # --diag：正交修饰 —— 保留 name 段 / 断言 / sourcemap，外加诊断专用导出。产物更大更慢。
   if [ "$diag" = "1" ]; then
-    export DIAG_NAMES=1 DIAG_ASSERT=1 DIAG_SOURCEMAP=1
+    while IFS='=' read -r k v; do
+      [ -n "$k" ] || continue
+      export "$k=$v"
+    done < <(diag_overrides)
   fi
   export BUILD_MODE="$m"
   export BUILD_DECLARED="$(mode_declared "$m")"
@@ -252,12 +275,23 @@ EOF
 }
 
 cmd_explain() {
-  local m="$1" k v
+  local m="$1" diag="${2:-}" k v
   echo "# 模式 '$m' 推出的全部变量（这就是文档 —— 别再去别处抄命令）"
   while IFS='=' read -r k v; do
     [ -n "$k" ] || continue
     printf '%-20s %s\n' "$k" "${v:-（空）}"
   done < <(mode_table "$m")
+  if [ "$diag" = "1" ]; then
+    # ★ 工单 01：`--diag` 的修饰**必须打得出来**。打不出来的开关就是看不见的开关，
+    #   而"赋值了却没人引用"是本仓踩过的静默失效形状。这里与 apply_mode 同读 diag_overrides()。
+    echo
+    echo "# ── 下面是 --diag 的**正交修饰**（不属于模式表，但会改变产物）──"
+    while IFS='=' read -r k v; do
+      [ -n "$k" ] || continue
+      printf '%-20s %s\n' "$k" "${v:-（空）}"
+    done < <(diag_overrides)
+    echo "# （DIAG_EXPORTS 走 lld 的 --export-if-defined：未定义的符号静默忽略 ⇒ 无害）"
+  fi
   echo
   echo "# 产物目录：$([ -n "${OUT:-}" ] && echo "$OUT" || out_default "$m")"
   echo "# 链接命令（由本脚本执行）："
@@ -315,6 +349,33 @@ cmd_selfcheck() {
 
 cmd_link() {
   local m="$1" out="$2" diag="$3"
+
+  # ★★ 线程档的**隐形前置**（2026-09-28 实测被它咬，见 HISTORY §5.67）★★
+  #   为什么线程档需要它：`-pthread` 要求 shared-memory 链上**每个对象**都声明 `atomics`，
+  #   而 farm 里那 20+ 个库的构建脚本**没有传旗标的点位**（有的写死在 emf77 命令行、有的在
+  #   cmake）⇒ 只能靠 `lane-shim.sh` 建的 **PATH 影子**（`$LANE_SHIM/em++` 就是
+  #   `em++ -pthread "$@"`）把旗标注进去。而 **`main.cc` 的编译也在 `link-web.sh` 里** ⇒
+  #   链线程档之前影子必须在 PATH 上 —— 否则 `main.o` 不带 atomics，
+  #   链接期报 `--shared-memory is disallowed by /src/websrc/main.o`。
+  #   以前这一步**只存在于操作员的记忆与 NOTES 散文里**，而这个入口自称"唯一入口、
+  #   一个变量都不许手设" —— 那句话在 threads 模式上是**假的**。
+  #   现在由入口自己挂：口径搬进代码。缺影子就**点名 FATAL**（附可直接复制的建法），
+  #   而不是链到一半才炸（那时错误信息离根因很远）。
+  #   ⚠️ 检查放在 LINK_WEB 之前：`--selftest` 的第 ⑤ 条要在**宿主**上就能证明它会红。
+  if [ "$m" = threads ]; then
+    if [ -d "$LANE_SHIM" ]; then
+      export PATH="$LANE_SHIM:$PATH"
+      echo "  车道影子：$LANE_SHIM（注入 -pthread —— 线程档的 atomics 前置）"
+    else
+      echo "FATAL: threads 模式需要**车道影子**（$LANE_SHIM 不存在）—— 它是线程档的隐形前置：" >&2
+      echo "       \`-pthread\` 要求链上每个对象都带 atomics，而 farm 那批库没有传旗标的点位，" >&2
+      echo "       只能靠 PATH 影子注入。没有它 ⇒ main.o 不带 atomics ⇒ 链接期才报" >&2
+      echo "       \`--shared-memory is disallowed by main.o\`（离根因很远）。" >&2
+      echo "       建它：export PATH=/src/bin:\$PATH && bash build/113/lane-shim.sh -pthread" >&2
+      exit 2
+    fi
+  fi
+
   [ -f "$LINK_WEB" ] || {
     echo "FATAL: 找不到 "$LINK_WEB"" >&2; exit 2; }
   apply_mode "$m" "$diag"
@@ -412,33 +473,62 @@ done
 [ "$OUT" = "__NEXT__" ] && { echo "FATAL: --out 后面要跟目录" >&2; exit 2; }
 
 cmd_selftest() {
-  # ★ F1：自证 —— 三个用例（全部在**夹具副本**上跑，不碰真 link-web.sh）
-  local bad=0 tmp
+  # ★ F1：自证 —— 四个用例（前三个在**夹具副本**上跑，不碰真 link-web.sh）
+  local bad=0 n=0 tmp on off
   tmp="$(mktemp -d)"
   cp "$LINK_WEB" "$tmp/link-web.sh"
-  # ① 真仓库：--selfcheck 应当绿
+  # ① 真仓库：--selfcheck 应当绿（**阳性对照** —— 没有它，"恒红"的自检也能骗过自证）
+  n=$((n + 1))
   if LINK_WEB="$LINK_WEB" bash "$0" --selfcheck >/dev/null 2>&1; then
     echo "PASS | relink/真实 link-web.sh ⇒ selfcheck 绿"
   else
     echo "fail | relink/真实 link-web.sh selfcheck 竟红"; bad=1
   fi
   # ② 夹具：加一个"读了但模式表里没有"的变量 ⇒ selfcheck **必须红**
+  n=$((n + 1))
   printf '\necho "T ${ZZZ_NOT_IN_TABLE:-}"\n' >> "$tmp/link-web.sh"
   if LINK_WEB="$tmp/link-web.sh" bash "$0" --selfcheck >/dev/null 2>&1; then
     echo "fail | relink/**未登记变量却没报**（自检失效）"; bad=1
   else
     echo "PASS | ★ 未登记变量 ⇒ selfcheck 必须红"
   fi
-  # ③ 夹具：把模式表里的变量删光 ⇒ 反向方向（"表在骗人"）必须红
-  cp "$LINK_WEB" "$tmp/link-web.sh"; printf '\n' >> "$tmp/link-web.sh"
+  # ③ 夹具：**未动**的副本 ⇒ 仍绿（证明自证不是恒红）
+  n=$((n + 1))
+  cp "$LINK_WEB" "$tmp/link-web.sh"
   if LINK_WEB="$tmp/link-web.sh" bash "$0" --selfcheck >/dev/null 2>&1; then
     echo "PASS | 未动的副本 ⇒ 仍绿（自证不是恒红）"
   else
     echo "fail | relink/未动的副本竟红"; bad=1
   fi
+  # ④ ★ 工单 01 的反向断言：`--diag` 的修饰必须是**看得见**的
+  #    为什么：诊断档若是个看不见的开关，它等于没有 —— 而"赋值了却没人引用"正是本仓
+  #    踩过的静默失效形状（`JSPI_FLAGS` 那次：全绿，功能不在）。
+  #    ⚠️ `grep -c` 零命中会退出 1 ⇒ 必须 `|| true`，否则 `set -e` 下整段自证会中断。
+  #    ⚠️ 模式里**不能写 `=`**：`explain` 是列对齐打印（`printf '%-20s %s'`），
+  #       行里没有等号。第一版就是这么写错的 —— 于是断言"恒失败"，看起来像功能没做（实测踩到）。
+  n=$((n + 1))
+  on="$(bash "$0" explain product --diag 2>/dev/null | grep -c 'DIAG_EXPORTS.*openblas_set_num_threads' || true)"
+  off="$(bash "$0" explain product 2>/dev/null | grep -c 'DIAG_EXPORTS.*openblas_set_num_threads' || true)"
+  if [ "${on:-0}" -ge 1 ] && [ "${off:-0}" -eq 0 ]; then
+    echo "PASS | ★ --diag ⇒ explain 打得出来；不带 --diag 时打不出来（修饰可见，且非恒真）"
+  else
+    echo "fail | --diag 修饰在 explain 里看不见（on=$on off=$off）"; bad=1
+  fi
+  # ⑤ ★ 线程档的**隐形前置必须在入口里被点名**（而不是链到一半才炸）
+  #    实测背景：threads 的 `-pthread` 依赖 PATH 上的车道影子，以前只在人的记忆里；
+  #    不挂 ⇒ main.o 不带 atomics ⇒ 链接期才报 `--shared-memory is disallowed by main.o`。
+  #    ⚠️ 这条在**宿主**上跑：`LANE_SHIM=/不存在` ⇒ 必须命中"点名 FATAL"那一路。
+  #      它证明的是"入口认得这个前置"，不证明容器内的愉快路径（那由每次真链覆盖）。
+  n=$((n + 1))
+  msg="$(LANE_SHIM=/nonexistent-lane-shim bash "$0" link threads --out /tmp/_zr_shim_probe 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q '车道影子'; then
+    echo "PASS | ★ 缺车道影子 ⇒ 入口**点名** FATAL（不再靠人的记忆）"
+  else
+    echo "fail | 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
+  fi
   rm -rf "$tmp"
   echo ""
-  echo "=== relink 自证：$((3 - bad)) PASS / $bad fail ==="
+  echo "=== relink 自证：$((n - bad)) PASS / $bad fail ==="
   return $bad
 }
 
@@ -447,7 +537,7 @@ case "$SUB" in
   selfcheck) cmd_selfcheck; exit $? ;;
   selftest)  cmd_selftest; exit $? ;;
   explain)   [ -n "$MODE" ] || { echo "FATAL: explain 要一个模式名" >&2; exit 2; }
-             cmd_explain "$MODE"; exit 0 ;;
+             cmd_explain "$MODE" "$DIAG"; exit 0 ;;
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }

@@ -7,7 +7,7 @@
 
 **Blocked by:** 01（需要诊断/导出口子）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** 新建 `test/browser/probe-e2-threads.mjs` 两格（裸 `.oct` 路径 / 先 `set_num_threads(1)`）—— rc=0 ⇒ 定位在「多线程唤醒」；rc=7 ⇒ 定位在「线程版代码路径本身」
 自托管带头服务 + 每格独立超时 + 末行 `=== N PASS / M FAIL ===`）。
@@ -26,3 +26,22 @@
 - [ ] 第二步：`probe-e2-threads.mjs` 两格都能跑出**不同**的 rc
 - [ ] 第三步：结论回填 `build/113/NOTES-threads.md` 的 E2 节（推断 → 实测），工单置 `resolved`
 - [ ] 若证明不可行 ⇒ 把结论写进 NOTES 并说明代价，**不要**删这张工单
+
+## Answer（2026-09-28）
+
+**卡点在「线程版代码路径本身」，与线程数无关。** 不是多线程唤醒。
+
+做法：工单 01 先给了 `DIAG_EXPORTS` 口子（`--diag` 时并入 `--export-if-defined`），
+再链一份带该导出的诊断档（`85e64295…`，`verdict=ok`；wasm 导出表 735 条，对照线上 725），
+用新建的 `test/browser/probe-e2-threads.mjs` 跑两格（**同一份产物** ⇒ 诊断档更慢在 A/B 之间抵消）：
+
+- 格 A 裸跑 dlopen 的 `.oct` 路径 ⇒ **>300 s 未返回**（复现既有实测 `e2_threaded_oct_rc`）；
+- 格 B 先 `Module._openblas_set_num_threads(1)` 再跑同一路径 ⇒ **>300 s 未返回**
+  （且导出确实可调：`typeof=function`、调用返回 ok）。
+
+⇒ 原推断（worker 唤醒/自旋等待）**被证伪**，已登记 `build/lib/retractions.json` 的 **R-010**。
+下一个问题是"线程版代码路径本身在哪一段不同" ⇒ **工单 16**。
+
+**复跑方式**：起一个带 COI 的站点，把 `--diag` 产物放进它的 `threads/`，然后
+`sh test/browser/run.sh test/browser/probe-e2-threads.mjs <那个站点URL>`。
+（探针自带 SKIP 闸：非诊断档站点上它打 SKIP 并 `exit 0`，不产生假红。）

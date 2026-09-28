@@ -77,6 +77,13 @@
    "why": "过度概括（2026-09-27 实测更正）：wasm-ld 的规则针对**带 TLS / 用原子操作**的对象（报错原文里的 `libglpk_la-tls.o`、`fccache.o`、`src_sfnt_sfnt.c.o` 都是这类）。**纯计算、无 TLS 的对象可以静默链进 shared-memory 模块**：实测那份线程档产物`m2fc-threads-out` 当时链进去的是**基础档**（非 atomics）的 SIMD BLAS（身份证 `inputs.blas.resolved_dir=/src/deps/lapack-simd/lib`，sha `6160358f…`），而链接 0 违规、verdict=ok。",
    "evidence": "① `python3 build/113/atomics_scan.py --quiet /src/deps/lapack-simd/lib/*.a` → 1781 处缺；② 同一份产物 `octave.build.json` 的 `inputs.blas.refblas.sha256` == 该目录那份的 sha；③ 链接日志 `grep -c 'shared-memory is disallowed'` = 0",
    "fixed_in": "PLAN-threads §6（口径改成「带 TLS/原子的对象必须」）+ 新增可证伪判据：`check-build-manifest.py::lane_blas_problem()` —— 声明 threads=true 时 BLAS 必须来自车道路径"
+  },
+  {
+   "id": "R-010",
+   "text": "worker 唤醒/自旋等待",
+   "why": "推断被实验证伪（2026-09-28）：曾推断线程版在 dlopen 的 `.oct` 路径上不返回，是因为 OpenBLAS 的 worker 唤醒/自旋等待在 wasm 下的行为（线程同步忙等 + 主线程 `Atomics.wait` 受限）。结案实验②的做法是**先调 `openblas_set_num_threads(1)` 再跑同一路径** —— 若卡在唤醒/自旋，设成 1 个线程就该返回。实测：**仍不返回**（>300 s），且那个导出确实可调（`typeof=function`、调用返回 ok）。⇒ 卡点在**线程版代码路径本身，与线程数无关**。",
+   "evidence": "`test/browser/probe-e2-threads.mjs` 两格（同一份 `--diag` 产物，A/B 抵消诊断档更慢）：格 A 裸跑 >300 s 未返回；格 B 先设 1 线程 >300 s 未返回。7 PASS / 0 FAIL。探针与产物 sha（`85e64295…`）见 `build/113/NOTES-threads.md` 的 E2 节",
+   "fixed_in": "build/113/NOTES-threads.md『结案实验②（本条已做，2026-09-28）』"
   }
  ]
 }
