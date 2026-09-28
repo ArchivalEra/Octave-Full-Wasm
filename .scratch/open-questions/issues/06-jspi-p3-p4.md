@@ -7,7 +7,7 @@
 
 **Status:** ready-for-agent
 
-**Settling:** `sh build/sweep.sh <站点>/` 里 `accept-*` 相关套件全绿（尤其 `accept-ginput`、
+**Settling:** `sh build/sweep.sh <站点>/` —— rc=0 且 `accept-ginput` / `accept-113-oct` 全绿 ⇒ 过；rc≠0 ⇒ 有回归（反向断言：关掉 JSPI 时 `accept-ginput` 必须**优雅降级**，不是 TypeError）
 `accept-113-oct`）；反向断言：把 JSPI 关掉时 `accept-ginput` 必须**优雅降级**（D9 门槛，不是 TypeError）。
 
 **Type:** task

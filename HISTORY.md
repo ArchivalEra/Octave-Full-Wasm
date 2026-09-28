@@ -3277,3 +3277,64 @@ mismatch 同为 `zdotu_`）⇒ **零新增**。闸门自证 22 → **26 个**（
 线程版（小尺寸 6.7×）**在"dlopen 的 `.oct` 里首次 BLAS 调用"这条路上不返回**（600 s 跑满）；
 "为什么"未结案，下一步实验写在 NOTES（`openblas_set_num_threads(1)` 后跑同一路径）。
 **本轮不 promote**：E2 是分支产物（`/src/websrc/e2-ob-s-out`，verdict=ok），8761/8768 一字未动。
+
+### 5.66 E2 单线程形态上线（换产物批次）+ 两处工具缺陷 + wasm64 需求书（2026-09-28，branch `open-questions`）
+
+**用户定序**：E2 上线 → 推进多线程版 → 把 wasm64 纳入考量并出需求书交外部 agent。
+
+**0) 环境两处先修**：容器 `o113` **Exited (137)**（9 小时前被 kill）⇒ `docker start`；
+8761 / 8768 **都没在服务**（`HTTP=000`）⇒ `serve-coi.py` 起回来 + `check-boot`。
+磁盘上的部署件与台账当时仍逐字一致（`1ed3e528…` / `c2899a71…`）⇒ 是跨会话进程没了，不是产物退化。
+
+**1) verify 的一次假红（工单 15，我自己踩的）**：为核对 E2 产物身份证，跑
+`relink.sh verify threads --out /mnt/hdd/.../e2-artifacts/single` —— 它**没认 `--out`**，
+去宿主上找 `/src/websrc/e2-ob-s-out`（容器路径）⇒ 报「三个大件不存在」，
+并且 **`--write` 把 `verdict=rejected` 写进了那份好产物的身份证**。
+根因：`check-build-manifest.py:207` 的配对检查是 `out_dir or man.build.out`
+—— 按**身份证里记录的构建目录**找兄弟文件，而 `cmd_verify` **不转发 `--out-dir`**。
+⇒ 从容器 `docker cp` 恢复身份证，改在**容器内原位**验（那里记录的路径真实存在）⇒ 10 项声明全过、`verdict=ok`。
+**性质**：一次「验证产物」的动作销毁了被验证的产物。修法一行 + 反向断言（坏副本必须仍红）已开单。
+
+**2) E2 上线（只换线程档）**：
+- 暂存 8768：4 个文件换入 `siteWebGL/threads/`（旧的先备份）⇒ `check-boot` 1.1s ⇒
+  `probe-artifact-sha` 两层 SHA 对上且 **`dir=threads/`**（页面确实跑线程档）。
+- **8768 整轮 sweep：43 套 / 1077 PASS / 0 FAIL** —— 与台账 `accept_suites` / `accept_pass` 逐字相同
+  ⇒ 换产物后套件数一个没少、PASS 一个没掉。关键几套：`accept-113-oct 8/0`（就是线程版 600 s 不返回的那套）、
+  `accept-dldfcn 71/0`、`accept-embed-multi 13/0`、`accept-archive 20/0`。
+- promote：`SRC_OUT=GL_OUT=/src/websrc/m2fc-simd-out THREADS_OUT=/src/websrc/e2-ob-s-out`。
+  §1b 核过「基础档源与现役逐字节相同」⇒ **本次只换线程档**。车道 `.oct` 44 个 + 清单重算
+  （TLS 入口 44/44，基础档 44 个都没有 —— 反向断言成立）。8761 **BOOT OK 0.9s**。
+- SHA 三层：基础档 `1ed3e528…`（磁盘+HTTP）、线程档 `e570905e…`（磁盘+HTTP）、
+  **页面实例化字节 = `e570905e…` 且取自 `threads/`**。
+- 台账重测：改口守卫**正好拦下 4 条**，且 4 条全部与预期逐字吻合、并交叉对上 `e2_single_*`：
+  `threads_blas_dir` → `/src/work/e2-openblas-lib-s`、`threads_v128` 4756 → **4926**、
+  `threads_wasm_bytes` → 29495868、`threads_wasm_sha` → `e570905e…` ⇒ `--accept-changes`。
+
+**3) wasm64 侦察（五个容器内实测，写进 `PLAN-wasm64.md`）**：
+- `settings.js:258-261`：`MEMORY64` = 0/1/2，其中 **2 = clang/lld 按 64 位编、Binaryen 降回 wasm32**。
+- **链接层三种组合全过**：平凡 / `-pthread -sSHARED_MEMORY` / `SIDE_MODULE+MAIN_MODULE`
+  （emcc 为 wasm64 备了完整 sysroot，含 `-mt` 与 `pic` 变体）。
+- **运行层挡的是引擎版本**：容器内 `node 22.16` 报
+  `CompileError: WebAssembly.instantiate(): invalid table elements limits flags`；
+  宿主 `node 26.8.1` **跑得动**，且 `memory64 + dlopen` 输出 **`dlopen OK, f()=42`**，
+  与 wasm32 对照**行为一致**。
+- 全树 grep `memory64 × {side,dylink,dynamic,shared,pthread}`：**无任何显式守卫**（= 没人测过）。
+- 需求书把「`MEMORY64=2` 同样拿不到 >4 GiB」写成**待证伪的推断**（不是结论），
+  并把「拿不到 >4 GiB ⇒ 零收益 ⇒ 写否证并停」定为 fail-closed 出口。
+
+**4) 悬案台账 15 张 + 归档仓 `zcode-reflect`**：
+- 工单新增 **14**（wasm64）、**15**（verify 假红）。悬案闸门跑出**我自己**的问题：
+  15 张里 10 张的 `Settling:` 只写做法、没写**两种可区分的结论** ⇒ 全部改写成
+  `—— rc=0 ⇒ A；rc=7 ⇒ B` 的形状（这正是这条规则存在的意义）。
+- 另发现**约定文本与检查器互相打架**（约定写「本工单**的**第一个交付物」，检查器找「第一交付物」）
+  ⇒ 修检查器 + 补反向断言，并把「路径判据只查首词」这个**已知缺口**写进 README
+  （宁可留写明的缺口，也不要会误报的判据 —— 会误报的闸门最后会被人一律 `--accept` 掉）。
+- 归档仓 `https://github.com/ArchivalEra/zcode-reflect`（MIT，公开）：四部件机制 + 发现式闸门名录，
+  全新克隆跑通（3 闸门 + runner 4 夹具 + SessionStart 注入）。抽出来时去掉了本项目的一切路径与数据。
+
+**教训（本轮新增两条）**：
+1. **跑工具前先读它的用法** —— `relink.sh verify` 那次假红与产物被污染，根因是没读 `cmd_verify`
+   怎么取目录就敲了命令；而「验副本」恰恰是 promote 之外最自然的一个动作。
+2. **闸门的文档与实现对不上，就是一次假红或假绿** —— 约定写「的第一个交付物」而检查器认
+   「第一交付物」，结果是**完全合规的悬案被判成不合规**。凡「约定文本 + 检查器」成对出现的地方，
+   两边必须各有一条用例把对方钉住。

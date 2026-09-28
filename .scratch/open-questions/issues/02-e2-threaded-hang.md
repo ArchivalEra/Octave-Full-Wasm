@@ -9,7 +9,7 @@
 
 **Status:** ready-for-agent
 
-**Settling:** 新建 `test/browser/probe-e2-threads.mjs`（照 `probe-blas-threads.mjs` 骨架：
+**Settling:** 新建 `test/browser/probe-e2-threads.mjs` 两格（裸 `.oct` 路径 / 先 `set_num_threads(1)`）—— rc=0 ⇒ 定位在「多线程唤醒」；rc=7 ⇒ 定位在「线程版代码路径本身」
 自托管带头服务 + 每格独立超时 + 末行 `=== N PASS / M FAIL ===`）。
 两格：① 裸跑 dlopen 的 `.oct` 路径；② 同路径但先注入 `openblas_set_num_threads(1)`。
 `rc=0` ⇒ 定位在多线程唤醒；`rc=7` ⇒ 定位在线程版代码路径本身。

@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-09-27T21:56:45+0800",
+ "generated": "2026-09-28T08:31:04+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -63,13 +63,13 @@
   },
   "accept_suites": {
    "value": 43,
-   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-181413 里带汇总行的套件（且 0 FAIL）",
-   "source": "sweep-logs/20260927-181413"
+   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-081214 里带汇总行的套件（且 0 FAIL）",
+   "source": "sweep-logs/20260928-081214"
   },
   "accept_pass": {
    "value": 1077,
    "cmd": "同上，把每个套件的 PASS 相加",
-   "source": "sweep-logs/20260927-181413",
+   "source": "sweep-logs/20260928-081214",
    "note": "最近一次**全绿**扫描的 PASS 合计"
   },
   "threads_verdict": {
@@ -91,7 +91,7 @@
    "note": "基础档实测是 0"
   },
   "threads_v128": {
-   "value": 4756,
+   "value": 4926,
    "cmd": "读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.simd.v128",
    "source": "m2fc-threads-out/octave.build.json",
    "note": "线程档也带 SIMD（两轴不互斥）"
@@ -102,18 +102,18 @@
    "source": "m2fc-threads-out/octave.build.json"
   },
   "threads_blas_dir": {
-   "value": "/src/deps-threads/lapack-simd/lib",
+   "value": "/src/work/e2-openblas-lib-s",
    "cmd": "读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 inputs.blas.resolved_dir",
    "source": "m2fc-threads-out/octave.build.json",
    "note": "**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）"
   },
   "threads_wasm_sha": {
-   "value": "c2899a71b5c75fce43475ecaedd35cd76af6aeb5fee542ebd9ad8479276f2cf4",
+   "value": "e570905ecc8927bf79f1bda4451dbed05f7f1d0713ff4c850b0c9d4b63953cea",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/site/threads/octave.wasm",
    "source": "m2fc-threads-out/octave.wasm"
   },
   "threads_wasm_bytes": {
-   "value": 29218378,
+   "value": 29495868,
    "cmd": "stat -c%s /mnt/hdd/octave-wasm-build/site/threads/octave.wasm",
    "source": "m2fc-threads-out/octave.wasm"
   },

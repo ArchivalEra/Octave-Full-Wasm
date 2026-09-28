@@ -6,7 +6,7 @@
 
 **Status:** ready-for-human
 
-**Settling:** 跑一次真实的 `rebuild`（configure + clean + 数小时 make），判据 =
+**Settling:** `bash build/113/relink.sh rebuild product --out <新目录> --yes-rebuild` —— rc=0 且 `verdict=ok` ⇒ rebuild 路径还活着；rc≠0 ⇒ 该路径已腐烂（**这本身就是发现**）
 `verdict=="ok"` 且产物 sha 与不 rebuild 时一致/可解释；若它与 `link` 的产物**不一致**，
 那本身就是发现（说明 rebuild 路径已经腐烂）。
 

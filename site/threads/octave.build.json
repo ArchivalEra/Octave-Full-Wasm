@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-09-27T04:16:25+0000",
-  "out": "/src/websrc/m2fc-threads-out",
+  "when": "2026-09-27T13:30:13+0000",
+  "out": "/src/websrc/e2-ob-s-out",
   "mode": "threads"
  },
  "declared": {
@@ -23,6 +23,7 @@
   "idbfs": true,
   "fontconfig": true,
   "threads": true,
+  "e2_openblas": true,
   "fonts": [
    "FreeSans.otf",
    "FreeSansBold.otf",
@@ -37,7 +38,7 @@
  "measured": {
   "exported_functions": 725,
   "simd": {
-   "v128": 4756,
+   "v128": 4926,
    "impl": "llvm-objdump"
   },
   "jspi_entry": true,
@@ -66,12 +67,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "c2899a71b5c75fce43475ecaedd35cd76af6aeb5fee542ebd9ad8479276f2cf4",
-    "bytes": 29218378
+    "sha256": "e570905ecc8927bf79f1bda4451dbed05f7f1d0713ff4c850b0c9d4b63953cea",
+    "bytes": 29495868
    },
    "octave.js": {
-    "sha256": "1ead2a3f190aa65a5b2ee86fe2461db2e12a3bcc34872d52ef81d0a2aecd243d",
-    "bytes": 494234
+    "sha256": "9ca02946d6eb78e14a2be63a67a528ad93ff730e49ba384b88b5d5bf2f02f981",
+    "bytes": 494219
    },
    "octave.data": {
     "sha256": "5c1433c4a5a263ce3a0731fbce440dea5a4ca05fafb25000f595a67b4511bd76",
@@ -85,21 +86,18 @@
    "sha256": "44be7ec283ea4a343943af00413ae5a3f34352dd1da5ca4fcd71f5fbb615f90e"
   },
   "blas": {
-   "resolved_dir": "/src/deps-threads/lapack-simd/lib",
+   "resolved_dir": "/src/work/e2-openblas-lib-s",
    "search_order": [
+    "/src/work/e2-openblas-lib-s",
     "/src/deps-threads/lapack-simd/lib",
     "/usr/local/lib"
    ],
    "librefblas": {
-    "path": "/src/deps-threads/lapack-simd/lib/librefblas.a",
-    "sha256": "5ca43812cb855d8ea0b93e2e257b2a0bf55b7263f06354a791f105bb965cb5ef",
-    "bytes": 680444
+    "path": "/src/work/e2-openblas-lib-s/librefblas.a",
+    "sha256": "2ae5e15712d8b3768dfa4797db9bb73a032189b46ea607f9696abe68ce5f5462",
+    "bytes": 2065210
    },
-   "liblapack": {
-    "path": "/src/deps-threads/lapack-simd/lib/liblapack.a",
-    "sha256": "3ca97ce481d1a016573cb8bbe281a8cc9b4761937eff68e58d52096fecb50007",
-    "bytes": 9894986
-   }
+   "liblapack": null
   },
   "keep_list": {
    "path": "/src/libwork/keep.txt",
@@ -115,8 +113,8 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-09-27T04:16:25+0000",
+  "when": "2026-09-28T00:11:47+0000",
   "by": "check-build-manifest.py",
-  "script_sha256": "b9d20df2416d2efb24df4f0bef3b5267beb51a4220f2da13a9c3d50a77388b66"
+  "script_sha256": "79f70251f1cde9da3f53d786b56ecc9742aa252b4e4d2b0c650be950c6e7b393"
  }
 }

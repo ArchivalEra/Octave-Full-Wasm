@@ -7,7 +7,7 @@
 
 **Status:** ready-for-human
 
-**Settling:** 扩 `test/browser/probe-jspi*.mjs` 的矩阵：对缺 JSPI API 的引擎**应返回退出码 2**
+**Settling:** 不存在 —— 本工单第一交付物就是造它：`test/browser/probe-browser-floor.mjs`（对缺 JSPI API 的引擎 rc=2 ⇒ 按约定优雅降级；rc=其他 ⇒ 判定失效；今天那只是注释里的约定）
 （这是已有的约定，见 `NOTES-jspi.md:87-89`）；矩阵每一格都要有明确期望值，缺格即红。
 
 **Type:** research

@@ -8,7 +8,7 @@
 
 **Status:** ready-for-agent
 
-**Settling:** `bash build/113/relink.sh explain product --diag` 必须把诊断旗标列出来；
+**Settling:** `bash build/113/relink.sh explain product --diag` —— rc=0 且打出诊断旗标 ⇒ 过；rc≠0（报「未知选项」）⇒ 口子没进模式表（反向断言：把 `--diag` 从表里删掉后 `relink.sh --selfcheck` 必须红）
 反向断言：把 `--diag` 从模式表里删掉后 `bash build/113/relink.sh --selfcheck` 必须**红**。
 
 **Type:** task

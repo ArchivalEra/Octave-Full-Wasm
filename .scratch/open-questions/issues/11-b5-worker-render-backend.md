@@ -7,7 +7,7 @@
 
 **Status:** ready-for-agent
 
-**Settling:** `sh build/sweep.sh <站点>/` 相关套件全绿 + 页面侧实测出图（不是"能编过"）。
+**Settling:** `sh build/sweep.sh <站点>/` + 页面侧出图（`?worker=1` 与默认路径**都要**）—— rc=0 且两条路径都出图 ⇒ 过；rc≠0 或缺一条 ⇒ 未完成
 反向断言：`?worker=1` 与默认路径**都**要能出图，缺一个即红。
 
 **Type:** task

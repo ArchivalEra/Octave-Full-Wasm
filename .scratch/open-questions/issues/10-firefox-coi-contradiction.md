@@ -7,7 +7,7 @@
 
 **Status:** ready-for-agent
 
-**Settling:** 部分存在 —— `test/browser/probe-coi-sw.mjs` 给出观察值（3 引擎 × 3 档，7/2）。
+**Settling:** `test/browser/probe-coi-sw.mjs` 加一档「同源但走 CDN 路径」的对照 —— rc=0 ⇒ 假设 A（拦截发生在 CDN 层）；rc=7 ⇒ 假设 B（作用域问题）；两者必须只有一种成立
 缺的是**能区分假设**的那一格：加一档"同源但走 CDN 路径"的对照，两值的差必须能指向唯一解释。
 
 **Type:** research

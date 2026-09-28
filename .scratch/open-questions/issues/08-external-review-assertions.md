@@ -7,7 +7,7 @@
 
 **Status:** ready-for-agent
 
-**Settling:** 每条行为各配一条**能证伪**的断言（该报错的必须报错），并入现有套件；
+**Settling:** 并入现有套件后 `sh build/sweep.sh <站点>/` —— rc=0 ⇒ 4 条判据都在且能绿；rc≠0 ⇒ 要么缺判据、要么行为已坏
 反向断言必须有 —— 例：worker 崩溃时若不快速失败，断言必须红。
 
 **Type:** task

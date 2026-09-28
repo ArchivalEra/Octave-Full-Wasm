@@ -13,7 +13,7 @@
 
 ---
 
-## 0. 现在是什么（2026-09-27）
+## 0. 现在是什么（2026-09-28）
 
 - **8761 = 现役「双档」站点**：根目录基础档 + `threads/` 线程档，**带头服务**（`build/serve-coi.py`）
   ⇒ 页面按 COI 选**线程档**（实测 `probe-artifact-sha` 2/0：实例化的正是 `threads/octave.wasm`）。
@@ -39,9 +39,13 @@
     显式 `?lane=threads&worker=1` 仍选线程档并**硬失败**（不静默降级）。
   · **同页多实例是支持的**（13/0），但**前提是每个实例都拿到页面的选档计划** —— 少传一个就是
     "线程胶水 + 基础产物"的错配（`eval_string` 缺席）。
-- ⚠️ **一条最容易在压缩里丢的细微事实**：**现役**（8761/8768）用的仍是 **refblas/lapack 的
-  「SIMD + atomics」版**（多线程运行时已启用、数学还没并行化）；**E2 那套（OpenBLAS）在分支
-  `e2-openblas` 上，尚未 promote**。别把"E2 已打通"读成"现役已经在用 OpenBLAS"。
+- ★ **现役线程档 = E2（OpenBLAS，`USE_THREAD=0` 的交付形态）**，2026-09-28 上线：
+  `threads/` 那份产物**就是 OpenBLAS**（BLAS 来源见台账 `threads_blas_dir`，收益见
+  `e2_matmul500_ratio` / `e2_lu800_ratio`）。
+  ⚠️ **别把「E2 上线」读成「数学已并行化」**：上线的是**单线程**形态 —— 收益来自 OpenBLAS 的内核，
+  不是多线程；**线程版仍不可用**（`e2_threaded_oct_rc`），"为什么"未结案 ⇒ 工单 02。
+  **基础档本次一字未换**（`wasm_sha` 逐字节未变，promote 的 §1b 判据核过）⇒ 这是一次
+  **只换线程档**的换产物。
 - 现役 farm（`/usr/local`、`/src/deps`）**一字未动**（实测仍 100% 缺 atomics）；车道在
   `/usr/local-threads` + `/src/deps-threads`；两档 prefix 分开是硬要求。
 - 事实系统：`build/FACTS.json`（源）+ `AUTO:FACTS`（渲染）+ 翻案台账 `build/lib/retractions.json`
@@ -49,26 +53,27 @@
 
 ## 1. 下一步（按此顺序）
 
-**B6 已收尾上线**（8761 双档 + 带头服务 + 三套矩阵 + 三处 parity `--strict` + dist + 六道闸门，
-提交在 `threads` 分支且已推 mirror）。⇒ 下一步是 **E2**，它在**独立分支 `e2-openblas`**：
+**E2（单线程形态）已上线 2026-09-28**：8768 验绿（套件数 / PASS 见 `accept_suites` / `accept_pass`，
+全 0 FAIL）→ promote（只换线程档）→ boot → SHA 三层 → 台账 `threads_*` 那几条按实测**接受改口**。
+⇒ 下一步两条线：
 
-1. **E2 现状（已落地，等你拍板"要不要上线"）**：把**线程版 OpenBLAS** 链进主模块这件事**已经打通** ——
-   根因是**返回约定**（f2c/F77_RET_T 按 `int` 调、OpenBLAS 定义 `void`），方案 B（`ob_` 前缀 +
-   生成薄包装）落地；两个产物都 `verdict=ok`（台账键 `e2_single_verdict` / `e2_threaded_verdict`，
-   sha 见 `e2_single_wasm_sha` / `e2_threaded_wasm_sha`）。
-   · **交付形态 = 单线程**（`USE_THREAD=0`）：实测收益 **`e2_matmul500_ratio`（矩阵乘 500²）与
-     `e2_lu800_ratio`（`lu(800)`）**，数值回归 5 套全绿（`accept-113-oct 8/0`、`libs 17/0`、
-     `hdf5 16/0`、`ode15 29/0`、`slicot 25/0`）；
-   · **线程版**：小尺寸非常快（`e2_threaded_matmul500_ratio`），但在"dlopen 的 `.oct` 里首次 BLAS
-     调用"这条路上 **`e2_threaded_oct_rc` = 124（600 s 跑满未完成）** ⇒ 暂不可用；
-     **"为什么"未结案**，结案实验②（页面里先 `openblas_set_num_threads(1)` 再跑同一路径）写在
-     `NOTES-threads.md` 的 E2 节；
-   · 配方（六步）/五条规则表/三个坑/两版 A/B 全在 `NOTES-threads.md` 的 E2 节；过程在 `HISTORY` §5.65。
-2. **若要 E2 上线**：把单线程 E2 当**新的线程档产物** promote（`E2_OPENBLAS=` 口子已进 `relink.sh`
-   的模式表），然后按批次收尾那套走一遍（8768 验绿 → promote → boot/SHA 三层 → 同步 `site/` →
-   dist → parity → 六道闸门）。**这是一次"换产物"**：台账里那批 `threads_*` 会变，`facts.py` 重测
-   就会跟上（掉条守卫会拦住意外）。
-3. **线程版的"为什么"**（独立课题，收益更大：小尺寸已 6×）⇒ 结案实验②后再说。
+1. **多线程版（独立课题，收益最大：小尺寸见 `e2_threaded_matmul500_ratio`）** —— 按工单 **01 → 02** 走：
+   · **01** = 把诊断/额外导出这类旗标收进 `relink.sh` 的模式表（`explain` 打得出来、`--selfcheck`
+     覆盖得到）。它是 02 与 03 的**共同前置**，本身不碰产物；
+   · **02** = 线程版在 dlopen 的 `.oct` 路径上不返回的**定位**。
+     ⚠️ **第一步是一次重链** —— 三个产物的导出表里**一条 BLAS 都没有**（实测，见工单 02），
+     所以「页面里先 `openblas_set_num_threads(1)`」今天敲不下去，得先把那个符号导出来。
+     ⇒ 这次重链可**顺带做掉工单 11**（B5 worker 渲染后端），省一次 29MB。
+2. **wasm64**：需求书 + 容器内实测在 `build/113/PLAN-wasm64.md`，工单 **14**，交外部 agent 在**新分支**做。
+   结论方向已定：**不是工具链挡的，挡的是引擎版本**（容器内 node 22 装不进、宿主 node 26 跑得动，
+   memory64 的 side module + dlopen 与 wasm32 对照行为一致）。**不动 8761/8768。**
+3. **其余前沿**（各自独立、互不阻塞）：工单 04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、
+   08（外审 4 项补判据）、10（Firefox COI 矛盾）；需要设备的 07 / 12 / 13。
+   **不要与上面那次重链并行**（本仓实测过并发会让套件假崩）。
+
+**本轮顺带发现并登记的**：工单 **15** —— `relink.sh verify --out <副本>` **假红，并把 `verdict`
+写成 `rejected`**（根因：`check-build-manifest.py` 的配对检查按身份证里记录的 `build.out` 找兄弟文件，
+而 `cmd_verify` 不转发 `--out-dir`）。⇒ **验副本必须在产物原位验。**
 
 ## 2. 铁律（违反会被拦或返工）
 
@@ -160,7 +165,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | 键 | 值 | 复跑命令 |
 |---|---|---|
 | `accept_pass` | **1077**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260927-181413 里带汇总行的套件（且 0 FAIL）` |
+| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-081214 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
 | `e2_lu800_ratio` | **1.4** | `上面两行的比值（车道 / E2）` |
@@ -192,19 +197,19 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octdir_base_files` | **28**（基础档 `assets/octdir/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' \| wc -l` |
 | `probe_lane_fail` | **0** | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
 | `probe_lane_pass` | **17**（双档探针的 PASS 数（FAIL 必须 0）） | `SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
-| `threads_blas_dir` | **/src/deps-threads/lapack-simd/lib**（**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 inputs.blas.resolved_dir` |
+| `threads_blas_dir` | **/src/work/e2-openblas-lib-s**（**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 inputs.blas.resolved_dir` |
 | `threads_exported_functions` | **725** | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.exported_functions` |
 | `threads_pthread_glue` | **54**（基础档实测是 0） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.threads.pthread_glue` |
 | `threads_shared_memory` | 是（wasm 内存段的 shared 位；线程档的硬身份） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.threads.shared_memory` |
-| `threads_v128` | **4756**（线程档也带 SIMD（两轴不互斥）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.simd.v128` |
+| `threads_v128` | **4926**（线程档也带 SIMD（两轴不互斥）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.simd.v128` |
 | `threads_verdict` | **ok**（只有 ok 才可部署（fail-closed）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 verdict` |
-| `threads_wasm_bytes` | **29218378** | `stat -c%s /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
-| `threads_wasm_sha` | `c2899a71b5c75fce…` | `sha256sum /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
+| `threads_wasm_bytes` | **29495868** | `stat -c%s /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
+| `threads_wasm_sha` | `e570905ecc8927bf…` | `sha256sum /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
 | `wasm_bytes` | **29632229** | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-27T21:56:45+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-28T08:31:04+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
@@ -219,7 +224,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260927-181413` · **43 套 / 1,077 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 24 套 / 227 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20260927` · tar.zst 50,023,518 B · `d60e1dc3b95351ce…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20260928-084847` · **43 套 / 1,077 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 24 套 / 227 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20260928` · tar.zst 50,063,501 B · `8d2b49c1dfd6922a…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `open-questions`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
