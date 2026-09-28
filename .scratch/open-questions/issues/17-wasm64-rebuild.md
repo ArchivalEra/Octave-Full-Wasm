@@ -50,6 +50,9 @@ wasm-ld: error: /src/work/octave-11.3.0/libinterp/.libs/liboctinterp.a(liboctint
 
 ## Answer（2026-09-28，由主会话独立复核）
 
+> ⚠️ **下面这些数字是「当时」**：产物之后又被重编过一次 ⇒ 现值看台账 `w64_*` 组
+> （732 / 4,040,751 / 46，sha `d34d3217…`）。
+
 **重编成功，且主会话已逐项独立复核**：
 - `/src/websrc/w64-out/octave.wasm`（29,944,672 B）`verdict=ok`，身份证 **`declared.wasm64=true` /
   `measured.wasm64=true`**（write-build-manifest 现在解析 WebAssembly limits flags bit 2）；

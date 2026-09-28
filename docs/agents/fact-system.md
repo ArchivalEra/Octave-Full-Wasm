@@ -89,12 +89,15 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
   基础档（`wasm_sha` / `wasm_v128` / `exported_functions` / `accept_suites` / `accept_pass` …）、
   线程档（`threads_*` 那组）、E2 两组（`e2_single_*` / `e2_threaded_*`）、
   探针（`probe_lane_pass` / `probe_lane_fail`）、`env_vars`。
-- **还没有键的**：**w64 车道的全部数字**（导出数、i64 指令密度、`.oct` 计数、
-  Q3 那几个内存上限、`Arch: wasm64`）。它们现在只在
-  `build/113/NOTES-wasm64.md` 与工单 14/17 的 Answer 里**以散文存在**。
-- **这正是工单 18 该顺手做的**：给 w64 那组上键（照 `build/facts.py` 里 `threads_*` 组的写法
-  抄结构），之后正文才能引用键名、闸门才拦得住它们腐烂。**在那之前，别把 NOTES 里的 w64 数字
-  手抄进任何活状态文档** —— 那就是在制造这套系统要消灭的东西。
+- **w64 车道也已上键**（2026-09-28 补，10 条）：`w64_verdict` / `w64_wasm64` /
+  `w64_shared_memory` / `w64_exported_functions` / `w64_v128` / `w64_i64_insns` /
+  `w64_oct_files` / `w64_oct_wasm64` / `w64_wasm_sha` / `w64_wasm_bytes`。
+  它们的**生产者**是 `build/113/build-w64-lane.sh` 的 `facts` 阶段（写两份日志）+ 宿主侧
+  `docker cp` 产物到 `w64-artifacts/`；`python3 build/facts.py show w64_wasm64` 能查。
+  ⇒ **Q3 那几个内存上限还没上键**（它们来自一次浏览器实测，不是产物），仍是散文。
+- ⚠️ **教训（值得照着做）**：上键之前，w64 的数字只活在 `NOTES-wasm64.md` 与工单 Answer 的
+  散文里 —— 而那份产物**后来又被重编过一次**，散文里的数字（734 / 4,189,800 / 44）
+  **当场过期**，没有任何东西报警。**上了键，改口守卫就会拦**（那正是它存在的理由）。
 
 **⚠️ 已知缺口（如实记）**：悬案台账（`.scratch/open-questions/issues/`）目前**没有**本仓闸门盯着
 ——检查器在归档仓 `zcode-reflect` 里，没接进本仓的 `gates-selftest.sh` 名单。

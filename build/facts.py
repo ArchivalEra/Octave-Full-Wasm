@@ -506,6 +506,66 @@ def measure(argv):
     except (OSError, ValueError):
         pass
 
+    # ── ★ wasm64 车道（工单 14/17/18，2026-09-28）：memory64 的实测事实 ──────────────
+    # 为什么进台账：w64 那组数字（导出数 / i64 密度 / 44 个 `.oct` 有几个是 64 位）本来是**散文** ——
+    #   只活在 `NOTES-wasm64.md` 与工单 Answer 里，没有任何东西拦得住它们腐烂。这组把它们上键。
+    # 量什么：宿主上的 `w64-artifacts/`（docker cp 出来的产物与身份证）+ `w64-logs/`
+    #   （由 `build/113/build-w64-lane.sh` 的 **facts 阶段**写的两份日志）。
+    W64A = os.environ.get("W64_ARTIFACTS", os.path.join(os.path.dirname(SITE), "w64-artifacts"))
+    W64L = os.environ.get("W64_LOGS", os.path.join(os.path.dirname(SITE), "w64-logs"))
+    try:
+        bj = json.load(open(os.path.join(W64A, "octave.build.json"), encoding="utf-8"))
+        me = bj.get("measured") or {}
+        facts["w64_verdict"] = fact(bj.get("verdict"),
+                                    "python3 build/facts.py（读 %s/octave.build.json）" % W64A,
+                                    "w64-artifacts/octave.build.json",
+                                    "只有 ok 才可部署（fail-closed）")
+        # ★ 64 位的**硬身份**：wasm 内存段的 limits flags bit2（`write-build-manifest.py` 解析它）。
+        #   有这个键，一份 w64 产物与一份 wasm32 产物在身份证上就**分得开** ——
+        #   上一批的缺口正是"分不开"。
+        facts["w64_wasm64"] = fact(bool(me.get("wasm64")),
+                                   "读 %s 的 measured.wasm64" % W64A,
+                                   "w64-artifacts/octave.build.json",
+                                   "wasm 内存段 limits flags bit2 = 1 ⇒ 真 64 位")
+        facts["w64_shared_memory"] = fact(bool((me.get("threads") or {}).get("shared_memory")),
+                                          "读 %s 的 measured.threads.shared_memory" % W64A,
+                                          "w64-artifacts/octave.build.json",
+                                          "目标形态 = memory64 **+ 多线程**（shared 是这个轴的硬身份）")
+        if (me.get("simd") or {}).get("v128") is not None:
+            facts["w64_v128"] = fact(me["simd"]["v128"], "读 %s 的 measured.simd.v128" % W64A,
+                                    "w64-artifacts/octave.build.json")
+        if me.get("exported_functions") is not None:
+            facts["w64_exported_functions"] = fact(me["exported_functions"],
+                                                  "读 %s 的 measured.exported_functions" % W64A,
+                                                  "w64-artifacts/octave.build.json")
+        wf = (me.get("files") or {}).get("octave.wasm") or {}
+        facts["w64_wasm_sha"] = fact(wf.get("sha256"), "sha256sum %s/octave.wasm" % W64A,
+                                    "w64-artifacts/octave.wasm")
+        facts["w64_wasm_bytes"] = fact(wf.get("bytes"), "stat -c %%s %s/octave.wasm" % W64A,
+                                      "w64-artifacts/octave.wasm")
+    except (OSError, ValueError) as e:
+        print("⚠ 读不到 w64 身份证（%s）：%s" % (W64A, e), file=sys.stderr)
+    # 两份日志：由 build-w64-lane.sh 的 facts 阶段写（`llvm-objdump` / `llvm-readobj` 量的）
+    try:
+        facts["w64_i64_insns"] = fact(int(open(os.path.join(W64L, "i64.txt"),
+                                               encoding="utf-8").read().strip()),
+                                      "llvm-objdump -d <w64>/octave.wasm | grep -c i64"
+                                      "（由 build/113/build-w64-lane.sh facts 写出，容器内跑）",
+                                      "w64-logs/i64.txt",
+                                      "64 位的指令层证据（wasm32 版为 0）")
+    except (OSError, ValueError):
+        pass
+    try:
+        _p = open(os.path.join(W64L, "oct-wasm64.txt"), encoding="utf-8").read().split()
+        facts["w64_oct_wasm64"] = fact(int(_p[0]),
+                                       "bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/"
+                                       "llvm-readobj 逐个量）", "w64-logs/oct-wasm64.txt",
+                                       "`.oct` 车道里 wasm64 的个数（side module 的指针宽度必须与主模块一致）")
+        facts["w64_oct_files"] = fact(int(_p[1]), "同上（文件名：oct-wasm64.txt 的第二个数）",
+                                      "w64-logs/oct-wasm64.txt", "车道 `.oct` 总数")
+    except (OSError, ValueError, IndexError):
+        pass
+
     # ★ 零值守卫（2026-09-27 实测踩到）：本脚本**无参数运行就会重写台账**，而某些事实的输入
     #   现在不在（例：8761 站点此刻没有 `threads/` ⇒ 8 条线程档事实测不出来）⇒ 一次手滑就把
     #   台账从 28 条**静默缩成 17 条**（闸门靠"引用键不存在"才抓到）。⇒ 掉条就拒绝，除非显式

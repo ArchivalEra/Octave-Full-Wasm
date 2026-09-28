@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-09-28T09:44:19+0800",
+ "generated": "2026-09-28T22:43:42+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -57,19 +57,19 @@
    "source": "site/matrix-android.html"
   },
   "env_vars": {
-   "value": 28,
+   "value": 29,
    "cmd": "grep -oE '\\$\\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh | sort -u（去掉位置参数）",
    "source": "build/113/link-web.sh"
   },
   "accept_suites": {
    "value": 43,
-   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-084847 里带汇总行的套件（且 0 FAIL）",
-   "source": "sweep-logs/20260928-084847"
+   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-212629 里带汇总行的套件（且 0 FAIL）",
+   "source": "sweep-logs/20260928-212629"
   },
   "accept_pass": {
    "value": 1077,
    "cmd": "同上，把每个套件的 PASS 相加",
-   "source": "sweep-logs/20260928-084847",
+   "source": "sweep-logs/20260928-212629",
    "note": "最近一次**全绿**扫描的 PASS 合计"
   },
   "threads_verdict": {
@@ -237,6 +237,62 @@
    "value": 124,
    "cmd": "timeout 600 sh test/browser/run.sh ...accept-113-oct.mjs <E2 线程版站点>; echo $?",
    "source": "e2-logs/e2-oct-threaded.rc"
+  },
+  "w64_verdict": {
+   "value": "ok",
+   "cmd": "python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts/octave.build.json）",
+   "source": "w64-artifacts/octave.build.json",
+   "note": "只有 ok 才可部署（fail-closed）"
+  },
+  "w64_wasm64": {
+   "value": true,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.wasm64",
+   "source": "w64-artifacts/octave.build.json",
+   "note": "wasm 内存段 limits flags bit2 = 1 ⇒ 真 64 位"
+  },
+  "w64_shared_memory": {
+   "value": true,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.threads.shared_memory",
+   "source": "w64-artifacts/octave.build.json",
+   "note": "目标形态 = memory64 **+ 多线程**（shared 是这个轴的硬身份）"
+  },
+  "w64_v128": {
+   "value": 4797,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.simd.v128",
+   "source": "w64-artifacts/octave.build.json"
+  },
+  "w64_exported_functions": {
+   "value": 732,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.exported_functions",
+   "source": "w64-artifacts/octave.build.json"
+  },
+  "w64_wasm_sha": {
+   "value": "d34d3217f348bcd754d1f2777fe73b67f188e038cd05c54a6aed06a2dd8240ae",
+   "cmd": "sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm",
+   "source": "w64-artifacts/octave.wasm"
+  },
+  "w64_wasm_bytes": {
+   "value": 30012178,
+   "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm",
+   "source": "w64-artifacts/octave.wasm"
+  },
+  "w64_i64_insns": {
+   "value": 4040751,
+   "cmd": "llvm-objdump -d <w64>/octave.wasm | grep -c i64（由 build/113/build-w64-lane.sh facts 写出，容器内跑）",
+   "source": "w64-logs/i64.txt",
+   "note": "64 位的指令层证据（wasm32 版为 0）"
+  },
+  "w64_oct_wasm64": {
+   "value": 46,
+   "cmd": "bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/llvm-readobj 逐个量）",
+   "source": "w64-logs/oct-wasm64.txt",
+   "note": "`.oct` 车道里 wasm64 的个数（side module 的指针宽度必须与主模块一致）"
+  },
+  "w64_oct_files": {
+   "value": 46,
+   "cmd": "同上（文件名：oct-wasm64.txt 的第二个数）",
+   "source": "w64-logs/oct-wasm64.txt",
+   "note": "车道 `.oct` 总数"
   }
  }
 }

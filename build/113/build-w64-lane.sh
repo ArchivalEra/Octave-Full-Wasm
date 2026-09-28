@@ -58,6 +58,32 @@ stage_libs() {
   PATH="$SHIM_DIR:$PATH" LANE_FLAGS="$FLAGS" DEPS="$DEPS_W64" F2C_PREFIX="$PREFIX_W64" bash /src/bin/build-libs.sh all
 }
 
+stage_facts() {
+  # ★ 台账的 **w64 组**按这里写出的两份文件量（`build/facts.py`）。为什么要有这一步：
+  #   "导出数 / i64 密度 / 44 个 .oct 有几个是 64 位"这些数字**本来只活在 NOTES 与工单的散文里**
+  #   —— 那正是本仓事实系统要消灭的形状（散文会腐烂，且没有闸门拦得住）。
+  #   ⚠️ 量的对象是**产物**；宿主侧再 docker cp 到 `/mnt/hdd/octave-wasm-build/w64-{artifacts,logs}/`。
+  ensure_shim || return 1
+  echo "── [facts] 写两份可量的日志"
+  RO=/emsdk/upstream/bin/llvm-readobj      # ⚠️ 容器 PATH 里**没有**它，必须绝对路径（踩过）
+  O=/emsdk/upstream/bin/llvm-objdump
+  OUT="${OUT:-/src/websrc/w64-out}"
+  [ -f "$OUT/octave.wasm" ] || { echo "FATAL: 缺 $OUT/octave.wasm"; return 1; }
+  $O -d "$OUT/octave.wasm" 2>/dev/null | grep -c 'i64' > "$LOGD/i64.txt" || true
+  echo "  i64 指令数：$(cat "$LOGD/i64.txt")"
+  local n=0 w=0 f
+  while IFS= read -r f; do
+    n=$((n + 1))
+    $RO -h "$f" 2>/dev/null | grep -q 'wasm64' && w=$((w + 1))
+  done < <(find /src/libwork/octs-w64 /src/libwork/octs-w64-pkg -name '*.oct' 2>/dev/null)
+  printf '%s %s\n' "$w" "$n" > "$LOGD/oct-wasm64.txt"
+  echo "  .oct：$w / $n 是 wasm64"
+  # 零值守卫：计数为 0 ⇒ 收集逻辑坏了，**不是**"全合格"
+  { [ "${w:-0}" -gt 0 ] && [ "${n:-0}" -gt 0 ]; } || {
+    echo "FATAL: .oct 计数为 0 —— 收集逻辑坏了，这不是「全部合格」"; return 1; }
+  echo "  ✅ 已写出 $LOGD/{i64.txt,oct-wasm64.txt}"
+}
+
 stage_tree() {
   ensure_shim || return 1
   echo "── [tree] Octave 树：configure + make + install → $OCT_INSTALL_W64"
@@ -169,7 +195,7 @@ rc=0
 for s in "$@"; do
   log="$LOGD/$s.log"
   case "$s" in
-    shim|deps|libs|tree|link|oct)
+    shim|deps|libs|tree|link|oct|facts)
       # 直接调函数（**不要**写成 `"$(echo stage_$s)"`：命令替换会开子壳、状态全丢）
       "stage_$s" 2>&1 | tee "$log"
       st=${PIPESTATUS[0]}

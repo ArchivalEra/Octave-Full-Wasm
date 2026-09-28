@@ -128,7 +128,65 @@ def check_inputs(manifest, env, exists=os.path.exists):
     return out
 
 
+def resolved_inputs(manifest, name, env, exists=os.path.exists):
+    """给一个套件，返回 `{环境变量: 解析后的值}` —— **由 sweep.sh 用 `env` 传给子进程**。
+
+    为什么需要它（**2026-09-28 实测踩到，差点骗过复核**）：F4 声明了输入的 `value`（标准默认）
+    与 `env`（覆盖变量名），但**没有任何人把它导出给子进程** ⇒ 探针只能退回**它自己内部的默认**。
+    实测代价：`SITE_DIR=site-w64 … probe-lane` 那次，探针照样按自己的默认起了 `siteWebGL` 的服务，
+    打出 17 PASS —— **全是另一个站点的成绩**，而日志里只有 `dir=…` 一行出卖它。
+    这就是"两处口径"的形状：清单说一套、探针内部默认说另一套，而**没人对齐它们**。
+
+    规则：
+      · 只导 `kind="path"` 且**写了 `env` 变量名**的（`kind="env"` 靠继承，本来就在环境里；
+        没写变量名的 ⇒ 探针自己找，没有口径可对齐）；
+      · 值 = 环境变量覆盖（优先）否则声明的 `value` —— 与 `input_state` **同一口径**（不许分叉）。
+    """
+    out = {}
+    for inp in (manifest.get("inputs") or {}).get(name, []):
+        if inp.get("kind") != "path":
+            continue
+        var = inp.get("env")
+        if not var:
+            continue
+        val = env.get(var) or inp.get("value")
+        if val:
+            out[var] = val
+    return out
+
+
+def emit_inputs(pairs):
+    """把 `{VAR: 值}` 变成 `env` 能吃的 `VAR=值` 词。
+
+    ★ **值里有空白就拒绝**（返回值里的第二个元素是原因）：sweep.sh 是用 `env $inputs sh …` 传的，
+    未加引号的展开会把带空格的路径拆成两个词 ⇒ **静默传错一个更长的值**。
+    宁可在这里响亮失败（换个不含空白的路径，或改传递方式），也不要静默传错。
+    """
+    lines, bad = [], []
+    for k, v in sorted(pairs.items()):
+        if any(c.isspace() for c in v) or not v:
+            bad.append("%s 的值里有空白/为空（%r）⇒ 本接线方式撑不住" % (k, v))
+            continue
+        lines.append("%s=%s" % (k, v))
+    return lines, bad
+
+
 def main(argv):
+    if argv and argv[0] == "--inputs-for":
+        # `sweep.sh` 在**每个套件启动前**调它，把清单声明的输入对齐给探针（见 resolved_inputs 的长注释）
+        if len(argv) < 3:
+            print("用法：sweep_select.py --inputs-for <manifest> <套件名>", file=sys.stderr)
+            return 2
+        man = load_manifest(argv[1])
+        lines, bad = emit_inputs(resolved_inputs(man, argv[2], os.environ))
+        for b in bad:
+            print("FATAL: %s" % b, file=sys.stderr)
+        if bad:
+            return 3                      # ★ 响亮失败：不许静默传错
+        for ln in lines:
+            print(ln)
+        return 0
+
     if argv and argv[0] == "--check-inputs":
         man = load_manifest(argv[1])
         rows = check_inputs(man, os.environ)
@@ -219,6 +277,20 @@ CASES = [
      lambda: [r[0] for r in _sel(probes=True, flt="accept-*")[0]] == ["accept-x"]),
     ("★ 过滤器匹配不到任何东西时 rows 为空（由 sweep.sh 判 FATAL，不是这里静默绿）",
      lambda: _sel(flt="nothing-*")[0] == []),
+    # ★ F4 接线（2026-09-28）：声明了输入，还必须有东西**把它对齐给探针** —— 否则探针退回
+    #   自己的内部默认，你会拿另一个站点的成绩当这个站点的（实测踩过，见 resolved_inputs）
+    ("★ `--inputs-for` 用**声明值**填变量（探针不必再依赖自己的内部默认）",
+     lambda: resolved_inputs(_MAN, "probe-b", {}, exists=_ALLEXIST) == {"P_DIR": "/外/部/目录"}),
+    ("★ 环境变量覆盖优先（与 input_state **同一口径**，不许分叉）",
+     lambda: resolved_inputs(_MAN, "probe-b", {"P_DIR": "/别处"}, exists=_ALLEXIST) == {"P_DIR": "/别处"}),
+    ("`kind=env` 不导出（变量本来就靠继承）",
+     lambda: resolved_inputs(_MAN, "probe-c", {"PLAYWRIGHT_BROWSERS_PATH": "/x"}) == {}),
+    ("path 输入**没写 env 变量名** ⇒ 不导出（没有口径可对齐）",
+     lambda: resolved_inputs({"inputs": {"s": [{"kind": "path", "value": "/x"}]}},
+                             "s", {}, exists=_ALLEXIST) == {}),
+    ("★ **值里有空白 ⇒ 拒绝**（`env $inputs` 未加引号展开会静默传错，宁可响亮失败）",
+     lambda: emit_inputs({"A": "/a b"})[1] != [] and emit_inputs({"A": "/ok"})[1] == []),
+    ("★ 空值也拒绝（`VAR=` 会让探针以为设过了）", lambda: emit_inputs({"A": ""})[1] != []),
 ]
 
 

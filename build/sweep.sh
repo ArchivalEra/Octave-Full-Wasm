@@ -71,7 +71,14 @@ while IFS='	' read -r name tmo needs; do
   nrun=$((nrun + 1))
   log="$LOGDIR/$name.log"
   start=$(date +%s)
-  sh "$REPO/test/browser/run.sh" "$REPO/test/browser/$name.mjs" "$URL" >"$log" 2>&1 &
+  # ★ F4 接线（2026-09-28，**补上契约缺的那一环**）：把清单里**声明**的输入解析出来，
+  #   用 `env` 传给子进程。不接这一步，探针会退回**它自己内部的默认** —— 两处口径各说一套，
+  #   而没人对齐它们。实测代价：`SITE_DIR=site-w64 … probe-lane` 那次，探针照样按自己的默认
+  #   起了 siteWebGL 的服务、打出 17 PASS，**全是另一个站点的成绩**（日志里只有 `dir=…` 出卖它）。
+  #   值里有空白时模块会**响亮拒绝**（未加引号的 `env $INPUTS` 会静默传错）——见 emit_inputs。
+  INPUTS="$(python3 "$REPO/build/lib/sweep_select.py" --inputs-for "$MAN" "$name" 2>>"$LOGDIR/.inputs-error.log" || true)"
+  # shellcheck disable=SC2086
+  env $INPUTS sh "$REPO/test/browser/run.sh" "$REPO/test/browser/$name.mjs" "$URL" >"$log" 2>&1 &
   runner=$!
   # 超时用**外挂看门狗**（不用 `timeout` 包住整个 sh：POSIX `timeout` 在某些镜像里没有）
   ( sleep "$tmo"; kill -TERM "$runner" 2>/dev/null; sleep 5; kill -KILL "$runner" 2>/dev/null ) &
@@ -87,7 +94,8 @@ while IFS='	' read -r name tmo needs; do
     retried=" [重跑]"
     echo "  ↻ $name 出现 Target crashed（页面偶发崩）⇒ 重跑一次"
     mv "$log" "$log.crashed1"
-    sh "$REPO/test/browser/run.sh" "$REPO/test/browser/$name.mjs" "$URL" >"$log" 2>&1 &
+    # shellcheck disable=SC2086
+    env $INPUTS sh "$REPO/test/browser/run.sh" "$REPO/test/browser/$name.mjs" "$URL" >"$log" 2>&1 &
     runner=$!
     ( sleep "$tmo"; kill -TERM "$runner" 2>/dev/null; sleep 5; kill -KILL "$runner" 2>/dev/null ) &
     watchdog=$!
