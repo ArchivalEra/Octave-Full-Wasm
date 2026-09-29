@@ -229,7 +229,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.gitignore` (3818 bytes)
 - `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
 - `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
-- `.scratch/open-questions/issues/03-lsode-unreachable.md` (801 bytes)
+- `.scratch/open-questions/issues/03-lsode-unreachable.md` (1961 bytes)
 - `.scratch/open-questions/issues/04-umfpack-sparse-lu.md` (2418 bytes)
 - `.scratch/open-questions/issues/05-jspi-g1-dlopen.md` (2598 bytes)
 - `.scratch/open-questions/issues/06-jspi-p3-p4.md` (2509 bytes)
