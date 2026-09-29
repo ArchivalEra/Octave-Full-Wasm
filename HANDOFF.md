@@ -91,7 +91,11 @@ E2 上线、wasm64 三件（可行性 / 重编 / 集成）都已收尾。⇒ 下
    `build/113/NOTES-wasm64.md`「glpk 悬案结案」；`build-libs.sh` 已加两道闸（旗标指纹自动清树 +
    `need_arch` 架构断言）。⇒ 下面两条顺次上移。
 3. **工单 16**（线程版的卡点在"代码路径本身"，与线程数无关 —— R-010 推翻了"多线程唤醒"那条推断）。
-   ⚠️ 注意它与 **wasm64 是同一个 OpenBLAS**：w64 那条路要是稳，可能反过来给 16 提供线索。
+   ⚠️ ~~注意它与 **wasm64 是同一个 OpenBLAS**~~ —— **这句是错的**（2026-09-29 实测更正，
+   复跑：`w64-artifacts/octave.build.json` 的 `inputs.blas.resolved_dir` = `/src/deps-w64/lapack-simd/lib`，
+   容器 `/src/deps-w64` 里没有 openblas）：w64 用的是 **f2c refblas + lapack**，16 的雷
+   （OpenBLAS `USE_THREAD=1` 专属行为）w64 从头到尾没碰 —— w64 全绿**不能**给 16 提供线索，
+   反过来说 16 的悬案被干净地隔离在 OpenBLAS 这一个库里。
 4. **其余前沿**（各自独立）：04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、08（外审判据）、
    10（Firefox COI 矛盾）、15（`relink.sh verify --out <副本>` 假红并污染 verdict）、
    01/03（诊断仪器与其两个下游）；需要设备的 07 / 12 / 13。
