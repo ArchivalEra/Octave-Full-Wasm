@@ -361,3 +361,16 @@ runner = `test/browser/probe-jspi-b.mjs`。
      `pause` 的接线（web_pause_ms import + m 侧 shim）是 G2 的活。
 4. **复盘一句话**：复审的判定"A2 核心/B 备选"建立在"两者机制相同"上；实验证明**机制并不相同**
    —— A2 因 `-sJSPI` 连带把 dlopen 变成挂起点。这正好演示了为什么判据必须可证伪。
+
+
+---
+
+## 工单 05 结算件（2026-09-29）：v13 结晶成永久探针 + 一处形状翻面
+
+- `build/113/probe-jspi-g1/`（main.cpp 宏切 control/startup 两变体 + side.c + page.html）
+  与 `test/browser/probe-jspi-g1.mjs`：3 PASS / 0 FAIL —— control 的 callSide 必抛
+  SuspendError（机制①复现）、startup 必出机制指纹（机制③复现）。
+- ⚠️ **形状翻面**：v13 当日"ready=false 页面起不来"；今日同容器同 emcc 下 throw 仍在但
+  boot 存活、**embind 的 bindings 注册被打残**（callSide 从 Module 上消失）。后果变了，
+  机制没变 —— 稳定判据 = `trying to suspend without WebAssembly.promising` 指纹。
+- ⚠️ ErrorEvent.message 不带错误名前缀（"SuspendError:" 匹配不到），按消息体匹配。

@@ -37,10 +37,16 @@ rc=1
 fixed_line=""
 broken_line=""
 
+# 探针调用（run.sh 没有执行位 ⇒ 必须 `sh`；输出全捕获再取行，探针报错不许吞）
+run_probe () {  # $1=URL → 全局 PROBE_OUT
+  PROBE_OUT="$(sh "$RUN" "$REPO/test/browser/probe-umfpack-trap.mjs" "$1" 2>&1 || true)"
+  printf '%s\n' "$PROBE_OUT" | grep -m1 '^=== LU-' || true
+}
+
 # ── 第一面：修复侧必须绿 ──────────────────────────────────────────────────────
 echo "── 第一面：现役站点（$SITE_URL）上最小复现必须 LU-OK"
-out="$($RUN "$REPO/test/browser/probe-umfpack-trap.mjs" "$SITE_URL" 2>&1 | grep -m1 '^=== LU-')"
-fixed_line="${out:-（探针无输出）}"
+fixed_line="$(run_probe "$SITE_URL")"
+[ -n "$fixed_line" ] || fixed_line="（探针无 === LU- 行；原始输出尾部：$(printf '%s' "${PROBE_OUT:-}" | tail -2)）"
 echo "   $fixed_line"
 if printf '%s' "$fixed_line" | grep -q '^=== LU-OK'; then
   echo "   ✅ 修复侧成立（-DNBLAS/-DNSUPERNODAL 在，稀疏 lu 3 输出可用 —— 不再是 7.2 回归）"
@@ -78,12 +84,39 @@ if [ "$REBUILD_BROKEN" = "1" ]; then
     cp -f SuiteSparse_config/SuiteSparse_config.h "$B/include/" 2>/dev/null || true
     for f in */Include/*.h; do [ -f "$f" ] && cp -f "$f" "$B/include/"; done
     echo "   坏变体 SuiteSparse → $B/lib（$(ls "$B/lib" | wc -l) 个 .a）"
-    # 用 EXTRA_LDFLAGS 抢搜索顺序（link-web.sh 的既有口子，在 -l 前面）
-    eval "$(bash /src/bin/relink.sh exports product | grep -v "^P5_")"
-    EXTRA_LDFLAGS="-L$B/lib"
-    export EXTRA_LDFLAGS
-    bash /src/bin/relink.sh link product --out /src/websrc/umfpack-repro-out
+    # ★ 链接走 probe-wasm64-link 的正道：环境从模式表推出后**直接驱动 link-web.sh**——
+    #   若走 `relink.sh link`，apply_mode 会把模式表外的 EXTRA_LDFLAGS **重置掉**（口径表
+    #   是唯一来源，设计如此）⇒ 坏库根本进不了链接（第一版就这么静默空转的，sha 与正常
+    #   rebuild 一模一样）。EXTRA_LDFLAGS 在 LIBS 之前 ⇒ -L 抢搜索顺序。
+    while IFS= read -r kv; do
+      [ -n "$kv" ] || continue
+      export "$kv"
+    done < <(bash /src/bin/relink.sh exports product)
+    export EXTRA_LDFLAGS="${EXTRA_LDFLAGS:-} -L$B/lib"
+    echo "   EXTRA_LDFLAGS=$EXTRA_LDFLAGS"
+    set +e
+    bash /src/bin/link-web.sh /src/websrc/umfpack-repro-out > /src/work/umfpack-repro-link.log 2>&1
+    LRC=$?
+    set -e
+    echo "   link rc=$LRC（日志 /src/work/umfpack-repro-link.log）"
+    if [ "$LRC" != "0" ]; then
+      # ★ 复现形状（2026-09-29 实测）：坏库的腐坏现在被 **Binaryen 在出厂前拦下**
+      #   （wasm-opt `popping from empty stack`）—— 09-22 时代是"链得过、运行时整页 trap"。
+      #   同一腐坏、更早的护栏。只要报错是 parse/validate 类，就等于复现成立。
+      if grep -qE "popping from empty stack|parse exception|error parsing wasm|wasm-validate" /src/work/umfpack-repro-link.log; then
+        echo "   ✅ 复现成立（形状=Binaryen 拒收腐坏产物）：坏库与好库唯一差别就是那两个宏"
+        touch /src/work/umfpack-repro-REPRODUCED
+      else
+        echo "   ❌ 链接失败但报错不像腐坏 —— 复现不成立" >&2; exit 1
+      fi
+    else
+      bash /src/bin/relink.sh verify product --out /src/websrc/umfpack-repro-out
+    fi
   ' || { echo "   ❌ 坏变体构建/链接失败" >&2; exit 1; }
+  if [ "$($DOCKER exec "$CTR" sh -c 'test -f /src/work/umfpack-repro-REPRODUCED && echo y')" = "y" ]; then
+    broken_line="（链不出产物 —— Binaryen 拒收，见上；这本身就是腐坏复现）"
+    p2=0
+  else
   $DOCKER exec "$CTR" bash -c 'cp /src/websrc/umfpack-repro-out/{octave.wasm,octave.js,octave.data} /tmp/ 2>/dev/null; true'
   # 起一次性站点（坏变体），跑探针
   site_dir="$($DOCKER exec "$CTR" sh -c 'echo /src/websrc/umfpack-repro-out')"
@@ -92,8 +125,8 @@ if [ "$REBUILD_BROKEN" = "1" ]; then
   $DOCKER exec "$CTR" tar -C /src/websrc/umfpack-repro-out -cf - . | tar -C "$tmp_site" -xf -
   # 站点要能 boot：把站点级资产（octave.build.json 等）也带上 —— tar 已带全部
   setsid nohup python3 "$REPO/build/serve-coi.py" --dir "$tmp_site" --port 8799 >/tmp/umfpack-repro-serve.log 2>&1 &
-  out2="$($RUN "$REPO/test/browser/probe-umfpack-trap.mjs" "$BROKEN_URL" 2>&1 | grep -m1 '^=== LU-')"
-  broken_line="${out2:-（探针无输出）}"
+  broken_line="$(run_probe "$BROKEN_URL")"
+  [ -n "$broken_line" ] || broken_line="（探针无 === LU- 行；原始输出尾部：$(printf '%s' "${PROBE_OUT:-}" | tail -2)）"
   echo "   $broken_line"
   if printf '%s' "$broken_line" | grep -q '^=== LU-TRAP'; then
     echo "   ✅ 陷阱侧成立：同一行 .m 在坏变体上 wasm trap —— 根因结论可复现"
@@ -101,6 +134,7 @@ if [ "$REBUILD_BROKEN" = "1" ]; then
   else
     echo "   ❌ 陷阱侧没复现（坏了的库竟然没 trap）⇒ 复现器失效，根因结论要重查" >&2
     p2=1
+  fi
   fi
   pkill -f 'serve-coi.py --dir /tmp/umfpack-repro-site' 2>/dev/null || true
   rc=$(( p1 + p2 ))

@@ -131,3 +131,16 @@ $ grep OCTAVE_IDX_TYPE config.h
 并在构建前 `rm -f UMFPACK/Lib/*.o CHOLMOD/Lib/*.o`（**改了 config 宏就必须先删旧对象**
 —— SuiteSparse 的 make 不会因为"命令行多了个 -D"就重编，与 HISTORY §10.3 坑 2 同源）。
 
+
+
+---
+
+## 结案附录（2026-09-29，无人值守批次）
+
+主悬案（-DNBLAS/-DNSUPERNODAL）已在 52489ab 修复并回车；本节记录**可复现结算件**的实测：
+
+- `build/113/repro-umfpack-trap.sh` 两面判决 rc=0：现役产物 LU-OK；**去掉两个宏**的坏变体
+  被 Binaryen 当场拒收（`popping from empty stack`，wasm-opt）——同一腐坏、更早的护栏
+  （09-22 是"链得过、运行时 trap"）。
+- 上文「下一步该往哪查」的 1/2/4 全部作废（根因已明）；3 的 `SKIP=` 二分不再需要
+  （坏因是 SUITESPARSE 的两个宏，不是"哪个库"，最小复现 + 宏开关比 SKIP 二分更直接）。

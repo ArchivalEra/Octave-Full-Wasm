@@ -134,3 +134,6 @@
 
 # 工单 12 的第一交付物：真机手测清单（可复跑结算件）
 !docs/manual-test-checklist.md
+
+# 工单 05 结算件：G1 复现探针（main.cpp/side.c/page.html 一层放行）
+!build/113/probe-jspi-g1/*

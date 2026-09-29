@@ -166,6 +166,14 @@
     "value": "PLAYWRIGHT_BROWSERS_PATH",
     "why": "它要 **webkit**（三引擎里唯一不在默认缓存里的那个，在 /mnt/hdd/crossbuild-tools/pw-browsers）；缺则相关引擎记 N/A 而不是红 ⇒ 单独跑时才 export"
    }
+  ],
+  "probe-jspi-g1": [
+   {
+    "kind": "path",
+    "env": "PROBE_DIR",
+    "value": "/mnt/hdd/octave-wasm-build/g1-probe",
+    "why": "G1 复现探针产物（control/startup 两变体），由容器里的 `bash build/113/probe-jspi-g1.sh` 生成；探针自托管（不看 URL）"
+   }
   ]
  }
 }
