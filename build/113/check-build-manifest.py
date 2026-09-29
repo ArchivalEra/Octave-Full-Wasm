@@ -71,6 +71,31 @@ def lane_blas_problem(declared, man):
     return None
 
 
+def pairing_problems(man, out_dir):
+    """★ 清单与产物是不是一对：按 **--out-dir（验证谁就查谁所在目录）** 或清单里的
+    build.out 重哈希产物大件。工单 15 的教训：这个决定权过去内联在 main 里 ——
+    验**副本**时 `build.out` 指向**构建时**的容器路径 ⇒ 宿主上必然"文件不存在" ⇒ 假红，
+    且 `--write` 把 verdict=rejected 写回副本（一次验证动作销毁了被验证的东西）。"""
+    measured = man.get("measured") or {}
+    d = out_dir or (man.get("build") or {}).get("out")
+    file_bad = []
+    if not d:
+        file_bad.append("清单里没有 build.out，也没给 --out-dir ⇒ 无法核对清单与产物是否配对")
+    else:
+        for name, rec in (measured.get("files") or {}).items():
+            p = os.path.join(d, name)
+            if not os.path.exists(p):
+                file_bad.append("%s 不存在（%s）" % (name, d))
+                continue
+            got = sha256_file(p)
+            if got != rec.get("sha256"):
+                file_bad.append("%s 的 sha 不符：清单 %s… 实测 %s…"
+                                % (name, (rec.get("sha256") or "?")[:16], got[:16]))
+        if not (measured.get("files") or {}):
+            file_bad.append("清单里没有 measured.files ⇒ 无法核对")
+    return file_bad
+
+
 def compare(declared, measured, man=None):
     """返回 [(键, 声明值, 实测值, 为什么)]，空表 = 全过。"""
     bad = []
@@ -203,23 +228,8 @@ def main(argv):
         return 3
     bad = compare(declared, measured, man)
 
-    # ── 清单与产物是不是一对 ──
-    d = out_dir or (man.get("build") or {}).get("out")
-    file_bad = []
-    if not d:
-        file_bad.append("清单里没有 build.out，也没给 --out-dir ⇒ 无法核对清单与产物是否配对")
-    else:
-        for name, rec in (measured.get("files") or {}).items():
-            p = os.path.join(d, name)
-            if not os.path.exists(p):
-                file_bad.append("%s 不存在（%s）" % (name, d))
-                continue
-            got = sha256_file(p)
-            if got != rec.get("sha256"):
-                file_bad.append("%s 的 sha 不符：清单 %s… 实测 %s…"
-                                % (name, (rec.get("sha256") or "?")[:16], got[:16]))
-        if not (measured.get("files") or {}):
-            file_bad.append("清单里没有 measured.files ⇒ 无法核对")
+    # ── 清单与产物是不是一对 ──（工单 15 起：抽成纯函数 pairing_problems，自证可测）
+    file_bad = pairing_problems(man, out_dir)
 
     # ── ★ 车道一致性（B6，2026-09-27 实测补）：声明 threads=true 的产物，**它链进去的 BLAS 必须来自车道**
     #   为什么单列：实测发现 wasm-ld 的 atomics 规则只针对**带 TLS/原子的**对象 ⇒ 一个**非 atomics 的纯计算
@@ -280,6 +290,21 @@ def _nc(decl):
     return len(compare(decl, dict(_MEAS)))
 
 
+def _copy_with(extra, out_dir=True):
+    """工单 15 的夹具：最小"产物目录 + 身份证副本"。extra=None ⇒ 文件与清单相符；
+    否则文件尾多一字节（坏副本）。out_dir=False 时模拟**不给 --out-dir**（退回 build.out
+    的旧路径 —— 当年假红的形状）。返回 pairing_problems 报的问题数。"""
+    import tempfile
+    d = tempfile.mkdtemp()
+    base = b"OCTAVE-FAKE"
+    payload = base + (extra or b"")
+    open(os.path.join(d, "octave.wasm"), "wb").write(payload)
+    # 清单记的是**原件**的 sha —— 坏副本 = 文件被改而清单还是原件的（这才会红）
+    man = {"measured": {"files": {"octave.wasm": {"sha256": hashlib.sha256(base).hexdigest()}}},
+           "build": {"out": "/nonexistent-构建时容器路径"}}   # 故意指不到夹具 ⇒ 老逻辑必假红
+    return len(pairing_problems(man, d if out_dir else None))
+
+
 CASES = [
     ("一致的声明 ⇒ 不报", lambda: _nc(_DECL) == 0),
     ("simd.v128 被改成 0 ⇒ 报", lambda: _nc({**_DECL, "simd": True}) == 0 and
@@ -315,6 +340,13 @@ CASES = [
      lambda: len(compare({**_DECL, "wasm64": True}, _MEAS)) == 1),
     ("★ 声明 wasm64=false 但产物是 wasm64 ⇒ 必须报",
      lambda: len(compare({**_DECL, "wasm64": False}, {**_MEAS, "wasm64": True})) == 1),
+    # ★ 工单 15：--out-dir 指**副本** ⇒ 按**副本所在目录**核对，不许退回 build.out 的旧路径
+    ("★ 工单 15：--out-dir 副本、文件在且 sha 相符 ⇒ 不报（副本也能验）",
+     lambda: _copy_with(None) == 0),
+    ("★ 工单 15：--out-dir 副本被改一个字节 ⇒ 必须报（坏副本必须红）",
+     lambda: _copy_with(b"x") == 1),
+    ("★ 工单 15：不给 --out-dir 且 build.out 指向别处 ⇒ 必须报（当年假红的形状，不许复活）",
+     lambda: _copy_with(None, out_dir=False) == 1),
     ("**空声明** ⇒ 必须报（零值守卫）", lambda: True),      # 由 main 的守卫覆盖，这里只作占位
 ]
 

@@ -498,7 +498,10 @@ cmd_verify() {
   # 也能用"另一种模式的声明"去测判定器（反向断言）。
   d="$(mktemp)"
   mode_declared "$m" > "$d"
-  python3 "$HERE/check-build-manifest.py" "$out/octave.build.json" "$d" --write || rc=$?
+  # ★ --out-dir 必须转发（工单 15）：验证谁就按**谁所在目录**核对三个大件 ——
+  #   不转发时配对检查退回身份证里记录的**构建时**目录（容器内路径），宿主上验副本必假红，
+  #   且 --write 把 verdict=rejected 写回副本（一次验证动作销毁了被验证的东西）。
+  python3 "$HERE/check-build-manifest.py" "$out/octave.build.json" "$d" --out-dir "$out" --write || rc=$?
   rm -f "$d"
   return $rc
 }

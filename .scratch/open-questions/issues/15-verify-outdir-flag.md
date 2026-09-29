@@ -5,7 +5,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** `cp -a <产物> /tmp/vcopy && E2_OPENBLAS=… relink.sh verify threads --out /tmp/vcopy` —— rc=0 ⇒ 修好（副本能验）；rc≠0 且副本 verdict 变成 `rejected` ⇒ 未修（反向断言：坏副本必须仍红）
 `cp -a /mnt/hdd/octave-wasm-build/e2-artifacts/single /tmp/vcopy && E2_OPENBLAS=/src/work/e2-openblas-lib-s bash build/113/relink.sh verify threads --out /tmp/vcopy`
@@ -27,7 +27,20 @@
 
 **Type:** task
 
-- [ ] `cmd_verify` 补 `--out-dir "$out"`
-- [ ] 在 `check-build-manifest.py --selftest` 里加"副本也能验"与"坏副本必须红"两条用例
-- [ ] 改完 `docker cp` 进容器并比两侧 sha
-- [ ] 本仓的 `HISTORY.md` 记一笔（这是一处"闸门在错的地方判成假红并污染产物"的实例）
+- [x] `cmd_verify` 补 `--out-dir "$out"`
+- [x] 在 `check-build-manifest.py --selftest` 里加"副本也能验"与"坏副本必须红"两条用例
+- [x] 改完 `docker cp` 进容器并比两侧 sha（49e4bd0c / 334649f4 两侧一致）
+- [x] 本仓的 `HISTORY.md` 记一笔（§5.68-3）（这是一处"闸门在错的地方判成假红并污染产物"的实例）
+
+## Answer（2026-09-29，无人值守批次）
+
+- 配对检查抽成纯函数 `check-build-manifest.py::pairing_problems(man, out_dir)`；
+  `cmd_verify` 转发 `--out-dir "$out"`（relink.sh）。
+- 自证 19/0（新增三条：副本绿 / 坏副本红 / **老假红形状不许复活**）。
+- 结算三连（2026-09-29 宿主实测，命令即本单 Settling 所写）：
+  - 副本：`cp -a e2-artifacts/single /tmp/vcopy && E2_OPENBLAS=/src/work/e2-openblas-lib-s
+    relink.sh verify threads --out /tmp/vcopy` ⇒ **rc=0**，副本 verdict 保持 `ok`；
+  - 坏副本（改一字节）⇒ **rc=3**，点名 `octave.wasm 的 sha 不符：清单 e570905e… 实测 a97f34f8…`；
+  - 原位验证 ⇒ 仍 **rc=0**。
+- 夹具教训记 HISTORY §5.68：第一版坏副本夹具把清单 sha 记成篡改后的内容（自己比自己，恒绿），
+  自证当场抓住。

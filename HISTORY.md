@@ -3417,3 +3417,35 @@ with 'atomics' or 'bulk-memory' features.`
    打印；断言于是"恒失败"，比没有断言更误导（看起来像功能没做）。
 3. **检测挂死的工具必须自己不会挂** —— `accept-113-oct` 那套 `run()` 用轮询哨兵，在被测对象
    挂住时它一起挂；新探针用硬超时 + 独立浏览器 + `process.exit` 才对得起"检测"两个字。
+
+### 5.68 无人值守批次：Q3 上键 + glpk 悬案结案（翻案 R-011/R-012）+ 工单 15 修复（2026-09-29，branch `wasm64`）
+
+**1) Q3 内存上限上键（3c9e46c）**：新探针 `test/browser/probe-wasm64-mem.mjs`（自托管 plain/coi
+两页，8 PASS / 0 FAIL），`w64_mem_5g_bytes` / `w64_mem_8g_bytes` / `w64_mem_shared_5g_bytes` /
+`w64_mem_probe_fail` 四键入账（台账 54 → 58 条）。探针自带三条反证（wasm32 超页必抛、
+`index:'i64'` 陷阱仍在、Number 必抛）。新量到：**非 COI 页上 `SharedArrayBuffer` 标识符本身
+不存在**（裸引用 ReferenceError，不只是"不能构造"）。
+
+**2) glpk 悬案结案（e888ba7，翻案）**：判别实验的"这面墙由 memory64 造成"**复现不出来** ——
+glpk-5.0 用 `-pthread -sMEMORY64=1` 在 CFLAGS 通道与 emcc 影子通道、全新树下都建成
+191 成员全 wasm64。真机制 = **换旗标后复用没清的构建树**：`make` 按 mtime 判"全部最新"
+零重编（脏树 make 日志 0 条编译命令 vs 新树 386 条）⇒ 库**静默保持旧指针宽度**；
+ccache 无辜（`CCACHE_DISABLE=1` A/B 不变）。判别实验的方法论缺口：只看 rc/符号、没查架构
+⇒ 表里的 ②"✅"按本机制同样是 wasm32 假成功。修复（build-libs.sh 两道闸）：**旗标指纹清树**
+（`$WORK/<树>/.lane-flags` 与当前 LANE_FLAGS 不符 ⇒ 整树重解包；同旗标照旧续跑）+
+**`need_arch` 架构断言**（MEMORY64 车道 ⇒ 每个 `.a` 逐成员 wasm64，接满 9 处）。
+验证：E5 自愈绿（脏树自动清、386 条重编、191 全 wasm64）/ E6 反向红（wasm32 归档 FATAL）。
+登记 **R-011/R-012**；HANDOFF 里"w64 与 16 是同一个 OpenBLAS"也实测翻掉（w64 用 f2c
+refblas，`97affe0`）。
+
+**3) 工单 15 结案**：`cmd_verify` 不转发 `--out-dir` ⇒ 验副本按**构建时**容器路径找大件 ⇒
+假红且 `--write` 把 verdict=rejected 写回副本。修法：转发 `--out-dir` + 把配对检查抽成
+`pairing_problems()` 纯函数 + 自证加三条用例（副本绿 / 坏副本红 / 老假红形状不许复活，
+19/0）。结算三连：副本验证 rc=0 且 verdict 保持 ok；坏副本（改一字节）rc=3 点名 sha 不符；
+原位验证仍 rc=0。工单 01 同批结案（内容上批已落，settle 实测 `explain product --diag` rc=0）。
+
+**教训（本轮两条）**：
+1. **判别实验必须查产物架构，不能只看 rc/符号** —— "静默错误架构的成功"两头都能骗
+   （该 ✅ 的被记 ❌，该 ❌ 的被记 ✅）。
+2. **自证夹具自己也会错** —— 第一版"坏副本"夹具把清单 sha 记成了**篡改后**的内容
+   （自己跟自己比，恒绿）；自证当场抓住。夹具的期望值必须从"被验对象"独立推导。
