@@ -555,6 +555,9 @@ coi-serviceworker 走 require-corp）**。
 天然不增长，但值得一条循环测试）、图像与完成信号的 FIFO 单调性、worker 崩溃的快速失败
 （已实现 `onerror` → 立即 reject 待办，尚未写判据）、多 worker + IDBFS 隔离
 （已实现 `opts.home` 按实例换挂载点，尚未写判据）。
+⭐ **2026-09-29 更新：这四条的判据都写好了**（工单 08 结案），在 `accept-worker.mjs` 的
+I1（unlink 循环 ==1）/ I2（FIFO 单调 +1）/ I3（跨实例 FS 隔离）/ I4（崩溃 ⇒ 待办 403ms
+以 WorkerCrashError reject；触发走 worker 的 `__crash_test` 判据通道），21 PASS / 0 FAIL。
 
 
 ---

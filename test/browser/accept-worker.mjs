@@ -166,6 +166,67 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
     JSON.stringify(gfx));
   console.log('   图形路径自证：' + JSON.stringify(gfx.d));
 
+  // ══ 以下四条 = 工单 08（外部评审"已实现、判据没写"的那批，2026-09-29 补判据）══
+
+  // ★ I1 MEMFS unlink 循环：图导出路径固定 /tmp/p5_fig.png（webgl_toolkit.cc:130）
+  //   ⇒ 反复出图不许累积新文件（外审原话："天然不增长，但值得一条循环测试"——这就是那条测试）
+  //   ⚠️ 值的读回**不走 stdout**（小输出经 rAF 合批，无头下时序不稳，实测拿到 null）；
+  //     走 error 消息通道：`error(...)` ⇒ rc≠0 ⇒ result.err = last_error_message 带值。
+  const unlinkLoop = await page.evaluate(async () => {
+    for (let k = 0; k < 5; k++) {
+      const r = await window.OctaveWorker.eval('figure(9); clf; plot(1:5); drawnow();');
+      if (r.rc !== 0) return { rc: r.rc, err: r.err };
+    }
+    await new Promise(r => setTimeout(r, 600));
+    const c = await window.OctaveWorker.eval("s = numel(dir('/tmp/p5_fig*')); error('P5COUNT %d', s);");
+    const m = /P5COUNT (\d+)/.exec(String(c.err || ''));
+    return { rc: c.rc, count: m ? +m[1] : null, raw: String(c.err || '').slice(0, 60) };
+  });
+  check(unlinkLoop.count === 1,
+    '★ I1 MEMFS unlink 循环：5 次 plot 导出后 /tmp/p5_fig* 恰好 1 份（固定路径覆盖，不累积）',
+    JSON.stringify(unlinkLoop));
+
+  // ★ I2 FIFO 单调：图必须**先于**它的完成信号到（resolve 时图已在 DOM），且每轮恰好 +1 不丢
+  const fifo = await page.evaluate(async () => {
+    const counts = [];
+    await window.OctaveWorker.eval('figure(11); clf; plot(1:5); drawnow();');
+    counts.push(document.querySelectorAll('img').length);
+    await window.OctaveWorker.eval('figure(11); clf; plot(1:20); drawnow();');
+    counts.push(document.querySelectorAll('img').length);
+    return { counts: counts, plots: window.OctaveWorker.plots };
+  });
+  check(fifo.counts[0] >= 1 && fifo.counts[1] === fifo.counts[0] + 1 && fifo.plots >= fifo.counts[1],
+    '★ I2 图像/完成信号 FIFO 单调：resolve 时本张图已在 DOM（图先到），img 恰好 +1、不丢不跳',
+    JSON.stringify(fifo));
+
+  // ★ I3 多 worker + IDBFS 隔离：opts.home 按实例换挂载点 —— A 实例写的文件 B 实例**必须看不见**
+  //   （读回同样走 error 通道，见 I1 的说明；实测教训：stdout 小输出在无头下取不到）
+  const iso = await page.evaluate(async () => {
+    const w1 = window.OctaveWorker;
+    await w1.eval("fid=fopen('/home/web_user/iso_probe.txt','w'); fprintf(fid,'w1'); fclose(fid);");
+    const w3 = new Worker('octave-worker.js');
+    var seq3 = 0, pend3 = {};
+    w3.onmessage = function (e) { const m = e.data || {};
+      if (m.id && pend3[m.id]) { pend3[m.id](m); delete pend3[m.id]; } };
+    const call3 = (code) => new Promise(res => { const id = ++seq3; pend3[id] = res; w3.postMessage({ id, kind: 'eval', code }); });
+    w3.postMessage({ kind: 'opts', base: '', home: '/home/web_user/iso-w3' });
+    for (let i = 0; i < 240; i++) { const ok = await call3('1').catch(() => null); if (ok && ok.rc === 0) break; await new Promise(r => setTimeout(r, 500)); }
+    await call3("fid=fopen('/home/web_user/iso-w3/mine.txt','w'); fprintf(fid,'w3'); fclose(fid);");
+    // w3 的视野：w1 的文件必须看不见（0），自己的必须看得见（2）
+    const q3 = await call3("error('ISORESULT %d %d', exist('/home/web_user/iso_probe.txt','file'), exist('/home/web_user/iso-w3/mine.txt','file'));");
+    const mw = /ISORESULT (\d+) (\d+)/.exec(String(q3.err || ''));
+    // w1 的视野：w3 的文件必须看不见（0）
+    const q1 = await w1.eval("s = exist('/home/web_user/iso-w3/mine.txt','file'); error('W1SEES %d', s);");
+    const m1 = /W1SEES (\d+)/.exec(String(q1.err || ''));
+    w3.terminate();
+    return { w3sees: mw ? [+mw[1], +mw[2]] : null, w1seesW3: m1 ? +m1[1] : null };
+  });
+  check(iso.w3sees && iso.w3sees[0] === 0 && iso.w3sees[1] === 2 && iso.w1seesW3 === 0,
+    '★ I3 多 worker IDBFS/MEMFS 隔离：w3 看不见 w1 的文件、看得见自己的；w1 也看不见 w3 的',
+    JSON.stringify(iso));
+
+  console.log('   （工单 08 的 I1/I2/I3 已并入；I4 崩溃快速失败在下方独立页）');
+
   // ══ 以下四条来自外部评审 C 节（Gemini）：真盲区，判据都可证伪 ══
 
   // ★ C1 重入防护：挂起期间再派一条命令 ⇒ **必须排队**，不许撞
@@ -241,6 +302,34 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
     JSON.stringify(revived));
 
   if (errs.length) console.log('   ⚠️ 页面报错：' + errs.slice(0, 3).join(' // '));
+  await page.close();
+}
+
+// ══ I4（工单 08）：worker 崩溃 ⇒ 待办**快速失败**（独立页 —— onerror 会污染宿主状态）══
+// 机制：宿主 `w.onerror` ⇒ `failAllPending(new Error('WorkerCrashError: …'))`（index.html）。
+// 触发：worker 里**一切消息路径都有守卫** ⇒ 用 `__crash_test` 判据通道（setTimeout 回调里
+// 抛，走与真实崩溃同一条 onerror）。反向语义：若宿主没有"立刻失败"，长待办会在 pause
+// 结束后**正常返回 rc=0** ⇒ 本断言红 —— 它证伪的就是"僵尸待办"。
+{
+  const page = await (await browser.newContext()).newPage();
+  await page.goto(URL + (URL.indexOf('?') >= 0 ? '&' : '?') + 'worker=1', { waitUntil: 'load', timeout: 120000 });
+  let ok = false;
+  for (let t = 0; t < 480; t++) {
+    if (await page.evaluate(() => window.OctaveWorker && window.OctaveWorker.ready).catch(() => false)) { ok = true; break; }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  const crash = await page.evaluate(async () => {
+    const t0 = performance.now();
+    const p = window.OctaveWorker.evalAsync('pause(6); 555');   // 长待办（自然结束要 6s）
+    await new Promise(r => setTimeout(r, 400));
+    window.OctaveWorker.__raw.postMessage({ kind: '__crash_test' });
+    let err = null, settled = false;
+    try { await p; settled = true; } catch (e) { err = String((e && e.message) || e).slice(0, 90); }
+    return { settled: settled, err: err, ms: Math.round(performance.now() - t0) };
+  });
+  check(ok && !crash.settled && /WorkerCrashError/.test(crash.err || '') && crash.ms < 4000,
+    '★ I4 worker 崩溃 ⇒ 待办立即以 WorkerCrashError 失败（<4s，不等 pause 自然结束）',
+    JSON.stringify(crash));
   await page.close();
 }
 

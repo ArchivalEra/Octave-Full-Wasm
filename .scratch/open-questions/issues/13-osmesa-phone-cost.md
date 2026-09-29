@@ -5,13 +5,24 @@
 
 **Blocked by:** 12（需要真机；没有设备就连测量条件都不成立）
 
-**Status:** needs-info
+**Status:** wontfix
 
 **Settling:** 不存在 —— 本工单第一交付物是一份**测量协议**（哪台设备、哪张图、量什么、
 什么算红）。在没有设备之前，任何"更慢/更重"的说法都只能标"猜想"。
 
 **Type:** research
 
-- [ ] 先读 `build/113/NOTES-webgl.md:70-74` 确认原文（那里已写明没有手机测试环境）
+- [x] 先读 `build/113/NOTES-webgl.md:70-74` 确认原文（那里已写明没有手机测试环境）
 - [ ] 写测量协议；有设备后按协议量并把结果回填
 - [ ] 在拿到数之前，**不许**把结论写进活状态（`AGENTS.md` 事实纪律第 5 条）
+
+## Answer（2026-09-29，无人值守批次）：测量对象已不存在 ⇒ wontfix
+
+本单要量的"OSMesa 回退路径"**已于 2026-09-23 从产品退役**：
+- `build/113/link-web.sh:314` 对 `GL_BACKEND=OSMesa` **硬 FATAL**（"OSMesa 后端已退役，这里只有 webgl"），
+  配方只在 git 历史（`graphics-osmesa` 分支 + `osmesa_toolkit.cc` + `NOTES-p5-osmesa.md`）；
+- `link-web.sh:300`：GL 垫片只剩 gl4es 一条；图形回退不存在"OSMesa 分支"可量。
+
+⇒ 在没有 OSMesa 的产品上写"它的手机开销测量协议"是在量一个幽灵。**决定：不查**
+（本单保留正是为了下一个人不必重问）。若日后复活 OSMesa，先开新工单重建该链，
+再回到本单的协议形状（哪台设备、哪张图、量什么、什么算红）。

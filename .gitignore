@@ -131,3 +131,6 @@
 #   其余 `.scratch/` 分支仍被开头的 `*` 拒掉 —— 只放行这一个 subtree。
 !docs/agents/*
 !.scratch/open-questions/issues/*
+
+# 工单 12 的第一交付物：真机手测清单（可复跑结算件）
+!docs/manual-test-checklist.md

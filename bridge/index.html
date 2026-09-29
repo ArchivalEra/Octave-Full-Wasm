@@ -316,6 +316,9 @@
   };
   API.diagnose = function () { return call('diagnose', {}).then(function (m) { return m.d; }); };
   API.interrupt = function () { API.interrupted++; w.postMessage({ kind: 'interrupt' }); };
+  // ★ 测试/诊断口子（工单 08）：裸 worker —— `__crash_test` 这类**不发 id** 的判据消息
+  //   只能直接 postMessage（包装 API 的每个方法都会挂一个待办）。测试以外不要用。
+  API.__raw = w;
   window.OctaveWorker = API;
   // 点击一律转发（worker 侧 `arm` 时会清空队列 ⇒ "第二次点击不误触发下一次 ginput" 仍成立）
   window.addEventListener('pointerdown', function (e) {

@@ -49,6 +49,15 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# ★ 把自己的目录放进 PATH（工单 09，2026-09-29 实测踩到）：容器里 relink.sh 住在 /src/bin，
+#   emf77 也在那里 —— 但"操作员的交互 shell 恰好带了 /src/bin"是个**隐形前置**，
+#   非交互（docker exec bash -c）直接死于 `FATAL: PATH 里没有 emf77`。
+#   与车道影子同款教训：凡是入口，前置必须入口自己解决，不能活在人的 shell 配置里。
+#   （宿主上 HERE=build/113，里面没有 emf77，此行无害。）
+case ":$PATH:" in
+  *":$HERE:"*) ;;
+  *) export PATH="$HERE:$PATH" ;;
+esac
 OCT="${OCT:-/src/work/octave-11.3.0}"
 # ★ F1：`--selfcheck` 要看的那份 link-web.sh **可注入** —— 自证必须在**夹具副本**上跑，
 #   不许为了自证去临时改真文件（本会话真这么干过，改完还得记得还原）。
@@ -526,9 +535,29 @@ cmd_rebuild() {
   #   --enable-threads）。**不许手设** —— 与 D1 的纪律一致（口径从模式推出来）。
   local th=0; [ "$m" = threads ] && th=1
   ( cd "$OCT" && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 \
-      WITH_THREADS="$th" bash "$HERE/configure-113-full.sh" )
-  ( cd "$OCT" && emmake make clean )
-  ( cd "$OCT" && emmake make -k -j"$JOBS" )
+      WITH_THREADS="$th" bash "$HERE/configure-113-full.sh" ) \
+    || { echo "FATAL: configure 失败（rebuild 第①步）—— 第一面墙在上面输出里" >&2; exit 2; }
+  ( cd "$OCT" && emmake make clean ) \
+    || { echo "FATAL: make clean 失败（rebuild 第②步）" >&2; exit 2; }
+  # ★ make 的 rc≠0 是**已知预期**（工单 09，2026-09-29 实测）：树内 octave-cli 用
+  #   configure 时的 /usr/local 前缀链 LAPACK，缺 `zgejsv_`/`cgejsv_`（web 链接用的是
+  #   /src/deps/lapack-simd 那份新的，树内 cli 没这份）——farm 的 stage_tree 早就写明
+  #   "预期 ≠0：树内 cli 失败"。⇒ 不能因为它中止：web 产物只吃树内 .libs + 车道 deps。
+  #   但要**零值守卫**：三大 .libs 必须真的（重）建出来了，否则就是"全没编过"而不是
+  #   "只有 cli 失败"——那种情况必须红着死，不能带病链接。
+  local mkr=0
+  ( cd "$OCT" && emmake make -k -j"$JOBS" ) || mkr=$?
+  echo "   make rc=$mkr（树内 cli 失败是已知预期；库必须都在才继续）"
+  local lib f
+  for lib in liboctave/.libs/liboctave.a libinterp/.libs/liboctinterp.a \
+             libmex/.libs/liboctmex.a libgnu/.libs/libgnu.a; do
+    f="$OCT/$lib"
+    if [ ! -s "$f" ]; then
+      echo "FATAL: 树内库缺或空：$f —— make 不是'只有 cli 失败'，不许带病链接" >&2
+      exit 2
+    fi
+  done
+  echo "   ✅ 树内四大 .libs 在（$(date -u +%H:%M:%SZ)），继续链接"
   cmd_link "$m" "$out" "$diag"
 }
 

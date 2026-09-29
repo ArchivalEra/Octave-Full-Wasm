@@ -27,7 +27,9 @@ ${mode === 'credless' ? `<script>window.coi = { coepCredentialless: () => true }
 ${mode === 'off' ? '' : `<script src="/coi-serviceworker.min.js"></script>`}
 <script>
 window.__cdnOK = false;
+window.__libSameOK = false;
 </script>
+<script src="/lib.js"></script>
 <script src="http://127.0.0.1:CDN_PORT/lib.js"></script>
 <iframe name="f" src="/frame.html" style="width:50px;height:20px"></iframe>
 <body>mode=${mode}</body>`;
@@ -43,6 +45,10 @@ const server = createServer(async (req, res) => {
   }
   if (u.pathname === '/frame.html') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(FRAME); return; }
   const html = TOP(u.searchParams.get('mode') || 'off').replace('CDN_PORT', String(CDN_PORT));
+  if (u.pathname === '/lib.js') {   // ★ 工单 10 的判别格：**同源**的"CDN 形态"脚本（不带 CORP 也不需要）
+    res.writeHead(200, { 'Content-Type': 'application/javascript' });
+    res.end('window.__libSameOK = true;'); return;
+  }
   res.writeHead(200, { 'Content-Type': 'text/html' });   // ★ 顶层**不注任何** COI 头（模拟静态托管）
   res.end(html);
 });
@@ -95,13 +101,14 @@ for (const [name, launch] of ENGINES) {
       let fcoi = null;
       try { fcoi = f && f.contentWindow ? f.contentWindow.crossOriginIsolated : null; } catch (e) { fcoi = 'blocked'; }
       return { coi: self.crossOriginIsolated, sab: typeof SharedArrayBuffer,
-               cdn: window.__cdnOK === true, fcoi: fcoi,
+               cdn: window.__cdnOK === true, same: window.__libSameOK === true,
+               fcoi: fcoi,
                controlled: !!navigator.serviceWorker.controller,
                coepFailed: sessionStorage.getItem('coiCoepHasFailed') === 'true',
                coepDegrading: sessionStorage.getItem('coiReloadedBySelf') === 'coepdegrade' };
     });
     res[name][mode] = m;
-    console.log(`     ${name.padEnd(8)} ${mode.padEnd(9)} coi=${String(m.coi).padEnd(5)} sab=${String(m.sab).padEnd(9)} CDN脚本=${m.cdn ? '✓加载' : '✗被拦'} 同源iframe.coi=${String(m.fcoi).padEnd(7)} SW接管=${m.controlled} 降级旗标=${m.coepFailed}${errs.length ? '  [' + errs.slice(0, 2).join(',') + ']' : ''}`);
+    console.log(`     ${name.padEnd(8)} ${mode.padEnd(9)} coi=${String(m.coi).padEnd(5)} sab=${String(m.sab).padEnd(9)} CDN脚本=${m.cdn ? '✓加载' : '✗被拦'} 同源lib=${m.same ? '✓' : '✗'} 同源iframe.coi=${String(m.fcoi).padEnd(7)} SW接管=${m.controlled} 降级旗标=${m.coepFailed}${errs.length ? '  [' + errs.slice(0, 2).join(',') + ']' : ''}`);
     await page.close();
   }
   await br.close();
@@ -128,6 +135,22 @@ for (const e of Object.keys(res)) {
   const r = get(e, 'credless');
   check(r && r.coi === true && r.cdn === true,
     `★ C ${e}：credentialless 定制 ⇒ COI 成立**且 CDN 脚本不被拦**`, JSON.stringify(r));
+}
+
+// ★ D（工单 10，2026-09-29）：**同源判别格** —— 区分 Firefox"COI ✓ 但 CDN ✗"的两个假设。
+//   同一份 lib.js 摆成两种形态：跨源无 CORP（CDN 形态）/ **同源**（无需 CORP，require-corp 必放行）。
+//   假设 A「拦截发生在跨源+CORP 语义层」 ⇒ 同源那份必然加载；
+//   假设 B「SW 的 COEP 作用域错杀同源子资源」 ⇒ 同源那份也被拦。
+//   两者的判据**互斥**：同源 lib 加载 = A 成立；被拦 = B 成立（同源被拦就是红，必须查）。
+let hypA = 0, hypB = 0;
+for (const e of Object.keys(res)) {
+  const r = get(e, 'default');
+  if (!r) continue;
+  if (r.same === true) { hypA++; check(r.same === true, `★ D ${e}：同源 lib 在默认模式加载 ⇒ 假设 A（拦截=跨源+无CORP 语义）`, `cdn=${r.cdn} same=${r.same}`); }
+  else { hypB++; check(false, `★ D ${e}：**同源 lib 被拦** ⇒ 假设 B（SW 的 COEP 错杀同源）—— 必须查`, JSON.stringify(r)); }
+}
+if (hypA + hypB > 0) {
+  console.log(`\n──── 工单 10 判别结论：假设 A（跨源语义拦截）命中 ${hypA} 引擎；假设 B（作用域错杀）命中 ${hypB} 引擎 ────`);
 }
 
 console.log('\n──── 默认模式 vs credentialless：CDN 脚本存活对比（本探针的核心数据）────');

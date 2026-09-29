@@ -215,6 +215,15 @@ self.onmessage = function (ev) {
     enqueue(m);
     return;
   }
+  if (m.kind === '__crash_test') {
+    // ★ 工单 08 的判据通道（2026-09-29）：worker 里**所有**消息路径都有守卫 ⇒
+    //   真实崩溃（OOM / 引擎杀 / 未捕获异常）无法从测试侧确定性复现，onerror 判据
+    //   就没法写。这个 kind 在**一切 try/catch 之外**（setTimeout 回调）抛，
+    //   确定性地走与真实崩溃同一条 onerror 通路。发消息时不带 id ⇒ 不 resolve 任何待办。
+    setTimeout(function () { throw new Error('crash-test: 非受控异常（工单 08 判据通道）'); }, 0);
+    send({ id: m.id, kind: 'result', rc: 0 });
+    return;
+  }
   if (false) {
   }
 };
