@@ -182,6 +182,50 @@ async function main () {
       `val=${f.val} msg=${String(fMsg).slice(0, 80)}`);
   }
   await page.close();
+
+  // ── G（工单 06 的反向断言）：**真·关掉 JSPI** ⇒ 必须优雅降级，不是 TypeError ──
+  // 做法：addInitScript 在**任何页面脚本之前**废掉 WebAssembly.Suspending/promising
+  // ⇒ 宿主的 B 姿势包装跳过（jspiApi=false）⇒ D9 门必须**关**，pause 走内建阻塞照常返回。
+  // 反向语义：若降级是靠 TypeError/挂死，这里必红。
+  {
+    const ctx2 = await browser.newContext();
+    const page2 = await ctx2.newPage();
+    await page2.addInitScript(() => {
+      try { WebAssembly.Suspending = undefined; WebAssembly.promising = undefined; } catch (e) {}
+    });
+    await page2.goto(URL, { waitUntil: 'load', timeout: 240000 });
+    const t0 = Date.now();
+    while (Date.now() - t0 < 120000) {
+      if (await page2.evaluate(() => window.__octaveReady === true).catch(() => false)) break;
+      await sleep(200);
+    }
+    const caps = await page2.evaluate(() => ({
+      ready: window.__octaveReady === true,
+      jspiApi: !!(window.__octaveCaps && window.__octaveCaps.engine &&
+                  window.__octaveCaps.engine.jspiApi),
+    })).catch(() => ({ ready: false, jspiApi: null }));
+    // ⚠️ 无 JSPI 时宿主**不暴露 eval_async**（降级形态 = 只有同步口；实测 G1 车道）
+    //    ⇒ 这里只能走 eval_string；值经 error 消息通道带回（worker 批次教训的页面版）。
+    const gate = await page2.evaluate(() => {
+      try { window.Module.eval_string("s = __web_suspend_ok__; error('GATE %d', s);"); }
+      catch (e) { /* Octave error ⇒ JS 异常；文本从 last_error_message 取（F 格同款） */ }
+      const m = /GATE (\d+)/.exec(String((() => { try { return window.Module.last_error_message(); } catch (e2) { return ''; } })()) || '');
+      return { gate: m ? +m[1] : null };
+    });
+    const pauseRun = await page2.evaluate(() => {
+      const t0 = Date.now();
+      try { const rc = window.Module.eval_string('pause(0.2);'); return { rc, ms: Date.now() - t0, err: null }; }
+      catch (e) { return { rc: null, ms: Date.now() - t0, err: String(e.message || e).slice(0, 80) }; }
+    });
+    check(caps.ready === true && caps.jspiApi === false,
+      'G1 无 JSPI API ⇒ 页面照常 ready（api 门如实为 false）', JSON.stringify(caps));
+    check(gate.gate === 0,
+      '★ G2 D9 门在无 JSPI 时必须**关**（不许误报可挂起）', JSON.stringify(gate));
+    check(pauseRun.err === null && pauseRun.rc === 0 && pauseRun.ms >= 150 && pauseRun.ms < 5000,
+      '★ G3 无 JSPI 时 pause 走内建阻塞照常返回（优雅降级：≥0.2s 真等待，不是 TypeError/挂死）',
+      JSON.stringify(pauseRun));
+    await page2.close();
+  }
 }
 await main();
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
