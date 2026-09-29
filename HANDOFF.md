@@ -49,7 +49,8 @@
 - ★ **wasm64 已建成并集成**（工单 14/17/18 全 `resolved`，2026-09-28，**branch `wasm64`**）：
   · **可行性三问全绿**：Q1 引擎支持（本机 Chromium 默认支持 memory64）、Q2 `.oct`
     （`w64_oct_wasm64` / `w64_oct_files`，且 `dlopen OK, f()=42`）、Q3 **>4 GiB 确凿**
-    （⚠️ **Q3 那几个内存上限还没上键**，仍是散文，见 §1）；
+    （上限已上键：`w64_mem_5g_bytes` / `w64_mem_8g_bytes` / `w64_mem_shared_5g_bytes`；
+    探针 = `test/browser/probe-wasm64-mem.mjs`，自托管两页、不依赖任何产物，FAIL 数 = `w64_mem_probe_fail`）；
   · **全量重编成**（`/usr/local-w64` + `/src/deps-w64`，影子 `/src/libwork/lane-shim-w64`
     注入 `-pthread -sMEMORY64=1`）；产物事实看台账 **`w64_*` 组**（10 条，含复跑命令）；
   · **两轴选档**（`bridge/lane.js`：COI × memory64）⇒ 最多四格；**`site-w64` 上四档物理齐备**：
@@ -83,14 +84,14 @@ E2 上线、wasm64 三件（可行性 / 重编 / 集成）都已收尾。⇒ 下
 1. **w64 上线（要拍板；独立批次）**：`site-w64` 已验绿（全量回归 + 四格矩阵探针都全绿），
    但是否把 w64 当**新的线程档**推上 8761、以及发几档（四格 vs 砍到两三档），**是产品决定**。
    走批次收尾那套（8768 验绿 → promote → boot/SHA 三层 → 同步 `site/` → dist → parity → 六道闸门）。
-2. **Q3 的内存上限上键**（唯一还没上键的一组）：5 GiB / 8 GiB / 共享 5 GiB 现在仍是散文。
-   生产者需要一个**真的内存探针脚本**（现在是 `node -e` + playwright 的一次性命令）。
-3. **glpk 的 memory64 静默失败**（工单 17 的遗留）：判别已确认与 memory64 有关（无影子 ✅ /
+2. **glpk 的 memory64 静默失败**（工单 17 的遗留）：判别已确认与 memory64 有关（无影子 ✅ /
    `-pthread` 影子 ✅ / 带 memory64 ❌），但**根因没查**；farm 后来建成了，所以它**不再阻塞**，
    但那个"失败不告诉你为什么"的缺口还在（`build-libs.sh` 吞掉了错误）。
-4. **工单 16**（线程版的卡点在"代码路径本身"，与线程数无关 —— R-010 推翻了"多线程唤醒"那条推断）。
+   ⚠️ 工单 17 的 Answer 还点名 `/src/deps-w64/glpk/` 当前是**混编目录**（判别实验把 wasm32
+   glpk 建了进去）—— 接手先清。
+3. **工单 16**（线程版的卡点在"代码路径本身"，与线程数无关 —— R-010 推翻了"多线程唤醒"那条推断）。
    ⚠️ 注意它与 **wasm64 是同一个 OpenBLAS**：w64 那条路要是稳，可能反过来给 16 提供线索。
-5. **其余前沿**（各自独立）：04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、08（外审判据）、
+4. **其余前沿**（各自独立）：04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、08（外审判据）、
    10（Firefox COI 矛盾）、15（`relink.sh verify --out <副本>` 假红并污染 verdict）、
    01/03（诊断仪器与其两个下游）；需要设备的 07 / 12 / 13。
    **不要与重链类活并行**（本仓实测过并发会让套件假崩）。
@@ -227,6 +228,10 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `threads_wasm_sha` | `e570905ecc8927bf…` | `sha256sum /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
 | `w64_exported_functions` | **732** | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.exported_functions` |
 | `w64_i64_insns` | **4040751**（64 位的指令层证据（wasm32 版为 0）） | `llvm-objdump -d <w64>/octave.wasm \| grep -c i64（由 build/113/build-w64-lane.sh facts 写出，容器内跑）` |
+| `w64_mem_5g_bytes` | **5242880000**（单线程 memory64 分配 80000 页（非 COI 页，buffer 是 ArrayBuffer）） | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
+| `w64_mem_8g_bytes` | **8589934592**（单线程 memory64 分配 131072 页） | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
+| `w64_mem_probe_fail` | **0**（内存探针 FAIL 数（必须 0；含 wasm32 上限 / index 陷阱 / BigInt 三条反证）） | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
+| `w64_mem_shared_5g_bytes` | **5242880000**（COI 页 shared memory64 分配 80000 页（buffer 是 SharedArrayBuffer）） | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
 | `w64_oct_files` | **46**（车道 `.oct` 总数） | `同上（文件名：oct-wasm64.txt 的第二个数）` |
 | `w64_oct_wasm64` | **46**（`.oct` 车道里 wasm64 的个数（side module 的指针宽度必须与主模块一致）） | `bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/llvm-readobj 逐个量）` |
 | `w64_shared_memory` | 是（目标形态 = memory64 **+ 多线程**（shared 是这个轴的硬身份）） | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.threads.shared_memory` |
@@ -239,7 +244,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-28T22:43:42+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-29T08:27:38+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态

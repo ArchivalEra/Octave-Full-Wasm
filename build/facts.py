@@ -565,6 +565,37 @@ def measure(argv):
                                       "w64-logs/oct-wasm64.txt", "车道 `.oct` 总数")
     except (OSError, ValueError, IndexError):
         pass
+    # ── ★ Q3 的内存上限（2026-09-29 上键）：HANDOFF §1 的第 2 条 ────────────────────
+    # 为什么要有这组：5 GiB / 8 GiB / 共享 5 GiB 原来是**一次性 `node -e` 命令 + 散文**
+    #   —— 没有复跑入口，也没有闸门拦腐烂。生产者 = test/browser/probe-wasm64-mem.mjs
+    #   （自托管两页：不带头的 plain 页量单线程，带头的 coi 页量 shared；照 probe_lane_pass
+    #   的形状从**保存下来的探针日志**取值，facts.py 不自己开浏览器）。
+    _memlog = os.environ.get("W64_MEM_LOG", os.path.join(W64L, "mem-probe.log"))
+    if os.path.exists(_memlog):
+        try:
+            _mtxt = open(_memlog, encoding="utf-8", errors="replace").read()
+            for key, pat, note in (
+                ("w64_mem_5g_bytes", r"^mem5g_bytes=(\d+)$",
+                 "单线程 memory64 分配 80000 页（非 COI 页，buffer 是 ArrayBuffer）"),
+                ("w64_mem_8g_bytes", r"^mem8g_bytes=(\d+)$",
+                 "单线程 memory64 分配 131072 页"),
+                ("w64_mem_shared_5g_bytes", r"^memshared5g_bytes=(\d+)$",
+                 "COI 页 shared memory64 分配 80000 页（buffer 是 SharedArrayBuffer）"),
+            ):
+                _m = re.search(pat, _mtxt, re.M)
+                if _m:
+                    facts[key] = fact(int(_m.group(1)),
+                                      "sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > %s" % _memlog,
+                                      os.path.basename(_memlog), note)
+            _mf = re.search(r"===\s*\d+ PASS / (\d+) FAIL\s*===", _mtxt)
+            if _mf:
+                facts["w64_mem_probe_fail"] = fact(int(_mf.group(1)),
+                                                   "同上（脚本结尾的 `=== N PASS / M FAIL ===`）",
+                                                   os.path.basename(_memlog),
+                                                   "内存探针 FAIL 数（必须 0；含 wasm32 上限 / index 陷阱 / "
+                                                   "BigInt 三条反证）")
+        except OSError as e:
+            print("⚠ 读不到内存探针日志 %s：%s" % (_memlog, e), file=sys.stderr)
 
     # ★ 零值守卫（2026-09-27 实测踩到）：本脚本**无参数运行就会重写台账**，而某些事实的输入
     #   现在不在（例：8761 站点此刻没有 `threads/` ⇒ 8 条线程档事实测不出来）⇒ 一次手滑就把

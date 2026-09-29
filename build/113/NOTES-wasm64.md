@@ -104,6 +104,13 @@ sudo docker exec o113 python3 /src/bin/check-oct-imports.py
 
 ## Q3 · 收益到底有多少？（可寻址上限实测）
 
+> **2026-09-29 起这一组的现值上键了**：`build/FACTS.json` 的 `w64_mem_5g_bytes` /
+> `w64_mem_8g_bytes` / `w64_mem_shared_5g_bytes` / `w64_mem_probe_fail`，生产者 =
+> `test/browser/probe-wasm64-mem.mjs`（自托管两页：不带头的 plain 页量单线程、带头的 coi 页量
+> shared；**不依赖任何产物**，复跑 `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs`）。
+> 探针带三条**反证**：wasm32 要 >65536 页必须抛、`index:'i64'` 陷阱必须仍在、
+> `address:'i64'` 配 Number 必须抛。下面的一次性命令是**历史**（当时如此），别再当配方。
+
 ### 1. 实测结论
 - **API 规范踩坑与关键发现**：
   - WebAssembly JavaScript API 对于 64 位内存的定义属性为 **`address: "i64"`**（注意：部分旧草案及文档提及的 `index: "i64"` 会被 V8 当作未知属性忽略，从而退回 32 位内存检查，在上限超过 65536 页时报 `Property "maximum": value X is above the upper bound 65536`）。
@@ -115,6 +122,13 @@ sudo docker exec o113 python3 /src/bin/check-oct-imports.py
   - **多线程配置（Shared-memory wasm64 + COI）**：
     - 在启用了 COI 头的页面中，`new WebAssembly.Memory({initial: 80000n, maximum: 131072n, shared: true, address: "i64"})` 成功分配 **5,242,880,000 字节（5 GiB）** 的 `SharedArrayBuffer` 共享内存。
 - **判决**：确凿突破 4 GiB 内存边界，在单线程与多线程两种配置下均可拿到 >4 GiB 堆空间，**Q3 判定过（rc=0，确认有显著内存容量收益）**。
+- **探针首跑补量的两个细节**（2026-09-29，`w64-logs/mem-probe.log`）：
+  - **非 COI 页上 `SharedArrayBuffer` 这个标识符本身不存在**（`typeof` 都不必提 ——
+    裸引用直接 `ReferenceError`），不只是"不能构造"。页面侧代码判共享只能走
+    `typeof SharedArrayBuffer === 'function'` 或 `buffer.constructor.name`；
+  - BigInt 页数喂给 wasm32 路径抛的是 `TypeError: Cannot convert a BigInt value to a number`
+    （不是旧草案文档里那条 RangeError 文案 —— 那条是 **Number** 页数喂 `maximum` 时的）；
+    反证按"必须抛"断言，不按文案断言（文案会随引擎版本漂）。
 
 ### 2. 复跑命令
 ```bash
