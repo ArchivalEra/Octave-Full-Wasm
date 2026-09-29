@@ -64,3 +64,13 @@ wasm-ld: error: /src/work/octave-11.3.0/libinterp/.libs/liboctinterp.a(liboctint
 
 **遗留（如实记）**：`build-libs.sh` 的 glpk 在 memory64 下静默失败的**根因未查**（判别已确认与 memory64 有关，
 但为什么没查）；判别实验把 wasm32 glpk 建进了 `/src/deps-w64/glpk/` ⇒ **该 farm 目录当前混编**，接手先清。
+
+## Answer 附录（2026-09-29，主会话）：上面两条遗留都有了下文
+
+- **"混编目录，接手先清"** —— 已被后来成功的 farm 自然清掉（2026-09-29 复测：
+  `libglpk.a` 191 成员全 wasm64；台账 `w64_i64_insns` / `w64_oct_wasm64` 对得上）。
+- **"根因未查"** —— 已结案，且是**翻案**：memory64 无辜（R-011/R-012）。真机制 =
+  **换旗标后复用没清的构建树**（`make` 按 mtime 零重编 ⇒ 库静默保持旧指针宽度）；
+  ccache 无辜（`CCACHE_DISABLE=1` 不变）。四个实验、复跑命令与修复
+  （旗标指纹清树 + `need_arch` 架构断言）见 `build/113/NOTES-wasm64.md`「glpk 悬案结案」。
+  注意判别表本身的方法论缺口：只看 rc/报错文本、没查产物架构 ⇒ 表里的 ✅/❌ 都不可靠。

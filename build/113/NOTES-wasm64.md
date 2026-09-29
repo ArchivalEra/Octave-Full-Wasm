@@ -102,6 +102,60 @@ sudo docker exec o113 python3 /src/bin/check-oct-imports.py
 
 ---
 
+## glpk 悬案结案（2026-09-29）：真机制 = 换旗标不清树 ⇒ make 零重编 ⇒ 静默错误架构
+
+> 工单 17 遗留的"glpk 在 memory64 下静默失败"已结案：**memory64 无辜，ccache 也无辜**。
+> 真机制：`build-libs.sh` 的 `unpack` 目录在就跳过 ⇒ 判别实验三次共用一棵没清的树 ⇒
+> 换旗标后 `make` 按 mtime 判"全部最新"、**一条编译都不跑** ⇒ 把旧架构的对象原样打包安装。
+> "静默"的真身：rc=0、符号自检也过（glp_simplex 在）、**只有架构是错的** —— 而当时的自检
+> 不查架构（方法论缺口：判别只看 rc/报错文本，于是"静默错误架构的成功"②被记成 ✅、
+> ③被记成 ❌，其实两个都可能是 wasm32 假成功）。
+
+### 实验（容器内可复跑；全部用一次性 prefix，没碰 `/src/deps-w64`）
+
+| # | 条件 | 结果 |
+|---|---|---|
+| E-repro1 | 新树 + `LANE_FLAGS="-pthread -sMEMORY64=1"`（CFLAGS 通道，**无** `-fno-threadsafe-statics`） | ✅ 191 成员全 wasm64 |
+| E3a | 新树 + 只含 `-pthread -sMEMORY64=1` 的 emcc 影子（不传 LANE_FLAGS，= 当时 stage_libs 的姿势） | ✅ 191 成员全 wasm64 |
+| E3b③ | **脏树**（先无旗标建过一遍）+ 同上影子 | ❌ 静默 wasm32（glp_simplex 照样在） |
+| E4 | 同 E3b③ + `CCACHE_DISABLE=1` | ❌ 仍旧 wasm32 ⇒ **ccache 无辜**；make 日志 **0 条编译命令**（新树对照 386 条） |
+| E5 | 同 E3b③ + 修复后的 build-libs.sh | ✅ 自动"旗标变了→清树重解包"，386 条重编，191 全 wasm64 |
+
+复跑（E3b③→E5 的最小形状；`llvm-readobj` 不在容器 PATH，必须绝对路径）：
+
+```bash
+# ① 基线（无旗标）建一遍，留下脏树
+sudo docker exec o113 bash -c 'DEPS=/tmp/g1 WORK=/tmp/w1 bash /src/bin/build-libs.sh glpk'
+# ② 不清树，换 w64 影子重入同一棵树 —— 修前：静默 wasm32；修后：自动清树重编 wasm64
+sudo docker exec o113 bash -c 'export PATH=/src/bin:/src/libwork/shim-repro2:$PATH; DEPS=/tmp/g2 WORK=/tmp/w1 bash /src/bin/build-libs.sh glpk'
+# ③ 量架构（0/191 = 复现了陷阱；191/191 = 修复生效）
+sudo docker exec o113 /emsdk/upstream/bin/llvm-readobj -h /tmp/g2/glpk/lib/libglpk.a | grep -c wasm64
+```
+
+### 修复（`build-libs.sh`，两道闸）
+
+1. **旗标指纹清树**：解包时把当时的 `LANE_FLAGS` 写进 `$WORK/<树>/.lane-flags`；目录已存在
+   但指纹对不上（含无指纹的老树）⇒ 整树重解包。**同旗标重跑照旧续跑**（指纹相同）。
+   qhull 的 build 目录在源码树外，单独接了同一套 clear/stamp。
+2. **`need_arch` 架构断言**（fail-closed）：`LANE_FLAGS` 含 MEMORY64 ⇒ 每个 `.a` **逐成员**
+   必须是 wasm64，否则 FATAL 并点名两类原因（影子没挂 / 树没清）。接在全部产物自检处
+   （zlib、bzip2、glpk、fftw×2、qhull、sndfile、hdf5、arpack、qrupdate、suitesparse×8）。
+   **反向断言已验**（2026-09-29，容器内）：wasm32 归档 + MEMORY64 车道 ⇒ FATAL rc=1；
+   wasm64 归档 ⇒ 绿；基线车道（无 MEMORY64）⇒ 断言不适用。
+   ⚠️ 验证范围如实记：E5 只走通了 glpk 路径；其余库的同形接线是同一次 diff 里的机械复制，
+   没有各自全量重编验证过 —— 下次跑 `build-libs.sh all` 时顺带覆盖。
+
+### 顺带更正的两个"当时如此"
+
+- "它本该写的 `$WORK/glpk-conf.log` 根本没生成"：**不可考**（失败轮的日志被后来的成功运行
+  覆盖）；实测该日志**会**生成（E3b/E4 都有）。当时很可能是查错了目录（`WORK` 默认是
+  `/src/libwork`，不是 `/src/work/w64-logs`）。
+- `/src/deps-w64` 的 wasm32 混编污染：已被后来成功的 farm 清掉（2026-09-29 复测：
+  `libglpk.a` 191 成员全 wasm64，且整份 w64 产物 `w64_i64_insns`/`w64_oct_wasm64` 都在台账）。
+- 工单 16 提醒仍然有效：这与线程版挂起无关 —— 别拿本结案去套 16。
+
+---
+
 ## Q3 · 收益到底有多少？（可寻址上限实测）
 
 > **2026-09-29 起这一组的现值上键了**：`build/FACTS.json` 的 `w64_mem_5g_bytes` /

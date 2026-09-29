@@ -79,6 +79,20 @@
    "fixed_in": "PLAN-threads §6（口径改成「带 TLS/原子的对象必须」）+ 新增可证伪判据：`check-build-manifest.py::lane_blas_problem()` —— 声明 threads=true 时 BLAS 必须来自车道路径"
   },
   {
+   "id": "R-011",
+   "text": "确认这面墙由 memory64 造成",
+   "why": "判别实验③的结论复现不出来（2026-09-29 四个实验）：glpk-5.0 用 `-pthread -sMEMORY64=1` 在 CFLAGS 通道与 emcc 影子通道、全新树下都建成完整 wasm64 库（191 成员）。当时观察到的真机制是**换旗标后复用没清的构建树** —— `make` 按 mtime 判「全部最新」**零重编**，把旧架构的对象原样打包安装（与 memory64 无关，B6 影子同样会产出 wasm32 假成功）；ccache 无辜（`CCACHE_DISABLE=1` 不变）。",
+   "evidence": "build/113/NOTES-wasm64.md「glpk 悬案结案」的实验表：E3b③/E4（脏树+影子 ⇒ 静默 wasm32，make 日志 0 条编译命令 vs 新树 386 条）vs E-repro1/E3a（新树 ⇒ 191 成员全 wasm64）",
+   "fixed_in": "build/113/NOTES-wasm64.md「glpk 悬案结案」+ PLAN-wasm64.md §1 判别表更正 + build-libs.sh 加旗标指纹清树与 need_arch 架构断言"
+  },
+  {
+   "id": "R-012",
+   "text": "判别已确认与 memory64 有关",
+   "why": "同 R-011（这是它在 HANDOFF §1 的措辞）：2026-09-29 复跑四个实验后翻案 —— 判别实验当时只看 rc/报错文本、没查产物架构，把「换旗标不清树 ⇒ make 零重编 ⇒ 静默错误架构」误读成了 memory64 的墙。",
+   "evidence": "同 R-011；复跑命令见 NOTES-wasm64.md「glpk 悬案结案」",
+   "fixed_in": "HANDOFF §1（glpk 条目改写为已结案）+ NOTES-wasm64.md 结案节"
+  },
+  {
    "id": "R-010",
    "text": "worker 唤醒/自旋等待",
    "why": "推断被实验证伪（2026-09-28）：曾推断线程版在 dlopen 的 `.oct` 路径上不返回，是因为 OpenBLAS 的 worker 唤醒/自旋等待在 wasm 下的行为（线程同步忙等 + 主线程 `Atomics.wait` 受限）。结案实验②的做法是**先调 `openblas_set_num_threads(1)` 再跑同一路径** —— 若卡在唤醒/自旋，设成 1 个线程就该返回。实测：**仍不返回**（>300 s），且那个导出确实可调（`typeof=function`、调用返回 ok）。⇒ 卡点在**线程版代码路径本身，与线程数无关**。",

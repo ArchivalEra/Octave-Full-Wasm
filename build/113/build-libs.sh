@@ -45,14 +45,53 @@ fi
 say () { echo; echo "=== $*"; }
 need () { [ -f "$1" ] || { echo "FATAL: 缺 $1" >&2; exit 2; }; }
 
+# ---------------------------------------------------------------------------
+# ★ 旗标指纹（2026-09-29，glpk 悬案结案后加）：树是**按旗标**编译的 —— 换旗标不清树，
+#   make 会按 mtime 判"全部最新"⇒ **零重编** ⇒ 库静默保持旧指针宽度（实测 E3b③/E4：
+#   影子在 PATH、连 ccache 都禁了，wasm32 的树照样"建成功"出 wasm32 的库；
+#   机制与四个实验见 NOTES-wasm64.md「glpk 悬案结案」）。⇒ 解包时把当时的
+#   LANE_FLAGS 存进树里；目录已存在但指纹对不上（含没有指纹的老树）就整树重来。
+#   同旗标重跑不受影响（指纹相同 ⇒ 复用树续跑）。
+clear_if_flags_changed () {  # $1=目录：存在且指纹不符 ⇒ 清掉
+  local stamp="$1/.lane-flags"
+  if [ -d "$1" ] && ! grep -xqF "$LANE_FLAGS" "$stamp" 2>/dev/null; then
+    echo "  ⚠ 旗标变了（该目录旧指纹：$(cat "$stamp" 2>/dev/null || echo 无)）→ 清掉 $1 重解包"
+    rm -rf "$1"
+  fi
+}
+stamp_dir () { mkdir -p "$1"; printf '%s\n' "$LANE_FLAGS" > "$1/.lane-flags"; }
+
+# ★ 架构断言（2026-09-29）：查符号**不够** —— 判别实验的方法论缺口就是只看 rc/符号，
+#   于是"静默错误架构的成功"被记成了 ✅。车道声明 MEMORY64 ⇒ 每个 `.a` 必须**逐成员**
+#   是 wasm64。这是 fail-closed 的反向断言：上面指纹清树若失效（或旗标通道根本没进
+#   编译），这里必须红 —— 不许错架构的库混进车道 prefix（R-009 的同族危险）。
+need_arch () {  # $1=.a 路径
+  local a="$1" ro="/emsdk/upstream/bin/llvm-readobj" h total w64
+  [ -f "$a" ] || { echo "FATAL: 缺 $a" >&2; exit 1; }
+  [ -x "$ro" ] || ro="llvm-readobj"
+  h="$("$ro" -h "$a" 2>/dev/null)"
+  total="$(grep -c 'Arch: wasm' <<<"$h" || true)"
+  w64="$(grep -c 'Arch: wasm64' <<<"$h" || true)"
+  if [[ "$LANE_FLAGS" == *"MEMORY64"* ]]; then
+    if [ "$total" -gt 0 ] && [ "$total" -eq "$w64" ]; then return 0; fi
+    echo "FATAL: $a 架构断言失败：$total 个成员里只有 $w64 个是 wasm64（车道声明 MEMORY64）" >&2
+    echo "       典型原因：旗标通道没进编译（影子没挂 / 树没清，make 零重编）——见 NOTES-wasm64.md" >&2
+    exit 1
+  fi
+}
+
 unpack () {  # $1=tar 文件名（在 SRC/SRC2 里找）  $2=解包后目录名
   local f="$1" d="$2" t=""
   for dir in "$SRC" "$SRC2"; do
     if [ -f "$dir/$f" ]; then t="$dir/$f"; break; fi
   done
-  [ -n "$t" ] || { echo "FATAL: 在两个源码目录里都找不到 $f（$SRC, $SRC2）" >&2; exit 2; }
+  [ -n "$t" ] || { echo "FATAL: 在两个源码目录里都找不到 $f（$SRC, $SRC2）" >&2; exit 1; }
+  clear_if_flags_changed "$WORK/$d"
   mkdir -p "$WORK"
-  [ -d "$WORK/$d" ] || tar xf "$t" -C "$WORK"
+  if [ ! -d "$WORK/$d" ]; then
+    tar xf "$t" -C "$WORK"
+    stamp_dir "$WORK/$d"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -82,6 +121,7 @@ do_zlibbz2 () {
   emmake make -j"$JOBS" CC="$CCACHE_CC" CFLAGS="-O2 -fPIC $LANE_FLAGS" > "$WORK/zlib-make.log" 2>&1
   emmake make install > "$WORK/zlib-inst.log" 2>&1
   grep -q ' deflate$' <(emnm "$P/lib/libz.a") || { echo "FATAL: libz.a 缺 deflate" >&2; exit 1; }
+  need_arch "$P/lib/libz.a"
   # bzip2：**绕开它的 Makefile**。实测两轮都失败：其 Makefile 里 `CC=gcc` 是
   #   普通赋值，连 make 命令行传 CC 都没压住（日志里始终是宿主 gcc），于是产出
   #   x86 对象，链接时报
@@ -98,6 +138,7 @@ do_zlibbz2 () {
   emar rcs "$P/lib/libbz2.a" "${bzobjs[@]}"
   cp -f bzlib.h "$P/include/bzlib.h"
   grep -q ' BZ2_bzCompress$' <(emnm "$P/lib/libbz2.a") || { echo "FATAL: libbz2.a 缺 BZ2_bzCompress" >&2; exit 1; }
+  need_arch "$P/lib/libbz2.a"
   echo "  ✅ zlib + bzip2 → $P"
 }
 
@@ -121,6 +162,7 @@ do_glpk () {
       || { echo "FATAL: glpk install 失败，见 $WORK/glpk-inst.log" >&2; tail -20 "$WORK/glpk-inst.log" >&2; exit 1; }
   local s; s="$(emnm "$P/lib/libglpk.a")"
   grep -q ' glp_simplex$' <<<"$s" || { echo "FATAL: libglpk.a 缺 glp_simplex" >&2; exit 1; }
+  need_arch "$P/lib/libglpk.a"
   echo "  ✅ glpk → $P（glp_simplex 在）"
 }
 
@@ -145,6 +187,7 @@ do_fftw () {
   done
   grep -q ' fftw_plan_dft_1d$'  <(emnm "$P/lib/libfftw3.a")  || { echo "FATAL: libfftw3.a 缺 fftw_plan_dft_1d" >&2; exit 1; }
   grep -q ' fftwf_plan_dft_1d$' <(emnm "$P/lib/libfftw3f.a") || { echo "FATAL: libfftw3f.a 缺 fftwf_plan_dft_1d" >&2; exit 1; }
+  need_arch "$P/lib/libfftw3.a"; need_arch "$P/lib/libfftw3f.a"
   echo "  ✅ fftw3 + fftw3f → $P"
 }
 
@@ -164,6 +207,8 @@ do_qhull () {
   unpack "qhull-8.0.2.tar.gz" qhull-8.0.2
   local P="$DEPS/qhull"
   local TC=/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
+  # qhull 的 build 目录在源码树**外**（unpack 的指纹管不到它）⇒ 单独清/盖戳
+  clear_if_flags_changed "$WORK/qhull-build"
   emcmake cmake -S "$WORK/qhull-8.0.2" -B "$WORK/qhull-build" \
       -DCMAKE_INSTALL_PREFIX="$P" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_C_FLAGS="-O2 -fPIC -fwasm-exceptions $LANE_FLAGS" \
@@ -172,10 +217,14 @@ do_qhull () {
       -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
       -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
       > "$WORK/qhull-conf.log" 2>&1
-  emmake cmake --build "$WORK/qhull-build" -j"$JOBS" > "$WORK/qhull-make.log" 2>&1
-  emmake cmake --install "$WORK/qhull-build" > "$WORK/qhull-inst.log" 2>&1
+  emmake cmake --build "$WORK/qhull-build" -j"$JOBS" > "$WORK/qhull-make.log" 2>&1 \
+      || { echo "FATAL: qhull make 失败，见 $WORK/qhull-make.log" >&2; tail -20 "$WORK/qhull-make.log" >&2; exit 1; }
+  emmake cmake --install "$WORK/qhull-build" > "$WORK/qhull-inst.log" 2>&1 \
+      || { echo "FATAL: qhull install 失败，见 $WORK/qhull-inst.log" >&2; tail -20 "$WORK/qhull-inst.log" >&2; exit 1; }
+  stamp_dir "$WORK/qhull-build"
   cp -f "$P/lib/libqhullstatic_r.a" "$P/lib/libqhull_r.a"
   grep -q ' qh_new_qhull$' <(emnm "$P/lib/libqhull_r.a") || { echo "FATAL: libqhull_r.a 缺 qh_new_qhull" >&2; exit 1; }
+  need_arch "$P/lib/libqhull_r.a"
   echo "  ✅ qhull → $P（qh_new_qhull 在；已补 libqhull_r.a 别名）"
 }
 
@@ -195,9 +244,12 @@ do_sndfile () {
       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
       -DCMAKE_CROSSCOMPILING_EMULATOR="/emsdk/node/22.16.0_64bit/bin/node" \
       > "$WORK/sndfile-conf.log" 2>&1
-  emmake cmake --build build -j"$JOBS" > "$WORK/sndfile-make.log" 2>&1
-  emmake cmake --install build > "$WORK/sndfile-inst.log" 2>&1
+  emmake cmake --build build -j"$JOBS" > "$WORK/sndfile-make.log" 2>&1 \
+      || { echo "FATAL: sndfile make 失败，见 $WORK/sndfile-make.log" >&2; tail -20 "$WORK/sndfile-make.log" >&2; exit 1; }
+  emmake cmake --install build > "$WORK/sndfile-inst.log" 2>&1 \
+      || { echo "FATAL: sndfile install 失败，见 $WORK/sndfile-inst.log" >&2; tail -20 "$WORK/sndfile-inst.log" >&2; exit 1; }
   grep -q ' sf_open$' <(emnm "$P/lib/libsndfile.a") || { echo "FATAL: libsndfile.a 缺 sf_open" >&2; exit 1; }
+  need_arch "$P/lib/libsndfile.a"
   echo "  ✅ libsndfile → $P（sf_open 在）"
 }
 
@@ -251,6 +303,7 @@ do_hdf5 () {
   HDF5_Make_Ignore=1 emmake make install > "$WORK/hdf5-inst.log" 2>&1 \
       || { echo "FATAL: hdf5 install 失败，见 $WORK/hdf5-inst.log" >&2; tail -20 "$WORK/hdf5-inst.log" >&2; exit 1; }
   grep -q ' H5Fopen$' <(emnm "$P/lib/libhdf5.a") || { echo "FATAL: libhdf5.a 缺 H5Fopen" >&2; exit 1; }
+  need_arch "$P/lib/libhdf5.a"
   echo "  ✅ hdf5 → $P（H5Fopen 在）"
 }
 
@@ -286,6 +339,7 @@ do_arpack () {
   for sym in dsaupd_ dseupd_ dnaupd_; do
     grep -q " $sym$" <(emnm "$P/lib/libarpack.a") || { echo "FATAL: libarpack.a 缺 $sym" >&2; exit 1; }
   done
+  need_arch "$P/lib/libarpack.a"
   echo "  ✅ arpack → $P（dsaupd_/dseupd_/dnaupd_ 在；逐文件编译成功）"
 }
 
@@ -304,6 +358,7 @@ do_qrupdate () {
   for f in *.f; do emf77 -O2 -fPIC $LANE_FLAGS -c "$f" -o "${f%.f}.o"; o+=("$PWD/${f%.f}.o"); done
   emar rcs "$P/lib/libqrupdate.a" "${o[@]}"
   grep -q ' dqrinc_$' <(emnm "$P/lib/libqrupdate.a") || { echo "FATAL: libqrupdate.a 缺 dqrinc_" >&2; exit 1; }
+  need_arch "$P/lib/libqrupdate.a"
   echo "  ✅ qrupdate → $P（dqrinc_ 在）"
 }
 
@@ -393,6 +448,7 @@ do_suitesparse () {
   for pair in $chk; do
     local l="${pair%%:*}" sym="${pair##*:}"
     grep -q " $sym$" <(emnm "$P/lib/$l" 2>/dev/null) || { echo "FATAL: $l 缺 $sym" >&2; exit 1; }
+    need_arch "$P/lib/$l"
   done
   echo "  ✅ SuiteSparse → $P（8 个库的代表符号全在）"
 }
