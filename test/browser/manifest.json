@@ -95,6 +95,10 @@
   "probe-toolkit-print": {
    "manual": true,
    "why": "打印 toolkit print 路径，无汇总行"
+  },
+  "probe-umfpack-trap": {
+   "manual": true,
+   "why": "报告型探针：只打印 `=== LU-OK` / `=== LU-TRAP` 供工单 04 的两面复现器判读，**不产 PASS/FAIL 汇总行**（判定在 build/113/repro-umfpack-trap.sh）"
   }
  },
  "inputs": {

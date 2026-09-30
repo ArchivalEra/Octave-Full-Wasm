@@ -155,7 +155,9 @@ if (!pre.hasExport) {
   console.log(`       本探针只对 \`--diag\` 产物有意义（工单 01 的 DIAG_EXPORTS）。`);
   console.log(`       用诊断站点跑：E2_OPENBLAS=<openblas目录> relink.sh link threads --out <dir> --diag，`);
   console.log(`       再把那份产物放进某个站点的 threads/，然后 probe-e2-threads.mjs <那个站点URL>。`);
-  console.log('=== SKIP（0 PASS / 0 FAIL —— 不是通过，是"不适用"）===');
+  // ⚠️ 汇总行必须**恰好**合规（sweep.sh:108 的正则）；"不适用"写在前一行。
+  console.log('（不适用：不是通过也不是失败）');
+  console.log('=== 0 PASS / 0 FAIL ===');
   process.exit(0);
 }
 
