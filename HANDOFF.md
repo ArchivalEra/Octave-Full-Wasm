@@ -92,19 +92,29 @@
 
 ## 1. 下一步（按此顺序）
 
-**⚡ 即时状态（2026-09-30 重启后继续）**：
-- **工单 19 已结案**（`USE_THREAD=1` 的 dlopen 挂死**修好并实测**）：
-  根因 = Emscripten dlsync 对**每个池线程**发同步代理，而 OpenBLAS 的 worker 永不回 JS 事件循环；
-  修法 = `build/113/patch-openblas-idle-exit.py`（空闲即**退出**，靠 OpenBLAS 自带懒重建）。
-  **验收**：格 C 由"挂死 >90s"变成"返回"；D/H 返回；**matmul 500² 中位数 0.006 s 与补丁前相同
-  ⇒ ≈6.7× 收益完整保留**。发运形态见 **工单 27**（换产物批次 + 产品决定）。
-- **工单 24 + 07 已结案**：旧 Chromium **125**（低于 137 下限）实测 4 PASS / 0 FAIL
-  —— ready ✓、`jspiApi=false` 且 **D9 门正确关闭** ✓。
-- **工单 26**（`rebuild <车道>` 不挂车道影子）：入口已修（缺影子**点名 FATAL**，自证 9/0），
-  正向结算 `rebuild threads --yes-rebuild` **正在后台跑**（日志容器内 `/src/work/rb26.log`）。
-- **还开着**：21（`need_arch` 的 9 处调用点逐条反向验证）、25（8768 三份残留待你定去留）、27（发运）。
-  **07/12 的人工阻塞已解除一条**（07 结案；12 仍缺真机，清单已入库）。
-- **残余**：GitHub 凭据重启后又失效（origin 推不动；mirror 一直在同步）。
+**⚡ 状态（2026-09-30 晚，无人值守批次收尾）**：
+- **工单台账：30 张 → resolved 26、wontfix 1、open 3**（12 真机、27 发运决定、30 w64 上线=**本任务**）。
+- 本日新增并结案：**19**（USE_THREAD=1 dlopen 挂死修好，插桩+补丁+实测：挂死类清零、
+  matmul 500² 0.006–0.007 s ⇒ ≈6.7× 收益保留）、**20**（页面资产批入口，首跑抓出两处漂移）、
+  **21**（need_arch 阳性 10/10 + 阴性 18/18）、**22**（陈旧变量数）、**23**（选档第三轴：站点档清单）、
+  **24+07**（Chromium 125 下限侧 4/0）、**25**（8768 残留清除）、**28+29**（rebuild 没传车道 install
+  前缀 / link 不校验树前缀 —— 两个"静默坏产物"缺陷，都带自证修掉；教训：**verdict=ok 不覆盖运行期路径**）。
+- **27**（`USE_THREAD=1` 发运）：技术判据三条全过（套件数/PASS 见台账
+  `accept_suites` / `accept_pass`，0 FAIL / 0 超时；`accept-113-oct` 5 秒、matmul 500² 中位数
+  0.006–0.007 s）；**只剩产品决定** ⇒ `ready-for-human`。
+- 验收底线全程未退化：8761 开机自检 0.9s、部署件 SHA 磁盘/HTTP、页面层自证 2/0、parity 三处一致。
+
+## 1a. ⭐ 下一任务（用户已拍板）：**工单 30 —— w64（四格）上线**
+
+把 `site-w64` 的**四格**（`base`/`threads`/`w64`/`w64-base` + 生成的 `lanes.js`）发运到 **8761**。
+**用户 2026-09-30 拍板**（工单 30，`ready-for-agent`，含逐条判据与坑）：
+
+1. 四格发到 **8768**（实验车道）先跑 `PROBES=1` 全量；
+2. promote → **8761 开机自检**（带头 ⇒ `__octaveLanes` 含 `w64` 且选中 `w64`）；
+3. **SHA 三层**——`base`/`threads` 两档 sha **必须不变**（`1ed3e528`/`e570905e`），只**新增**两档；
+4. 8761 全量 + `PROBES=1`（`probe-lane` 应从 17 PASS 涨到四格版）；
+5. `site/` → dist → `parity --strict` → 六道闸门 → 推送。
+**反向断言**：无 memory64 的引擎（Chromium 125 可作替身，`mem64=false`）在 8761 必须**落 `threads`**，不许 404。
 
 ## 2. 铁律（违反会被拦或返工）
 
@@ -195,8 +205,8 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 
 | 键 | 值 | 复跑命令 |
 |---|---|---|
-| `accept_pass` | **1077**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260928-212629 里带汇总行的套件（且 0 FAIL）` |
+| `accept_pass` | **1063**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
+| `accept_suites` | **42** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260930-212033 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
 | `e2_lu800_ratio` | **1.4** | `上面两行的比值（车道 / E2）` |
@@ -254,7 +264,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-29T08:27:38+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-09-30T22:55:14+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
