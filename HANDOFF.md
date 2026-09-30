@@ -92,35 +92,19 @@
 
 ## 1. 下一步（按此顺序）
 
-**⚡ 即时状态（2026-09-30 收工时）**：
-- **正在跑**：`PROBES=1 sh build/sweep.sh http://127.0.0.1:8761/`（日志 `/tmp/sweep-8761-c.log`，
-  这是**换过页面资产之后**的基线全量；跑完要看 `合计：… / 0 FAIL` 与 `rc=0`）。
-  跑完的收尾：`sh build/make-dist.sh`（核对包内 wasm 同 sha）→ 六道闸门 → 提交。
-- **8768 已验绿**（新页面资产，含 `lane.js` 第三轴）：套件数与 PASS 见台账
-  `accept_suites` / `accept_pass`（正文不手抄数字 —— 本行第一版写了裸数字，被
-  `check-handoff.py` 的 L2 规则拦下：台账里最近一次全绿仍是换资产之前那次）。
-- **工单 19 的根因已插桩确认**（见 NOTES-threads/工单文件）：`dlopen` 在 Emscripten 里必须先
-  `__emscripten_dlsync_threads()` —— 对**每个池线程**发**同步代理**；而 OpenBLAS（`USE_THREAD=1`）
-  的 worker 长期待在原生循环里、**永不应答邮箱** ⇒ 代理永久阻塞（100% CPU）。
-  实测排除：内存增长（格 G 返回）、大 dgemm（格 H 返回）、error 路径（格 E）、线程数（格 B）；
-  格 L（空闲 5s 后 dlopen）**仍挂** ⇒ 不是"自旋期"问题。
-  **开机期反例**：boot 的资产 dlopen 全部成功 ⇒ 池是 boot 期间出生的。
-  **未做**：正解（让 worker 的空闲等待对邮箱友好 ⇒ `patch-openblas-thread-yield.py` + 重建 + 重链，
-  用格 C 判绿）。
-
-**当前分支 `wasm64`**。2026-09-30 无人值守批次后，工单只剩：
-
-1. **⭐ 工单 19（用户点名："BLAS 内部多线程得"）**：让 `USE_THREAD=1` 的 OpenBLAS 产物**能用**
-   （拿那 ≈6.7×；现役交付是 `USE_THREAD=0` 的 ≈1.9×）。
-   墙已定位：该产物上**装载 `.oct`（dlopen）挂死**，>90s、100% CPU 忙等；
-   判别已排除 BLAS 算术（纯 dgemm 返回）与 error 路径，且与线程数无关。
-   待验的**第一格**：`CELLS=G sh test/browser/run.sh test/browser/probe-e2-threads.mjs <8792>`
-   —— 只强制内存增长、**不碰 dlopen**（`zeros(1,200e6)`）：挂 ⇒ "自旋挡增长"成立。
-2. **07 / 12（`ready-for-human`，无人值守做不了）**：07 缺"低于部署下限的引擎"
-   （探针已交付、3 引擎 12/0 绿）；12 缺真机（手测清单已入库 `docs/manual-test-checklist.md`）。
-3. **w64 上线**（仍是产品决定）：`site-w64` 已验绿（四格矩阵 33/0），是否推上 8761 由你拍板；
-   选档第三轴落地后，**页面资产不再与这个决定耦合**（同一份 lane.js 服务两种站点）。
-4. **残余**：GitHub 凭据失效（`gh` token 无效 ⇒ origin 推不上去；mirror 一直在同步）。
+**⚡ 即时状态（2026-09-30 重启后继续）**：
+- **工单 19 已结案**（`USE_THREAD=1` 的 dlopen 挂死**修好并实测**）：
+  根因 = Emscripten dlsync 对**每个池线程**发同步代理，而 OpenBLAS 的 worker 永不回 JS 事件循环；
+  修法 = `build/113/patch-openblas-idle-exit.py`（空闲即**退出**，靠 OpenBLAS 自带懒重建）。
+  **验收**：格 C 由"挂死 >90s"变成"返回"；D/H 返回；**matmul 500² 中位数 0.006 s 与补丁前相同
+  ⇒ ≈6.7× 收益完整保留**。发运形态见 **工单 27**（换产物批次 + 产品决定）。
+- **工单 24 + 07 已结案**：旧 Chromium **125**（低于 137 下限）实测 4 PASS / 0 FAIL
+  —— ready ✓、`jspiApi=false` 且 **D9 门正确关闭** ✓。
+- **工单 26**（`rebuild <车道>` 不挂车道影子）：入口已修（缺影子**点名 FATAL**，自证 9/0），
+  正向结算 `rebuild threads --yes-rebuild` **正在后台跑**（日志容器内 `/src/work/rb26.log`）。
+- **还开着**：21（`need_arch` 的 9 处调用点逐条反向验证）、25（8768 三份残留待你定去留）、27（发运）。
+  **07/12 的人工阻塞已解除一条**（07 结案；12 仍缺真机，清单已入库）。
+- **残余**：GitHub 凭据重启后又失效（origin 推不动；mirror 一直在同步）。
 
 ## 2. 铁律（违反会被拦或返工）
 

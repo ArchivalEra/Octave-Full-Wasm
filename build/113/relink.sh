@@ -530,6 +530,24 @@ cmd_rebuild() {
     echo "拒绝执行：确认要跑就在命令里加 --yes-rebuild" >&2
     exit 2
   fi
+  # ★ 工单 26（2026-09-30 实测踩到）：**线程档/w64 档的树必须由车道影子注入旗标来编**，
+  #   否则 configure/make 出来的对象**不带 atomics**（或不是 64 位），重链时报
+  #   `--shared-memory is disallowed by <tree>.o` —— 一个离根因很远的错。
+  #   以前这一步只在**操作员记忆**里（export PATH=…lane-shim…），本单把它搬进入口：
+  #   与 cmd_link 同款处置（缺了就**点名** FATAL，不许编到一半才炸）。
+  if [ "$m" = threads ] || [ "$m" = w64 ]; then
+    local shim="${LANE_SHIM:-/src/libwork/lane-shim}"
+    [ "$m" = w64 ] && shim="${LANE_SHIM_W64:-/src/libwork/lane-shim-w64}"
+    if [ -d "$shim" ]; then
+      export PATH="$shim:$PATH"
+      echo "  车道影子：$shim（rebuild 的 configure/make 也走它 —— 否则对象不带 atomics）"
+    else
+      echo "FATAL: \`rebuild $m\` 需要**车道影子** $shim，但它不在 —— 缺它编出来的树对象不带 atomics，" >&2
+      echo "       重链会报 \`--shared-memory is disallowed by …\`（离根因很远的错）。" >&2
+      echo "       建它：bash build/113/lane-shim.sh \"$([ "$m" = w64 ] && echo '-pthread -sMEMORY64=1' || echo '-pthread')\" \"$shim\"" >&2
+      exit 2
+    fi
+  fi
   command -v emmake >/dev/null 2>&1 || {
     echo "FATAL: PATH 里没有 emmake（先 export PATH=/usr/src/emsdk/upstream/emscripten:\$PATH）" >&2; exit 2; }
   # ★ 线程档：模式决定 configure 的线程开关（WITH_THREADS=1 ⇒ 撤销 AX_PTHREAD 覆盖 +
@@ -655,6 +673,14 @@ cmd_selftest() {
     echo "PASS | ★ exports 机器可读（无占位符；空变量是真空）"
   else
     echo "fail | exports 被渲染过了（占位符 $ph 处；空 EXPORT_IF_DEFINED 命中 $em 处）"; bad=1
+  fi
+  # ⑥b ★ 工单 26：`rebuild <车道>` 的车道影子前置也必须被点名
+  n=$((n + 1))
+  msg="$(LANE_SHIM=/nonexistent-shim bash "$0" rebuild threads --out /tmp/_zr_rb_probe --yes-rebuild 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q '车道影子'; then
+    echo "PASS | ★ rebuild threads 缺车道影子 ⇒ 入口**点名** FATAL（工单 26）"
+  else
+    echo "fail | rebuild threads 缺影子时没点名（msg=${msg:0:120}）"; bad=1
   fi
   # ⑦ ★ w64 模式的隐形前置必须在入口里被点名（LANE_SHIM_W64）
   n=$((n + 1))
