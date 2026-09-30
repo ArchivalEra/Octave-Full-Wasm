@@ -92,7 +92,23 @@
 
 ## 1. 下一步（按此顺序）
 
-**当前分支 `wasm64`**。2026-09-30 无人值守批次后，18 张工单里只剩两类：
+**⚡ 即时状态（2026-09-30 收工时）**：
+- **正在跑**：`PROBES=1 sh build/sweep.sh http://127.0.0.1:8761/`（日志 `/tmp/sweep-8761-c.log`，
+  这是**换过页面资产之后**的基线全量；跑完要看 `合计：… / 0 FAIL` 与 `rc=0`）。
+  跑完的收尾：`sh build/make-dist.sh`（核对包内 wasm 同 sha）→ 六道闸门 → 提交。
+- **8768 已验绿**（新页面资产，含 `lane.js` 第三轴）：套件数与 PASS 见台账
+  `accept_suites` / `accept_pass`（正文不手抄数字 —— 本行第一版写了裸数字，被
+  `check-handoff.py` 的 L2 规则拦下：台账里最近一次全绿仍是换资产之前那次）。
+- **工单 19 的根因已插桩确认**（见 NOTES-threads/工单文件）：`dlopen` 在 Emscripten 里必须先
+  `__emscripten_dlsync_threads()` —— 对**每个池线程**发**同步代理**；而 OpenBLAS（`USE_THREAD=1`）
+  的 worker 长期待在原生循环里、**永不应答邮箱** ⇒ 代理永久阻塞（100% CPU）。
+  实测排除：内存增长（格 G 返回）、大 dgemm（格 H 返回）、error 路径（格 E）、线程数（格 B）；
+  格 L（空闲 5s 后 dlopen）**仍挂** ⇒ 不是"自旋期"问题。
+  **开机期反例**：boot 的资产 dlopen 全部成功 ⇒ 池是 boot 期间出生的。
+  **未做**：正解（让 worker 的空闲等待对邮箱友好 ⇒ `patch-openblas-thread-yield.py` + 重建 + 重链，
+  用格 C 判绿）。
+
+**当前分支 `wasm64`**。2026-09-30 无人值守批次后，工单只剩：
 
 1. **⭐ 工单 19（用户点名："BLAS 内部多线程得"）**：让 `USE_THREAD=1` 的 OpenBLAS 产物**能用**
    （拿那 ≈6.7×；现役交付是 `USE_THREAD=0` 的 ≈1.9×）。
