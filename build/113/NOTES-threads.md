@@ -1162,3 +1162,45 @@ side-module 装载/符号解析之间的交互。
 **判据自身的坑（记下来）**：Octave 层的错误（`error()`/未定义函数）**不会**让 `eval_string`
 抛 JS 异常 ⇒ 格的 verdict 仍是 `returned`；要判"这格干了什么"必须另读
 `Module.last_error_message()`（第一版按 verdict 文本匹配，三条断言全假红）。
+
+
+---
+
+## 工单 23（2026-09-30）：选档器的**第三轴** —— 站点实际部署了哪几档
+
+**怎么发现的**：为同步两个页面文件（`index.html` / `octave-worker.js`）而新写的
+`build/promote-pages.sh`，第一次 `--dry-run` 就把仓库与站点的**逐文件 sha** 摆在一起
+⇒ 立刻抓出两处**此前无人发现的漂移**：`octave-core.js` 与 `lane.js` 在
+**仓库 + 8848（w64 站）是新版**、在 **8761/8768/仓库镜像还是旧版**（工单 18 的 w64 改动
+只在 w64 站上线过）。手抄清单那套流程不会发现，因为两站之间 diff **看不出**
+（8761 与 8768 都是旧版，彼此一致）。
+
+**为什么 `lane.js` 不能盲同步**：新版是**四格**矩阵，优先级是 `COI+m64 ⇒ w64`，
+而 8761 **没有 w64 文件** ⇒ 同步后 8761 会选到 `w64` 并 **404** —— 直接弄坏验收底线。
+这正是 AGENTS.md 那条"顺手 cp 页面把 8761 弄坏"的同族危险，只是这次的危险藏在
+**"页面资产与站点档位耦合"**里。
+
+**修法（第三轴）**：
+- `build/gen-lanes.sh <站点目录>` —— **生成物** `lanes.js`，按**磁盘上真实存在**的档写
+  `global.__octaveLanes`；`base` 必须在，否则红（红线：任何静态托管的底线）。
+- `bridge/lane.js` —— 选档时取**能力 ∩ 清单**：清单没声明的档不选；缺档退下一优并说明
+  原因；**没有清单**（老站点/第三方镜像）退回历史形态 `[base, threads]`。
+  ⇒ 同一份 `lane.js` 现在能服务"四格站 / 双档站 / 只有 base 的站"。
+- `bridge/lanes.js` —— 入库的**默认清单**（`["base","threads"]`）。它必须入库：
+  页面引用了它，而 `check-consistency.py` 的"页面引用的文件必须在 git 里"
+  （堵过 3 次同类 bug 的那条）会红 —— 这次它**又抓到了我**（我先加了 `<script src="lanes.js">`
+  而没入库，被闸门拦下；补 `.gitignore` 放行 + 入库后才绿）。
+- 接线：`bridge/index.html`（在 `lane.js` **之前**）+ `bridge/octave-worker.js` 的 `importScripts`。
+
+**判据（都带反向断言）**：
+| 判据 | 在哪 | 结果 |
+|---|---|---|
+| 选档纯函数 9 例（含"双档站 + m64 不许选 w64"、"worker 宿主必须落 base"） | `build/113/lane-pick-selftest.mjs`（接进 `gates-selftest`，已加 `.mjs` 分派） | 9 PASS / 0 FAIL |
+| 生成器 4 例（只有 base / 四格齐 / **没有 base 必须红** / 目录不存在必须红） | `build/gen-lanes.sh --selftest` | 4 PASS / 0 FAIL |
+| 页面批入口 3 例（一致不报 / **三大件被改必须红** / 站点缺失必须红）+ 清单与磁盘一致性 | `build/promote-pages.sh --selftest` | 3 PASS / 0 FAIL |
+| 运行期：清单被加载、**选中的档在清单里**、双档站清单不许含 w64 | `test/browser/probe-lane.mjs`（新增共用格） | 见批次收尾 |
+| 仓库装配清单漏 `lane.js`（照它重建站点会漏掉选档器本身） | `build/recover-113.sh` 已补 + `promote-pages` 清单已含 | 注释点名 |
+
+**教训**：**页面资产的"同一份"是有限度的** —— 与"站点部署了什么"耦合的那部分
+（档清单）必须是**生成物**而不是手抄件；否则"同一份文件铺到所有站点"这件事本身
+就是错的。

@@ -49,6 +49,9 @@ build/113/gen-f77-wrappers.py --selftest
 build/113/relink.sh --selftest
 build/facts.py --selftest
 build/lib/sweep_select.py --selftest
+build/113/lane-pick-selftest.mjs --selftest
+build/promote-pages.sh --selftest
+build/gen-lanes.sh --selftest
 EOF
 
 n=0; bad=0; badlist=""
@@ -64,6 +67,8 @@ while IFS= read -r line; do
   case "$script" in
     *.py) # shellcheck disable=SC2086
           out=$(python3 "$script" $args 2>&1) ;;
+    *.mjs) # shellcheck disable=SC2086
+          out=$(node "$script" $args 2>&1) ;;
     *)    if head -1 "$script" | grep -q 'bash'; then
             # shellcheck disable=SC2086
             out=$(bash "$script" $args 2>&1)

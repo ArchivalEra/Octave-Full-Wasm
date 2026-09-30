@@ -6,12 +6,13 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # 为什么有它（`build/113/PLAN-arch.md` §1.1）
 #
-# `link-web.sh` 读 **22 个环境变量**（复跑：见 §4.2）。其中只有 2 个"值写错会当场报错"
+# `link-web.sh` 读**一组环境变量**（条数见 `build/FACTS.json` 的 `env_vars`；
+# 查法 `python3 build/facts.py show env_vars` —— 别在这里手抄数字）。其中只有 2 个"值写错会当场报错"
 # （`GL_BACKEND` / `MAIN_MODULE_LEVEL`），**所有"漏写"都是静默**；而它的**六组产物自检
 # 全部在"开了才查"的分支里**（`:553`/`:588`/`:610`/`:632`/`:647`/`:661`）—— 漏一个开关
 # ⇒ 自检整块跳过、构建/链接/自检**全绿**，产物却是另一个形态。
 # 以前要把一条命令拼对，得在 8 份文档之间来回加法规约（HISTORY §5.26 + §5.38 + §5.54
-# + AGENTS 事实纪律 + NOTES…）。本文件把那些"口径"**搬进代码**：模式决定全部 22 个变量，
+# + AGENTS 事实纪律 + NOTES…）。本文件把那些"口径"**搬进代码**：模式决定全部变量，
 # **一个都不许手设**（管道变量漏一个同样静默退化，例如漏 `OCT_SCAN_DIRS` ⇒ 保活闸门被跳过）。
 #
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -39,7 +40,7 @@
 #   relink.sh link    <模式> [--out DIR] [--diag]        # 默认子命令（快，几分钟）
 #   relink.sh verify  <模式> [--out DIR]                 # 只核对已有产物（不链接）
 #   relink.sh rebuild <模式> [--out DIR] [--diag] --yes-rebuild
-#   relink.sh explain <模式>                             # 打印全部 22 个变量（文档生成物）
+#   relink.sh explain <模式>                             # 打印全部变量（文档生成物）
 #   relink.sh --list
 #
 # ⚠️ `rebuild` 的**执行路径尚未实测**（要跑 configure + make clean + 全量 make，数小时）：
@@ -88,7 +89,7 @@ pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
   if [ -f "$p" ]; then echo "$p"; else echo "$legacy"; fi
 }
 
-# ── 模式表：**唯一**的真值来源。22 个变量全在这里推出来，调用方一个都不许传 ──────────
+# ── 模式表：**唯一**的真值来源。全部变量都在这里推出来，调用方一个都不许传 ──────────
 mode_table() {      # 输出 KEY=VALUE 行（供 export）
   local m="$1"
   case "$m" in product|scalar|m1|threads|w64|w64-base) ;; *)
@@ -332,7 +333,7 @@ usage() {
   relink.sh link    <模式> [--out DIR] [--diag]        # 默认子命令（快，几分钟）
   relink.sh verify  <模式> [--out DIR]                 # 只核对已有产物（不链接）
   relink.sh rebuild <模式> [--out DIR] [--diag] --yes-rebuild
-  relink.sh explain <模式>                             # 打印全部 22 个变量（文档生成物）
+  relink.sh explain <模式>                             # 打印全部变量（文档生成物）
   relink.sh --list
 模式：product（现役） / scalar（去 SIMD 的对照） / m1（无 DCE，保活基线）
       threads（B6 线程档：product + `-pthread` ⇒ **需宿主发 COOP/COEP**，否则页面自动落回非线程档）

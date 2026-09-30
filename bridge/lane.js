@@ -15,8 +15,28 @@
 //   2. 非COI + m64 ⇒ `w64-base`（wasm64 单线程基础档）
 //   3. COI + 非m64 ⇒ `threads`（wasm32 线程档）
 //   4. 非COI + 非m64 ⇒ `base`（wasm32 单线程基础档）
+//
+// ── ★ 第三轴：**站点到底有哪些档**（工单 23，2026-09-30）──────────────────────
+// 为什么需要：四格是**能力**上的最优；但站点可能**只部署了其中几档**
+//   （8761/8768 只有 base+threads）。能力驱动的选择器在那种站点上会挑 `w64` 并 **404** ——
+//   而"站点少一档"没有任何闸门会拦。所以：**候选档必须既能力可行、又在站点清单里**。
+// 清单从哪来：装配期生成的 `lanes.js`（`build/gen-lanes.sh <站点目录>` 按磁盘上真实存在的
+//   目录写 `global.__octaveLanes = [...]`），在 lane.js **之前**加载。
+//   它**不是**手写文件 —— 手写就会漂（今天正是"手抄清单漂了两份资产"）。
+// 没有清单时（老站点/第三方镜像）：退回**历史形态** [base, threads] 并**打一条告警**；
+//   wasm64 那两档**只在清单里声明了才可能被自动选中**（避免在没部署的站点上 404）。
+//   显式 `?lane=w64` 仍然照旧**硬失败**（覆盖不改判据 —— 那是有意的可证伪档）。
 (function (global) {
   'use strict';
+
+  // 站点清单：装配期生成的 lanes.js 会设 global.__octaveLanes
+  function declaredLanes(env) {
+    try {
+      var inv = env && env.__octaveLanes;
+      if (Object.prototype.toString.call(inv) === '[object Array]' && inv.length) return inv;
+    } catch (e) { /* 下面退回历史形态 */ }
+    return null;   // 未声明
+  }
 
   function hasMemory64(env) {
     if (env && typeof env.memory64 === 'boolean') return env.memory64;
@@ -62,6 +82,38 @@
         : { lane: 'base',
             why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用基础档）'
                       : 'SharedArrayBuffer 不可用（用基础档）' };
+    }
+
+    // ★ 第三轴（工单 23）：能力可行 **且** 站点部署了 —— 否则按优先级退下一优。
+    //   历史形态（没有清单）只认 [base, threads]：wasm64 两档**必须**在清单里才可选。
+    var inv = declaredLanes(env);
+    var floor = ['base', 'threads'];
+    var avail = inv || floor;
+    var whyInv = inv ? ('站点清单声明 ' + inv.join('/'))
+                     : '站点**没有**档清单（lanes.js 缺失）⇒ 按历史形态 base/threads 判定';
+    if (avail.indexOf(auto.lane) < 0) {
+      var order = ['w64', 'w64-base', 'threads', 'base'];
+      var fallback = null;
+      for (var i = 0; i < order.length; i++) {
+        if (avail.indexOf(order[i]) >= 0) {
+          // 只退到**能力可行**的那几档：线程档要求 COI+SAB，wasm64 档要求 m64
+          var cand = order[i];
+          var okCap = (cand === 'base')
+            || (cand === 'threads' && coi && sab)
+            || (cand === 'w64' && coi && sab && m64)
+            || (cand === 'w64-base' && m64);
+          if (okCap) { fallback = cand; break; }
+        }
+      }
+      if (fallback) {
+        auto = { lane: fallback,
+                 why: '能力本会选 ' + auto.lane + '，但' + whyInv
+                      + ' ⇒ 退到 ' + fallback };
+      } else {
+        auto = { lane: 'base',
+                 why: '能力本会选 ' + auto.lane + '，但' + whyInv
+                      + '，且没有能力可行的已部署档 ⇒ 退到 base（任何静态托管的底线）' };
+      }
     }
 
     var ov = override(env);

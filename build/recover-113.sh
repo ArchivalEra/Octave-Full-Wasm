@@ -61,13 +61,17 @@ else
   # ⚠️ 这份清单必须覆盖 index.html/octave-worker.js 的**全部** <script src>/importScripts：
   #    以前缺 queue.js / p5canvas.js / octave-worker.js，2026-09-26（A2）又加了 octave-core.js
   #    —— 缺任何一个都是 404 + 对应功能静默消失。
+  # ⚠️ 工单 23（2026-09-30）：这份清单**曾经漏了 `lane.js`** —— 照它重建站点会漏掉**选档器本身**
+  #    （页面 404 ⇒ 档选不出来）。同一次还发现：`lanes.js`（档清单）是**站点专属生成物**，
+  #    必须由 `build/gen-lanes.sh` 按磁盘真实部署生成，不能从仓库手抄。
   cp "$REPO/bridge/index.html" "$REPO/bridge/assets-loader.js" \
-     "$REPO/bridge/octave-core.js" \
+     "$REPO/bridge/octave-core.js" "$REPO/bridge/lane.js" \
      "$REPO/bridge/queue.js" "$REPO/bridge/p5canvas.js" \
      "$REPO/bridge/octave-worker.js" \
      "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
      "$REPO/bridge/webfilepick.js" \
      "$REPO/bridge/webnet.js" "$SITE/"
+  sh "$REPO/build/gen-lanes.sh" "$SITE"
   sudo chown -R "$(id -u):$(id -g)" "$SITE"
   echo "  ⚠ 资产目录（assets/）需要另外补——见 HISTORY §10.4 的资产清单"
 fi

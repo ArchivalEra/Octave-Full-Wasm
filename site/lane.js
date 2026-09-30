@@ -1,48 +1,121 @@
-// Octave-Full-Wasm — **选档**：线程档 / 基础档（B6，2026-09-27）
+// Octave-Full-Wasm — **选档**：线程档 / 基础档 × wasm32 / wasm64（工单 18，2026-09-28）
 // Copyright (C) 2026 ArchivalEra
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // ── 为什么必须有它 ────────────────────────────────────────────────────────────
-// 线程档的产物（`-pthread` ⇒ wasm 内存 **shared**）在**没有跨源隔离**的页面上**连实例化都
-// 做不到**：SharedArrayBuffer 不可用 ⇒ 胶水建内存就崩（实测报错是
-// `DataCloneError: … SharedArrayBuffer transfer requires self.crossOriginIsolated`）。
-// 所以"用哪一档"必须在**加载胶水之前**、用**同步**判据决定 —— 不能等异步探测回来再选。
+// 两条正交轴：
+//   轴 1：跨源隔离（COI：crossOriginIsolated && typeof SharedArrayBuffer === 'function'）
+//     线程档产物（`-pthread` ⇒ wasm 内存 **shared**）在没有跨源隔离的页面上连实例化都做不到。
+//   轴 2：memory64 支持（`WebAssembly.Memory({initial:1n,address:"i64"})` 可用性）
+//     64 位 WebAssembly 在不支持 memory64 的引擎上无法实例化。
+// 必须在**加载胶水之前**、用**同步**判据决定 —— 不能等异步探测回来再选。
 //
-// ── 判据（两条都要）────────────────────────────────────────────────────────────
-//   `crossOriginIsolated === true` —— 宿主发了 `Cross-Origin-Opener-Policy: same-origin`
-//     + `Cross-Origin-Embedder-Policy: require-corp`（**要求宿主发头**是本轮的产品决定）
-//   `typeof SharedArrayBuffer === 'function'` —— 有些环境有隔离但没有 SAB（少见，但白测一次便宜）
-// 两条都满足 ⇒ 线程档；否则 ⇒ 基础档（**任何静态托管都能跑**，这是不能退的红线）。
+// ── 四格矩阵（优先级从高到低）────────────────────────────────────────────────
+//   1. COI + m64 ⇒ `w64`（wasm64 多线程档，目标形态）
+//   2. 非COI + m64 ⇒ `w64-base`（wasm64 单线程基础档）
+//   3. COI + 非m64 ⇒ `threads`（wasm32 线程档）
+//   4. 非COI + 非m64 ⇒ `base`（wasm32 单线程基础档）
 //
-// ── 两档都在（红线）──────────────────────────────────────────────────────────
-// 线程档**不许**是唯一产物：文件同名，线程档放在 `threads/` 子目录里（`threads/octave.js`…）。
-// 为什么是子目录而不是改文件名：Emscripten 胶水里**写死了** `octave.data` 这个名字，
-// 换名就得同时改胶水内部引用；放进子目录则胶水一行不用改，`locateFile` 一处前缀搞定。
-// 资产（`assets/`）与清单**两档共用**根目录那一份 ⇒ 不重复部署 9.7MB 的 `octave.data`。
+// ── ★ 第三轴：**站点到底有哪些档**（工单 23，2026-09-30）──────────────────────
+// 为什么需要：四格是**能力**上的最优；但站点可能**只部署了其中几档**
+//   （8761/8768 只有 base+threads）。能力驱动的选择器在那种站点上会挑 `w64` 并 **404** ——
+//   而"站点少一档"没有任何闸门会拦。所以：**候选档必须既能力可行、又在站点清单里**。
+// 清单从哪来：装配期生成的 `lanes.js`（`build/gen-lanes.sh <站点目录>` 按磁盘上真实存在的
+//   目录写 `global.__octaveLanes = [...]`），在 lane.js **之前**加载。
+//   它**不是**手写文件 —— 手写就会漂（今天正是"手抄清单漂了两份资产"）。
+// 没有清单时（老站点/第三方镜像）：退回**历史形态** [base, threads] 并**打一条告警**；
+//   wasm64 那两档**只在清单里声明了才可能被自动选中**（避免在没部署的站点上 404）。
+//   显式 `?lane=w64` 仍然照旧**硬失败**（覆盖不改判据 —— 那是有意的可证伪档）。
 (function (global) {
   'use strict';
 
-  // 显式覆盖（测试/调试用）：URL 上写 `?lane=threads` 或 `?lane=base`。
-  // ⚠️ 覆盖**不改判据** —— 它只改"选哪一档"，物理前提（COI）仍是硬的：
-  //    在没隔离的页面上强行选 threads ⇒ 胶水建 shared 内存当场抛。
-  //    这正是我们要能证伪的那一条（`probe-lane` 的第 4 格：**必须响亮地失败**）。
+  // 站点清单：装配期生成的 lanes.js 会设 global.__octaveLanes
+  function declaredLanes(env) {
+    try {
+      var inv = env && env.__octaveLanes;
+      if (Object.prototype.toString.call(inv) === '[object Array]' && inv.length) return inv;
+    } catch (e) { /* 下面退回历史形态 */ }
+    return null;   // 未声明
+  }
+
+  function hasMemory64(env) {
+    if (env && typeof env.memory64 === 'boolean') return env.memory64;
+    try {
+      var WA = (env && env.WebAssembly) || (typeof WebAssembly !== 'undefined' ? WebAssembly : null);
+      if (!WA || typeof WA.Memory !== 'function') return false;
+      var m = new WA.Memory({ initial: 1n, address: 'i64' });
+      return m instanceof WA.Memory;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 显式覆盖（测试/调试用）：URL 上写 `?lane=w64`、`?lane=w64-base`、`?lane=threads` 或 `?lane=base`。
+  // ⚠️ 覆盖**不改判据** —— 它只改"选哪一档"，物理前提仍是硬的：
+  //    在没隔离的页面上强行选 threads/w64 ⇒ 胶水建 shared 内存当场抛。
+  //    这正是我们要能证伪的那一条（`probe-lane` 的反证档：**必须响亮地失败**）。
   function override(env) {
     try {
-      var q = (env.location && env.location.search) || '';
-      var m = /[?&]lane=(threads|base)(?:&|$)/.exec(q);
+      var q = (env && env.location && env.location.search) || '';
+      var m = /[?&]lane=(w64|w64-threads|w64-base|threads|base)(?:&|$)/.exec(q);
       return m ? m[1] : null;
     } catch (e) { return null; }
   }
 
   // 纯函数：给一份"环境事实"返回该选哪一档（自证/探针可直接喂合成输入）
   function pickFrom(env) {
+    env = env || {};
     var coi = env.crossOriginIsolated === true;
     var sab = typeof env.SharedArrayBuffer === 'function';
-    var auto = (coi && sab)
-      ? { lane: 'threads', why: '跨源隔离 + SharedArrayBuffer 都可用' }
-      : { lane: 'base',
-          why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用基础档）'
-                    : 'SharedArrayBuffer 不可用（用基础档）' };
+    var m64 = hasMemory64(env);
+
+    var auto;
+    if (m64) {
+      auto = (coi && sab)
+        ? { lane: 'w64', why: '跨源隔离 + SharedArrayBuffer + memory64 可用（目标 wasm64 线程档）' }
+        : { lane: 'w64-base',
+            why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用 wasm64 基础档）'
+                      : 'SharedArrayBuffer 不可用（用 wasm64 基础档）' };
+    } else {
+      auto = (coi && sab)
+        ? { lane: 'threads', why: '跨源隔离 + SharedArrayBuffer 都可用（wasm32 线程档）' }
+        : { lane: 'base',
+            why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用基础档）'
+                      : 'SharedArrayBuffer 不可用（用基础档）' };
+    }
+
+    // ★ 第三轴（工单 23）：能力可行 **且** 站点部署了 —— 否则按优先级退下一优。
+    //   历史形态（没有清单）只认 [base, threads]：wasm64 两档**必须**在清单里才可选。
+    var inv = declaredLanes(env);
+    var floor = ['base', 'threads'];
+    var avail = inv || floor;
+    var whyInv = inv ? ('站点清单声明 ' + inv.join('/'))
+                     : '站点**没有**档清单（lanes.js 缺失）⇒ 按历史形态 base/threads 判定';
+    if (avail.indexOf(auto.lane) < 0) {
+      var order = ['w64', 'w64-base', 'threads', 'base'];
+      var fallback = null;
+      for (var i = 0; i < order.length; i++) {
+        if (avail.indexOf(order[i]) >= 0) {
+          // 只退到**能力可行**的那几档：线程档要求 COI+SAB，wasm64 档要求 m64
+          var cand = order[i];
+          var okCap = (cand === 'base')
+            || (cand === 'threads' && coi && sab)
+            || (cand === 'w64' && coi && sab && m64)
+            || (cand === 'w64-base' && m64);
+          if (okCap) { fallback = cand; break; }
+        }
+      }
+      if (fallback) {
+        auto = { lane: fallback,
+                 why: '能力本会选 ' + auto.lane + '，但' + whyInv
+                      + ' ⇒ 退到 ' + fallback };
+      } else {
+        auto = { lane: 'base',
+                 why: '能力本会选 ' + auto.lane + '，但' + whyInv
+                      + '，且没有能力可行的已部署档 ⇒ 退到 base（任何静态托管的底线）' };
+      }
+    }
+
     var ov = override(env);
     // ★ B6（2026-09-27 实测）：**Worker 模式（`?worker=1`）默认落基础档**。
     //   原因：线程产物在 DedicatedWorker 里当**主宿主**是未验证组合 —— 实测 `accept-worker`
@@ -57,36 +130,34 @@
       // ★ 两个触发条件都要：
       //   ① 页面上的 `?worker=1`（把解释器交给 worker 的那种加载姿势）；
       //   ② **本上下文自己就是一个 worker 宿主**（`importScripts` 是 worker 专有；
-      //      页面没有它）。加②是因为"别人手搓一个 `new Worker('octave-worker.js')`"也是真实用法
-      //      —— `accept-worker` 的 C3b（重启）就是手搓的，没有查询串 ⇒ 只靠①会漏，
-      //      那次实测正是 `Module.eval_string is not a function`（worker 自己按 COI 选了线程档）。
-      return { lane: 'base', coi: coi, sab: sab, forced: false, workerMode: true,
+      //      页面没有它）。
+      return { lane: 'base', coi: coi, sab: sab, memory64: m64, forced: false, workerMode: true,
                why: 'worker 宿主：线程产物在 DedicatedWorker 里当主宿主**未验证**'
                     + '（实测 accept-worker 4/12）⇒ 用基础档；要线程档请显式 ?lane=threads' };
     }
     if (ov && ov !== auto.lane) {
-      return { lane: ov, coi: coi, sab: sab, forced: true,
-               why: '显式覆盖为 ' + ov + '（环境本来该选 ' + auto.lane + '）'
-                    + (ov === 'threads' && !coi
-                       ? '；⚠️ 没有 COI ⇒ 线程档会**硬失败**（这是有意的可证伪档）' : '') };
+      var whyWarn = '';
+      if ((ov === 'threads' || ov === 'w64' || ov === 'w64-threads') && !coi) {
+        whyWarn = '；⚠️ 没有 COI ⇒ 线程档会**硬失败**（这是有意的可证伪档）';
+      } else if ((ov === 'w64' || ov === 'w64-threads' || ov === 'w64-base') && !m64) {
+        whyWarn = '；⚠️ 没有 memory64 支持 ⇒ wasm64 档会**硬失败**（这是有意的可证伪档）';
+      }
+      return { lane: ov, coi: coi, sab: sab, memory64: m64, forced: true,
+               why: '显式覆盖为 ' + ov + '（环境本来该选 ' + auto.lane + '）' + whyWarn };
     }
-    return { lane: auto.lane, coi: coi, sab: sab, forced: false, why: auto.why };
+    return { lane: auto.lane, coi: coi, sab: sab, memory64: m64, forced: false, why: auto.why };
   }
 
   var FILES = {
-    // data 两档共用根目录那一份 —— 前提是两档的 `octave.data` **sha 相同**（链接后核对，
-    // 记录在 HANDOFF/PLAN 里）。若哪天不同了，把 threads 的 data 改成 'threads/octave.data'
-    // 并把文件部署过去即可（探针 probe-lane 会核对"胶水要的文件真的取得到"）。
-    // ★ 两档**必须各自带一份 `octave.data`**（2026-09-27 实测）：两份的 sha **不同**
-    //   （基础 `f250530a…` 9,712,174 B / 线程 `5c1433c4…` 9,712,190 B —— 预载树里带进了链接期的差异）。
-    //   ⚠️ 早先我以为"同 sha 可共用一份"，实测推翻了 ⇒ 现在线程档指向 `threads/octave.data`。
-    //   `promote-webgl.sh` 里有一条 fail-closed：两档 data sha **不同**而 lane.js 却指根目录 ⇒ 拒绝上线
-    //   （否则线程档会**静默取到基础档的数据文件**，是最难查的那类）。
-    //
-    // ★ 资产：只有 `.oct` 那部分**必须**分档 —— 非 atomics 编的 side module 在 shared-memory 主模块里
-    //   连 dlopen 都过不去（`TypeError: tlsInitFunc is not a function`，见 NOTES-threads.md B5）
-    //   ⇒ 线程档用自己的 `.oct` 集（`oct-threads/`、`octdir-threads/`），其余（.m 包/文档/字体数据）
-    //   两档共用；清单逐条带 `url`，所以"分档"= 换一份清单。
+    w64: { lane: 'w64', dir: 'w64/',
+           js: 'w64/octave.js', wasm: 'w64/octave.wasm', data: 'w64/octave.data',
+           manifest: 'assets/manifest.w64.json' },
+    'w64-threads': { lane: 'w64', dir: 'w64/',
+                     js: 'w64/octave.js', wasm: 'w64/octave.wasm', data: 'w64/octave.data',
+                     manifest: 'assets/manifest.w64.json' },
+    'w64-base': { lane: 'w64-base', dir: 'w64-base/',
+                  js: 'w64-base/octave.js', wasm: 'w64-base/octave.wasm', data: 'w64-base/octave.data',
+                  manifest: 'assets/manifest.w64.json' },
     threads: { lane: 'threads', dir: 'threads/',
                js: 'threads/octave.js', wasm: 'threads/octave.wasm', data: 'threads/octave.data',
                manifest: 'assets/manifest.threads.json' },

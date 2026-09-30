@@ -137,3 +137,13 @@
 
 # 工单 05 结算件：G1 复现探针（main.cpp/side.c/page.html 一层放行）
 !build/113/probe-jspi-g1/*
+
+# 工单 20：页面资产批的受管辖入口
+!build/promote-pages.sh
+
+# 工单 23：档清单生成器 + 宿主侧选档自检
+!build/gen-lanes.sh
+!build/113/lane-pick-selftest.mjs
+
+# 工单 23：档清单的入库默认值（页面引用它，必须能被跟踪）
+!bridge/lanes.js

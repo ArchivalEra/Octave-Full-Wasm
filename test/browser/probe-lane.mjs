@@ -104,6 +104,7 @@ async function probeLane(browser, url, { expectReady = true, waitMs = 90000, dis
       capsVerdict: c && c.artifact ? c.artifact.verdict : null,
       sharedMemory: c ? c.sharedMemory : null,
       buf,
+      lanes: (typeof window.__octaveLanes !== 'undefined' && window.__octaveLanes) || null,
     };
   }).catch(e => ({ evalFail: String(e).slice(0, 160) }));
   await ctx.close();
@@ -119,6 +120,28 @@ check(upA && upB, '★ 两台服务都起来了（带头 / 不带头，同一目
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage'] });
+
+// ── ★ 档清单（工单 23）：页面必须真的加载了站点清单，且**选中的档在清单里** ──────
+//   为什么这条必须存在：四格选档器是**能力**驱动的 —— 没有清单它会在这类"只部署了
+//   base+threads"的站点上挑 w64 并 404。声明与选择必须对得上，这条在**运行期**钉住它。
+{
+  const r = await probeLane(browser, `${A}/index.html`);
+  const i = r.info;
+  const inv = i.lanes;
+  check(Object.prototype.toString.call(inv) === '[object Array]' && inv.length > 0,
+    '★ 站点档清单已加载（window.__octaveLanes 是非空数组）',
+    `lanes=${JSON.stringify(inv)}（缺它 ⇒ lane.js 会打告警并退回历史形态）`);
+  check(Array.isArray(inv) && inv.indexOf(i.laneState) >= 0,
+    '★ 选中的档**在**清单里（声明与选择一致，不会 404）',
+    `chosen=${i.laneState} lanes=${JSON.stringify(inv)}`);
+  if (hasW64) {
+    check(Array.isArray(inv) && inv.indexOf('w64') >= 0,
+      '四格站点：清单必须含 w64（否则能力最优的档选了会 404）', JSON.stringify(inv));
+  } else {
+    check(Array.isArray(inv) && inv.indexOf('w64') < 0,
+      '★ 双档站点：清单**不许**含 w64（否则会选到没部署的档并 404）', JSON.stringify(inv));
+  }
+}
 
 if (hasW64) {
   console.log('--- wasm64 两轴探针 (COI × memory64 四格矩阵) ---');

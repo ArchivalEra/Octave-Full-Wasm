@@ -135,7 +135,7 @@ self.__octaveClicksArmed = false;
 // ★ B6（2026-09-27）**选档**：先决定用哪一档，再按档 importScripts 胶水。
 //   worker 里 `crossOriginIsolated` 继承自页面（同源 worker），判据与页面侧同一份（lane.js）。
 //   ⚠️ 顺序不能反：线程档胶水在被 import 的那一刻就会建 **shared** 内存，没有隔离会直接崩。
-importScripts('assets-loader.js', 'octave-core.js', 'lane.js');
+importScripts('assets-loader.js', 'octave-core.js', 'lanes.js', 'lane.js');
 var LANE = octaveLaneFiles(octaveLaneState.lane);
 importScripts(LANE.js);
 
@@ -213,6 +213,15 @@ self.onmessage = function (ev) {
     //   `RuntimeError: Suspend error: instance is already suspended`
     // ⇒ 这里一律**排队**（FIFO），不裸调；interrupt/click 是带外消息，不排队。
     enqueue(m);
+    return;
+  }
+  if (m.kind === '__crash_test') {
+    // ★ 工单 08 的判据通道（2026-09-29）：worker 里**所有**消息路径都有守卫 ⇒
+    //   真实崩溃（OOM / 引擎杀 / 未捕获异常）无法从测试侧确定性复现，onerror 判据
+    //   就没法写。这个 kind 在**一切 try/catch 之外**（setTimeout 回调）抛，
+    //   确定性地走与真实崩溃同一条 onerror 通路。发消息时不带 id ⇒ 不 resolve 任何待办。
+    setTimeout(function () { throw new Error('crash-test: 非受控异常（工单 08 判据通道）'); }, 0);
+    send({ id: m.id, kind: 'result', rc: 0 });
     return;
   }
   if (false) {

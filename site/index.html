@@ -215,6 +215,9 @@
      就得把整段启动改写进回调里（改动面大得多）；这里是**只在解析期写一次**的经典用法。
      ⚠️ 线程档的文件名与基础档**相同**，放在 `threads/` 子目录（胶水内部写死的 `octave.data`
      引用因此不用改，见 lane.js 的说明）。 -->
+<!-- ★ 档清单（工单 23）：装配期由 build/gen-lanes.sh 生成，声明**站点真有哪几档** ——
+     没有它，四格选档器会在只部署了 base+threads 的站点上挑 w64 并 404。它必须在 lane.js 之前。 -->
+<script type="text/javascript" src="lanes.js"></script>
 <script type="text/javascript" src="lane.js"></script>
 <script type="text/javascript">
   window.__octaveLanePlan = octaveLaneFiles(octaveLaneState.lane);
@@ -316,6 +319,9 @@
   };
   API.diagnose = function () { return call('diagnose', {}).then(function (m) { return m.d; }); };
   API.interrupt = function () { API.interrupted++; w.postMessage({ kind: 'interrupt' }); };
+  // ★ 测试/诊断口子（工单 08）：裸 worker —— `__crash_test` 这类**不发 id** 的判据消息
+  //   只能直接 postMessage（包装 API 的每个方法都会挂一个待办）。测试以外不要用。
+  API.__raw = w;
   window.OctaveWorker = API;
   // 点击一律转发（worker 侧 `arm` 时会清空队列 ⇒ "第二次点击不误触发下一次 ginput" 仍成立）
   window.addEventListener('pointerdown', function (e) {

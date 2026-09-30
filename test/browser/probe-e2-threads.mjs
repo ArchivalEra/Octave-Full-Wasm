@@ -194,6 +194,26 @@ if (CELLS.includes('D')) {
   check(got.D.verdict === 'returned', '★ D · 纯 OpenBLAS dgemm（无 dlopen）返回 ⇒ 墙不在计算本身',
     got.D.detail);
 }
+if (CELLS.includes('G')) {
+  // ★ 工单 19 的判别格：**只强制内存增长，不碰 dlopen**。
+  //   机制假设：Emscripten 的共享内存在 ALLOW_MEMORY_GROWTH 下要**所有线程到安全点**
+  //   才能增长，而 OpenBLAS(USE_THREAD=1) 的池线程自旋 => 永远到不了安全点 =>
+  //   需要增长的 dlopen 永不完成（100% CPU 忙等）。若"只增长"就挂 => 假设成立。
+  console.log('--- 格 G：只强制内存增长（不 dlopen）---');
+  got.G = await cell('G/只增长', { timeout: CD_MS, noFixture: true,
+    code: "a = zeros(1, 200e6); a(end) = 1; printf('__E2DONE__ %d', numel(a));" });
+  check(got.G.verdict === 'returned',
+    '★ G · 纯内存增长（无 dlopen）返回 ⇒ 墙不在"增长"本身', got.G.detail);
+}
+if (CELLS.includes('H')) {
+  // ★ 大 dgemm：**超过 OpenBLAS 的线程阈值**（D 格用 300² 可能走了单线程路径 ⇒ 没测到池）。
+  //   挂 ⇒ 线程池计算路径本身卡；返回 ⇒ 池能干活，墙只在装载段。
+  console.log('--- 格 H：大 dgemm（越过线程阈值，无 dlopen）---');
+  got.H = await cell('H/大dgemm', { timeout: CD_MS, noFixture: true,
+    code: "A=rand(1200); B=rand(1200); C=A*B; printf('__E2DONE__ %d', numel(C));" });
+  check(got.H.verdict === 'returned',
+    '★ H · 大 dgemm 返回 ⇒ 线程池计算可用（D 的 300² 可能低于阈值）', got.H.detail);
+}
 if (CELLS.includes('A')) {
   console.log('--- 格 A：裸跑（期望"不返回"，复现既有实测）---');
   got.A = await cell('A/裸跑', {});
@@ -219,7 +239,7 @@ if (CELLS.includes('B')) {
 
 console.log('');
 console.log('════ 结论（工单 16 的二分阶梯）════');
-for (const k of ['C', 'E', 'F', 'D', 'A', 'B']) {
+for (const k of ['C', 'E', 'F', 'D', 'G', 'H', 'A', 'B']) {
   if (got[k]) console.log(`  ${k} : ${got[k].verdict}   ${got[k].detail}`);
 }
 const hung = k => got[k] && got[k].verdict === 'hung';
@@ -227,6 +247,11 @@ if (hung('C') && !hung('F') && !hung('E') && !hung('D')) {
   console.log('  ⇒ **墙必须经过 `.oct` 的 dlopen**：同一句代码，装了夹具（要 dlopen）就挂、'
     + '不装（不 dlopen）就干净报"未定义"；而纯 error()、纯 BLAS 都活。'
     + '\n     线程数不是变量（B 设 1 线程仍挂）⇒ 定位 = **线程版 OpenBLAS 产物上的 .oct 动态装载**。');
+} else if (got.G && got.G.verdict === 'hung') {
+  console.log('  ⇒ ★ **墙是"共享内存增长"**：不碰 dlopen、只增长就挂 ⇒ 自旋的池线程挡住了增长安全点；'
+    + '\n     dlopen 只是"需要增长的那件事"（工单 19 的假设 1 成立）。');
+} else if (got.H && got.H.verdict === 'hung') {
+  console.log('  ⇒ 墙在 **OpenBLAS 线程池的计算路径**（大 dgemm 就挂；D 的 300² 多半低于线程阈值）。');
 } else if (got.D && got.D.verdict === 'hung') {
   console.log('  ⇒ 定位在 **OpenBLAS(USE_THREAD=1) 的计算/线程池本身**（D 无 dlopen 也挂）。');
 } else {

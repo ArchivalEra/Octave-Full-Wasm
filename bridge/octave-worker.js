@@ -135,7 +135,7 @@ self.__octaveClicksArmed = false;
 // ★ B6（2026-09-27）**选档**：先决定用哪一档，再按档 importScripts 胶水。
 //   worker 里 `crossOriginIsolated` 继承自页面（同源 worker），判据与页面侧同一份（lane.js）。
 //   ⚠️ 顺序不能反：线程档胶水在被 import 的那一刻就会建 **shared** 内存，没有隔离会直接崩。
-importScripts('assets-loader.js', 'octave-core.js', 'lane.js');
+importScripts('assets-loader.js', 'octave-core.js', 'lanes.js', 'lane.js');
 var LANE = octaveLaneFiles(octaveLaneState.lane);
 importScripts(LANE.js);
 
