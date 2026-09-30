@@ -8,7 +8,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** 存在一条**受管辖**的入口，两值可分辨 ——
 `sh build/promote-pages.sh --dry-run` 打印"只同步页面资产（清单见脚本）且**不碰**三大件"；
@@ -32,3 +32,20 @@
 2. `--dry-run` / `--verify` 两个模式；`--verify` 覆盖四处 sha（仓库 `bridge/`、8761、8768、仓库 `site/`）；
 3. 反向断言进 `build/gates-selftest.sh` 名单（该脚本必须能证明自己会红）；
 4. 结论回填 `build/113/NOTES-*.md` 或本单 Answer。
+
+## Answer（2026-09-30）：已实现并用它完成了三站同步（**状态漏翻了，审计抓到**）
+
+**交付物**：`build/promote-pages.sh`（POSIX，`sh` 可直接跑），三个模式：
+- `--dry-run` 打印要做什么 + **四处 sha 对照表**（仓库 `bridge/` · 8761 · 8768 · 仓库 `site/`）；
+- `--verify` ⇒ rc=0 当且仅当清单内每个页面文件四处 sha 一致、**且三大件逐字节未变**；
+- `--selftest` ⇒ **3 PASS / 0 FAIL**：一致夹具不报 / **三大件被改必须红**（页面批不许夹带产物）/
+  目标站点缺失必须红。已登记进 `build/gates-selftest.sh`（29 个闸门全绿）。
+
+**清单从 `recover-113.sh` 那份 `<script src>/importScripts` 清单推** —— 推的过程中就发现
+**它漏了 `lane.js`**（照它重建站点会漏掉选档器本身），已一并修 `recover-113.sh` 并注明。
+
+**实际用它做的事**（这就是它存在的价值）：
+1. 第一次 `--dry-run` 抓出两处**此前无人发现的漂移**：`octave-core.js` 与 `lane.js`
+   在仓库+8848 是新版、8761/8768 是旧版（工单 18 的 w64 改动只上过 w64 站）；
+2. 三站同步（8768 → 8848 → 8761）全部走它，三大件逐字节未动，`--verify` 绿；
+3. 随后 8768 全量回归全绿、8761 开机自检与 SHA 三层绿、`parity --strict` 三处完全一致。
