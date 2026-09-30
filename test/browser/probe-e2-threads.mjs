@@ -54,6 +54,7 @@ async function newBrowser () {
 
 // 一格 = 一个独立浏览器 + 一个独立页面。返回 {prep, verdict, detail}。
 async function cell (name, opts) {
+  const LIMIT = opts.timeout || CELL_TIMEOUT_MS;
   const browser = await newBrowser();
   const page = await browser.newPage();
   const logs = [];
@@ -73,34 +74,42 @@ async function cell (name, opts) {
     check(lane === 'threads', `${name} · 页面跑的是线程档`, `lane=${lane}`);
 
     // 装夹具（与 accept-113-oct 同一套动作：写 .oct + 建函数名符号链接 + addpath）
-    const wrote = await page.evaluate(async () => {
-      try {
-        const buf = await fetch('threads/minioct.oct').then(r => r.arrayBuffer());
-        const FS = window.Module.FS, dir = '/usr/src/octave/m/oct';
-        try { FS.mkdir(dir); } catch (e) { /* 已存在 */ }
-        FS.writeFile(dir + '/minioct.oct', new Uint8Array(buf));
-        try { FS.symlink(dir + '/minioct.oct', dir + '/miniprobe.oct'); } catch (e) { /* 已存在 */ }
-        return buf.byteLength;
-      } catch (e) { return 'ERR: ' + e.message; }
-    });
-    check(typeof wrote === 'number', `${name} · 夹具装进 FS`, `${wrote} 字节`);
-    await page.evaluate(() => window.Module.eval_string("addpath('/usr/src/octave/m/oct');"));
+    if (!opts.noFixture) {
+      const wrote = await page.evaluate(async () => {
+        try {
+          const buf = await fetch('threads/minioct.oct').then(r => r.arrayBuffer());
+          const FS = window.Module.FS, dir = '/usr/src/octave/m/oct';
+          try { FS.mkdir(dir); } catch (e) { /* 已存在 */ }
+          FS.writeFile(dir + '/minioct.oct', new Uint8Array(buf));
+          try { FS.symlink(dir + '/minioct.oct', dir + '/miniprobe.oct'); } catch (e) { /* 已存在 */ }
+          return buf.byteLength;
+        } catch (e) { return 'ERR: ' + e.message; }
+      });
+      check(typeof wrote === 'number', `${name} · 夹具装进 FS`, `${wrote} 字节`);
+      await page.evaluate(() => window.Module.eval_string("addpath('/usr/src/octave/m/oct');"));
+    }
 
     // 本格特有的"准备"（格 B 在这里调 set_num_threads）
     if (opts.prepare) prep = await opts.prepare(page);
 
     // ★ 关键一步：硬超时赛跑。挂住的 wasm 会把 evaluate 的 Promise 永远挂着。
-    const CODE = "printf('%.10g', miniprobe([2,3;1,4])); disp('__E2DONE__');";
+    const CODE = opts.code || "printf('%.10g', miniprobe([2,3;1,4])); disp('__E2DONE__');";
     const racing = page.evaluate(c => window.Module.eval_string(c), CODE)
       .then(() => 'returned')
       .catch(e => 'error: ' + String(e).slice(0, 90));
     let timer;
-    const hung = new Promise(res => { timer = setTimeout(() => res('hung'), CELL_TIMEOUT_MS); });
+    const hung = new Promise(res => { timer = setTimeout(() => res('hung'), LIMIT); });
     verdict = await Promise.race([racing, hung]);
     clearTimeout(timer);
+    // ⚠️ Octave 层的错误（error()/未定义函数）**不会**让 eval_string 抛 JS 异常 ⇒ verdict 仍是
+    //    `returned`。判"这一格干了什么"要另读 last_error_message（F 格靠它区分"未定义"）。
+    const lastErr = verdict === 'returned'
+      ? await page.evaluate(() => { try { return String(window.Module.last_error_message() || ''); } catch (e) { return ''; } }).catch(() => '')
+      : '';
     detail = verdict === 'returned'
-      ? `输出=${logs.join(' ').split('__E2DONE__')[0].replace(/\s+/g, ' ').trim().slice(0, 60)}`
-      : (verdict === 'hung' ? `>${CELL_TIMEOUT_MS / 1000}s 未返回（100% CPU 的典型形状）` : verdict);
+      ? `输出=${logs.join(' ').split('__E2DONE__')[0].replace(/\s+/g, ' ').trim().slice(0, 45)}`
+        + (lastErr ? ` ｜ last_error=${lastErr.slice(0, 55)}` : '')
+      : (verdict === 'hung' ? `>${LIMIT / 1000}s 未返回（100% CPU 的典型形状）` : verdict);
   } catch (e) {
     verdict = 'threw: ' + String(e).slice(0, 90);
     detail = verdict;
@@ -149,38 +158,79 @@ if (!pre.hasExport) {
   process.exit(0);
 }
 
-console.log('--- 格 A：裸跑（期望"不返回"，复现既有实测）---');
-const A = await cell('A/裸跑', {});
-check(A.verdict === 'hung', 'A · 复现"不返回"', A.detail);
+// ── 工单 16 的**轻量二分格**（先跑，别让 A/B 的 5 分钟挂死挡路）─────────────────
+// 选格：CELLS=C,D,E,F,A,B（默认全跑）。E/F 是 2026-09-29 补的**判别格**：
+//   C · 只 dlopen 不进 LAPACK：miniprobe(1)（非方阵 ⇒ 在 determinant **之前**报错）
+//   E · 纯 error() 路径（**不装夹具 ⇒ 无 dlopen**）：`error('boom')` —— 判别"是不是 error 本身就挂"
+//   F · 同一句 miniprobe(1) 但**不装夹具**（函数不存在 ⇒ 干净"未定义"错误，**不 dlopen**）
+//       ⇒ E/F 都返回而 C 挂 ⇒ 墙**必须**经过 .oct 的 dlopen（把"error 路径"这个变量劈掉）
+//   D · 纯 OpenBLAS 乘法：rand(300)*rand(300) —— **完全没有 dlopen** 参与
+const CELLS = (process.env.CELLS || 'C,D,E,F,A,B').split(',').map(s => s.trim());
+const CD_MS = Number(process.env.CD_TIMEOUT_MS || 90000);
+const got = {};
 
-console.log('--- 格 B：先 set_num_threads(1) ---');
-const B = await cell('B/set_num_threads(1)', {
-  prepare: async (page) => {
-    // ① 先证明**诊断口子真的交付了**：页面侧够得到那个符号
-    const t = await page.evaluate(() => typeof (window.Module || {})._openblas_set_num_threads);
-    check(t === 'function', 'B · 页面够得到 Module._openblas_set_num_threads', `typeof=${t}`);
-    // ② 再调它
-    const r = await page.evaluate(() => {
-      try { window.Module._openblas_set_num_threads(1); return 'ok'; }
-      catch (e) { return 'ERR: ' + e.message; }
-    });
-    check(r === 'ok', 'B · set_num_threads(1) 调用成功', r);
-    return r;
-  },
-});
+if (CELLS.includes('C')) {
+  console.log('--- 格 C：只 dlopen 不进 LAPACK（miniprobe(1) 应干净报错）---');
+  got.C = await cell('C/只dlopen', { timeout: CD_MS, code: "miniprobe(1); disp('__E2DONE__');" });
+  check(got.C.verdict === 'hung',
+    '★ C · 只 dlopen（.oct 在）⇒ **挂死**（连 LAPACK 都没进就挂 ⇒ 墙在装载段）', got.C.detail);
+}
+if (CELLS.includes('E')) {
+  console.log('--- 格 E：纯 error() 路径（无 dlopen）---');
+  got.E = await cell('E/纯error', { timeout: CD_MS, noFixture: true, code: "error('boom');" });
+  check(got.E.verdict === 'returned',
+    '★ E · 纯 error() 返回（无 dlopen）⇒ error 路径本身不挂', got.E.detail);
+}
+if (CELLS.includes('F')) {
+  console.log('--- 格 F：同一句 miniprobe(1) 但不装夹具（不 dlopen）---');
+  got.F = await cell('F/无夹具', { timeout: CD_MS, noFixture: true, code: "miniprobe(1); disp('__E2DONE__');" });
+  check(got.F.verdict === 'returned' && /not found|undefined|未定义/i.test(got.F.detail),
+    '★ F · 同一句但**不 dlopen** ⇒ 干净报"未定义"并返回（判别格）', got.F.detail);
+}
+if (CELLS.includes('D')) {
+  console.log('--- 格 D：纯 OpenBLAS 乘法（无 dlopen）---');
+  got.D = await cell('D/纯BLAS', { timeout: CD_MS, noFixture: true,
+    code: "r = rand(300)*rand(300); printf('__E2DONE__ %d', numel(r));" });
+  check(got.D.verdict === 'returned', '★ D · 纯 OpenBLAS dgemm（无 dlopen）返回 ⇒ 墙不在计算本身',
+    got.D.detail);
+}
+if (CELLS.includes('A')) {
+  console.log('--- 格 A：裸跑（期望"不返回"，复现既有实测）---');
+  got.A = await cell('A/裸跑', {});
+  check(got.A.verdict === 'hung', 'A · 复现"不返回"', got.A.detail);
+}
+if (CELLS.includes('B')) {
+  console.log('--- 格 B：先 set_num_threads(1) ---');
+  got.B = await cell('B/set_num_threads(1)', {
+    prepare: async (page) => {
+      // ① 先证明**诊断口子真的交付了**：页面侧够得到那个符号
+      const t = await page.evaluate(() => typeof (window.Module || {})._openblas_set_num_threads);
+      check(t === 'function', 'B · 页面够得到 Module._openblas_set_num_threads', `typeof=${t}`);
+      // ② 再调它
+      const r = await page.evaluate(() => {
+        try { window.Module._openblas_set_num_threads(1); return 'ok'; }
+        catch (e) { return 'ERR: ' + e.message; }
+      });
+      check(r === 'ok', 'B · set_num_threads(1) 调用成功', r);
+      return r;
+    },
+  });
+}
 
 console.log('');
-console.log('════ 结论 ════');
-console.log(`  格 A（裸跑）            : ${A.verdict}   ${A.detail}`);
-console.log(`  格 B（先设 1 线程）     : ${B.verdict}   ${B.detail}`);
-if (A.verdict === 'hung' && B.verdict === 'returned') {
-  console.log('  ⇒ 定位在**多线程唤醒/并行执行**：设成单线程就返回了。');
-} else if (A.verdict === 'hung' && B.verdict === 'hung') {
-  console.log('  ⇒ 定位在**线程版代码路径本身**：与线程数无关（设成 1 线程仍不返回）。');
-} else if (A.verdict === 'returned') {
-  console.log('  ⇒ 格 A 就返回了 ⇒ 与既有实测（>600s 不返回）**不符**：先查这份诊断档是不是真线程版。');
+console.log('════ 结论（工单 16 的二分阶梯）════');
+for (const k of ['C', 'E', 'F', 'D', 'A', 'B']) {
+  if (got[k]) console.log(`  ${k} : ${got[k].verdict}   ${got[k].detail}`);
+}
+const hung = k => got[k] && got[k].verdict === 'hung';
+if (hung('C') && !hung('F') && !hung('E') && !hung('D')) {
+  console.log('  ⇒ **墙必须经过 `.oct` 的 dlopen**：同一句代码，装了夹具（要 dlopen）就挂、'
+    + '不装（不 dlopen）就干净报"未定义"；而纯 error()、纯 BLAS 都活。'
+    + '\n     线程数不是变量（B 设 1 线程仍挂）⇒ 定位 = **线程版 OpenBLAS 产物上的 .oct 动态装载**。');
+} else if (got.D && got.D.verdict === 'hung') {
+  console.log('  ⇒ 定位在 **OpenBLAS(USE_THREAD=1) 的计算/线程池本身**（D 无 dlopen 也挂）。');
 } else {
-  console.log('  ⇒ 两格都不干净（见上面 detail），本次不构成结论。');
+  console.log('  ⇒ 见上面各格原样记录（组合与已知形状不符时别硬下结论）。');
 }
 console.log(`=== ${pass} PASS / ${fail} FAIL ===`);
 // ★ 显式退出：挂住的浏览器可能关不掉，绝不能让探针自己挂在收尾上。

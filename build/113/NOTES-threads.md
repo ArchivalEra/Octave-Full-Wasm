@@ -411,11 +411,16 @@ README 只给定制示例，**默认值得读源码/实测**：`coi-serviceworke
 `plotbridge`/`webshims` 静默装不上（表现为 addpath 找不到目录、`pause` shim 缺席 ⇒
 中断判据假红、ready 永远不来）。修法：用**显式标记** `self.__octaveWorker` 而不是探测 document。
 
-**phase 2 边界（未做，PLAN 留档）**：worker 模式**没有真渲染后端** —— 图形后端初始化要用
-EM_ASM 在 `document` 上建隐藏 canvas，worker 里没有真 DOM ⇒ 回落到"只出句柄"的旧后端，
-绘图报 `get: unknown axes property __legend_handle__`（Octave 侧清晰错误、解释器存活）。
-把 WebGL 搬进 worker 需要改 `webgl_toolkit.cc`（canvas 契约 + OffscreenCanvas 目标）并**重链**。
-外部咨询请求（去身份化）已发出：`build/113/GEMINI-ASK-1-worker-webgl.md`（含这条与 E2 的
+**phase 2 边界（⭐ 2026-09-26 已达成；2026-09-29 补记更正）**：当时记的是"worker 模式**没有真渲染
+后端**"—— 图形后端初始化要用 EM_ASM 在 `document` 上建隐藏 canvas，worker 里没有真 DOM ⇒ 回落
+到"只出句柄"的旧后端，绘图报 `get: unknown axes property __legend_handle__`。
+**后来发现这件事不需要重链**：Emscripten 只要一个"能 `getContext('webgl2')` 的对象"，而
+`OffscreenCanvas` 在 worker 里可用 ⇒ shim 交出一个真 OffscreenCanvas 即可
+（实现见 `bridge/octave-worker.js` 的 `makeCanvas` 段）。**判据已钉进 `accept-worker.mjs`**：
+H 格（toolkit=webgl + 无 GL 回落信号 `p5_nogl.txt` + OffscreenCanvas 上真有 WebGL2 上下文 +
+图上屏）与 C3b 格（重启的新实例**同样**拿到真渲染后端）—— 2026-09-29 实测 **21 PASS / 0 FAIL**。
+⇒ 工单 11 写的"**但需要一次重链**"这个前提是**错的**（OffscreenCanvas 路线零重链）。
+外部咨询请求（去身份化）已发出：`build/113/GEMINI-ASK-1-worker-webgl.md`（含 E2 的
 binaryen 阻塞、以及"挑刺验收矩阵"）。
 
 **验收链（全绿）**：`glue-selftest 91/91` → **8768 全量 43 套 / 1071 PASS / 0 FAIL**（含新套件）→
@@ -1121,3 +1126,39 @@ side-module 装载/符号解析之间的交互。
 
 ⇒ **单线程 OpenBLAS 是能用的交付形态**：SIMD 收益 1.4–1.9×、无新警告、数值全过。
 线程版（小尺寸 6.7×）留在"多线程唤醒"那条独立课题里 —— 见上面那两条结案实验。
+
+
+---
+
+## 工单 16 结案（2026-09-29）：墙 = **线程版 OpenBLAS 产物上的 `.oct` 动态装载**
+
+**二分阶梯**（`CELLS=C,E,F,D sh test/browser/run.sh test/browser/probe-e2-threads.mjs http://127.0.0.1:8792/`
+—— 8792 = `site-e2diag`，其 `inputs.blas.resolved_dir` = `/src/work/e2-openblas-lib`，
+即 **USE_THREAD=1** 那份；判据 9 PASS / 0 FAIL）：
+
+| 格 | 内容 | 结果 |
+|---|---|---|
+| **C** | 装了夹具（`.oct` 在）⇒ `miniprobe(1)` **要 dlopen** | **挂死 >90s** |
+| E | 纯 `error('boom')`（无 dlopen） | 返回，`last_error=boom` |
+| **F** | **同一句** `miniprobe(1)` 但**不装夹具**（函数不存在 ⇒ 不 dlopen） | 返回，`last_error='miniprobe' undefined near line 1, column 1` |
+| D | 纯 `rand(300)*rand(300)`（**无 dlopen**） | 返回 |
+| A | 裸跑（复现既有实测） | 挂死 >300s |
+| B | 先 `openblas_set_num_threads(1)` 再跑同一路径 | **仍挂死 >300s** |
+
+⇒ **墙必须经过 `.oct` 的 dlopen**：C 与 F 是**同一句代码**，唯一差别是 `.oct` 在不在
+（在 ⇒ 走 dlopen 装载；不在 ⇒ 干净报"未定义"）。而纯 error 路径、纯 BLAS 算术都活得很好。
+⇒ 也**否掉了**"BLAS 算术/线程池"这条候选（D 格无 dlopen 也返回），与 **R-010**（与线程数无关）一致。
+
+**定位（工单 16 要的那一句）**：
+> 在 `USE_THREAD=1` 的 OpenBLAS 产物上，**装载一个 `.oct`（dlopen/dylink 那一段）会挂死**；
+> 现象与线程数无关，也不在 BLAS 算术里。
+
+**这不是交付缺口**：现役线程档的交付形态是 **`USE_THREAD=0`**（`threads_blas_dir` =
+`/src/work/e2-openblas-lib-s`，见本文件「单线程变体（USE_THREAD=0）的实测：交付形态定为它」），
+`.oct` 装载在那份上正常（`accept-113-oct` 8 PASS / 0 FAIL）。⇒ 本单的收益是
+**"将来若要 OpenBLAS 内部多线程那 6.7×，该修的是装载段而不是算术"**，
+而不是"要砍 dlopen 或 BLAS"（前者是 44 个 `.oct` 的整个能力面 + 资产车道，后者是数值核心 —— 都不可砍）。
+
+**判据自身的坑（记下来）**：Octave 层的错误（`error()`/未定义函数）**不会**让 `eval_string`
+抛 JS 异常 ⇒ 格的 verdict 仍是 `returned`；要判"这格干了什么"必须另读
+`Module.last_error_message()`（第一版按 verdict 文本匹配，三条断言全假红）。
