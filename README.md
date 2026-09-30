@@ -251,7 +251,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/22-relink-stale-var-count.md` (2449 bytes)
 - `.scratch/open-questions/issues/23-lane-drift-and-existence.md` (5555 bytes)
 - `.scratch/open-questions/issues/24-floor-matrix-old-engine.md` (3989 bytes)
-- `.scratch/open-questions/issues/25-sitewebgl-leftovers.md` (1801 bytes)
+- `.scratch/open-questions/issues/25-sitewebgl-leftovers.md` (4240 bytes)
 - `.scratch/open-questions/issues/26-rebuild-lacks-lane-shim.md` (1609 bytes)
 - `.scratch/open-questions/issues/27-ship-threaded-openblas.md` (2048 bytes)
 - `.zcode/config.json` (791 bytes)

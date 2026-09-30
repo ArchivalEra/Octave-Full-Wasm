@@ -13,7 +13,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** 三份文件各得一个明确去向，且有可复跑的判据：
 - **要留** ⇒ 移进 `build/113/`（实验物该待的地方）并在注释/工单里说明用途，然后
@@ -31,3 +31,42 @@
 本仓纪律：**不是自己建的产物，先surface 再动**（用户点名的"删之前先看目标、不是自己建的
 就要先汇报"）。这三份文件**没有对应的工单/提交记录**（`git log` 里查不到），
 所以来源与是否还有用**只能由人确认** —— 本单的存在就是那条"留痕"。
+
+## Answer（2026-09-30）：查清来历 ⇒ **留痕后从站点清掉**
+
+三份都不是部署件（8761 与仓库镜像里从来没有），是 8768 实验车道上的边角料：
+
+### `octave.js.orig`（685455 B，sha256 `fa74d2244bb53286…`，**已删**）
+
+```
+var OCTAVE=(()=>{var _scriptName=globalThis.document?.currentScript?.src;return async function(moduleArg={}){var moduleRtn;var Module=moduleArg;var ENVIRONMENT_IS_WEB=true;var ENVIRONMENT_IS_WORKER=false;var ENVIRONMENT_IS_NODE=false;var ENVIRONMENT_IS_SHELL=false;if(!Module["expectedDataFileDownloads"])Module["expectedDataFileDownloads"]=0;Module["expectedDataFileDownloads"]++;(()=>{var isPthread=typeof ENVIRONMENT_IS_PTHREAD!="undefined"&&ENVIRONMENT_IS_PTHREAD;var isWasmWorker=typeof ENVIRONMENT_IS_WASM_WORKER!="undefined"&&ENVIRONMENT_IS_WASM_WORKER;if(isPthread||isWasmWorker)return;async 
+```
+
+### `wtest.html`（298 B，sha256 `81b661225db41950…`，**已删**）
+
+```
+<!doctype html><meta charset=utf-8><body>w
+<script>
+var w = new Worker('wtest.js');
+w.onmessage = e => { window.__r = e.data; console.log('WORKER-RESULT ' + JSON.stringify(e.data)); };
+w.onerror = e => { window.__r = 'onerror:' + e.message; console.log('WORKER-ONERROR ' + e.message); };
+</script>
+```
+
+### `wtest.js`（184 B，sha256 `69de6c78f3213c3a…`，**已删**）
+
+```
+try { importScripts('/assets/m/plotbridge.js'); postMessage({ok:true, keys:Object.keys(self.__OCT_ASSETS__||{})}); }
+catch (e) { postMessage({ok:false, err:String(e).slice(0,200)}); }
+```
+
+**来历**（据此判定可删）：
+- `wtest.html` + `wtest.js`：**3 行的一次性调试页** —— 在一个 Worker 里 `importScripts('/assets/m/plotbridge.js')`
+  看能不能拿到 `__OCT_ASSETS__` 的键（B5/A2 那条"worker 里资产注入路径"的排查）。判据早已固化进
+  `accept-worker.mjs` 的 E 格（资产可用），这份手搓页没有独立价值。
+- `octave.js.orig`：旧胶水备份（与现役 `octave.js` sha 不同），来源提交不可考；胶水的唯一真相源是
+  重链产物 + 仓库里的 `bridge/*.js`，备份留着只会让人误以为"站点上还有一份要维护的胶水"。
+
+**处置**：内容与 sha **留档在本工单**（上面），然后从 `siteWebGL` 删除 —— 既清了站点，
+信息也没丢（本文件在 git 里）。**反向断言**：删完 `sh build/check-site-parity.sh --strict`
+必须仍 rc=0，且输出里**不再出现这三行**。
