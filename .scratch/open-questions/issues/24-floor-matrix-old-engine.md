@@ -7,7 +7,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** `FLOOR_ENGINES=old-chromium sh test/browser/run.sh test/browser/probe-browser-floor.mjs <站点>`
 —— 旧引擎（<137）上：① 页面仍 **ready**、② `eval('2+2')` 成立、③ **D9 门必须关**
@@ -43,3 +43,20 @@
 - **可行做法**：`curl -L -x http://127.0.0.1:2080` 直接取
   `https://playwright.azureedge.net/builds/chromium/1117/chromium-linux.zip`（156.8MB @ ~23MB/s），
   再手工 `unzip` 到 `pw-browsers/chromium-1117/`（zip 顶层就是 `chrome-linux/`）。
+
+## Answer（2026-09-30）：实测完成 —— Chromium 125 上"低于下限必须优雅降级"成立
+
+命令：`HARNESS=/mnt/hdd/crossbuild-tools/pw-old FLOOR_ENGINES=old-chromium sh test/browser/run.sh test/browser/probe-browser-floor.mjs http://127.0.0.1:8761/`
+
+| 判据 | 实测 |
+|---|---|
+| ① 页面 ready（低于下限也必须优雅） | **ready=true** ✓ |
+| ② `eval('2+2')` 成立 | evalOk=true ✓ |
+| ③ **反证**：无 JSPI API ⇒ D9 门必须关 | `jspiApi=false`、`suspendOk=0` ✓（**没有**误报可挂起；若旧引擎竟有 JSPI API，本格会红） |
+| ④ lane 与 COI 一致 | `coi=true lane=threads` ✓ |
+| 附带 | `mem64=false`（125 不支持 memory64，与年龄一致） |
+
+**4 PASS / 0 FAIL**。装法（复跑用）：`curl -L -x 代理 https://playwright.azureedge.net/builds/chromium/1117/chromium-linux.zip`
+→ `unzip` 到 `/mnt/hdd/crossbuild-tools/pw-browsers/chromium-1117/`（zip 顶层就是 `chrome-linux/`），
+配 playwright 1.44.1（`/mnt/hdd/crossbuild-tools/pw-old`）。**没碰现役 chromium/firefox。**
+顺带修掉探针里已成假话的一句（"本机没有 <137 的 Chromium"）。

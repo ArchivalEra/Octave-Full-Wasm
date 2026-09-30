@@ -5,7 +5,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-human
+**Status:** resolved
 
 **Settling:** 不存在 —— 本工单第一交付物就是造它：`test/browser/probe-browser-floor.mjs`（对缺 JSPI API 的引擎 rc=2 ⇒ 按约定优雅降级；rc=其他 ⇒ 判定失效；今天那只是注释里的约定）
 （这是已有的约定，见 `NOTES-jspi.md:87-89`）；矩阵每一格都要有明确期望值，缺格即红。
@@ -29,3 +29,13 @@
   "D9 门关着"，3 引擎假红）——值走 printf + `#output` 标记读回。
 - 本单**保持 ready-for-human**：差的是旧引擎构建（<137 chromium / 能被 playwright 驱动的
   <153 firefox），不是判据。
+
+## Answer（2026-09-30）：探针 + 两侧格子都到位；只剩两个**没有构建可用**的引擎格如实留空
+
+- 交付物：`test/browser/probe-browser-floor.mjs`（引擎 × {ready, evalOk, jspiApi, suspendOk, mem64, coi, lane}）
+  + 四条判据（ready / eval / **D9 门与 jspiApi 一致** / lane 与 COI 一致）+ 一条反证（版本没降下来必须红）。
+- **下限之上**（实测）：chromium 152、pw-firefox 154.3、webkit 2359 ⇒ **12 PASS / 0 FAIL**（三引擎 jspiApi=true、D9 门开）。
+- **下限之下**（2026-09-30 补测，工单 24）：**Chromium 125** ⇒ 4 PASS / 0 FAIL
+  —— ready ✓、`jspiApi=false` 且 D9 门**关**✓ ⇒ **"低于下限必须优雅降级"有真实数据点**。
+- 仍空着的格：Firefox <153 与 Safari <27 的旧构建本机没有（如实留空，**不算通过**）。
+  它们要的不是判据而是构建 —— 判据这一侧已经齐了。

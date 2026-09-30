@@ -138,7 +138,11 @@ for (const r of rows) {
 
 console.log('');
 console.log('════ 引擎缺口（如实，不算失败也不算通过）════');
-console.log('  <137 的老 Chromium 本机没有 ⇒ 「低于下限」那一侧的格子待真机/旧构建补测（工单 07 保持 ready-for-human）。');
+// ⚠️ 这句话曾写着"本机没有 <137 的 Chromium"—— 2026-09-30 起**不再成立**：
+//   旧的 Chromium 125 已装在 /mnt/hdd/crossbuild-tools/pw-browsers/chromium-1117（配套旧 playwright）。
+//   跑它：HARNESS=/mnt/hdd/crossbuild-tools/pw-old FLOOR_ENGINES=old-chromium sh test/browser/run.sh <本探针> <URL>
+console.log('  低于下限的格子：Chromium 125 已实测（ready ✓ / jspiApi=false ⇒ D9 门关 ✓）；');
+console.log('  Firefox<153 与 Safari<27 那一侧的旧构建**本机仍没有** ⇒ 那两格如实留空（不算通过）。');
 // ⚠️ 汇总行必须**恰好**是 `=== N PASS / M FAIL ===`（build/sweep.sh:108 的正则）
 //    —— N/A 单独一行，别塞进汇总行（第一版塞了 ⇒ 被扫成"有问题"）。
 if (na) console.log(`N/A 合计：${na} 格（引擎缺件，既不算通过也不算失败）`);
