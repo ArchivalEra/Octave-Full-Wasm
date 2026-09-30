@@ -153,3 +153,37 @@ Blocking on the main thread is very dangerous, see …/pthreads.html#blocking-on
 - 上面第 1 条**尚未实施**（需要 `patch-openblas-thread-yield.py` + 重建 + 重链 + 用格 C 判绿）；
 - 第 2 条的可行性可用一个**便宜的实验**判定：在 boot 最早的钩子里 dlopen 一个 `.oct`
   （若成功 ⇒ 池确实晚于它出生 ⇒ 可做"预热装载"）。
+
+## ★ 修法设计（2026-09-30 定稿，可直接实施）
+
+**两个事实合起来就给出修法**：
+1. Emscripten 的 dlsync **跳过已结束的线程**：
+   `octave.js:12196  if (!PThread.finishedThreads.has(pthread_ptr)) { … proxy … }`
+   —— 死掉的线程不再是障碍；
+2. Emscripten 的**池线程**在线程函数返回后**回到 JS 事件循环**（那时它能应答邮箱）；
+   而 OpenBLAS 的 server 线程**永不返回**（`thread_server` 的 `while(1)`），
+   所以只要池活着，dlopen 就永远等不到应答。
+3. OpenBLAS **自带懒重建**：`exec_blas`/`goto_set_num_threads` 里都有
+   `if (unlikely(blas_server_avail == 0)) blas_thread_init();`
+   —— 池被关掉之后，下一次 BLAS 调用会自动把它建回来。
+
+⇒ **补丁（`build/113/patch-openblas-idle-exit.py`，按本仓 `patch-openblas-*.py` 惯例带 `--selftest`）**：
+改 `driver/others/blas_server.c` 的空闲超时分支
+（`if ((unsigned int)rpcc() - last_tick > thread_timeout)` 那一支，当前行为是
+`thread_status[cpu].status = THREAD_STATUS_SLEEP; pthread_cond_wait(...)`）：
+- 改成**让该 worker 退出**：置 `queue = (queue_t)-1` 并让循环 `break`（与 shutdown 同一出口），
+  同时把 `blas_server_avail = 0`（下一个 `exec_blas` 会重建池）；
+- 并把 `thread_timeout` 从默认 `1U<<28`（≈0.27 s，纳秒计数器）**加大到 ~1–2 s**
+  （否则池会被反复拆建，BLAS 性能崩）——即"活跃期保有池、空闲后解散"。
+
+**代价与取舍（要如实写进 NOTES）**：空闲后首次 BLAS 调用要重建 4 个线程
+（Emscripten 池里 `pthread_create` 便宜，但仍有一次延迟）。
+换来的是**运行期 dlopen 不再挂死** ⇒ 资产车道与 `USE_THREAD=1` 可以共存。
+
+**判据（用现成的格 C）**：打完补丁重建 + 重链后
+`CELLS=C,E,F,D,G,H,L sh test/browser/run.sh test/browser/probe-e2-threads.mjs <该产物站点>`
+⇒ 格 C 必须**返回**（"墙没了"），且格 D/H 仍返回（算术没退化）；
+**反向断言**：`e2_matmul500_ratio` 必须仍在 6.7 量级（不许把线程偷偷关掉换绿灯）。
+
+**备用方案（若上面的补丁让 BLAS 明显变慢）**：页面/宿主在"要 dlopen 之前"先显式
+`blas_thread_shutdown()`（OpenBLAS 已导出该符号）—— 只在装载资产的那几个时刻付一次代价。

@@ -245,7 +245,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/16-e2-threaded-path-cause.md` (3259 bytes)
 - `.scratch/open-questions/issues/17-wasm64-rebuild.md` (4761 bytes)
 - `.scratch/open-questions/issues/18-wasm64-final-integration.md` (6038 bytes)
-- `.scratch/open-questions/issues/19-openblas-internal-threads.md` (11830 bytes)
+- `.scratch/open-questions/issues/19-openblas-internal-threads.md` (14220 bytes)
 - `.scratch/open-questions/issues/20-page-asset-promote-entry.md` (2037 bytes)
 - `.scratch/open-questions/issues/21-need-arch-call-sites.md` (2319 bytes)
 - `.scratch/open-questions/issues/22-relink-stale-var-count.md` (2449 bytes)
