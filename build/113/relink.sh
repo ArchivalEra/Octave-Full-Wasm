@@ -553,8 +553,21 @@ cmd_rebuild() {
   # ★ 线程档：模式决定 configure 的线程开关（WITH_THREADS=1 ⇒ 撤销 AX_PTHREAD 覆盖 +
   #   --enable-threads）。**不许手设** —— 与 D1 的纪律一致（口径从模式推出来）。
   local th=0; [ "$m" = threads ] && th=1
+  # ★ 工单 28（2026-09-30 实测）：**必须把车道自己的 install 前缀传给 configure** ——
+  #   不传就落到默认的 product 路径（`/src/work/octave-install`），于是产物**烘死 product 的
+  #   docstrings 路径**，而站点资产是按**车道**前缀挂载的（`manifest.threads.json` 挂到
+  #   `/src/work/octave-install-threads/…`）⇒ 运行期 `help` 全打不开（实测 accept-help 5/7）。
+  #   这类错 `verdict=ok` **查不出来**（它只核对声明 vs 量测），必须靠运行期套件 + 下面的烘死路径自证。
+  local inst
+  case "$m" in
+    threads)      inst=/src/work/octave-install-threads ;;
+    w64|w64-base) inst=/src/work/octave-install-w64 ;;
+    *)            inst=/src/work/octave-install ;;
+  esac
+  echo "   车道 install 前缀：$inst（configure 的 \$2；不传就会烘死 product 路径 —— 工单 28）"
+  [ -d "$inst" ] || { echo "FATAL: 车道安装树不存在：$inst（先建它，别拿 product 树凑）" >&2; exit 2; }
   ( cd "$OCT" && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 \
-      WITH_THREADS="$th" bash "$HERE/configure-113-full.sh" ) \
+      WITH_THREADS="$th" bash "$HERE/configure-113-full.sh" "$OCT" "$inst" ) \
     || { echo "FATAL: configure 失败（rebuild 第①步）—— 第一面墙在上面输出里" >&2; exit 2; }
   ( cd "$OCT" && emmake make clean ) \
     || { echo "FATAL: make clean 失败（rebuild 第②步）" >&2; exit 2; }
@@ -578,6 +591,15 @@ cmd_rebuild() {
   done
   echo "   ✅ 树内四大 .libs 在（$(date -u +%H:%M:%SZ)），继续链接"
   cmd_link "$m" "$out" "$diag"
+  # ★ 烘死路径自证（工单 28）：产物的 `octave.js` 里出现的安装前缀必须是**本车道**那一个。
+  #   为什么单列：这是"能链过、verdict=ok、但运行期打不开 doc"的唯一机器可查的迹象。
+  local baked
+  baked=$(grep -o '/src/work/octave-install[a-z0-9_-]*' "$out/octave.js" 2>/dev/null | sort -u | tr '\n' ' ')
+  case " $baked " in
+    *" $inst "*) echo "   ✅ 烘死路径含本车道前缀（$inst）" ;;
+    *) echo "FATAL: 产物烘死的安装前缀里**没有** $inst（量到：$baked）⇒ 运行期 doc/help 会打不开" >&2
+       exit 2 ;;
+  esac
 }
 
 # ── 参数解析 ─────────────────────────────────────────────────────────────────
