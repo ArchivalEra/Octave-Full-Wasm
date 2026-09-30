@@ -10,7 +10,7 @@
 
 **Blocked by:** None（28 已把烘死路径的**自证**加在 `rebuild` 里，本单是把它扩到 `link`）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** `link <模式>` 在链之前读树的实际前缀（`grep '^prefix' Makefile` 或 `config.status`
 里那一条），与模式应有前缀（product→`/src/work/octave-install`、threads→`-threads`、w64→`-w64`）
@@ -27,3 +27,14 @@
   以及工单 28 的 prefix 烤错；
 - `verdict=ok` 是**声明 vs 量测**的核对器，天生**不看运行期路径** ⇒ 这类错只能靠
   "链之前比对"或"链之后跑运行期套件"来拦。本单选前者（便宜、早、且在链之前）。
+
+## Answer（2026-09-30）：已实现（自证 10/0）
+
+`cmd_link` 开头读**树自己的** `Makefile` 的 `prefix` 行，与模式期望比对：
+`threads → /src/work/octave-install-threads`、`w64|w64-base → -w64`、其余 `→ /src/work/octave-install`；
+不一致 ⇒ **点名 FATAL** 并打出"先 `rebuild <模式>` 重配"的下一步（附 28 的盲区说明）。
+一致时打一行 `树前缀校验：… == 模式 … 的期望 ✓`。
+
+**自证**（`relink.sh --selftest` → **10 PASS / 0 fail**）：夹具树写 `prefix = …-threads`，
+`link product` ⇒ 输出出现"树的 configure 前缀"⇒ 命中 FATAL。
+（判据从**树**读，不信任何人的记忆；这与 28 在 `rebuild` 里的烘死路径自证一前一后夹住同一个坑。）

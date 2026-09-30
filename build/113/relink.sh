@@ -427,6 +427,31 @@ cmd_selfcheck() {
 cmd_link() {
   local m="$1" out="$2" diag="$3"
 
+  # ★ 工单 29（2026-09-30）：**链之前校验"树配的前缀"与模式一致**。
+  #   为什么：产物会把树 configure 时的 --prefix **烘死**进 octave.js（docstrings/doc-cache
+  #   等运行期路径）。一棵树只配一个前缀 ⇒ 在 threads 前缀的树上跑 `link product`，会产出
+  #   **烘死 threads 路径的 product 产物** ⇒ 上线后 8761 的 help 打不开，而
+  #   `verdict=ok`、三条 SHA、"链得过" **全都绿**（工单 28 的同族盲区，实测过）。
+  #   判据从**树自己**读（`Makefile` 的 prefix 行），不信任何人的记忆。
+  local want
+  case "$m" in
+    threads)      want=/src/work/octave-install-threads ;;
+    w64|w64-base) want=/src/work/octave-install-w64 ;;
+    *)            want=/src/work/octave-install ;;
+  esac
+  if [ -f "$OCT/Makefile" ]; then
+    local have
+    have=$(sed -n 's/^[[:space:]]*prefix[[:space:]]*=[[:space:]]*//p' "$OCT/Makefile" | head -1)
+    if [ -n "$have" ] && [ "$have" != "$want" ]; then
+      echo "FATAL: 这棵树的 configure 前缀是 $have，但模式 $m 要的是 $want。" >&2
+      echo "       产物会把前缀**烘死**进 octave.js（docstrings 等运行期路径）⇒ 上线后 help 打不开，" >&2
+      echo "       而 verdict=ok / SHA / '链得过' **全绿**（工单 28 的同族盲区）。" >&2
+      echo "       先重配重建：bash $0 rebuild $m --out <目录> --yes-rebuild" >&2
+      exit 2
+    fi
+    [ -n "$have" ] && echo "  树前缀校验：$have == 模式 $m 的期望 ✓"
+  fi
+
   # ★★ 线程档的**隐形前置**（2026-09-28 实测被它咬，见 HISTORY §5.67）★★
   #   为什么线程档需要它：`-pthread` 要求 shared-memory 链上**每个对象**都声明 `atomics`，
   #   而 farm 里那 20+ 个库的构建脚本**没有传旗标的点位**（有的写死在 emf77 命令行、有的在
@@ -704,6 +729,17 @@ cmd_selftest() {
   else
     echo "fail | rebuild threads 缺影子时没点名（msg=${msg:0:120}）"; bad=1
   fi
+  # ⑥c ★ 工单 29：link 之前必须校验"树前缀 vs 模式"
+  n=$((n + 1))
+  fx="$(mktemp -d)"
+  printf 'prefix = /src/work/octave-install-threads\n' > "$fx/Makefile"
+  msg="$(OCT="$fx" bash "$0" link product --out /tmp/_zr_pfx_probe 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q '树的 configure 前缀'; then
+    echo "PASS | ★ link product 撞上 threads 前缀的树 ⇒ 点名 FATAL（工单 29）"
+  else
+    echo "fail | 树前缀不匹配时没拦（msg=${msg:0:110}）"; bad=1
+  fi
+  rm -rf "$fx"
   # ⑦ ★ w64 模式的隐形前置必须在入口里被点名（LANE_SHIM_W64）
   n=$((n + 1))
   msg="$(LANE_SHIM_W64=/nonexistent-w64-shim bash "$0" link w64 --out /tmp/_zr_shim_probe 2>&1 || true)"
