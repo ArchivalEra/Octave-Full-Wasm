@@ -73,33 +73,38 @@
   17 PASS 当成目标站点的）。⇒ 要跑 w64 四格：`SITE_DIR=…/site-w64 PROBES=1 sh build/sweep.sh <URL> probe-lane`。
 - 现役 farm（`/usr/local`、`/src/deps`）**一字未动**；四条车道 prefix 分开：
   `/usr/local`+`/src/deps`（base）、`-threads`（B6）、`-w64`（wasm64）—— **这是硬要求**。
+- ★ **2026-09-30 无人值守批次**（用户令：持续立工单并解决）：**17 张工单结案**
+  （01–06、08–11、14–18 `resolved`；13 `wontfix`——OSMesa 已退役，测量对象不存在）。
+  关键落地：
+  · 选档**第三轴**（工单 23）：`gen-lanes.sh` 生成站点**档清单** `lanes.js`，`lane.js` 取
+    「能力 ∩ 清单」⇒ 同一份页面资产可服务"四格站 / 双档站 / 只有 base 的站"；
+    实测 8761/8768 **20/0**、8848 **33/0**（`probe-lane`）；宿主侧纯函数自检
+    `build/113/lane-pick-selftest.mjs` **9/0**（已进 `gates-selftest`，闸门 29 个全绿）；
+  · **页面资产批有了受管辖入口**（工单 20）：`build/promote-pages.sh`
+    （`--dry-run`/`--verify`/`--selftest`）—— 它第一次 dry-run 就抓出 `octave-core.js`/`lane.js`
+    两处**此前无人发现的漂移**；
+  · 工单 16 结案：线程版卡点定位到**`.oct` 的动态装载段**（非 BLAS 算术、非线程数）；工单 19
+    （用户令：USE_THREAD=1 那 6.7× 要）已立，机制候选已锁到 OpenBLAS 的**热自旋**
+    （`YIELDING` = 8 个 `nop`；`THREAD_TIMEOUT` 默认 28 ⇒ 池线程基本不停）挡住
+    Emscripten 共享内存增长的**安全点**，而 `dlopen` 正需要增长。
 - 事实系统：`build/FACTS.json`（源）+ `AUTO:FACTS`（渲染）+ 翻案台账
   `build/lib/retractions.json`（R-009/R-010）+ **`docs/agents/fact-system.md`**（给接手工单的 agent 的入门）。
 
 ## 1. 下一步（按此顺序）
 
-**当前分支 `wasm64`**（`open-questions` → `e2-openblas` → `threads` 的线上），mirror 与 origin 都同步。
-E2 上线、wasm64 三件（可行性 / 重编 / 集成）都已收尾。⇒ 下一步：
+**当前分支 `wasm64`**。2026-09-30 无人值守批次后，18 张工单里只剩两类：
 
-1. **w64 上线（要拍板；独立批次）**：`site-w64` 已验绿（全量回归 + 四格矩阵探针都全绿），
-   但是否把 w64 当**新的线程档**推上 8761、以及发几档（四格 vs 砍到两三档），**是产品决定**。
-   走批次收尾那套（8768 验绿 → promote → boot/SHA 三层 → 同步 `site/` → dist → parity → 六道闸门）。
-2. ~~glpk 的 memory64 静默失败~~ —— **已结案（2026-09-29）**：旧话"判别已确认与 memory64 有关"
-   是**错的**（已翻案 R-011/R-012）。真机制 = **换旗标后复用没清的构建树**：`make` 按 mtime
-   判"全部最新"零重编 ⇒ 库静默保持旧指针宽度（与 memory64 无关，ccache 也无辜）；
-   memory64 下 glpk 实测建得成（新树两个通道都是 191 成员全 wasm64）。机制、实验与复跑命令见
-   `build/113/NOTES-wasm64.md`「glpk 悬案结案」；`build-libs.sh` 已加两道闸（旗标指纹自动清树 +
-   `need_arch` 架构断言）。⇒ 下面两条顺次上移。
-3. **工单 16**（线程版的卡点在"代码路径本身"，与线程数无关 —— R-010 推翻了"多线程唤醒"那条推断）。
-   ⚠️ ~~注意它与 **wasm64 是同一个 OpenBLAS**~~ —— **这句是错的**（2026-09-29 实测更正，
-   复跑：`w64-artifacts/octave.build.json` 的 `inputs.blas.resolved_dir` = `/src/deps-w64/lapack-simd/lib`，
-   容器 `/src/deps-w64` 里没有 openblas）：w64 用的是 **f2c refblas + lapack**，16 的雷
-   （OpenBLAS `USE_THREAD=1` 专属行为）w64 从头到尾没碰 —— w64 全绿**不能**给 16 提供线索，
-   反过来说 16 的悬案被干净地隔离在 OpenBLAS 这一个库里。
-4. **其余前沿**（各自独立）：04（UMFPACK 整页陷阱）、05（JSPI G1 真因）、08（外审判据）、
-   10（Firefox COI 矛盾）、15（`relink.sh verify --out <副本>` 假红并污染 verdict）、
-   01/03（诊断仪器与其两个下游）；需要设备的 07 / 12 / 13。
-   **不要与重链类活并行**（本仓实测过并发会让套件假崩）。
+1. **⭐ 工单 19（用户点名："BLAS 内部多线程得"）**：让 `USE_THREAD=1` 的 OpenBLAS 产物**能用**
+   （拿那 ≈6.7×；现役交付是 `USE_THREAD=0` 的 ≈1.9×）。
+   墙已定位：该产物上**装载 `.oct`（dlopen）挂死**，>90s、100% CPU 忙等；
+   判别已排除 BLAS 算术（纯 dgemm 返回）与 error 路径，且与线程数无关。
+   待验的**第一格**：`CELLS=G sh test/browser/run.sh test/browser/probe-e2-threads.mjs <8792>`
+   —— 只强制内存增长、**不碰 dlopen**（`zeros(1,200e6)`）：挂 ⇒ "自旋挡增长"成立。
+2. **07 / 12（`ready-for-human`，无人值守做不了）**：07 缺"低于部署下限的引擎"
+   （探针已交付、3 引擎 12/0 绿）；12 缺真机（手测清单已入库 `docs/manual-test-checklist.md`）。
+3. **w64 上线**（仍是产品决定）：`site-w64` 已验绿（四格矩阵 33/0），是否推上 8761 由你拍板；
+   选档第三轴落地后，**页面资产不再与这个决定耦合**（同一份 lane.js 服务两种站点）。
+4. **残余**：GitHub 凭据失效（`gh` token 无效 ⇒ origin 推不上去；mirror 一直在同步）。
 
 ## 2. 铁律（违反会被拦或返工）
 

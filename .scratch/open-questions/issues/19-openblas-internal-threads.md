@@ -28,6 +28,28 @@
 | `.oct` 文件**两端逐字节相同**（`413eb730…`）⇒ 差别在主模块 | `sha256sum site-e2diag/threads/minioct.oct site/threads/minioct.oct` |
 | 现役 `USE_THREAD=0` 站点上同一句**正常**（`accept-113-oct` 8/0） | `sh test/browser/run.sh test/browser/accept-113-oct.mjs http://127.0.0.1:8768/` |
 
+## ★ 机制（2026-09-30 从 Emscripten 运行时读出来的，比原假设更准）
+
+`libpthread.js` 里有 **dlsync** 一族：`_emscripten_dlsync_threads`（`proxy: 'sync'`）+
+`__emscripten_dlsync_self`。含义：**动态链接动作（`dlopen`/`dlsym` 新模块）要求跨线程同步** ——
+调用线程要**其它每个线程回到 JS 事件循环应答**。而 OpenBLAS（`USE_THREAD=1`）的池线程
+自旋在**原生代码里**（`YIELDING` = 8×`nop`，`common.h:382`），**回不到事件循环** ⇒
+应答永远不来 ⇒ **dlopen 永久阻塞**，且自旋线程把 CPU 打到 100%。
+⇒ 这条**精确解释了"只有 dlopen 挂"**：纯 BLAS 算术、纯 `error()`、内存增长（见 G 格）
+都**不需要 dlsync**。也解释了为什么 `USE_THREAD=0` 那份产物一切正常（**根本没有池线程**）。
+
+**两个候选修法**（等 G 格结果定优先）：
+- **A（旋钮，最便宜）**：让池线程**早点停**。`THREAD_TIMEOUT` 默认 **28**（`1U<<28` ticks
+  ⇒ 实际上"几乎不停"），而 `OPENBLAS_THREAD_TIMEOUT` 环境变量可覆盖（被夹在 4..30，
+  见 `driver/others/blas_server.c:162-166,554-580` + `openblas_env.c:65`）——但**自旋窗口
+  只是变短**，不是消失；dlopen 撞上窗口照样挂。
+- **B（正解）**：让 pool 的等待**走 Emscripten 能应答的原语**（`emscripten_futex_wait`
+  一族，运行时会给它让出事件循环），或者干脆让 OpenBLAS 的 worker 空闲时**停在 JS 事件循环**里。
+  这需要**打补丁**（本仓已有 `patch-openblas-*.py` 三件套的先例，都带 `--selftest`）。
+- **C（绕过）**：把所有 `.oct` 的 dlopen **挪到任何 BLAS 调用之前**（启动期预热）。
+  ⚠️ 只在"池是**首次 BLAS 调用**时创建"的前提下成立 —— 若池在**模块初始化**
+  （OpenBLAS 的 ctor / `gotoblas_init`）就建好，则此法**无效**。**这一条本身就是一个可验的实验**。
+
 ## 待验假设（按可能性排序，**每条都写了判别实验**）
 
 1. **★ 自旋的 worker 线程卡住共享内存增长**（最强候选；**已找到源码级旁证**）。
@@ -60,3 +82,49 @@
 - **不许覆盖现役**：新产物落独立 prefix/目录（`e2-openblas-lib` 那份是实验档）。
 - 一次只动一个轴（本单不夹带 E2 之外的活）。长任务后台 + 完成通知，**禁止 `sleep`**。
 - 判据必须**两值可分辨**（修好/未修好），且必须带**反向断言**（见 Settling）。
+
+## ★★ 根因确认（2026-09-30，插桩实测，**决定性**）
+
+**做法**（本仓 LSODE 那套"插桩把墙夹死"的复用）：把诊断产物**复制**一份到 `/tmp/e2-inst`
+（不碰 8792），在它的胶水 `octave.js` 里给两处插日志：`__emscripten_dlsync_threads()`
+的每个 `__emscripten_proxy_dlsync` 前后、以及 `dlopenInternal` 进出。起 8793 跑同一格 C。
+
+**实测输出**（挂死那一刻）：
+```
+[G1-DIAG] dlsync_threads START, pthreads=3
+[G1-DIAG]   proxy_dlsync > 70320176
+Blocking on the main thread is very dangerous, see …/pthreads.html#blocking-on-the-main-browser-thread
+（之后 75 s 内**再也没有** "proxy_dlsync < … OK"，也没有 dlopenInternal LEAVE）
+```
+⇒ 挂点 = **对一个 pthread 的同步代理永不返回**。
+
+**机制（三条合起来就是完整因果）**：
+1. `dlopen` 在 Emscripten 里**必须**先 `__emscripten_dlsync_threads()`（`octave.js:12194`）——
+   它遍历 `PThread.pthreads`，对**每个**线程发 `__emscripten_proxy_dlsync`（同步代理）；
+2. 同步代理要求目标线程**回到 JS 事件循环应答邮箱**；
+3. 而 OpenBLAS（`USE_THREAD=1`）的 worker 在**库初始化**时就进入 `thread_server` 的原生死循环
+   （`blas_server.c`），**从此刻起永不回 JS** ⇒ 应答永远不来 ⇒ 代理阻塞、自旋线程把 CPU 打满。
+   ⇒ 也解释了"设成 1 线程仍挂"（池在 boot 期已建好，运行期改线程数不消灭它）。
+
+**已排除的其它候选**（都是实测）：
+| 候选 | 判别 | 结果 |
+|---|---|---|
+| 共享内存增长被自旋挡住 | 格 G：只 `zeros(1,200e6)` 不 dlopen | **返回** ⇒ 否掉 |
+| BLAS 算术/池不可用 | 格 H：大 dgemm 1200²（越过线程阈值） | **返回** ⇒ 否掉 |
+| error 路径 | 格 E：纯 `error()` | 返回 ⇒ 否掉 |
+| 线程数 | 格 B：`set_num_threads(1)` | 仍挂（池已存在） |
+
+## 修法（据此重排）
+
+- **A（正解，要重建 OpenBLAS）**：让 worker 的**等待路径对邮箱友好** —— 把 `blas_server.c`
+  的空闲等待（`YIELDING` 纯自旋 / `pthread_cond_wait` park）改成**会回 JS 事件循环**的原语
+  （Emscripten 的 `emscripten_thread_sleep()` 一族会处理邮箱）。本仓已有
+  `patch-openblas-*.py` 三件套的先例（都带 `--selftest`）。
+- **B（可能更省，需先验）**：让 OpenBLAS 的池**不在库初始化时创建**（延迟到首次 BLAS 调用），
+  并在页面 boot 里**先 dlopen 全部会用的 `.oct`**，再让池出生。⚠️ 若池确实由 ctor 建，
+  此法无效 —— **这一条本身是一个便宜的可验实验**（在页面最早时刻调 `dlopen`）。
+- **C（兜底）**：给 `__emscripten_proxy_dlsync` 加超时并降级为警告 —— **不推荐**：
+  dlsync 是 dlopen 正确性的一部分，跳过它可能带来难查的内存/重定位错。
+
+**下一步（本单的下一交付物）**：先做 B 的判别实验（便宜）；不行就走 A（写
+`patch-openblas-thread-yield.py` + 重建 + 重链 + 用同一格 C 判绿）。

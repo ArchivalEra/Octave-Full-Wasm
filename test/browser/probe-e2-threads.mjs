@@ -63,6 +63,7 @@ async function cell (name, opts) {
 
   let prep = null, verdict = 'unknown', detail = '';
   try {
+    if (opts.initScript) await page.addInitScript(opts.initScript);
     await page.goto(URL, { waitUntil: 'load', timeout: READY_TIMEOUT_MS });
     // 等启动链跑完（含 help 数据与 webgraphics —— 见 accept-113-oct 里那条实测注释）
     for (let w = 0; w < 400; w++) {
@@ -214,6 +215,22 @@ if (CELLS.includes('H')) {
   check(got.H.verdict === 'returned',
     '★ H · 大 dgemm 返回 ⇒ 线程池计算可用（D 的 300² 可能低于阈值）', got.H.detail);
 }
+if (CELLS.includes('I')) {
+  // ★ 工单 19 的判别格：**在模块初始化之前**把 OpenBLAS 的池关掉（NUM_THREADS=1）。
+  //   若 dlopen 因此能过 ⇒ 池线程就是元凶（Emscripten 的 dlsync：dlopen 要其它线程回到
+  //   事件循环应答，而自旋在原生代码里的池线程做不到）。
+  //   做法：initScript 在页面脚本之前放一个 `window.Module = {ENV:{...}}` ——
+  //   Emscripten 胶水是 `var Module = typeof Module != 'undefined' ? Module : {}` ⇒ 会合并。
+  console.log('--- 格 I：初始化前关池（OPENBLAS_NUM_THREADS=1）后 dlopen ---');
+  got.I = await cell('I/关池后dlopen', {
+    timeout: CD_MS,
+    initScript: () => { window.Module = Object.assign(window.Module || {}, { ENV: { OPENBLAS_NUM_THREADS: '1' } }); },
+    code: "miniprobe([2,3;1,4]); disp('__E2DONE__');",
+  });
+  check(got.I.verdict === 'returned',
+    '★ I · 初始化前关池 ⇒ dlopen 能过（池线程是 dlonen 挂死的元凶 ⇒ dlsync 假设成立）',
+    got.I.detail);
+}
 if (CELLS.includes('A')) {
   console.log('--- 格 A：裸跑（期望"不返回"，复现既有实测）---');
   got.A = await cell('A/裸跑', {});
@@ -239,7 +256,7 @@ if (CELLS.includes('B')) {
 
 console.log('');
 console.log('════ 结论（工单 16 的二分阶梯）════');
-for (const k of ['C', 'E', 'F', 'D', 'G', 'H', 'A', 'B']) {
+for (const k of ['C', 'E', 'F', 'D', 'G', 'H', 'I', 'A', 'B']) {
   if (got[k]) console.log(`  ${k} : ${got[k].verdict}   ${got[k].detail}`);
 }
 const hung = k => got[k] && got[k].verdict === 'hung';

@@ -48,6 +48,16 @@ const LAUNCHERS = {
   'firefox':    { type: 'firefox',  exe: '/usr/bin/firefox' },
   'pw-firefox': { type: 'firefox',  exe: '/mnt/hdd/crossbuild-tools/pw-browsers/firefox-1543/firefox/firefox' },
   'webkit':     { type: 'webkit',   exe: null },   // 走 PLAYWRIGHT_BROWSERS_PATH 的默认解析
+  // ★ 工单 24：**低于部署下限**那一侧的引擎（Chromium 125 < 137）。
+  //   它由**旧版 playwright**（1.44.1，落在 /mnt/hdd/crossbuild-tools/pw-old）驱动 ——
+  //   新 playwright 的 CDP 未必能驱动旧浏览器，所以跑这一格时要：
+  //     HARNESS=/mnt/hdd/crossbuild-tools/pw-old FLOOR_ENGINES=old-chromium \
+  //       sh test/browser/run.sh test/browser/probe-browser-floor.mjs <URL>
+  //   路径可用 FLOOR_OLD_CHROME 覆盖。
+  'old-chromium': { type: 'chromium',
+                    exe: process.env.FLOOR_OLD_CHROME
+                         || '/mnt/hdd/crossbuild-tools/pw-browsers/chromium-1117/chrome-linux/chrome',
+                    args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage'] },
 };
 
 // ── D9 门与页面事实 ────────────────────────────────────────────────────────────
