@@ -31,3 +31,24 @@
 **★ 这条同时暴露了一个验收盲区**：`verdict=ok` 只核对**声明 vs 产物量测**，**不覆盖运行期路径**
 ⇒ 工单 26 的结算（`rebuild threads` ⇒ verdict=ok）当时"绿"了，但那产物**在运行期是坏的**
 （help 打不开）。教训：**换产物/换车道之后，判据里必须有一条运行期套件**（本仓已有 `accept-help`）。
+
+## Answer（2026-09-30）：两条判据都实测通过
+
+**修法**：`cmd_rebuild` 按模式把**车道 install 前缀**传给 `configure-113-full.sh` 的 `$2`
+（threads → `/src/work/octave-install-threads`、w64 → `-w64`、其余 → `/src/work/octave-install`；
+不传就落到默认的 product 路径 —— 那就是本单的病因），缺车道安装树则点名 FATAL；
+并在 `cmd_link` 之后加一条**烘死路径自证**：产物 `octave.js` 里量到的 `/src/work/octave-install*`
+必须**含本车道那一个**，否则 FATAL。
+
+**判据 ①（产物级，脚本自证）**：
+`bash relink.sh rebuild threads --out /src/websrc/rb28-out --yes-rebuild` ⇒ rc=0、`verdict=ok`，
+并打出 **`✅ 烘死路径含本车道前缀（/src/work/octave-install-threads）`**（sha `ea094ed387e0e82c…`）。
+
+**判据 ②（运行期，本单 Settling 的那条）**：把该产物装进站点（8795）后
+`sh build/sweep.sh <站点>/ accept-help` ⇒ **12 PASS / 0 FAIL**（修前是 **5 PASS / 7 FAIL**）；
+站点上那份产物的烘死路径实测只有 `/src/work/octave-install-threads` 一条 ✓。
+
+**这条同时暴露的验收盲区（已写进本单正文）**：`verdict=ok` 只核对"声明 vs 产物量测"，
+**不覆盖运行期路径** ⇒ 工单 26 当时"verdict=ok"的那个产物其实是**运行期坏的**。
+⇒ 结论：**换车道/换产物之后，判据里必须有一条运行期套件**（本仓现成的是 `accept-help`）。
+同类防线已另立 **工单 29**（`link` 之前校验树前缀与模式一致，已实现，relink 自证 10/0）。
