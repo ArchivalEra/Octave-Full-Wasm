@@ -150,3 +150,6 @@
 
 # 工单 19：OpenBLAS 空闲退出的补丁脚本
 !build/113/patch-openblas-idle-exit.py
+
+# 工单 27：E2 车道重建驱动（含 idle-exit 补丁幂等接线）
+!build/113/build-e2-lane.sh

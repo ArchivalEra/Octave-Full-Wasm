@@ -27,6 +27,7 @@
 """
 import os
 import re
+import subprocess
 import sys
 
 REL = "driver/others/blas_server.c"
@@ -103,6 +104,19 @@ def selftest():
     print(("PASS" if ok3 else "fail") + " | ★ 片段不在 ⇒ 必须 FATAL（%s）" % r3)
     bad += 0 if ok3 else 1
     n += 1
+    # ③b --check 的**退出码契约**：已打=0、可打=1、不可打=3
+    d3 = tempfile.mkdtemp(); os.makedirs(os.path.join(d3, "driver/others"))
+    open(target(d3), "w", encoding="utf-8").write(OLD_PARK + "\n" + OLD_TO + "\n")
+    rc_ok = subprocess.call([sys.executable, __file__, "--check", d3]) == 1
+    apply(d3)
+    rc_patched = subprocess.call([sys.executable, __file__, "--check", d3]) == 0
+    d4 = tempfile.mkdtemp(); os.makedirs(os.path.join(d4, "driver/others"))
+    open(target(d4), "w", encoding="utf-8").write("/* 别的东西 */\n")
+    rc_bad = subprocess.call([sys.executable, __file__, "--check", d4]) == 3
+    ok5 = rc_ok and rc_patched and rc_bad
+    print(("PASS" if ok5 else "fail") + " | ★ --check 退出码契约（可打=1/已打=0/不可打=3）")
+    bad += 0 if ok5 else 1
+    n += 1
     # ④ 空输入必须报：文件不存在
     r4 = apply(tempfile.mkdtemp())
     ok4 = r4.startswith("FATAL")
@@ -120,10 +134,17 @@ def main(argv):
     mode = argv[0]
     root = argv[1] if len(argv) > 1 else "/src/work/OpenBLAS-e2"
     if mode == "--check":
+        # ★ 退出码**就是契约**（2026-09-30 实测教训）：调用方（build-e2-lane.sh）只按它分支。
+        #   0 = 已打（幂等，不用动）  1 = 可打（该 apply）  3 = 不可打（源码版本变了 ⇒ 人工核）
         p = target(root)
-        s = open(p, encoding="utf-8", errors="surrogateescape").read() if os.path.exists(p) else ""
-        print("可打" if (OLD_PARK in s and MARK not in s) else ("已打" if MARK in s else "不可打（片段不符）"))
-        return 0
+        if not os.path.exists(p):
+            print("不可打（文件不存在）"); return 3
+        s = open(p, encoding="utf-8", errors="surrogateescape").read()
+        if MARK in s:
+            print("已打"); return 0
+        if OLD_PARK in s and OLD_TO in s:
+            print("可打"); return 1
+        print("不可打（片段不符 —— 源码版本变了？）"); return 3
     print(apply(root, revert=(mode == "--revert")))
     return 0
 
