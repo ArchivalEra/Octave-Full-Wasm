@@ -231,6 +231,15 @@ if (CELLS.includes('I')) {
     '★ I · 初始化前关池 ⇒ dlopen 能过（池线程是 dlonen 挂死的元凶 ⇒ dlsync 假设成立）',
     got.I.detail);
 }
+if (CELLS.includes('L')) {
+  // ★ 判别格：**先空闲一段时间**（让 OpenBLAS 的池线程从"自旋"转为"park"）再 dlopen。
+  //   返回 ⇒ 墙只在"池在自旋"时存在（修法可以是"确保空闲"或缩短自旋）；
+  //   仍挂 ⇒ **park 后的线程也不应答邮箱** ⇒ 任何长驻原生等待都不行（修法必须更深）。
+  console.log('--- 格 L：空闲 5s 后 dlopen ---');
+  got.L = await cell('L/空闲后dlopen', { timeout: CD_MS,
+    code: "pause(5); miniprobe([2,3;1,4]); disp('__E2DONE__');" });
+  check(got.L.verdict === 'returned', '★ L · 空闲后 dlopen 能过（墙只在自旋期）', got.L.detail);
+}
 if (CELLS.includes('A')) {
   console.log('--- 格 A：裸跑（期望"不返回"，复现既有实测）---');
   got.A = await cell('A/裸跑', {});
@@ -256,7 +265,7 @@ if (CELLS.includes('B')) {
 
 console.log('');
 console.log('════ 结论（工单 16 的二分阶梯）════');
-for (const k of ['C', 'E', 'F', 'D', 'G', 'H', 'I', 'A', 'B']) {
+for (const k of ['C', 'E', 'F', 'D', 'G', 'H', 'I', 'L', 'A', 'B']) {
   if (got[k]) console.log(`  ${k} : ${got[k].verdict}   ${got[k].detail}`);
 }
 const hung = k => got[k] && got[k].verdict === 'hung';

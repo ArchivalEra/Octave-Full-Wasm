@@ -128,3 +128,28 @@ Blocking on the main thread is very dangerous, see …/pthreads.html#blocking-on
 
 **下一步（本单的下一交付物）**：先做 B 的判别实验（便宜）；不行就走 A（写
 `patch-openblas-thread-yield.py` + 重建 + 重链 + 用同一格 C 判绿）。
+
+## 后续判别（2026-09-30 晚，全部实测）
+
+| 格 | 内容 | 结果 | 含义 |
+|---|---|---|---|
+| **G** | 只 `zeros(1,200e6)`（强制内存增长，**不 dlopen**） | **返回** | 否掉"增长被自旋挡住" |
+| **H** | 大 dgemm 1200²（**越过线程阈值**，不 dlopen） | **返回** | 线程池**计算**可用 |
+| **I** | 初始化前注入 `Module.ENV.OPENBLAS_NUM_THREADS=1` 后 dlopen | 仍挂 | ⚠️ 但**注入是否生效未验证**（读 `Module.ENV` 会把胶水打进 `unreachable`）⇒ 本格**不构成结论** |
+| **L** | `pause(5)` 空闲 5s（让池从自旋转 park）后 dlopen | **仍挂** | ⇒ **park 后的线程也不应答邮箱** ⇒ 墙不是"自旋期"，而是**任何长驻原生等待** |
+
+**开机期的反例（重要）**：boot 期间资产车道的 dlopen（`__init_web__.oct` / `webgraphics` / …）
+**全都成功** ⇒ **池是 boot 期间出生的**，且"池出生之前 dlopen 正常"。
+
+⇒ **修法据此收窄为三选一（都要动产物，不是页面侧能救的）**：
+1. **让 worker 在空闲时回到 JS 事件循环**（能在事件循环里应答邮箱）—— 需要给 OpenBLAS 的
+   空闲等待加"邮箱友好"的原语（Emscripten 侧提供 `_emscripten_thread_mailbox_await` /
+   `checkMailbox` 机制，见 `libpthread.js:1270,1291`）；**这是正解，但要重建 OpenBLAS + 重链**。
+2. **让池晚出生**：把"会用到的 `.oct` 全部 dlopen"挪到**池出生之前**（boot 早期）——
+   与资产车道的懒加载冲突（用户随时可能调新能力），只能是**部分缓解**。
+3. **避免 dlsync**：不用运行期 dlopen ⇒ 与 `.oct` 车道架构冲突。**不可选**。
+
+**本单未完成的部分（交接要点）**：
+- 上面第 1 条**尚未实施**（需要 `patch-openblas-thread-yield.py` + 重建 + 重链 + 用格 C 判绿）；
+- 第 2 条的可行性可用一个**便宜的实验**判定：在 boot 最早的钩子里 dlopen 一个 `.oct`
+  （若成功 ⇒ 池确实晚于它出生 ⇒ 可做"预热装载"）。
