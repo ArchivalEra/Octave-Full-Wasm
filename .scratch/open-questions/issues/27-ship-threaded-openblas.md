@@ -46,6 +46,14 @@ matmul 500² 中位数 0.006 s ⇒ ≈6.7× 收益保留）。本单 = 把这条
 **实测（两条分支）**：树已打 ⇒ 三个补丁 rc=0 跳过、idle-exit rc=0 跳过，阶段绿；
 把 idle-exit `--revert` 后再跑 ⇒ 它 rc=1 ⇒ **自动 apply** ⇒ 复查 rc=0 ⇒ 标记 grep=2 ⇒ 阶段绿。
 
+## 第②步进行中（2026-09-30）：正式（非 diag）产物已链出
+
+- `bash build/113/build-e2-lane.sh all` ⇒ rc=0（库 3,153,970 B / 2515 符号；patch 阶段走通了
+  "rc=1 可打 ⇒ apply ⇒ rc=0 已打"分支）；
+- `E2_OPENBLAS=/src/work/e2-openblas-lib-idleexit bash /src/bin/relink.sh link threads --out /src/websrc/e2-ie-final-out`
+  ⇒ **rc=0、verdict=ok**（声明 10 项全有实测背书），产物 sha **`f76db33dd5d36152…`**；
+- 站点 `/tmp/e2-final-site`（8795，带 COI）已装好该产物 + `lanes.js`，**全量回归跑中**。
+
 ## 步骤（照 B6/E2 车道的既有形状）
 
 1. 车道重建脚本里接上补丁（**幂等 + `--check`**，与另三个 `patch-openblas-*.py` 一致）；

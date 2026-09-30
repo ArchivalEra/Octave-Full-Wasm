@@ -253,7 +253,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/24-floor-matrix-old-engine.md` (3989 bytes)
 - `.scratch/open-questions/issues/25-sitewebgl-leftovers.md` (4240 bytes)
 - `.scratch/open-questions/issues/26-rebuild-lacks-lane-shim.md` (2735 bytes)
-- `.scratch/open-questions/issues/27-ship-threaded-openblas.md` (3892 bytes)
+- `.scratch/open-questions/issues/27-ship-threaded-openblas.md` (4467 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (15320 bytes)
 - `CONTEXT.md` (10001 bytes)
