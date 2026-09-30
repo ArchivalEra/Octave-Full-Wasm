@@ -175,8 +175,10 @@ const got = {};
 if (CELLS.includes('C')) {
   console.log('--- 格 C：只 dlopen 不进 LAPACK（miniprobe(1) 应干净报错）---');
   got.C = await cell('C/只dlopen', { timeout: CD_MS, code: "miniprobe(1); disp('__E2DONE__');" });
-  check(got.C.verdict === 'hung',
-    '★ C · 只 dlopen（.oct 在）⇒ **挂死**（连 LAPACK 都没进就挂 ⇒ 墙在装载段）', got.C.detail);
+  // 判据是"**返回与否**"，不是错误文本：装载成功 ⇒ 函数跑到自己的参数检查并干净报错
+  // （scalar ⇒ "must be a numeric matrix"；方阵 ⇒ 会走到 determinant）。两者都算返回。
+  check(got.C.verdict === 'returned',
+    '★ C · 只 dlopen（.oct 在）⇒ **返回**（装载段活着；修好前这里是挂死）', got.C.detail);
 }
 if (CELLS.includes('E')) {
   console.log('--- 格 E：纯 error() 路径（无 dlopen）---');

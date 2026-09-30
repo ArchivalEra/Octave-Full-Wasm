@@ -1204,3 +1204,17 @@ side-module 装载/符号解析之间的交互。
 **教训**：**页面资产的"同一份"是有限度的** —— 与"站点部署了什么"耦合的那部分
 （档清单）必须是**生成物**而不是手抄件；否则"同一份文件铺到所有站点"这件事本身
 就是错的。
+
+
+---
+
+## 工单 19 结案（2026-09-30）：`USE_THREAD=1` 的 dlopen 挂死 = **dlsync × 永驻 worker**，已修并实测
+
+根因（插桩实测）：`dlopen` 必须先 `__emscripten_dlsync_threads()` → 对**每个** pthread 发**同步代理**；
+OpenBLAS 的 server 线程进 `thread_server` 后**永不返回 JS 事件循环** ⇒ 应答不来 ⇒ 永久阻塞（100% CPU）。
+
+修法（`build/113/patch-openblas-idle-exit.py`）：空闲超时分支改为**让 worker 退出**
+（+ `blas_server_avail=0`，靠 OpenBLAS 自带懒重建），`THREAD_TIMEOUT` ≈0.27s → ≈1.5s。
+
+实测（新产物 8794）：**格 C 返回**（原挂死点）、D/H 返回、`bench-core` 矩阵乘 500² 中位数 **0.006 s**
+（与补丁前相同 ⇒ ≈6.7× 收益保留）。代价：空闲 ~1.5s 后池解散、下次 BLAS 重建 4 线程。

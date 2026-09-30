@@ -7,7 +7,7 @@
 
 **Blocked by:** None（工单 16 的定位已交付：`CELLS=C,E,F,D` 阶梯，见 NOTES-threads「工单 16 结案」）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** 两值可分辨 —— 修好后
 `CELLS=C,A PROBE_... sh test/browser/run.sh test/browser/probe-e2-threads.mjs <threaded产物站点>`：
@@ -187,3 +187,32 @@ Blocking on the main thread is very dangerous, see …/pthreads.html#blocking-on
 
 **备用方案（若上面的补丁让 BLAS 明显变慢）**：页面/宿主在"要 dlopen 之前"先显式
 `blas_thread_shutdown()`（OpenBLAS 已导出该符号）—— 只在装载资产的那几个时刻付一次代价。
+
+## ★★ Answer（2026-09-30）：修法落地并**实测通过** —— dlopen 的墙没了，收益完整保留
+
+**交付物**：
+1. `build/113/patch-openblas-idle-exit.py`（带 `--selftest` 4/0：能打 / 幂等 / **片段不在必须 FATAL** /
+   **文件不存在必须 FATAL**）；
+2. 补丁已应用于 `/src/work/OpenBLAS-e2`（标记 `OCTAVE-WASM-IDLE-EXIT` ×2）：空闲超时分支由
+   "永久 park"改为**让该 worker 退出**（走 shutdown 同一出口 + `blas_server_avail=0`，
+   OpenBLAS 自带懒重建），`THREAD_TIMEOUT` 由 ≈0.27 s 加大到 ≈1.5 s（避免池被反复拆建）；
+3. 重新打包到**独立**目录 `/src/work/e2-openblas-lib-idleexit`（没覆盖现役）；
+4. 线程车道树重编 + 重链（`--diag`）⇒ 产物 `verdict=ok`，sha `55b268ca81e42481…`。
+
+**判据实测（新产物站点 8794）**：
+| 判据 | 结果 |
+|---|---|
+| **格 C**（`.oct` 装载 = 原挂死点） | **returned**（`last_error=miniprobe: argument must be a numeric matrix` —— 函数跑到自己的参数检查 ⇒ 装载段活着） |
+| 格 D / H（纯算术，含越过线程阈值的大 dgemm） | returned |
+| **反向断言**：`bench-core` 矩阵乘 500² 中位数 | **0.006 s** —— 与补丁前 `e2_threaded_matmul500_s` **相同** ⇒ 相对车道的 ≈6.7× 收益**完整保留**（没有靠关线程换绿灯） |
+
+**机制回顾（三条实测事实）**：Emscripten 的 dlsync **跳过已结束的线程**；池线程在**线程函数返回后
+回到 JS 事件循环**（那时能应答邮箱）；OpenBLAS **自带懒重建**（`exec_blas` 里 `blas_server_avail==0`
+就 `blas_thread_init()`）。⇒ "空闲即解散"同时满足"dlopen 拿得到应答"与"多线程不丢"。
+
+**代价（如实记）**：空闲约 1.5 s 后池解散，下一次 BLAS 调用要重建 4 个线程（Emscripten 池里
+`pthread_create` 便宜，但仍有首次延迟）。**活跃计算期间不受影响**（实测收益未变）。
+
+**未做（本单范围之外，另开一张）**：把这套补丁**进正式车道流水线**（`build-w64-lane.sh` 同级的
+E2 车道重建脚本 + 全量回归 + 是否把 `USE_THREAD=1` 作为交付形态上线）——那是一次**换产物批次**，
+且是产品决定。
