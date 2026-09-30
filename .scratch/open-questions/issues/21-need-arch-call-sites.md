@@ -33,3 +33,21 @@ arpack、qrupdate、suitesparse×8）。**只有 glpk 那条路径实测验证�
 3. 结论回填 `build/113/NOTES-wasm64.md`（glpk 结案节的"验证范围"段）；
 4. 若发现"车道声明"在非 w64 车道下确实不该判（例如 threads 车道只注 `-pthread`），
    把判据写清楚：**什么时候**断言适用、什么时候不适用（可证伪）。
+
+## 精确清单（2026-09-30 复核：**10 处调用点**，工单原文写"9 处"略少）
+
+| 行 | 目标 | 备注 |
+|---|---|---|
+| `build-libs.sh:124` | `libz.a` | |
+| `:141` | `libbz2.a` | |
+| `:165` | `libglpk.a` | ← **唯一实测验证过的那条**（E5 自愈 / E6 反向） |
+| `:190` | `libfftw3.a` + `libfftw3f.a` | 同一行两处 |
+| `:227` | `libqhull_r.a` | |
+| `:252` | `libsndfile.a` | |
+| `:306` | `libhdf5.a` | |
+| `:342` | `libarpack.a` | |
+| `:361` | `libqrupdate.a` | |
+| `:451` | `lib<P>.a`（suitesparse 8 个库的循环体内） | 一处覆盖 8 个 |
+
+⇒ 逐条反向断言的做法：把该库的 `.a` 换成 **wasm32** 的（现役 `/src/deps` 那一份即可）再跑该库，
+期望 **FATAL 且点名架构不符**；9 个库目标 × 各一次 = 9 条记录（fftw 与 suitesparse 按行记）。
