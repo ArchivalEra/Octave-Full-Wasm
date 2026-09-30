@@ -256,6 +256,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/27-ship-threaded-openblas.md` (6230 bytes)
 - `.scratch/open-questions/issues/28-rebuild-wrong-install-prefix.md` (3872 bytes)
 - `.scratch/open-questions/issues/29-link-does-not-check-tree-prefix.md` (2568 bytes)
+- `.scratch/open-questions/issues/30-w64-fourcell-ship.md` (2155 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (15320 bytes)
 - `CONTEXT.md` (10001 bytes)
