@@ -1218,3 +1218,31 @@ OpenBLAS 的 server 线程进 `thread_server` 后**永不返回 JS 事件循环*
 
 实测（新产物 8794）：**格 C 返回**（原挂死点）、D/H 返回、`bench-core` 矩阵乘 500² 中位数 **0.006 s**
 （与补丁前相同 ⇒ ≈6.7× 收益保留）。代价：空闲 ~1.5s 后池解散、下次 BLAS 重建 4 线程。
+
+
+### E2 车道重建配方（**含工单 19 的 idle-exit 补丁**，2026-09-30 实测有效）
+
+```sh
+# ① 干净副本（排除构建产物，避免"换旗标不清树"那一族坑）
+tar -C /src/work/OpenBLAS-0.3.34 --exclude='*.o' --exclude='*.a' --exclude='*.so' \
+    --exclude='config.h' --exclude='Makefile.conf' -cf - . | tar -C /src/work/OpenBLAS-e2 -xf -
+# ② 四个补丁（都幂等、都带 --selftest）
+python3 /src/bin/patch-openblas-symbol-prefix.py --apply /src/work/OpenBLAS-e2 ob_
+python3 /src/bin/patch-openblas-emscripten.py   --apply /src/work/OpenBLAS-e2
+python3 /src/bin/patch-openblas-f77-ret.py      --apply /src/work/OpenBLAS-e2    # 按需
+python3 /src/bin/patch-openblas-idle-exit.py    --apply /src/work/OpenBLAS-e2    # ★ 工单 19
+# ③ 构建（线程 + SIMD；NUM_THREADS 与主模块 PTHREAD_POOL_SIZE 对齐）
+cd /src/work/OpenBLAS-e2 && make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
+     NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc -pthread" FC="/src/bin/emf77 -pthread" HOSTCC=gcc -j24
+#   ⚠️ `tests` 阶段（utest/*.exe）失败无妨 —— 我们不需要测试程序；库本体在此之前已产出。
+# ④ 组装 librefblas.a（摘掉 c_abs.o + 挂上 f77 包装对象）
+D=/src/work/e2-openblas-lib-idleexit; mkdir -p "$D"
+cp -f libopenblas_wasm128p-r0.3.34.a "$D/librefblas.a"; cd "$D"
+emar d librefblas.a c_abs.o ; emar r librefblas.a /src/work/e2-f77-wrappers.o
+# ⑤ 重链（车道模式 + E2 口子；**车道影子由 relink.sh 入口自己挂** —— 工单 26）
+E2_OPENBLAS="$D" bash /src/bin/relink.sh link threads --out /src/websrc/e2-idleexit-out --diag
+```
+
+**判据**（工单 19 用的就是这四条）：
+`CELLS=C,D,H sh test/browser/run.sh test/browser/probe-e2-threads.mjs <该产物站点>` ⇒ 全返回；
+`bench-core` 的 `矩阵乘 500x500` 中位数应 ≈ **0.006 s**（与补丁前相同 ⇒ 收益未丢）。
