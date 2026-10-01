@@ -76,7 +76,19 @@ def main(argv):
     st = state(root)
     if mode == "--check":
         print("blas_server.c：%s" % st)
-        return 0
+        # ★ **退出码是契约**（工单 27 给 idle-exit 定的形状，本补丁 2026-10-01 才补上）：
+        #   0 = 已打 ⇒ 调用方跳过；1 = 可打（pristine）⇒ 调用方 apply 后复查必须回 0；
+        #   3 = 不可打（形状不认识）。
+        #   ⚠️ 实测事故（`w64` + 线程版 OpenBLAS，本批最贵的一条）：本补丁原先一律返 0，
+        #   驱动当"已打"跳过 ⇒ `blas_server.c` 的 `struct rlimit`/`raise`/`SIGINT` 在
+        #   **wasm64 sysroot** 下编不过 ⇒ 少了 `blas_server.o`（它定义 `blas_cpu_number`）⇒
+        #   库被打包成"缺一个成员"，**链接照过、`verdict=ok`**，而**运行期页面崩**：
+        #   `bad export type for 'blas_cpu_number'`（未定义符号被当成 GOT 导入）。
+        if st == "patched":
+            return 0
+        if st == "pristine":
+            return 1
+        return 3
     if mode == "--apply":
         if st == "patched":
             print("已打过（幂等）")
@@ -101,6 +113,18 @@ def main(argv):
 
 
 # ── 自证（机制用**运行时生成的小补丁**验；记录本身做内容断言）────────────────────────
+def _rc_check(fixture_text):
+    """把夹具写进临时树，跑 `--check`，返回 rc（CLI 级：测**退出码契约**）。"""
+    d = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d, "driver/others"))
+    io.open(os.path.join(d, "driver/others/blas_server.c"), "w", encoding="utf-8").write(fixture_text)
+    try:
+        return main(["--check", d])
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def selftest():
     cases = []
     tmp = tempfile.mkdtemp()
@@ -139,6 +163,15 @@ def selftest():
              and "struct rlimit" in io.open(PATCH, encoding="utf-8").read()),
             ("★ 记录带 `a/` `b/` 前缀（`-p1` 可用）",
              lambda: io.open(PATCH, encoding="utf-8").read().startswith("--- a/")),
+        ]
+        # ★★ 退出码契约（2026-10-01；缺它 ⇒ 驱动跳过补丁 ⇒ 库缺成员 ⇒ 运行期页面崩）
+        cases += [
+            ("★ `--check`：**未打**（pristine）必须返 1（可打）—— 返 0 会被驱动当\"已打\"跳过",
+             lambda: _rc_check("#include <sys/resource.h>\nint x;\n") == 1),
+            ("★ `--check`：**已打**必须返 0",
+             lambda: _rc_check("#ifndef __EMSCRIPTEN__\n#include <sys/resource.h>\n#endif\n") == 0),
+            ("★ `--check`：**形状不认识**必须返 3（不可打，别硬打）",
+             lambda: _rc_check("int nothing_here;\n") == 3),
         ]
         bad = 0
         for name, fn in cases:

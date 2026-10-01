@@ -141,6 +141,20 @@ stage_build () {
     tail -12 "$LOGD/make.log" >&2; return 1
   fi
   echo "   make rc=$rc（utest 失败无妨）；库：$lib"
+  # ★ **"utest 失败无妨"不是"什么失败都无妨"**（2026-10-01 实测，第 6 条真缺陷）：
+  #   符号前缀补丁没打上时，`blas_server.c` 在 wasm64 sysroot 下编不过 ⇒ 少了
+  #   `blas_server.o`（它定义 `blas_cpu_number`）⇒ 库**缺成员**，而这里只看"库文件在不在"
+  #   ⇒ 打包、链接**全过**（`verdict=ok`），**运行期页面崩**（`bad export type for
+  #   'blas_cpu_number'`）。⇒ 判据必须落到**报错目标**上：utest/tests 之外的 `Error 1` 一律红。
+  local bad_err
+  bad_err=$(grep -E "^make(\[[0-9]+\])?: \*\*\* .*Error 1" "$LOGD/make.log" \
+            | grep -vE "utest|tests?/" | head -5 || true)
+  if [ -n "$bad_err" ]; then
+    echo "FATAL: make 里有 utest/tests 之外的失败 —— 库很可能是**缺成员**的（别打包）：" >&2
+    printf '%s\n' "$bad_err" | sed 's/^/       /' >&2
+    echo "       根因常是某个补丁没打上（补丁的 --check 退出码必须是契约）——先看 $LOGD/make.log" >&2
+    return 1
+  fi
   # ★ 架构断言（w64 车道硬判据）：与农场 `build-libs.sh:need_arch` **同一条判据** ——
   #   用 `llvm-readobj -h <归档>` 数 `Arch: wasm` vs `Arch: wasm64`，**逐成员**全绿才算过。
   #   ⚠️ 实测踩到的坑（2026-10-01，本单车库第一次跑就撞上）：**`Format:` 行恒为 `WASM`**，
