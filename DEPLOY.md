@@ -9,6 +9,8 @@
 | 文件/目录 | 说明 |
 |---|---|
 | `octave.wasm` / `octave.js` / `octave.data` | 主产物（Octave 11.3.0 + JSPI 交互线；wasm sha 见 `check-deploy-sha.sh`） |
+| `threads/` `w64/` `w64-base/` | **另外三档产物**（同名文件、子目录区分；选档表见下节与 `bridge/lane.js`） |
+| `lanes.js` | **档清单**（生成物）：这个站点**真的**部署了哪几档，页面同步读它 —— 别手改，要改跑 `build/gen-lanes.sh` |
 | `octave.build.json` | **产物身份证**（A1/A2）：只记**量到的事实**（`simd.v128` / `jspi_entry` / gl4es 命中 / 8 个字体 / IDBFS / fontconfig / 三件套 sha / BLAS 归档 sha / 导出条目数），`verdict=="ok"` 表示它被某个模式的声明核对过。页面开机读它填 `Capabilities`（缺了不致命） |
 | `octave-core.js` | **内核**（A2）：页面与 worker 共用的那一份；`index.html` 与 `octave-worker.js` 都依赖它 |
 | `matrix-android.html` | 矩阵自测页，**由 `build/113/gen-matrix-android.py` 生成**（= 当前 index.html + 尾块）—— 别手改 |
@@ -25,19 +27,29 @@
 现役 `octave.wasm` 的 sha 与 `measured.simd.v128` 见 `build/FACTS.json` 的 `wasm_sha` / `wasm_v128`（手查：
 `llvm-objdump -d octave.wasm | grep -c v128`）。
 
-## ★ 双档（B6）：`threads/` 子目录 + **宿主必须发 COI 头**
+## ★ 四档（工单 30，2026-10-01）：同名文件、按目录分档 + **宿主发 COI 头才吃到多线程/64 位**
 
-本站点带**两档产物**，文件名相同、目录不同：
+本站点带**四档产物**，文件名逐字相同，只有**目录**不同（选档表在 `bridge/lane.js` 的 `FILES`）：
 
-| 档 | 文件 | 什么时候用 |
-|---|---|---|
-| 基础档 | 根目录 `octave.wasm` / `octave.js` / `octave.data` | **任何**静态托管；页面默认回落到它 |
-| 线程档 | `threads/octave.{wasm,js,data}` | 宿主发了下面两个响应头时**自动**选它（多线程**运行时**就绪） |
+| 档 | 文件 | 什么时候用 | 硬前提 |
+|---|---|---|---|
+| `base` | 根目录 `octave.{wasm,js,data}` | **任何**静态托管的底线（页面默认回落到它） | 无 |
+| `threads` | `threads/octave.{wasm,js,data}` | 宿主发了 COI 头、但引擎**没有 memory64** | COI + `SharedArrayBuffer` |
+| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（**目标形态**：>4 GiB + 多线程） | COI + `SharedArrayBuffer` + memory64 |
+| `w64-base` | `w64-base/octave.{wasm,js,data}` | 引擎支持 memory64 但宿主**没发** COI 头（单线程 64 位回退） | memory64 |
 
-页面按**同步**判据选档（`crossOriginIsolated === true` 且 `SharedArrayBuffer` 可用），
-判据与两档的文件表都在 `bridge/lane.js`；显式覆盖用 `?lane=base` / `?lane=threads`。
+**选档判据是同步的**（加载胶水**之前**就得定档）：`crossOriginIsolated === true` 且
+`SharedArrayBuffer` 可用（轴 1）× `WebAssembly.Memory({address:'i64'})` 可用（轴 2）×
+**这个站点到底部署了哪几档**（轴 3 = `lanes.js`，由 `build/gen-lanes.sh` 按磁盘生成）。
+轴 3 存在的原因：只按能力选档会在"只部署了 base+threads"的站点上挑 `w64` 并 **404**
+（实测代价见工单 23）。显式覆盖：`?lane=base|threads|w64|w64-base`。
 
-要**启用线程档**，宿主必须对**整站**发这两个头（缺一个都不行）：
+- ⚠️ **覆盖不改物理前提**：在没有 COI 的页面上强选 `threads`/`w64` 会**响亮地失败**
+  （不是静默降级）—— 这是有意的可证伪档（`test/browser/probe-lane.mjs` 的 Cell 6/7）。
+- ⚠️ **无 memory64 的引擎必须落 `threads`**（不许选 `w64`）：真 Chromium 125（`mem64=false`）
+  实测过这一格（`w64-logs/floor-8761-old-chromium.log`）。
+
+要**吃到多线程 / 64 位档**，宿主必须对**整站**发这两个头（缺一个都不行）：
 
 ```
 Cross-Origin-Opener-Policy: same-origin
@@ -47,16 +59,20 @@ Cross-Origin-Embedder-Policy: require-corp
 - 本地参考实现（两条，口径相同）：
   · 仓库里：`python3 build/serve-coi.py --dir <站点目录> --port 8761`；
   · **交付包自带**：`python3 serve.py [端口] [目录]` —— B6 起它**默认就发这两个头**，
-    加 `--no-coi` 才是"不发头"的那一侧（那条路径正是"宿主不发 ⇒ 页面落基础档"的本地复现）。
-  **别用 `python3 -m http.server` 测线程档** —— 它发不了这两个头，页面会**静默**落回基础档
-  （不报错，只是没线程）。
-- GitHub Pages **发不了**这两个头 ⇒ 在线版本跑的是基础档（`threads/` 目录在那儿等于闲置，
-  不影响任何功能）。要线程档就得用能改响应头的托管（Cloudflare Pages / 自己的 nginx 等）。
-- ⚠️ **线程档的已知边界**：① worker 宿主（`?worker=1` 或手搓 `new Worker('octave-worker.js')`）
+    加 `--no-coi` 才是"不发头"的那一侧（那条路径正是"宿主不发 ⇒ 页面落 `w64-base`/`base`"的本地复现）。
+  **别用 `python3 -m http.server` 测多线程档** —— 它发不了这两个头，页面会**静默**落回基础档
+  （不报错，只是没线程、也没有 64 位地址空间）。
+- GitHub Pages **发不了**这两个头 ⇒ 在线版本跑的是 `base`（其余三档在那儿等于闲置，
+  不影响任何功能）。要多线程/64 位就得用能改响应头的托管（Cloudflare Pages / 自己的 nginx 等）。
+- ⚠️ **已知边界**：① worker 宿主（`?worker=1` 或手搓 `new Worker('octave-worker.js')`）
   **自动落基础档** —— 线程产物在 DedicatedWorker 里当主宿主未验证；② 同页多实例**支持**，
   但每个实例都必须拿到页面的选档计划（页面内部已处理）。细节见 `build/113/NOTES-threads.md`。
-- ⚠️ 线程档现在是 **refblas/lapack 的「SIMD + atomics」版**（不是 OpenBLAS）⇒ 多线程**运行时**已就绪，
-  但**数学还没并行化**；真正提速那一步（线程版 OpenBLAS 链进主模块）见 `build/113/NOTES-threads.md` 末两节。
+- ⚠️ **两档 BLAS 的现状**（别再抄旧话）：`threads/` 那份**就是 OpenBLAS**（来源见台账
+  `threads_blas_dir`），但交付形态是 **`USE_THREAD=0`（单线程）** ⇒ 收益来自 OpenBLAS 的内核
+  （见台账 `e2_matmul500_ratio` / `e2_lu800_ratio`），**不是**多线程；`USE_THREAD=1`（约 6.7×）
+  的技术判据已全过（工单 27 / 19），**发运决定待定**。
+- ⚠️ **`w64` 的收益是地址空间、不是速度**：>4 GiB 的内存分配实测已上键
+  （`w64_mem_5g_bytes` / `w64_mem_8g_bytes` / `w64_mem_shared_5g_bytes`）。
 
 ## 怎么部署（GitHub Pages）
 
@@ -72,7 +88,9 @@ Cross-Origin-Embedder-Policy: require-corp
 ```sh
 sh build/check-boot.sh <URL>                      # 页面起得来 + 解释器可算
 sh build/check-deploy-sha.sh <站点目录> <期望sha> <URL>   # 磁盘/HTTP 层 SHA
-node test/browser/probe-artifact-sha.mjs <URL> <sha>     # 页面实例化字节的自证
+node test/browser/probe-artifact-sha.mjs <URL> [sha]     # 页面实例化字节的自证
+#   ★ 四档站点：带头 ⇒ 页面跑 w64/ ⇒ 第二个参数留空（走 ③a 身份证判据：
+#     页面实例化的字节 == 那一档自己 octave.build.json 记的 sha），或传 **w64 档** 的 sha。
 ```
 
 ## 更新流程（以后每一批）

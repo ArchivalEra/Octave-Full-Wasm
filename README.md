@@ -189,12 +189,17 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
   （1 个已进上游该删、2 个局部重做，共 4 个文件）。
 - **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
   Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
-- **多线程（B6）**：站点里同时带**两档产物**（根目录 = 基础档，`threads/` = `-pthread` 的线程档），
-  页面按**同步**判据自动选档：宿主发了 `Cross-Origin-Opener-Policy: same-origin` +
-  `Cross-Origin-Embedder-Policy: require-corp` ⇒ 选线程档（多线程**运行时**就绪），否则落基础档（任何静态
-  托管都能跑，这条红线没动）。本地带头服务：`python3 build/serve-coi.py --dir <站点> --port 8761`。
-  现状边界：**数学还没并行化**（线程档的 BLAS 是 refblas/lapack 的 SIMD+atomics 版，不是 OpenBLAS）、
-  **worker 宿主自动落基础档**；详见 `DEPLOY.md` 的「双档」一节与 `build/113/NOTES-threads.md`。
+- **多线程 / 64 位（B6 + wasm64；2026-10-01 起站点是「四档」）**：站点里带**四份产物**
+  （根目录 = `base` 基础档，`threads/` = wasm32 线程档，`w64/` = memory64+线程（**>4 GiB**，目标形态），
+  `w64-base/` = memory64 单线程回退），页面按**同步**判据自动选档：宿主发了
+  `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
+  且引擎支持 memory64 ⇒ `w64`；没有 memory64 ⇒ `threads`；没有 COI ⇒ `w64-base` / `base`
+  （任何静态托管的底线，这条红线没动）。站点**真的**部署了哪几档由生成的 `lanes.js` 声明
+  （与能力判据取交集，防 404）。本地带头服务：`python3 build/serve-coi.py --dir <站点> --port 8761`。
+  现状边界：**数学还没并行化**（`threads/` 那份是 OpenBLAS 的 `USE_THREAD=0` 单线程形态 ——
+  收益来自内核而非线程；`USE_THREAD=1` 的 6.7× 技术判据已过、发运决定待定）、
+  **worker 宿主自动落基础档**；详见 `DEPLOY.md` 的「四档」一节、
+  `build/113/NOTES-threads.md` 与 `build/113/NOTES-wasm64.md`。
 - **结果**：三道闸门（能编能跑数值对 / `.oct` side module 可用 / **免 COI**）**全部通过**；
   8761 已切到 11.3.0，7.2 快照留在 `/mnt/hdd/octave-wasm-build/site-72bak/`。
   9 个长尾库（glpk/qhull/fftw3+3f/sndfile/qrupdate/hdf5/arpack/SuiteSparse）全部重开。
@@ -259,8 +264,8 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/30-w64-fourcell-ship.md` (5732 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (16696 bytes)
-- `CONTEXT.md` (10001 bytes)
-- `DEPLOY.md` (5822 bytes)
+- `CONTEXT.md` (10597 bytes)
+- `DEPLOY.md` (7843 bytes)
 - `HANDOFF.md` (30671 bytes)
 - `HISTORY.md` (287214 bytes)
 - `LICENSE` (34523 bytes)
