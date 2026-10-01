@@ -92,7 +92,7 @@ check_one () {  # $1=补丁名  $2=附加参数（可空）⇒ 打印末行并�
 }
 
 stage_patch () {
-  say "[patch] 四个补丁（`--check` 退出码当契约 + apply 后复查）"
+  say "[patch] 四个补丁（--check 的退出码当契约 + apply 后复查）"
   local spec f extra out
   for spec in $PATCHES; do
     f="${spec%%:*}"; extra="${spec#*:}"
@@ -120,6 +120,14 @@ stage_patch () {
 stage_build () {
   say "[build] make（USE_THREAD=1 + SIMD，车道旗标：$LANE_FLAGS，-j$JOBS）→ 日志 $LOGD/make.log"
   cd "$WORKDIR" || return 1
+  # ★ **先强制 clean**（2026-10-01 实测踩到）：`patch-openblas-symbol-prefix.py` 改的是
+  #   `Makefile.system` 里的 `-DNAME=` —— **那不是文件依赖**，make 按 mtime 判"全部最新"
+  #   ⇒ **零重编**，把没前缀的旧对象原样重打包（本仓对这条形状有专名：见 NOTES-wasm64 的
+  #   glpk 悬案"换旗标不清树 ⇒ make 零重编 ⇒ 静默错误架构"）。症状离根因很远：链到 wasm-opt
+  #   才炸（76 条 mismatch 一条没消）。
+  set +e
+  emmake make clean > "$LOGD/make-clean.log" 2>&1
+  set -e
   set +e
   make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
        NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS" FC="/src/bin/emf77 $LANE_FLAGS" \

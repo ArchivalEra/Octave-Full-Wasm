@@ -75,6 +75,33 @@ HEAD = """/* 自动生成，别手改（生成器：build/113/gen-f77-wrappers.p
 """
 
 
+# ★ **ABI 模式（工单 33，2026-10-01）**：默认 `wasm32`（历史行为：所有参数在 wasm 里都是 i32，
+#   一律写 `void*`）。`--abi wasm64` 时**必须按量到的类型逐字出参表** —— 因为 wasm64 下
+#   指针是 **i64** 而 Fortran 隐藏长度（f2c 的 `ftnlen`）是 **i32**：
+#   包装的签名要与**调用方**完全一致，写成清一色 `void*` 会留下 `int` vs `void*` 的 mismatch
+#   （实测：不改这一处，76 条 mismatch 一条都消不掉）。
+ABI = "wasm32"
+_PTYPE = {"i64": "void*", "i32": "int", "f64": "double", "f32": "float"}
+
+
+def param_types(ca, k, abi):
+    """按 ABI 出包装的参数类型表；wasm64 下前 k 个（要转发给 OpenBLAS 的）必须是指针宽度。"""
+    if abi != "wasm64":
+        return ["void *a%d" % (i + 1) for i in range(len(ca))]
+    out = []
+    for i, t in enumerate(ca):
+        if t not in _PTYPE:
+            raise SystemExit("FATAL: wasm64 ABI 下参数类型 %r 不在映射表里 ⇒ 拒绝生成" % t)
+        # 指针写成 `void *aN`（与 wasm32 那条路的排版一致，纯粹为了生成物好读）
+        out.append(("void *a%d" if _PTYPE[t] == "void*" else "%s a%d") % (i + 1)
+                   if _PTYPE[t] == "void*" else "%s a%d" % (_PTYPE[t], i + 1))
+    bad = [i + 1 for i, t in enumerate(ca[:k]) if t != "i64"]
+    if bad:
+        raise SystemExit("FATAL: wasm64 ABI 下前 %d 个参数里第 %s 个不是指针宽度 ⇒ 拒绝生成"
+                         "（前 k 个是要原样转发给 OpenBLAS 的）" % (k, bad))
+    return out
+
+
 def parse_log(text):
     """返回 [(sym, caller_args, caller_ret, ob_args, ob_ret)]（按出现顺序去重）。"""
     out, seen = [], set()
@@ -148,7 +175,7 @@ def render(pairs, exclude=None, extras=None):
             raise SystemExit("FATAL: %s OpenBLAS 比调用方多 %d 个参数，且不是规则④的 sret ⇒ 拒绝生成"
                              % (sym, m - n))
         call_args = ", ".join(names)
-        wargs = ", ".join("void *a%d" % (i + 1) for i in range(n))
+        wargs = ", ".join(param_types(ca, k, ABI))
         odecl = ", ".join(["void*"] * m)
         if sym in special:
             # 透传：声明与 OpenBLAS 一致、原样转发（不碰返回约定）
@@ -213,6 +240,12 @@ def main(argv):
     if "--from-log" not in argv or "--out" not in argv:
         print(__doc__.strip().split("用法")[-1].strip(), file=sys.stderr)
         return 2
+    global ABI
+    if "--abi" in argv:
+        ABI = argv[argv.index("--abi") + 1]
+        if ABI not in ("wasm32", "wasm64"):
+            print("FATAL: --abi 只认 wasm32|wasm64（给了 %r）" % ABI, file=sys.stderr)
+            return 2
     text = io.open(argv[argv.index("--from-log") + 1], encoding="utf-8",
                    errors="replace").read()
     pairs = parse_log(text)
@@ -263,6 +296,26 @@ wasm-ld: warning: function signature mismatch: ztrsv_
 """
 
 
+# wasm64 夹具（工单 33）：指针 i64 + 隐藏长度 i32 —— 包装的参数表必须**逐字跟调用方**。
+_W64 = """wasm-ld: warning: function signature mismatch: ztrsv_
+>>> defined as (i64,i64,i64,i64,i64,i64,i64,i64,i32,i32,i32) -> i32   in /x/liblapack.a(e.o)
+>>> defined as (i64,i64,i64,i64,i64,i64,i64,i64) -> void  in /y/e2-openblas-lib-w64/librefblas.a(ztrsv.o)
+"""
+_W64_BAD = _W64.replace("(i64,i64,i64,i64,i64,i64,i64,i64,i32,i32,i32)",
+                        "(i32,i64,i64,i64,i64,i64,i64,i64,i32,i32,i32)")
+
+
+def _w64_src(text=None):
+    global ABI
+    old = ABI
+    ABI = "wasm64"
+    try:
+        src, _st = render(parse_log(text or _W64), exclude={})
+    finally:
+        ABI = old
+    return src
+
+
 def selftest():
     src, stats = render(parse_log(_L), exclude={})          # 形状测试不看特例名单
     src2, _st2 = render(parse_log(_L))
@@ -300,6 +353,13 @@ def selftest():
          lambda: _raises(lambda: render(parse_log(_L.replace(
              ">>> defined as (i32,i32) -> i32   in /y/librefblas.a(lsame.o)",
              ">>> defined as (i32,f64) -> i32   in /y/librefblas.a(lsame.o)"))))),
+        # ★★ wasm64（工单 33）：参数表逐字跟调用方；前 k 个非指针宽度必须拒
+        ("★ wasm64：隐藏长度出 `int`、指针出 `void*`（清一色 void* 会留下 mismatch）",
+         lambda: "int ztrsv_(void *a1, void *a2, void *a3, void *a4, void *a5, void *a6, void *a7, "
+                 "void *a8, int a9, int a10, int a11) "
+                 "{ ob_ztrsv_(a1, a2, a3, a4, a5, a6, a7, a8); return 0; }" in _w64_src()),
+        ("★ wasm64：前 k 个参数不是指针宽度 ⇒ 必须拒（那是要原样转发给 OpenBLAS 的）",
+         lambda: _raises(lambda: _w64_src(_W64_BAD))),
     ]
     bad = 0
     for name, fn in cases:

@@ -116,7 +116,14 @@ def main(argv):
             print("FATAL: 两处名字生成行都没找到 ⇒ 这个 OpenBLAS 版本的 Makefile 与脚本假设不符",
                   file=sys.stderr)
             return 3
-        return 0
+        # ★ **退出码是契约**（工单 27 给 idle-exit 定的形状，本补丁 2026-10-01 才补上）：
+        #   0 = 已打（无可改）⇒ 调用方**跳过**；1 = 可打 ⇒ 调用方 apply 后复查必须回 0；
+        #   3 = 不可打（形状不认识）。
+        #   ⚠️ 实测事故：本补丁原先两种状态都返 0，而驱动（`build-e2-lane.sh` 的 patch 阶段）
+        #   把 rc=0 当"已打 ⇒ 跳过" ⇒ **符号前缀根本没打**，OpenBLAS 的 76 个 Fortran 入口
+        #   不带 `ob_` ⇒ 生成的 f77 包装（都转发 `ob_*`）接不上 ⇒ 76 条 mismatch 一条都消不掉，
+        #   而链路一路跑到 wasm-opt 才炸（`call param types must match` / 解析失败）。
+        return 1 if raw > 0 else 0
     if mode == "--apply":
         prefix = argv[2] if len(argv) > 2 else "ob_"
         if done and not raw:
@@ -154,6 +161,18 @@ OTHER_LINE = -DNAME=$(*F)$(BU)
 """
 
 
+def _rc_check(fixture_text):
+    """把夹具写进临时树，跑 `--check`，返回 rc（CLI 级：测的是**退出码契约**）。"""
+    import tempfile
+    d = tempfile.mkdtemp()
+    io.open(os.path.join(d, TARGET), "w", encoding="utf-8").write(fixture_text)
+    try:
+        return main(["--check", d])
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def selftest():
     cases = [
         ("改后出现 $(E2PREFIX)，且 -DNAME 那一项被改",
@@ -168,6 +187,13 @@ def selftest():
         ("★ `--revert` 逐字节还原", lambda: revert_text(patch_text(_S, "ob_")[0]) == _S),
         ("★ **零值守卫**：形状不符时不改（返回 0 处，调用方据此报 FATAL）",
          lambda: patch_text("nothing here\n", "ob_")[1] == 0),
+        # ★★ 退出码契约（工单 27 的形状；本补丁 2026-10-01 补上 —— 缺它 ⇒ 漏打，见 main 的注释）
+        ("★ `--check`：**未打**的树必须返 1（可打）—— 返 0 会被驱动当成\"已打\"而跳过",
+         lambda: _rc_check(_S) == 1),
+        ("★ `--check`：**已打**的树必须返 0（驱动据此跳过）",
+         lambda: _rc_check(patch_text(_S, "ob_")[0]) == 0),
+        ("★ `--check`：**形状不认识**的树必须返 3（不可打，别硬打）",
+         lambda: _rc_check("nothing here\n") == 3),
     ]
     bad = 0
     for name, fn in cases:
