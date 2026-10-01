@@ -147,8 +147,12 @@ stage_build () {
   #   ⇒ 打包、链接**全过**（`verdict=ok`），**运行期页面崩**（`bad export type for
   #   'blas_cpu_number'`）。⇒ 判据必须落到**报错目标**上：utest/tests 之外的 `Error 1` 一律红。
   local bad_err
+  #   判据落到**目标类型**上：`Error 1` 且目标**不是** `.exe`（utest 的测试程序是已知无妨的）
+  #   ⇒ 才是"真有一块没编出来"。为什么不用 `utest|tests/` 过滤：实测那些测试程序**由顶层
+  #   Makefile 构建**，报错行是 `Makefile:265: xscblat1.exe`（路径里根本没有 utest）⇒
+  #   第一版把这批误判成致命（自己的判据先假红）。
   bad_err=$(grep -E "^make(\[[0-9]+\])?: \*\*\* .*Error 1" "$LOGD/make.log" \
-            | grep -vE "utest|tests?/" | head -5 || true)
+            | grep -vE "\.exe($| )" | head -5 || true)
   if [ -n "$bad_err" ]; then
     echo "FATAL: make 里有 utest/tests 之外的失败 —— 库很可能是**缺成员**的（别打包）：" >&2
     printf '%s\n' "$bad_err" | sed 's/^/       /' >&2

@@ -3589,3 +3589,35 @@ refblas，`97affe0`）。
 
 **顺带**：`bench-core.mjs` 的 `fft 1e6` 一项在实测里 >90 s×3 次仍不出结果（四档串行必撞 900 s 看门狗）
 ⇒ 四档对比改用新仪器 `bench-lanes.mjs`（只用纯计算，显式带 `?lane=`）。
+
+### 5.74 w64 + 线程版 OpenBLAS 建成并实测（工单 33/35/36，2026-10-01，branch `wasm64`）
+
+用户 2026-10-01 点名的目标形态（"当然是 w64+thread 啊"）：**memory64 × `USE_THREAD=1` 的 OpenBLAS**。
+四档里此前没有这一格（`w64` 用 refblas、OpenBLAS 只在 wasm32 线程档）。本批把它建出来、跑起来、并量了。
+
+**结果**（台账 `w64_ob_*`）：`verdict=ok`、`declared` 三条齐（threads/wasm64/e2_openblas）、
+残留 mismatch 1（与 wasm32 相同）、未定义符号 6（已知那批）；
+**装机（8849）开机自检 1.3 s、四格选档 33/0**；
+**matmul 500² 0.046 s → 0.007 s（6.6×）**、lu(800) 0.080 → 0.019 s（4.2×），
+比 wasm32 的 OpenBLAS 档还快 ⇒ **i64 的代价远小于线程收益**。堆上限不变（1.49 GiB）。
+
+**路上抓到的 7 条静默缺陷**（全部已修 + 自证；形状全是"链得过 / `verdict=ok` / 自检全绿，而结果是错的"）：
+
+1. `relink.sh rebuild` 不导出**车道依赖**（`DEPS`/`D`/`TARGET_HOST`）⇒ configure 的 Fortran 自检失败（工单 32a）；
+2. 同一个 `rebuild` 的**线程开关**对 `w64` 配成 `WITH_THREADS=0`（它是 pthread 车道）⇒ 树自相矛盾（工单 32b）；
+3. 树构建没导出**车道 `F2C_PREFIX`** ⇒ wasm64 下 `ftnlen` 宽度分叉（`/usr/local` 给 i64、`/usr/local-w64` 给 i32）
+   ⇒ 26 条 mismatch ⇒ wasm-opt 判模块非法（工单 34）；
+4. `patch-openblas-symbol-prefix.py --check` **退出码不是契约**（一律 0）⇒ 驱动当"已打"跳过 ⇒ 符号没有 `ob_`
+   ⇒ 76 条 mismatch（工单 35-①）；
+5. `patch-openblas-emscripten.py` 同样 ⇒ `blas_server.c` 在 wasm64 sysroot 下编不过 ⇒ **库缺成员**
+   ⇒ 链接照过、**页面崩**（`bad export type for 'blas_cpu_number'`）（工单 35-②）；
+6. E2 驱动的 `stage_build` 把"库文件存在"当"只有 utest 失败" ⇒ 缺成员的库被打包（工单 35-③）；
+7. 包装名单的**收割口径**：必须在"未打前缀补丁"的配置下收，否则漏掉 23 个"签名本来就一致、只需透传壳"的
+   入口（`ddot_`/`dnrm2_`/`dasum_`/`idamax_`…）⇒ 29 个未定义符号在运行期变 JS 导入（工单 36）。
+   而那 23 个里**有字符参数**的 9 个，其隐藏长度在 wasm64 下是 i32 ⇒ 得按链接器量到的调用方签名逐字改类型。
+
+**排查链（可复跑）**：页面报 `Cannot read properties of undefined (reading 'value')`
+→ 栈指 `reportUndefinedSymbols` → 给 glue 的 `typeof value.value` 加 undefined 守门后**点名符号**
+（`blas_cpu_number` / `zdrot_k`）→ `emnm` 对比 wasm32/w64 两份归档找差异 → 回到 `make.log` 看哪块没编出来。
+
+**教训（本仓第 N 次）**：`verdict=ok` **不覆盖运行期路径**；这条链的验收判据必须含**装机开机自检**。

@@ -7,7 +7,7 @@
 
 **Blocked by:** 工单 32（rebuild 的车道依赖，已修）；工单 19/27（idle-exit 补丁与 E2 车道脚本，已就绪）
 
-**Status:** ready-for-agent（库已建成；链接与运行期正在按工单 36 的收割口径收尾；**发运**仍要人拍板）
+**Status:** resolved（构建+链接+运行期+竞速全部完成；**发运**是产品决定 —— 与工单 27 同一面）
 
 **Settling:** ②的判据（构建后）：
 1. `bash /src/bin/build-e2-lane.sh --lane w64 …` 产出的库**逐成员**是 wasm64（自证写进脚本）；
@@ -53,3 +53,26 @@
   正在按该配方重跑（revert → build → pack-raw → 收割链 → gen 包装 → apply → build → pack → 重链）。
 - 顺带记：**`verdict=ok` 不保证跑得起来** —— 本次两次都是"链过、自检绿、页面崩"
   （缺成员 / 未定义符号变导入）。⇒ 这条链的验收判据**必须**含装机开机自检。
+
+## 结案（2026-10-01）：建成、跑起来、并更快
+
+- 库：`E2_LANE=w64` ⇒ 1968 成员全 wasm64；
+- 链接：`verdict=ok`、`declared` 三条齐（threads/wasm64/e2_openblas）、残留 mismatch **1**（与 wasm32 相同）、
+  未定义符号 6（全是已知的 `cgejsv_`/`zgejsv_`/GL 那批）；
+- **运行期**：装机（8849）开机自检 **1.3 s**、四格选档 `probe-lane` **33/0**；
+- **竞速**（`bench-lanes.mjs`，同机同仪器，台账 `w64_ob_matmul500_s` / `w64_ob_lu800_s` /
+  `w64_ob_matmul500_speedup`）：
+
+| 用例 | 现役 `w64`（refblas） | 新 `w64`（线程版 OpenBLAS） | 倍数 |
+|---|---|---|---|
+| matmul 500² | 0.046 s | **0.007 s** | **6.6×** |
+| lu(800) | 0.080 s | **0.019 s** | **4.2×** |
+
+  且比 wasm32 的 OpenBLAS 档（`e2_matmul500_s`）还快 ⇒ **memory64 的 i64 代价远小于线程收益**。
+- 堆上限**没变**（`mem_live_ceiling_gib` 1.49 GiB / `W64_BIG_HEAP=no`）—— "又大又快"里的"大"仍要工单 31 第二半。
+
+## 发运（待拍板）
+
+与工单 27 是同一个决定面：**是否把"线程版 OpenBLAS"作为交付形态**（现役交付是 `threads/` 的
+`USE_THREAD=0` 形态）。若要发运，改动面 = `w64/` 一档（其余三档 sha 不变），走
+`build/promote-w64-lane.sh` 那一套 + 全量回归 + 开机自检。

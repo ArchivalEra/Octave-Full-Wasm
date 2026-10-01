@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-10-01T10:19:15+0800",
+ "generated": "2026-10-01T12:05:04+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -367,6 +367,24 @@
    "cmd": "同上",
    "source": "w64-logs/e2-w64-build.log",
    "note": "必须是 0（side module 的指针宽度必须与主模块一致）"
+  },
+  "w64_ob_matmul500_s": {
+   "value": 0.007,
+   "cmd": "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8849/ w64 > w64-logs/bench-ob-w64.log",
+   "source": "w64-logs/bench-ob-w64.log",
+   "note": "w64+线程版 OpenBLAS（memory64+pthread+USE_THREAD=1）的矩阵乘 500² 中位数"
+  },
+  "w64_ob_lu800_s": {
+   "value": 0.019,
+   "cmd": "同上（8849 那轮）",
+   "source": "w64-logs/bench-ob-w64.log",
+   "note": "w64+线程版 OpenBLAS 的 lu(800) 中位数"
+  },
+  "w64_ob_matmul500_speedup": {
+   "value": 6.6,
+   "cmd": "派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项",
+   "source": "派生（两个 bench 日志）",
+   "note": "新 w64（OpenBLAS）相对现役 w64（refblas）的加速倍数"
   },
   "mem_live_ceiling_gib": {
    "value": 1.49,

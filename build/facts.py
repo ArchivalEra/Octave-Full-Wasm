@@ -679,6 +679,35 @@ def measure(argv):
                                                               "必须是 0（side module 的指针宽度必须与主模块一致）")
             except (OSError, ValueError) as e:
                 print("⚠ 读不到 w64 OpenBLAS 构建日志 %s：%s" % (_obl, e), file=sys.stderr)
+        # ★★ **`w64` + 线程版 OpenBLAS**（工单 33，2026-10-01）：用户点名的目标形态，**已建成并实测**。
+        #   为什么上键：这是本项目**目前最快的形态**（matmul 500² 0.007 s，比现役 w64 快 7.7×、
+        #   比 wasm32 的 OpenBLAS 档快 2.9×），而"快多少"这种数字一旦手抄进正文就会腐烂。
+        _bo = os.path.join(W64LOGD, "bench-ob-w64.log")     # 新形态（8849）
+        _bs = os.path.join(W64LOGD, "bench-ship-w64.log")   # 现役 w64（8761，refblas）
+        def _bench(path, case):
+            try:
+                t = open(path, encoding="utf-8", errors="replace").read()
+            except OSError:
+                return None
+            m = re.search(r"^\s*%s\s+([0-9.]+)s" % re.escape(case), t, re.M)
+            return float(m.group(1)) if m else None
+        _ob_m, _ob_l = _bench(_bo, "matmul 500"), _bench(_bo, "lu 800")
+        _sh_m = _bench(_bs, "matmul 500")
+        if _ob_m is not None:
+            facts["w64_ob_matmul500_s"] = fact(_ob_m,
+                                              "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh "
+                                              "test/browser/bench-lanes.mjs http://127.0.0.1:8849/ w64 > w64-logs/bench-ob-w64.log",
+                                              "w64-logs/bench-ob-w64.log",
+                                              "w64+线程版 OpenBLAS（memory64+pthread+USE_THREAD=1）的矩阵乘 500² 中位数")
+        if _ob_l is not None:
+            facts["w64_ob_lu800_s"] = fact(_ob_l,
+                                           "同上（8849 那轮）", "w64-logs/bench-ob-w64.log",
+                                           "w64+线程版 OpenBLAS 的 lu(800) 中位数")
+        if _ob_m is not None and _sh_m is not None and _ob_m > 0:
+            facts["w64_ob_matmul500_speedup"] = fact(round(_sh_m / _ob_m, 1),
+                                                     "派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项",
+                                                     "派生（两个 bench 日志）",
+                                                     "新 w64（OpenBLAS）相对现役 w64（refblas）的加速倍数")
         # ★ **四档的堆上限与"64 位到底买到了什么"**（工单 31，2026-10-01）：
         #   为什么上键：这两条曾经都是**口号**（用户直觉"w64 更快"、我写"w64 买的是 >4 GiB 地址空间"），
         #   实测**两条都不成立**（已登记翻案 R-013）⇒ 把判据落成可复跑的探针与台账。

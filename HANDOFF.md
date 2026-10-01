@@ -151,6 +151,19 @@
    现代 Chromium 同一条判据期望 `w64`（`w64-logs/floor-8761-chromium.log`）。
    **引擎矩阵**（`floor_matrix_*`）：Chromium 154 / Firefox / WebKit 三台落 `w64`，Chromium 125 落 `threads`。
 
+## 1b. ⭐ 已建成、实测、**待拍板发运**：`w64` + 线程版 OpenBLAS（工单 33，2026-10-01）
+
+用户点名的形态（"当然是 w64+thread 啊"）**已经建出来并跑起来了**（实验站点 8849，**未 promote**）：
+
+- 产物：memory64 + pthread + `USE_THREAD=1` 的 OpenBLAS + idle-exit 补丁 ⇒ `verdict=ok`，
+  `declared` 三条齐（`threads`/`wasm64`/`e2_openblas`），烘死路径 `-w64`；装机**开机 1.3 s**、
+  四格选档 `probe-lane` **33/0**；残留 mismatch 1（与 wasm32 那份相同）。
+- **速度**（台账 `w64_ob_matmul500_s` / `w64_ob_lu800_s` / `w64_ob_matmul500_speedup`）：
+  matmul 500² **0.007 s**、lu(800) **0.019 s** —— 比现役 `w64`（refblas）快 **6.6×**，
+  且比 wasm32 的 OpenBLAS 档（`e2_matmul500_s`）**还快** ⇒ i64 的代价远小于线程收益。
+- 堆上限**没变**（`mem_live_ceiling_gib` / `W64_BIG_HEAP=no`）：要"又大又快"，"大"那一半仍要工单 31 第二半。
+- **发运 = 产品决定**（与工单 27 同一面）：改动面只有 `w64/` 一档，其余三档 sha 不变。
+
 ## 2. 铁律（违反会被拦或返工）
 
 **路径**：仓库 `/mnt/hdd/zcode-projects/Octave-Full-Wasm`（**唯一**可改的 git 仓）；
@@ -308,6 +321,9 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `w64_mem_shared_5g_bytes` | **5242880000**（COI 页 shared memory64 分配 80000 页（buffer 是 SharedArrayBuffer）） | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
 | `w64_ob_lib_wasm32_members` | **0**（必须是 0（side module 的指针宽度必须与主模块一致）） | `同上` |
 | `w64_ob_lib_wasm64_members` | **1557**（w64 车道线程版 OpenBLAS 归档里 wasm64 成员数） | `E2_LANE=w64 docker exec o113 bash /src/bin/build-e2-lane.sh src patch build > w64-logs/e2-w64-build.log（读那行架构断言）` |
+| `w64_ob_lu800_s` | **0.019**（w64+线程版 OpenBLAS 的 lu(800) 中位数） | `同上（8849 那轮）` |
+| `w64_ob_matmul500_s` | **0.007**（w64+线程版 OpenBLAS（memory64+pthread+USE_THREAD=1）的矩阵乘 500² 中位数） | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8849/ w64 > w64-logs/bench-ob-w64.log` |
+| `w64_ob_matmul500_speedup` | **6.6**（新 w64（OpenBLAS）相对现役 w64（refblas）的加速倍数） | `派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项` |
 | `w64_oct_files` | **46**（车道 `.oct` 总数） | `同上（文件名：oct-wasm64.txt 的第二个数）` |
 | `w64_oct_wasm64` | **46**（`.oct` 车道里 wasm64 的个数（side module 的指针宽度必须与主模块一致）） | `bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/llvm-readobj 逐个量）` |
 | `w64_shared_memory` | 是（目标形态 = memory64 **+ 多线程**（shared 是这个轴的硬身份）） | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.threads.shared_memory` |
@@ -320,7 +336,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-10-01T10:19:15+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-10-01T12:05:04+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
@@ -335,7 +351,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20261001-093418` · **0 套 / 0 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 1 套 / 33 PASS） |  |
+| 最近一次**全绿**回归 | `20261001-115743` · **0 套 / 0 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 1 套 / 33 PASS） |  |
 | 交付包 | `octave-full-wasm-site-20261001` · tar.zst 91,025,991 B · `2a4bfb92e57c39d4…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `wasm64`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

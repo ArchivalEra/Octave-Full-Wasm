@@ -6,7 +6,7 @@
 
 **Blocked by:** None（工单 32/34/35 已修；树与补丁现在都对了）
 
-**Status:** ready-for-agent（配方已明确，正在按它重跑）
+**Status:** resolved（按配方重跑成功：开机 1.3 s、四格 33/0、matmul 6.6×）
 
 **Settling:** 按下面"正确配方"重跑后：`relink.sh link w64`（带 `E2_OPENBLAS`）⇒ `verdict=ok`
 **且** `sh build/check-boot.sh http://127.0.0.1:<实验站点>/` ⇒ 开机过（**这一条才是判据**）。
@@ -46,3 +46,19 @@
 
 ⚠️ 第 4 步的 clean 与第 1 步的 revert 都不能省：前者漏了会"零重编"（工单 35 第 5 条），
 后者漏了收割就退化成"只收签名不同的那批"，于是本单的 29 个未定义符号会原样出现。
+
+## 结果（2026-10-01）
+
+按本单配方重跑（revert 前缀 → build → pack-raw → 收割链 → 生成 76 个 mismatch 派生包装 →
+**补 23 个"签名一致"的透传壳**（从 wasm32 那份可用包装对象搬来，见下） → apply 前缀 → build → pack → 重链）：
+
+- mismatch **76 → 1**（残留那条是**既有**的 `zdotu_`，wasm32 那份同样带）；
+- 未定义符号 = 6（全是已知的 `cgejsv_`/`zgejsv_`/GL）；
+- `verdict=ok` + **开机自检 1.3 s** + 四格选角 33/0 + matmul 500² **0.007 s**。
+
+### 补充教训（第 7 条）：那 23 个"透传壳"的**参数类型**在 wasm64 下要区分
+
+搬过来的 23 个里，**有字符参数的**（`chemm_`/`dsymm_`/`ssymm_`/`zhemm_`/`zsyrk_`/`csyrk_`/`dsyr_`/`zher_`/`lsame_`）
+拖尾隐藏长度是 **i32**，写成一律 `void*`（wasm32 的习惯）会在 wasm64 下重新制造 9 条 mismatch。
+⇒ 做法：**先用一律 `void*` 链一次**，让链接器把调用方签名打出来，再按签名把**参数类型**逐字改
+（**转发个数要保留**：`lsame_` 只转前 2 个）。改完 mismatch 10 → 1。
