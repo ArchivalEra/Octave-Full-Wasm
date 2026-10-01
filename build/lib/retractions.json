@@ -98,6 +98,13 @@
    "why": "推断被实验证伪（2026-09-28）：曾推断线程版在 dlopen 的 `.oct` 路径上不返回，是因为 OpenBLAS 的 worker 唤醒/自旋等待在 wasm 下的行为（线程同步忙等 + 主线程 `Atomics.wait` 受限）。结案实验②的做法是**先调 `openblas_set_num_threads(1)` 再跑同一路径** —— 若卡在唤醒/自旋，设成 1 个线程就该返回。实测：**仍不返回**（>300 s），且那个导出确实可调（`typeof=function`、调用返回 ok）。⇒ 卡点在**线程版代码路径本身，与线程数无关**。",
    "evidence": "`test/browser/probe-e2-threads.mjs` 两格（同一份 `--diag` 产物，A/B 抵消诊断档更慢）：格 A 裸跑 >300 s 未返回；格 B 先设 1 线程 >300 s 未返回。7 PASS / 0 FAIL。探针与产物 sha（`85e64295…`）见 `build/113/NOTES-threads.md` 的 E2 节",
    "fixed_in": "build/113/NOTES-threads.md『结案实验②（本条已做，2026-09-28）』"
+  },
+  {
+   "id": "R-013",
+   "text": "w64 的收益是地址空间（>4 GiB）—— 部署形态里 64 位档能吃到比 wasm32 更大的堆",
+   "why": "实测证伪（2026-10-01，工单 30 收尾后用户要求直接测）：四个档的 wasm 内存上限**都是 2 GiB**（base/w64-base 的内存段 max=2.00 GiB；threads/w64 的胶水 `maximum:32768` 页 = 2 GiB），逐块分配实测的**存活上限**四档同为 **1.49 GiB**。此前把引擎级探针 `w64_mem_5g_bytes`（直接 `new WebAssembly.Memory({initial:80000n,address:'i64'})` 拿 5 GiB）当成了产物的能力 —— **引擎能 ≠ 产物配了**（与工单 28/29 那条『verdict=ok 不覆盖运行期路径』同类）。",
+   "evidence": "test/browser/probe-heap-ceiling.mjs（`W64_BIG_HEAP=no`；base/threads/w64 三档块序列都是 0.75→1.49 GiB），日志 w64-logs/heap-ceiling.log；胶水与内存段的读法见工单 31 的『现状』节",
+   "fixed_in": "工单 31（.scratch/open-questions/issues/31-w64-heap-cap-and-speed.md）+ HANDOFF §0 / DEPLOY.md / README 的 w64 条目改写"
   }
  ]
 }

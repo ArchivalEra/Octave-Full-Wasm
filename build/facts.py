@@ -660,6 +660,43 @@ def measure(argv):
                                              "跑过的引擎：Chromium 154 / Chromium 125 / Firefox / WebKit（2026-10-01 实测）")
         facts["floor_matrix_pass"] = fact(_fp, "同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）",
                                           "w64-logs/floor-*.log")
+        # ★ **四档的堆上限与"64 位到底买到了什么"**（工单 31，2026-10-01）：
+        #   为什么上键：这两条曾经都是**口号**（用户直觉"w64 更快"、我写"w64 买的是 >4 GiB 地址空间"），
+        #   实测**两条都不成立**（已登记翻案 R-013）⇒ 把判据落成可复跑的探针与台账。
+        _hc = os.path.join(W64LOGD, "heap-ceiling.log")
+        if os.path.exists(_hc):
+            try:
+                _ht = open(_hc, encoding="utf-8", errors="replace").read()
+                _vals = [float(x) for x in re.findall(r"上限=([0-9.]+) GiB", _ht)]
+                if _vals:
+                    facts["mem_live_ceiling_gib"] = fact(max(_vals),
+                                                         "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh "
+                                                         "test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/ > w64-logs/heap-ceiling.log",
+                                                         "w64-logs/heap-ceiling.log",
+                                                         "逐块 0.75 GiB 吃到 OOM 的**存活上限**（四档实测同为 1.49 GiB）")
+                _m = re.search(r"W64_BIG_HEAP=(yes|no)", _ht)
+                if _m:
+                    facts["w64_big_heap"] = fact(_m.group(1) == "yes", "同上（探针结尾的 `W64_BIG_HEAP=` 行）",
+                                                 "w64-logs/heap-ceiling.log",
+                                                 "工单 31 的结算判据：抬了 MAXIMUM_MEMORY 之后必须变 yes")
+            except (OSError, ValueError) as e:
+                print("⚠ 读不到堆上限日志 %s：%s" % (_hc, e), file=sys.stderr)
+        # 四档速度：只上键 w64 那两个（base 与 OpenBLAS 的已有 lane_* / e2_* 键）
+        _sp = os.path.join(W64LOGD, "speed-w64.log")
+        if os.path.exists(_sp):
+            try:
+                _st = open(_sp, encoding="utf-8", errors="replace").read()
+                for key, case, note in (("w64_matmul500_s", "matmul 500",
+                                         "w64 档矩阵乘 500²：比 base 慢约 1.2×（i64 指针/索引的代价）"),
+                                        ("w64_lu800_s", "lu 800", "w64 档 lu(800)：比 base 慢约 1.3×")):
+                    _m = re.search(r"^\s*%s\s+([0-9.]+)s" % re.escape(case), _st, re.M)
+                    if _m:
+                        facts[key] = fact(float(_m.group(1)),
+                                          "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh "
+                                          "test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log",
+                                          "w64-logs/speed-w64.log", note)
+            except (OSError, ValueError) as e:
+                print("⚠ 读不到四档速度日志 %s：%s" % (_sp, e), file=sys.stderr)
         # ★ **交付包本身**也要端到端验（2026-10-01）：字节层"包内 wasm == 部署件"只是一半 ——
         #   包**起不起得来**、**选不选得对档**是另一半。生产者 = 包自带的 serve.py + probe-lane。
         _dp = os.path.join(W64LOGD, "dist-probe-lane.log")

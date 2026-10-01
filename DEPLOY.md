@@ -35,7 +35,7 @@
 |---|---|---|---|
 | `base` | 根目录 `octave.{wasm,js,data}` | **任何**静态托管的底线（页面默认回落到它） | 无 |
 | `threads` | `threads/octave.{wasm,js,data}` | 宿主发了 COI 头、但引擎**没有 memory64** | COI + `SharedArrayBuffer` |
-| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（**目标形态**：>4 GiB + 多线程） | COI + `SharedArrayBuffer` + memory64 |
+| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（memory64 + pthread 的目标形态；**当前不比 wasm32 快、堆也仍是 2 GiB**，见下） | COI + `SharedArrayBuffer` + memory64 |
 | `w64-base` | `w64-base/octave.{wasm,js,data}` | 引擎支持 memory64 但宿主**没发** COI 头（单线程 64 位回退） | memory64 |
 
 **选档判据是同步的**（加载胶水**之前**就得定档）：`crossOriginIsolated === true` 且
@@ -71,8 +71,15 @@ Cross-Origin-Embedder-Policy: require-corp
   `threads_blas_dir`），但交付形态是 **`USE_THREAD=0`（单线程）** ⇒ 收益来自 OpenBLAS 的内核
   （见台账 `e2_matmul500_ratio` / `e2_lu800_ratio`），**不是**多线程；`USE_THREAD=1`（约 6.7×）
   的技术判据已全过（工单 27 / 19），**发运决定待定**。
-- ⚠️ **`w64` 的收益是地址空间、不是速度**：>4 GiB 的内存分配实测已上键
-  （`w64_mem_5g_bytes` / `w64_mem_8g_bytes` / `w64_mem_shared_5g_bytes`）。
+- ⚠️ **`w64` 的两个"想当然"都要收回**（2026-10-01 实测，工单 31 / 翻案 R-013）：
+  · **不比 wasm32 快** —— 同一份工作中位数：matmul 慢 1.17–1.20×、lu 慢 1.18–1.34×、
+    解释器循环慢 1.72×（i64 指针/索引的代价）。四档里**最快的是 `threads`**（OpenBLAS 内核，
+    BLAS 上快 1.7–2.0×），但它在 `sort`/循环上反而慢。
+  · **也没有更大的堆** —— 四个档的 wasm 内存上限**都是 2 GiB**（`w64/octave.js` 的
+    `new WebAssembly.Memory({..., maximum:32768n, ...})`），逐块分配实测的**存活上限同为 1.49 GiB**
+    （台账 `mem_live_ceiling_gib` / `w64_big_heap`）。引擎级探针能拿 5 GiB（`w64_mem_5g_bytes`）
+    证明的是**引擎能力**，不是产物配置 —— 要兑现 >2 GiB 得显式抬 `MAXIMUM_MEMORY` 重链（工单 31 第二半）。
+  · 复跑：`test/browser/bench-lanes.mjs`（四档竞速）与 `test/browser/probe-heap-ceiling.mjs`（堆上限）。
 
 ## 怎么部署（GitHub Pages）
 

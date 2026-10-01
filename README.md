@@ -190,7 +190,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
   Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
 - **多线程 / 64 位（B6 + wasm64；2026-10-01 起站点是「四档」）**：站点里带**四份产物**
-  （根目录 = `base` 基础档，`threads/` = wasm32 线程档，`w64/` = memory64+线程（**>4 GiB**，目标形态），
+  （根目录 = `base` 基础档，`threads/` = wasm32 线程档，`w64/` = memory64+线程（目标形态；**实测不比 wasm32 快、堆上限同为 2 GiB** —— 工单 31），
   `w64-base/` = memory64 单线程回退），页面按**同步**判据自动选档：宿主发了
   `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
   且引擎支持 memory64 ⇒ `w64`；没有 memory64 ⇒ `threads`；没有 COI ⇒ `w64-base` / `base`
@@ -262,12 +262,13 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/28-rebuild-wrong-install-prefix.md` (3872 bytes)
 - `.scratch/open-questions/issues/29-link-does-not-check-tree-prefix.md` (2568 bytes)
 - `.scratch/open-questions/issues/30-w64-fourcell-ship.md` (6067 bytes)
+- `.scratch/open-questions/issues/31-w64-heap-cap-and-speed.md` (5078 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (16696 bytes)
 - `CONTEXT.md` (10597 bytes)
-- `DEPLOY.md` (7843 bytes)
-- `HANDOFF.md` (31990 bytes)
-- `HISTORY.md` (289058 bytes)
+- `DEPLOY.md` (8730 bytes)
+- `HANDOFF.md` (34021 bytes)
+- `HISTORY.md` (291179 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
@@ -411,7 +412,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
 - `build/CLIBS.md` (91172 bytes)
-- `build/FACTS.json` (14706 bytes)
+- `build/FACTS.json` (15921 bytes)
 - `build/GAPS-2.md` (28532 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
@@ -428,7 +429,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/check_m.py` (6710 bytes)
 - `build/embed/coi-serviceworker.js` (6028 bytes)
 - `build/embed/coi-serviceworker.min.js` (3009 bytes)
-- `build/facts.py` (47901 bytes)
+- `build/facts.py` (50874 bytes)
 - `build/fftw_threads_stub.c` (553 bytes)
 - `build/forge-build.sh` (2117 bytes)
 - `build/forge-fetch.py` (5109 bytes)
@@ -458,7 +459,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/glue-selftest.sh` (1953 bytes)
 - `build/lib/facts_block.py` (4515 bytes)
 - `build/lib/gate.py` (7246 bytes)
-- `build/lib/retractions.json` (8365 bytes)
+- `build/lib/retractions.json` (9450 bytes)
 - `build/lib/sweep_select.py` (15827 bytes)
 - `build/main.cc` (23622 bytes)
 - `build/make-dist.sh` (3226 bytes)
@@ -924,6 +925,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/accept-worker.mjs` (20785 bytes)
 - `test/browser/bench-core.mjs` (5350 bytes)
 - `test/browser/bench-dgemm.mjs` (3310 bytes)
+- `test/browser/bench-lanes.mjs` (4136 bytes)
 - `test/browser/fixtures/internal-props-probe.m` (3762 bytes)
 - `test/browser/fixtures/p5-graphics-probe.m` (3048 bytes)
 - `test/browser/fixtures/t2-graphics-probe.m` (2587 bytes)
@@ -950,6 +952,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/browser/probe-gfx-surf-cost.mjs` (2358 bytes)
 - `test/browser/probe-gl4es-smoke.mjs` (4306 bytes)
 - `test/browser/probe-gpu-backend.mjs` (2037 bytes)
+- `test/browser/probe-heap-ceiling.mjs` (5569 bytes)
 - `test/browser/probe-idbfs-bounds.mjs` (4741 bytes)
 - `test/browser/probe-iframe-coi.mjs` (11130 bytes)
 - `test/browser/probe-internal-props.mjs` (9154 bytes)
