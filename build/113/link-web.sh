@@ -589,6 +589,18 @@ em++ --bind \
   -o "$OUT/octave.js" "$SRC/main.o" ${P5_OBJS[@]+"${P5_OBJS[@]}"}
 set +x
 
+# ---- MEMORY64：glue 的 dlsync BigInt 补丁（工单 37，2026-10-01）----------------
+# 根因：Emscripten 5.0.7 的 `__emscripten_dlsync_threads` 用 **Number** 调
+# `__emscripten_proxy_dlsync(pthread_ptr)`，而 memory64 下 pthread_t 是 i64 ⇒
+# `Cannot convert … to a BigInt`。**触发条件**是"dlopen 时有存活的 pthread"——
+# 裸 w64 树（无 OpenBLAS 线程）从不走进这行，直到把线程版 OpenBLAS 链进 w64
+# （`USE_THREAD=1` 的 worker 在 dlopen 时活着）才炸 ⇒ 藏了很久。
+# wasm32 车道 pthread_t 是 i32、Number 合法 ⇒ 不适用（补丁自己对形状说不适用）。
+if [ "${MEMORY64:-0}" = "1" ]; then
+  python3 "$HERE/patch-glue-proxy-dlsync-bigint.py" --apply "$OUT/octave.js" || {
+    echo "FATAL: dlsync BigInt 补丁没打上 ⇒ 运行期 dlopen 会崩" >&2; exit 3; }
+fi
+
 # ---- 自检：JSPI 到底有没有按 **B 姿势** 落进产物（2026-09-25 翻面）--------------
 # 历史：2026-09-24 那条自检查"胶水里有没有 promising"（防 `JSPI_FLAGS` 没进链接的假失败，
 # HISTORY §5.46）。**B 姿势下口径反了**：包装只许存在于**页面层**（bridge/index.html 的

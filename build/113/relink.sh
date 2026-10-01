@@ -684,6 +684,18 @@ cmd_rebuild() {
     *) echo "FATAL: 产物烘死的安装前缀里**没有** $inst（量到：$baked）⇒ 运行期 doc/help 会打不开" >&2
        exit 2 ;;
   esac
+  # ★ 工单 37：MEMORY64 车道的 glue 必须带 dlsync BigInt 补丁（link-web 在 MEMORY64=1 时
+  #   自动打；这里复核一遍，防“换了链路/换了机器”漏打 ⇒ 运行期 dlopen 必崩）。
+  if [ "$m" = w64 ] || [ "$m" = w64-base ]; then
+    rc=0
+    python3 "$HERE/patch-glue-proxy-dlsync-bigint.py" --check "$out/octave.js" >/dev/null 2>&1 || rc=$?
+    case "$rc" in
+      0) echo "   ✅ dlsync BigInt 补丁在（MEMORY64 车道）" ;;
+      1) echo "FATAL: MEMORY64 车道的 glue **可打而未打** dlsync BigInt 补丁 ⇒ 运行期 dlopen 必崩" >&2
+         exit 2 ;;
+      *) echo "   （dlsync 补丁不适用 —— 上游可能已修；rc=$rc）" ;;
+    esac
+  fi
 }
 
 # ── 参数解析 ─────────────────────────────────────────────────────────────────
