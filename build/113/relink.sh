@@ -582,6 +582,11 @@ cmd_rebuild() {
   esac
   [ -n "$_deps" ] || { echo "FATAL: 模式 $m 的表里没有 DEPS" >&2; exit 2; }
   echo "   车道依赖：DEPS=$_deps D=${_droot:-/src/deps（默认）} TARGET_HOST=$_thost"
+  # ★ 工单 34：**车道的 f2c 前缀**也在这里定死并 export（emf77 是在 **make** 阶段被调的，
+  #   只在 configure 行里传没用）。不跟车道走 ⇒ wasm64 下 Fortran 隐藏长度的类型会分叉：
+  #   `/usr/local/include/f2c.h` 给 `long int ftnlen`(i64)，`/usr/local-w64` 那份给 `int ftnlen`(i32)。
+  export F2C_PREFIX="$_deps"
+  echo "   车道 f2c 前缀：F2C_PREFIX=$F2C_PREFIX（f2c.h 与 libf2c 都取它）"
   if [ "$yes" != "1" ]; then
     echo "拒绝执行：确认要跑就在命令里加 --yes-rebuild" >&2
     exit 2
@@ -631,8 +636,21 @@ cmd_rebuild() {
   #   这三个值本来就在模式表里（`DEPS`/`DEPS_ROOT`）⇒ 从表里取，不另抄一份。
   #   ⚠️ 别写 `${_droot:+D="$_droot"}`：展开结果是**一个词**（含引号），shell 会把它当命令执行
   #      （实测：`D=/src/deps-w64: No such file or directory`）。赋值只能逐个写死。
+  #
+  # ★★ 工单 34（2026-10-01，本批最贵的一条）：**`F2C_PREFIX` 必须跟着车道走**。
+  #   `emf77` 用它取 `f2c.h`（`-I$F2C_PREFIX/include`）与 `libf2c`；默认是 `/usr/local`。
+  #   而 wasm64 下两份 `f2c.h` 解析出的 **`ftnlen`（Fortran 隐藏长度的类型）宽度不同**：
+  #     · /usr/local/include/f2c.h   → `typedef long int ftnlen;`  = **i64**（LP64 下 long 是 64 位）
+  #     · /usr/local-w64/include/f2c.h → `typedef int ftnlen;`      = **i32**
+  #   （两份都打过 build-deps.sh 的 `__wasm64__` 补丁，但**补到的位置不同**：/usr/local 那份
+  #     漏了 `ftnlen` 那一块 —— 量法见下。）
+  #   ⇒ 树里的 Fortran 走默认前缀、车道的 refblas/lapack 走 `-w64` 前缀 ⇒ **每个 Fortran→BLAS
+  #   调用的隐藏长度宽度都不一致**（`(i64×15)` vs `(i64×13,i32,i32)`）⇒ 26 条 `function signature
+  #   mismatch` ⇒ wasm-opt 的校验器直接判模块非法（`call param types must match`）。
+  #   ⚠️ 必须 **export**（不是只传给 configure）：emf77 是在 **make** 阶段被调的。
   ( cd "$OCT" && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 \
       WITH_THREADS="$th" DEPS="$_deps" D="${_droot:-/src/deps}" TARGET_HOST="$_thost" \
+      F2C_PREFIX="$_deps" \
       bash "$HERE/configure-113-full.sh" "$OCT" "$inst" ) \
     || { echo "FATAL: configure 失败（rebuild 第①步）—— 第一面墙在上面输出里" >&2; exit 2; }
   ( cd "$OCT" && emmake make clean ) \
@@ -796,6 +814,15 @@ cmd_selftest() {
     echo "PASS | ★ w64-base 缺车道影子 ⇒ 入口**点名** FATAL"
   else
     echo "fail | w64-base 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
+  fi
+  # ⑫ ★ 工单 34：`rebuild` 必须把**车道的 F2C_PREFIX** 打出来（emf77 靠它取 f2c.h；
+  #    不跟车道走 ⇒ wasm64 下 Fortran 隐藏长度宽度分叉 ⇒ 模块过不了 wasm-opt 校验）。
+  n=$((n + 1))
+  msg="$(bash "$0" rebuild w64 --out /tmp/_zr_rb_f2c 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q 'F2C_PREFIX=/usr/local-w64'; then
+    echo "PASS | ★ rebuild w64 打出行车 f2c 前缀 F2C_PREFIX=/usr/local-w64"
+  else
+    echo "fail | rebuild w64 没打出 F2C_PREFIX（msg=$(printf '%s' "$msg" | tr '\n' ' ' | cut -c1-120)）"; bad=1
   fi
   # ⑪ ★ 工单 32b：`rebuild w64` 的线程开关必须是 **1**（w64 是 memory64+pthread 车道）。
   n=$((n + 1))

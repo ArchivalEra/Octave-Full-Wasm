@@ -5,7 +5,7 @@
 
 **Blocked by:** None（A/B 实验在跑）
 
-**Status:** ready-for-agent
+**Status:** resolved（2026-10-01，根因确认并修掉；链路验证见"结论"）
 
 **Settling:** `bash relink.sh rebuild w64 --out <目录> --yes-rebuild` ⇒ 末尾 `verdict=ok`
 **且**产物能过 wasm-opt 校验：
@@ -42,3 +42,32 @@
   `rebuild` 传 `WITH_GL2PS=1`（车道脚本**不传**）；车道脚本传 `SKIP=`（空，等价于不传）。
 - 若**也不过** ⇒ 是环境/依赖侧的漂移（不是入口的锅），另查（emcc/emsdk 未变 ⇒ 可能在某份 `.a` 的
   重编上，虽然 sha 相同……那就得看树对象的目标特性了）。
+
+## 结论（2026-10-01）：根因是 **`F2C_PREFIX` 没跟车道走** ⇒ Fortran 隐藏长度的类型分叉
+
+**一行可复跑的证据**（wasm64 下解析两份 `f2c.h`）：
+
+```bash
+SHIM=/src/libwork/lane-shim-w64
+for p in /usr/local /usr/local-w64; do
+  PATH=$SHIM:$PATH emcc -pthread -sMEMORY64=1 -E -I$p/include -x c - <<< '#include "f2c.h"' \
+    | grep -E "^typedef .* (ftnlen|integer|logical);" | head -4
+done
+# /usr/local      → typedef int integer; typedef int logical; typedef long int ftnlen;   ← i64
+# /usr/local-w64  → typedef int integer; typedef int logical; typedef int ftnlen;        ← i32
+```
+
+`emf77` 用 `F2C_PREFIX`（默认 `/usr/local`）取 `f2c.h`。于是：
+
+- **树里的 Fortran**（走默认前缀）把隐藏长度编成 **i64**；
+- **车道的 refblas/lapack**（`build-deps.sh` 用 `F2C_PREFIX=/usr/local-w64` 建的）编成 **i32**；
+- 两边一遇上就是 `(i64×15) -> i32` vs `(i64×13, i32, i32) -> i32` —— 实测里 26 条，
+  wasm-ld 容忍（只 warning）、**wasm-opt 的校验器不容忍**（`call param types must match`）。
+
+wasm32 之所以一直没露馅：32 位下 `long` 就是 32 位，**两种定义宽度相同**（i32）⇒ 分叉不可见。
+9/28 那次 w64 能成，是因为当时环境里带着车道的 `F2C_PREFIX`（而 `relink.sh rebuild` 与
+`build-w64-lane.sh:stage_tree` **都没设**）—— 又一条"前置只活在操作员环境/车道脚本里"。
+
+**修法**：树构建入口把**车道的 f2c 前缀** export 出去（`F2C_PREFIX="$DEPS"`，且必须
+**export** 而不是只传给 configure —— emf77 是在 **make** 阶段被调的）；自证里加了
+"`rebuild w64` 必须打出 `F2C_PREFIX=/usr/local-w64`"（relink 自证 15 → 16/0）。
