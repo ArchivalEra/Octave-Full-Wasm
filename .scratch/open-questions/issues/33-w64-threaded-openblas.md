@@ -7,7 +7,7 @@
 
 **Blocked by:** 工单 32（rebuild 的车道依赖，已修）；工单 19/27（idle-exit 补丁与 E2 车道脚本，已就绪）
 
-**Status:** ready-for-agent（构建路径已就绪；**发运**仍要人拍板 —— 与工单 27 同一个决定面）
+**Status:** ready-for-agent（库已建成；链接与运行期正在按工单 36 的收割口径收尾；**发运**仍要人拍板）
 
 **Settling:** ②的判据（构建后）：
 1. `bash /src/bin/build-e2-lane.sh --lane w64 …` 产出的库**逐成员**是 wasm64（自证写进脚本）；
@@ -40,3 +40,16 @@
   memory64 OpenBLAS —— 第三个变体）。
 - 期望值要按实测口径给：OpenBLAS 相对 refblas 的收益见台账（`e2_matmul500_s` vs `lane_matmul500_s`），
   再乘上 memory64 的 i64 代价（`w64_matmul500_s` vs `lane_matmul500_s` 实测 1.2×）。
+
+## 进度（2026-10-01 晚）：库 ✅ / 链接 ✅ / **运行期 ✗（收割口径问题，工单 36）**
+
+- 库：`E2_LANE=w64` 建出 **1968 个成员全 wasm64**（`w64_ob_lib_*` 已上键），
+  `blas_cpu_number` 等定义齐备（此前因 emscripten 补丁被跳过而缺 `blas_server.o`，见工单 35）。
+- 链接：`E2_OPENBLAS=/src/work/e2-openblas-lib-w64 relink.sh link w64` ⇒ **`verdict=ok`**
+  （`declared` 里 `threads` + `wasm64` + `e2_openblas` 三条同时成立，烘死路径 `-w64`）。
+- **运行期**：页面报 `Import #4 "env" "zdrot_k": function import requires a callable` ——
+  29 个未定义符号（`ddot_`/`dnrm2_`/`dasum_`/`idamax_`…）。根因与配方见**工单 36**：
+  包装名单必须在"**未打前缀补丁**"的配置下收割（否则漏掉"本来签名一致、只需透传壳"的那批）。
+  正在按该配方重跑（revert → build → pack-raw → 收割链 → gen 包装 → apply → build → pack → 重链）。
+- 顺带记：**`verdict=ok` 不保证跑得起来** —— 本次两次都是"链过、自检绿、页面崩"
+  （缺成员 / 未定义符号变导入）。⇒ 这条链的验收判据**必须**含装机开机自检。
