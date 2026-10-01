@@ -215,8 +215,17 @@ DEPS_ROOT=/src/deps-w64
 GL4ES_A=/src/libwork/gl4es-src-w64/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl-w64/lib/libGLU.a
 EOF
+      # ★ E2 钩子（工单 31，2026-10-01）：w64 + **线程版 OpenBLAS** 的组合形态。
+      #   与 threads 那条同构，只有一处必须不同：LAPACK 的**回落目录**是**本车道**的
+      #   `/src/deps-w64/lapack-simd/lib`（threads 那条写死 deps-threads ⇒ 照抄会把
+      #   wasm32 的 LAPACK 链进 64 位主模块，那是架构错配）。
+      #   w64-base（单线程）**不给** `-pthread`/池：它的内存不 shared，线程版库链不进去。
       if [ "$m" = w64 ]; then
-        echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+        if [ -n "${E2_OPENBLAS:-}" ]; then
+          echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+        else
+          echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+        fi
       else
         echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib"
       fi
@@ -266,9 +275,13 @@ EOF
       ;;
     w64)
       # ★ wasm64 车道：显式声明 wasm64=true，与 wasm32 各档明确区分
-      cat <<'EOF'
+      # ★ E2 钩子（工单 31）：`E2_OPENBLAS` 有值时多声明 `e2_openblas` ⇒ check-build-manifest
+      #   把 BLAS 溯源判据从"必须含 -w64"换成"必须指向 E2 目录"（与 threads 那条同规则）。
+      _e2=""
+      [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
+      cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true${_e2},
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -545,12 +558,30 @@ cmd_rebuild() {
   local m="$1" out="$2" diag="$3" yes="$4"
   echo "════ relink.sh rebuild $m ════"
   echo "这会做四步（数小时）："
-  echo "  ① cd $OCT && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 WITH_THREADS=$( [ "$m" = threads ] && echo 1 || echo 0 ) bash $HERE/configure-113-full.sh"
+  # ★ 线程开关：**threads 与 w64 都是多线程车道**（w64 = memory64 + pthread）；只有 w64-base 是单线程。
+  #   ⚠️ 2026-10-01 实测踩到：老写法 `[ "$m" = threads ]` 让 `rebuild w64` 配出 **WITH_THREADS=0**
+  #   的树，却用 `-pthread -sMEMORY64=1` 的编译器编 ⇒ 树自相矛盾，链到 wasm-opt 才炸
+  #   （`call param types must match`，而那批 f2c ABI 不匹配本来是被容忍的）。
+  #   9/28 的 w64 树是 `build-w64-lane.sh` 建的（那里传 WITH_THREADS=1）⇒ 又是"前置只在车道脚本里"。
+  local _th=0; case "$m" in threads|w64) _th=1 ;; esac
+  echo "  ① cd $OCT && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 WITH_THREADS=$_th bash $HERE/configure-113-full.sh"
   echo "  ② cd $OCT && emmake make clean      # 刻意强制：不信任 config.h 的新鲜度"
   echo "  ③ cd $OCT && emmake make -k -j$JOBS"
   echo "  ④ relink.sh link $m --out $out $([ "$diag" = 1 ] && echo --diag)"
   echo "⚠️ 重配口径是**一整组**：WITH_OPENGL=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1（另加 WITH_GL2PS=1）。"
   echo "   漏 WITH_OPENGL=1 ⇒ 默认 toolkit 静默掉回 web，而构建/链接/自检全绿（HISTORY §5.31）。"
+  # ★ 工单 32：把**车道依赖**先算出来并打出来（在 `--yes-rebuild` 闸之前）——
+  #   它是 configure 那一面的根因（不传 ⇒ Fortran 链接自检失败），操作员在下决心之前
+  #   就该看见"这次会用什么依赖"；自证也靠这一行（不真跑构建就能验这段逻辑）。
+  local _deps _droot _thost
+  _deps="$(mode_table "$m" | sed -n 's/^DEPS=//p')"
+  _droot="$(mode_table "$m" | sed -n 's/^DEPS_ROOT=//p')"
+  case "$m" in
+    w64|w64-base) _thost=wasm64-unknown-emscripten ;;
+    *)            _thost=wasm32-unknown-emscripten ;;
+  esac
+  [ -n "$_deps" ] || { echo "FATAL: 模式 $m 的表里没有 DEPS" >&2; exit 2; }
+  echo "   车道依赖：DEPS=$_deps D=${_droot:-/src/deps（默认）} TARGET_HOST=$_thost"
   if [ "$yes" != "1" ]; then
     echo "拒绝执行：确认要跑就在命令里加 --yes-rebuild" >&2
     exit 2
@@ -577,7 +608,7 @@ cmd_rebuild() {
     echo "FATAL: PATH 里没有 emmake（先 export PATH=/usr/src/emsdk/upstream/emscripten:\$PATH）" >&2; exit 2; }
   # ★ 线程档：模式决定 configure 的线程开关（WITH_THREADS=1 ⇒ 撤销 AX_PTHREAD 覆盖 +
   #   --enable-threads）。**不许手设** —— 与 D1 的纪律一致（口径从模式推出来）。
-  local th=0; [ "$m" = threads ] && th=1
+  local th="$_th"
   # ★ 工单 28（2026-09-30 实测）：**必须把车道自己的 install 前缀传给 configure** ——
   #   不传就落到默认的 product 路径（`/src/work/octave-install`），于是产物**烘死 product 的
   #   docstrings 路径**，而站点资产是按**车道**前缀挂载的（`manifest.threads.json` 挂到
@@ -591,8 +622,18 @@ cmd_rebuild() {
   esac
   echo "   车道 install 前缀：$inst（configure 的 \$2；不传就会烘死 product 路径 —— 工单 28）"
   [ -d "$inst" ] || { echo "FATAL: 车道安装树不存在：$inst（先建它，别拿 product 树凑）" >&2; exit 2; }
+  # ★ 工单 32（2026-10-01 实测踩到）：`rebuild` 以前**只**传 WITH_* 与 install 前缀，
+  #   而 configure 还要吃**车道的依赖前缀**（`DEPS`/`D`，见 configure-113-full.sh:25-27）与
+  #   `TARGET_HOST`。不传就落在 product 的 `/usr/local`+`/src/deps`（wasm32 f2c）上，
+  #   而编译器已被车道影子加成 64 位/atomics ⇒ **configure 的 Fortran 链接自检当场失败**
+  #   （`configure: error: linking to Fortran libraries from C fails`），
+  #   或更坏：自检侥幸过了、树却是在**错架构的依赖**上编的。
+  #   这三个值本来就在模式表里（`DEPS`/`DEPS_ROOT`）⇒ 从表里取，不另抄一份。
+  #   ⚠️ 别写 `${_droot:+D="$_droot"}`：展开结果是**一个词**（含引号），shell 会把它当命令执行
+  #      （实测：`D=/src/deps-w64: No such file or directory`）。赋值只能逐个写死。
   ( cd "$OCT" && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 \
-      WITH_THREADS="$th" bash "$HERE/configure-113-full.sh" "$OCT" "$inst" ) \
+      WITH_THREADS="$th" DEPS="$_deps" D="${_droot:-/src/deps}" TARGET_HOST="$_thost" \
+      bash "$HERE/configure-113-full.sh" "$OCT" "$inst" ) \
     || { echo "FATAL: configure 失败（rebuild 第①步）—— 第一面墙在上面输出里" >&2; exit 2; }
   ( cd "$OCT" && emmake make clean ) \
     || { echo "FATAL: make clean 失败（rebuild 第②步）" >&2; exit 2; }
@@ -755,6 +796,49 @@ cmd_selftest() {
     echo "PASS | ★ w64-base 缺车道影子 ⇒ 入口**点名** FATAL"
   else
     echo "fail | w64-base 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
+  fi
+  # ⑪ ★ 工单 32b：`rebuild w64` 的线程开关必须是 **1**（w64 是 memory64+pthread 车道）。
+  n=$((n + 1))
+  msg="$(bash "$0" rebuild w64 --out /tmp/_zr_rb_th 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q 'WITH_THREADS=1'; then
+    echo "PASS | ★ rebuild w64 的 ① 行是 WITH_THREADS=1（不是 0）"
+  else
+    echo "fail | rebuild w64 的线程开关不是 1（msg=$(printf '%s' "$msg" | tr '\n' ' ' | cut -c1-120)）"; bad=1
+  fi
+  # 反向：w64-base 是**单线程**档，必须是 0（别一律开）
+  n=$((n + 1))
+  msg="$(bash "$0" rebuild w64-base --out /tmp/_zr_rb_th2 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q 'WITH_THREADS=0'; then
+    echo "PASS | ★ rebuild w64-base 的 ① 行是 WITH_THREADS=0（单线程回退档）"
+  else
+    echo "fail | rebuild w64-base 的线程开关不是 0"; bad=1
+  fi
+  # ⑩ ★ 工单 32：`rebuild` 必须把**车道依赖**（DEPS/D/TARGET_HOST）从模式表里取出来用。
+  #   判据：不真跑构建（`--yes-rebuild` 缺席即拒），但**拒绝之前**必须已经打印这三个值 ——
+  #   它们正是 configure 失败那一面墙的根因（实测：不传 DEPS ⇒ Fortran 链接自检失败）。
+  n=$((n + 1))
+  msg="$(bash "$0" rebuild w64 --out /tmp/_zr_rb_deps 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q 'DEPS=/usr/local-w64' && printf '%s' "$msg" | grep -q 'wasm64-unknown-emscripten'; then
+    echo "PASS | ★ rebuild w64 从模式表取车道依赖（DEPS/D/TARGET_HOST）"
+  else
+    echo "fail | rebuild w64 没把车道依赖打出来（msg=$(printf '%s' "$msg" | tr '\n' ' ' | cut -c1-120)）"; bad=1
+  fi
+  # ⑨ ★ 工单 31：`E2_OPENBLAS` 钩子对 **w64 模式**也要生效，且 LAPACK 回落目录必须是
+  #    **deps-w64**（照抄 threads 那条会把 wasm32 的 LAPACK 链进 64 位主模块）。
+  n=$((n + 1))
+  ex="$(E2_OPENBLAS=/tmp/_e2probe bash "$0" explain w64 2>/dev/null || true)"
+  if printf '%s' "$ex" | grep -q -- '-L/tmp/_e2probe' && printf '%s' "$ex" | grep -q -- '-L/src/deps-w64/lapack-simd/lib'; then
+    echo "PASS | ★ explain w64 + E2_OPENBLAS ⇒ EXTRA_LDFLAGS 指 E2 目录、LAPACK 回落 deps-w64"
+  else
+    echo "fail | w64 的 E2 钩子没生效或回落目录错（ex=$(printf '%s' "$ex" | grep EXTRA_LDFLAGS | head -1)）"; bad=1
+  fi
+  # 反向：不给 E2_OPENBLAS 时**不许**出现 e2_openblas 声明（否则判据会换错）
+  n=$((n + 1))
+  ex2="$(bash "$0" explain w64 2>/dev/null || true)"
+  if printf '%s' "$ex2" | grep -q 'e2_openblas'; then
+    echo "fail | 没给 E2_OPENBLAS 却声明了 e2_openblas"; bad=1
+  else
+    echo "PASS | ★ 不给 E2_OPENBLAS ⇒ 不声明 e2_openblas（反向断言）"
   fi
   rm -rf "$tmp"
   echo ""

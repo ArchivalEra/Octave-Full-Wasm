@@ -15,23 +15,46 @@
 # 之后重链（**车道影子由 relink.sh 入口自己挂** —— 工单 26）：
 #   E2_OPENBLAS=$OUTLIB bash /src/bin/relink.sh link threads --out <目录> [--diag]
 #
+# ★ **车道参数 `E2_LANE`（2026-10-01，工单 31）**：`threads`（默认）| `w64`。
+#   为什么要它：用户点名的目标是 **`w64` + 线程版 OpenBLAS**（memory64 与 USE_THREAD=1 的组合），
+#   而这两个参数**在编译期**（`-sMEMORY64=1`）就分岔 ⇒ 必须**分别建库**，不能共用：
+#     · `threads`：`WORKDIR=…/OpenBLAS-e2`、`OUTLIB=…/e2-openblas-lib-idleexit`、旗标 `-pthread`
+#     · `w64`    ：`WORKDIR=…/OpenBLAS-e2-w64`、`OUTLIB=…/e2-openblas-lib-w64`、旗标 `-pthread -sMEMORY64=1`
+#   ⚠️ 架构断言是**硬判据**：w64 车道的库里每个成员都必须是 wasm64（side module 的指针宽度
+#      必须与主模块一致；本仓踩过"换旗标不清树 ⇒ make 零重编 ⇒ 静默 wasm32"，见 HISTORY §5.71/gplk 悬案）。
+#
 # 判据（工单 19 用的四条，重建后照跑）：
 #   CELLS=C,D,H sh test/browser/run.sh test/browser/probe-e2-threads.mjs <该产物站点>   # 全返回
 #   矩阵乘 500x500 中位数 ≈ 0.006 s（与补丁前相同 ⇒ 6.7× 收益未丢）
 set -u
 
+# ── 车道表（口径进代码；不设 = threads，与历史行为一致）────────────────────────
+E2_LANE="${E2_LANE:-threads}"
+case "$E2_LANE" in
+  threads) LANE_FLAGS="-pthread" ;;
+  w64)     LANE_FLAGS="-pthread -sMEMORY64=1" ;;
+  *) echo "FATAL: 未知 E2_LANE='$E2_LANE'（可用 threads|w64）" >&2; exit 2 ;;
+esac
+
 # ── 宿主直跑：自动委托给容器（与 probe-wasm64-link.sh 同款）──────────────────────
 if [ ! -f /src/bin/relink.sh ]; then
   C="${C:-o113}"
   sudo docker start "$C" >/dev/null 2>&1 || true
-  exec sudo docker exec "$C" bash /src/bin/build-e2-lane.sh "$@"
+  exec sudo docker exec -e "E2_LANE=$E2_LANE" "$C" bash /src/bin/build-e2-lane.sh "$@"
 fi
 
 SRC_OPENBLAS="${SRC_OPENBLAS:-/src/work/OpenBLAS-0.3.34}"   # 干净来源
-WORKDIR="${WORKDIR:-/src/work/OpenBLAS-e2}"                 # 车道工作树
-OUTLIB="${OUTLIB:-/src/work/e2-openblas-lib-idleexit}"      # 打包产物目录
-LOGD="${LOGD:-/src/work/e2-lane-logs}"
-WRAPPERS="${WRAPPERS:-/src/work/e2-f77-wrappers.o}"         # f77 包装对象（gen-f77-wrappers.py 产）
+if [ "$E2_LANE" = w64 ]; then
+  WORKDIR="${WORKDIR:-/src/work/OpenBLAS-e2-w64}"           # 车道工作树
+  OUTLIB="${OUTLIB:-/src/work/e2-openblas-lib-w64}"         # 打包产物目录
+  LOGD="${LOGD:-/src/work/e2-lane-logs/w64}"
+  WRAPPERS="${WRAPPERS:-/src/work/e2-f77-wrappers-w64.o}"   # f77 包装对象（**必须也是 wasm64**）
+else
+  WORKDIR="${WORKDIR:-/src/work/OpenBLAS-e2}"
+  OUTLIB="${OUTLIB:-/src/work/e2-openblas-lib-idleexit}"
+  LOGD="${LOGD:-/src/work/e2-lane-logs}"
+  WRAPPERS="${WRAPPERS:-/src/work/e2-f77-wrappers.o}"
+fi
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 12)}"
 mkdir -p "$LOGD" "$OUTLIB"
 
@@ -40,6 +63,9 @@ say () { echo; echo "── $*"; }
 stage_src () {
   say "[src] 干净副本 $SRC_OPENBLAS → $WORKDIR（排除构建产物）"
   [ -d "$SRC_OPENBLAS" ] || { echo "FATAL: 找不到干净来源 $SRC_OPENBLAS" >&2; return 1; }
+  # ⚠️ 工作树目录得**先建**：`tar -C <不存在>` 直接报 "Cannot open"（实测：w64 车道首次跑就撞上；
+  #    threads 车道那份是早先手工建过才一直没露馅）。
+  mkdir -p "$WORKDIR" || return 1
   tar -C "$SRC_OPENBLAS" --exclude='*.o' --exclude='*.a' --exclude='*.so' \
       --exclude='config.h' --exclude='Makefile.conf' -cf - . \
     | tar -C "$WORKDIR" -xf - || return 1
@@ -92,11 +118,11 @@ stage_patch () {
 }
 
 stage_build () {
-  say "[build] make（USE_THREAD=1 + SIMD，-j$JOBS）→ 日志 $LOGD/make.log"
+  say "[build] make（USE_THREAD=1 + SIMD，车道旗标：$LANE_FLAGS，-j$JOBS）→ 日志 $LOGD/make.log"
   cd "$WORKDIR" || return 1
   set +e
   make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
-       NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc -pthread" FC="/src/bin/emf77 -pthread" \
+       NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS" FC="/src/bin/emf77 $LANE_FLAGS" \
        HOSTCC=gcc -j"$JOBS" > "$LOGD/make.log" 2>&1
   local rc=$?
   set -e
@@ -107,6 +133,25 @@ stage_build () {
     tail -12 "$LOGD/make.log" >&2; return 1
   fi
   echo "   make rc=$rc（utest 失败无妨）；库：$lib"
+  # ★ 架构断言（w64 车道硬判据）：与农场 `build-libs.sh:need_arch` **同一条判据** ——
+  #   用 `llvm-readobj -h <归档>` 数 `Arch: wasm` vs `Arch: wasm64`，**逐成员**全绿才算过。
+  #   ⚠️ 实测踩到的坑（2026-10-01，本单车库第一次跑就撞上）：**`Format:` 行恒为 `WASM`**，
+  #      位数在 **`Arch:`** 行（`wasm64` / `AddressSize: 64bit`）⇒ 拿 `Format:` 当判据会
+  #      把一份正确的 wasm64 库判成 wasm32（假红）；反过来若只看单个成员也漏（本仓 glpk 悬案
+  #      就是"部分成员是旧架构"静默通过）。判据必须**逐成员计数**。
+  if [ "$E2_LANE" = w64 ]; then
+    local ro=/emsdk/upstream/bin/llvm-readobj total w64n
+    [ -x "$ro" ] || ro=llvm-readobj
+    local hdr; hdr=$("$ro" -h "$lib" 2>/dev/null)
+    total=$(printf '%s\n' "$hdr" | grep -c 'Arch: wasm$' || true)
+    w64n=$(printf '%s\n' "$hdr" | grep -c 'Arch: wasm64' || true)
+    if [ "${total:-0}" -ne 0 ] || [ "${w64n:-0}" -eq 0 ]; then
+      echo "FATAL: $lib 架构断言失败：$w64n 个 wasm64 / $total 个 wasm32（车道声明 MEMORY64，要求 wasm32=0）" >&2
+      echo "       典型原因：旗标通道没进编译（影子没挂 / 树没清，make 零重编）——见 NOTES-wasm64.md" >&2
+      return 1
+    fi
+    echo "   ✅ 架构断言：$w64n 个成员全是 wasm64（wasm32=0）"
+  fi
   echo "   ✅ 库本体就绪"
 }
 
@@ -127,10 +172,29 @@ stage_pack () {
   echo "   下一步（车道影子由入口自己挂）：E2_OPENBLAS=$OUTLIB bash /src/bin/relink.sh link threads --out <目录> [--diag]"
 }
 
+stage_pack_raw () {
+  # ★ **先打一份不含 f77 包装的归档**（2026-10-01，工单 31）：E2 的包装对象是**从链接器的
+  #   `function signature mismatch` 报文生成**的 ⇒ 必须先用"裸库"链一次、把报文收下来。
+  #   threads 车道当年是手工走这一步（wrappers 已存在），w64 车道从零开始 ⇒ 这一步要成阶段。
+  say "[pack-raw] 裸归档（摘 c_abs.o，**不挂** f77 包装）→ $OUTLIB（供"第一次链接收 mismatch"）"
+  cd "$WORKDIR" || return 1
+  local lib; lib=$(ls -1 libopenblas_*r0.3.34.a 2>/dev/null | head -1)
+  [ -n "$lib" ] || { echo "FATAL: 没有 libopenblas_*.a（先跑 build）" >&2; return 1; }
+  cp -f "$lib" "$OUTLIB/librefblas.a" || return 1
+  cd "$OUTLIB" || return 1
+  emar d librefblas.a c_abs.o >/dev/null 2>&1 || true
+  local n; n=$(emnm librefblas.a 2>/dev/null | grep -c ' T \| t ' || true)
+  [ "${n:-0}" -gt 0 ] || { echo "FATAL: $OUTLIB/librefblas.a 里量不到符号" >&2; return 1; }
+  echo "   ✅ $OUTLIB/librefblas.a（裸，符号 $n 条）⇒ 现在链一次收 mismatch，再 gen-f77-wrappers.py --from-log"
+}
+
 rc=0
 for s in "$@"; do
   case "$s" in
-    src|patch|build|pack) "stage_$s" || { rc=$?; echo "❌ 阶段 $s 失败（rc=$rc）"; break; } ;;
+    src|patch|build|pack|pack-raw)
+      # 阶段名里的 `-` 换成 `_` 才是函数名（`stage_pack_raw`）—— 第一版直接 `stage_$s`
+      # 会报 `stage_pack-raw: command not found`（实测）。
+      "stage_$(printf '%s' "$s" | tr - _)" || { rc=$?; echo "❌ 阶段 $s 失败（rc=$rc）"; break; } ;;
     all) for t in src patch build pack; do "stage_$t" || { rc=$?; echo "❌ 阶段 $t 失败（rc=$rc）"; break 2; }; done ;;
     *) echo "未知阶段：$s（可用：src patch build pack all）" >&2; rc=2; break ;;
   esac
