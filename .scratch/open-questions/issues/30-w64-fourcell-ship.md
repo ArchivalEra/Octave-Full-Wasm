@@ -46,6 +46,10 @@
 **判据 5 —— 收尾**：`site/`（仓库镜像）rsync → `parity --strict` **三处完全一致**；
 `make-dist.sh` 包 **四档 sha 与部署件逐档相同**；六道闸门 + `gates-selftest`（30 个闸门全绿）。
 
+**引擎矩阵（2026-10-01 补测，上键 `floor_matrix_*`）**：Chromium 154 / **Firefox** / **WebKit** 三台
+都 `mem64=true` ⇒ 落 `w64` 且 JSPI 门开；**Chromium 125 落 `threads`**。日志 `w64-logs/floor-8761-*.log`，
+台账键 `floor_matrix_engines` / `floor_matrix_pass` / `floor_matrix_fail`（FAIL 必须 0）。
+
 **反向断言（真引擎实测，不只模拟）**：
 · Chromium 125（`mem64=false`，`/mnt/hdd/crossbuild-tools/pw-browsers/chromium-1117`，配旧 playwright 1.44.1）
   在 8761 上 `lane=threads`、页面 ready、D9 门关 → **4 PASS / 0 FAIL**，日志

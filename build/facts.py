@@ -44,6 +44,7 @@
 #   文档维护的正常动作；连它们也要显式接受 ⇒ 守卫变成噪音 ⇒ 最后被 `--accept-changes` 一律
 #   糊过去，守卫就废了（这就是为什么它守住的范围要窄）。
 # ═══════════════════════════════════════════════════════════════════════════════
+import glob
 import json
 import os
 import re
@@ -625,6 +626,42 @@ def measure(argv):
                                                    "BigInt 三条反证）")
         except OSError as e:
             print("⚠ 读不到内存探针日志 %s：%s" % (_memlog, e), file=sys.stderr)
+
+    # ★ **选档的引擎矩阵**（工单 30，2026-10-01）：把"哪几个引擎在四格站点上真的选到哪一档"
+    #   上键。为什么必须有：这是**生产风险**那一面 —— 只有 Chromium 一格绿不足以说"能上"，
+    #   而"无 memory64 的引擎会落回 threads"这条**反向断言**在真引擎上量过才作数。
+    #   生产者 = test/browser/probe-browser-floor.mjs（每台引擎 4 条判据），日志落 w64-logs/。
+    W64LOGD = os.path.dirname(_memlog)
+    _fl = sorted(glob.glob(os.path.join(W64LOGD, "floor-*.log")))
+    if _fl:
+        _fp = _ff = 0
+        for _f in _fl:
+            try:
+                _t = open(_f, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            _m = re.search(r"===\s*(\d+) PASS / (\d+) FAIL\s*===", _t)
+            if _m:
+                _fp += int(_m.group(1))
+                _ff += int(_m.group(2))
+        # ⚠️ 引擎数**按判据行的引擎名去重**数，不按日志文件数：一份日志可以跑多台引擎
+        #    （实测 `floor-8761-ff-webkit.log` 一台文件里跑了 Firefox + WebKit）⇒
+        #    "文件数=引擎数"会把 4 台写成 3 台。
+        _eng = set()
+        for _f in _fl:
+            try:
+                _t = open(_f, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            _eng.update(re.findall(r"^\s*(?:PASS|fail) \| (\S+) · ①", _t, re.M))
+        facts["floor_matrix_engines"] = fact(len(_eng),
+                                             "数 w64-logs/floor-*.log 里 `· ① 页面 ready` 判据行的引擎名（去重）",
+                                             "w64-logs/floor-*.log",
+                                             "跑过的引擎：Chromium 154 / Chromium 125 / Firefox / WebKit（2026-10-01 实测）")
+        facts["floor_matrix_pass"] = fact(_fp, "同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）",
+                                          "w64-logs/floor-*.log")
+        facts["floor_matrix_fail"] = fact(_ff, "同上", "w64-logs/floor-*.log",
+                                          "必须 0；含「无 memory64 的引擎必须落 threads」这条反向断言")
 
     # ★ 零值守卫（2026-09-27 实测踩到）：本脚本**无参数运行就会重写台账**，而某些事实的输入
     #   现在不在（例：8761 站点此刻没有 `threads/` ⇒ 8 条线程档事实测不出来）⇒ 一次手滑就把

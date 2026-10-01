@@ -3529,3 +3529,21 @@ refblas，`97affe0`）。
 **坑**：四格批**不能**走 `promote-webgl.sh` —— 它会从容器 `m2fc-threads-out` 重推线程档，而那份已漂到
 `c2899a71…`（现役 `e570905e…`）⇒ 一次裸跑就把"base/threads 不许变"踩掉。新入口
 `build/promote-w64-lane.sh` 把这条做成**反向断言**（站点现状 ≠ 台账即 FATAL），自证 7/0 并进了闸门名单。
+
+### 5.71 四格站点的引擎矩阵上键（2026-10-01，branch `wasm64`）
+
+四格上线（§5.70）之后补量了"生产风险"那一面 —— **同一份 8761 在四台真引擎上的落档**：
+
+| 引擎 | mem64 | JSPI API | 落档 | 判据 |
+|---|---|---|---|---|
+| Chromium 154 | true | 有 | `w64`（shared） | 4/0 |
+| Firefox（pw 1543） | true | 有 | `w64` | 4/0 |
+| WebKit（pw 2359） | true | 有 | `w64` | 4/0 |
+| **Chromium 125** | **false** | **无**（D9 门关） | **`threads`** ← 反向断言 | 4/0 |
+
+日志 `w64-logs/floor-8761-{chromium,old-chromium,ff-webkit}.log`；上键为
+`floor_matrix_engines` / `floor_matrix_pass` / `floor_matrix_fail`（生产者 =
+`test/browser/probe-browser-floor.mjs`，本批把它的 ④ 判据从 `/threads|w64/` 改成
+(COI × memory64 × 站点档清单) 三元一致 —— 老判据分辨不出两档）。
+**顺带修掉台账里一个自身的坑**：引擎数先写成"日志文件数"，而一台文件里跑了两台引擎
+（Firefox + WebKit）⇒ 4 台被写成 3 台；现在按判据行的引擎名去重数。
