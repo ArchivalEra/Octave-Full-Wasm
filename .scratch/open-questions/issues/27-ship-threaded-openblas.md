@@ -82,3 +82,34 @@ matmul 500² 中位数 0.006 s ⇒ ≈6.7× 收益保留）。本单 = 把这条
 **⇒ 剩余唯一事项 = 产品决定**：是否把 `USE_THREAD=1` 作为**交付形态**（现役交付是 `USE_THREAD=0` 的 ≈1.9×）。
 若决定上线，走标准批次收尾（8768 验绿 → promote → boot/SHA 三层 → `site/` → dist → parity → 六道闸门），
 并把 `build/113/build-e2-lane.sh` 接进车道流水线（脚本已就位）。**这一步需要人拍板，故本单置 `ready-for-human`。**
+
+## 与四格站点的关系（2026-10-01 补充，工单 30 上线之后）
+
+四格上线后（`base`/`threads`/`w64`/`w64-base`），本单的"上线"**只换 `threads/` 那一档**，
+其余三档**一字不动**。这不是推测，是逐档读身份证读出来的：
+
+| 档 | 现役 BLAS（`inputs.blas.resolved_dir`） | 本单上线后 |
+|---|---|---|
+| `threads` | `/src/work/e2-openblas-lib-s`（OpenBLAS，**`USE_THREAD=0`**） | ⇒ 换成 `e2-openblas-lib-idleexit`（`USE_THREAD=1` + idle-exit 补丁） |
+| `w64` | `/src/deps-w64/lapack-simd/lib`（**refblas/lapack SIMD**） | 不动 |
+| `w64-base` | 同上（refblas SIMD） | 不动 |
+| `base` | `/src/deps/lapack-simd/lib`（refblas SIMD） | 不动 |
+
+⇒ **上线后的形态会是"只有 wasm32 线程档拿到 6.7×，64 位两档仍是 refblas"**。
+要把 6.7× 也带给 `w64`/`w64-base`，得再做**一次 w64 车道的 OpenBLAS 重建**（`MEMORY64=1` + pthread
+的 OpenBLAS 库 → 重链两档）—— 那是另一个批次，**不在本单范围内**，要就得先立单。
+
+**候选产物**（已在容器里，`verdict=ok`，`declared.e2_openblas=true`）：
+`/src/websrc/e2-ie-final2-out/octave.{wasm,js,data}` = sha `39307910…` / `62a1a4d0…` / `5c1433c4…`，
+烘死路径 `/src/work/octave-install-threads`（工单 28 的修复生效）。
+
+**若拍板上线，改动面与步骤**（都走既有受管辖入口，别手 `cp`）：
+1. **8768 先验**：把 `threads/` 三件 + `octave.build.json` 换成候选产物（用同一个入口做：可给
+   `build/promote-w64-lane.sh` 加一个 `--threads-artifact <目录>` 分支，或先手工落在 `siteWebGL/`），
+   跑 `sh build/sweep.sh http://127.0.0.1:8768/` 全量 + `PROBES=1`；
+2. **判据**：全绿（含 `accept-113-oct` 秒级、`accept-worker` 21/0）+ `bench-core` 的 500² 中位数 ≤0.008 s；
+   **反向断言**：`USE_THREAD=0` 的对照产物上同一 benchmark 必须明显慢（否则"修好"其实是关了线程）；
+3. promote 8761 → 开机自检 → SHA 三层（**`base`/`w64`/`w64-base` 三档 sha 必须不变**，只有 `threads/` 变）
+   → `site/` → dist → parity → 六道闸门 → 推送；
+4. **回滚**：把 `threads/` 三件换回现役 sha `e570905e…`（台账 `threads_wasm_sha`；容器里那份在
+   `/src/websrc/e2-ie-*` 之外的产物目录，先 `cp -a` 留档）。
