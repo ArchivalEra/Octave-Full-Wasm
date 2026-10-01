@@ -3491,3 +3491,41 @@ refblas，`97affe0`）。
 3. **判据要读对通道**：Octave 层的错误（`error()`/未定义函数）**不会**让 `eval_string` 抛 JS 异常
    ⇒ 格的 verdict 仍是 `returned`，判"这格干了什么"必须另读 `Module.last_error_message()`
    （第一版按 verdict 文本匹配，三条断言全假红）。
+
+### 5.70 四格上线：wasm64 四档发运 8761（工单 30 结案）+ 四个真缺陷（2026-10-01，branch `wasm64`）
+
+**批次**：把 `site-w64` 的四格（`base`/`threads`/`w64`/`w64-base` + 生成的 `lanes.js`）发运到 8761。
+用户 2026-09-30 拍板（工单 30）；这一条记**当时的原始数字**（活状态文档里只留台账键名，
+这些逐轮数字按 F2 的规矩当历史读）。
+
+**逐条判据（实测）**
+
+1. **8768 先验**：`PROBES=1` 全量 = **72 套 / 1343 PASS / 0 FAIL**（日志 `sweep-logs/20261001-080742/`）；
+   `probe-lane` = **33 PASS / 0 FAIL**（双档时 17）。
+2. **8761 promote**：开机自检 **1.3 s**；`probe-lane` 日志里 `dir=/mnt/hdd/octave-wasm-build/site`
+   （跑的是 8761 那份，不是别的站点冒充），选中 `w64`。
+3. **SHA 三层**：`base` `1ed3e528…` / `threads` `e570905e…` 与批前**逐字节相同**；
+   `w64` `d34d3217…` / `w64-base` `091c3500…` 为新增；HTTP 层四档逐档同 sha；
+   页面层 `probe-artifact-sha` **4 PASS / 0 FAIL**（实例化的就是 `w64/octave.wasm`）。
+4. **8761 全量 `PROBES=1`**：全绿（`sweep-logs/20261001-084427/`）；`accept-*` 口径
+   **43 套 / 1084 PASS / 0 FAIL**、探针 27 套 / 261 PASS、基准 2 套（按契约无汇总行）。
+5. **收尾**：`parity --strict` 三处完全一致；dist 包 `octave-full-wasm-site-20261001`
+   （tar.zst 91,025,991 B）四档 sha 与部署件逐档相同；六道闸门 + `gates-selftest`（30 个）全绿。
+6. **反向断言（真引擎）**：Chromium 125（`mem64=false`，`chromium-1117` + playwright 1.44.1）
+   在 8761 上 `lane=threads`、ready、D9 门关 ⇒ 4/0（日志 `w64-logs/floor-8761-old-chromium.log`）；
+   现代 Chromium 同判据期望 `w64` ⇒ 4/0（`w64-logs/floor-8761-chromium.log`）。
+
+**四个真缺陷（都带自证，别重犯）**
+
+1. `check-build-manifest.py`：`--out-dir DIR` 的 `DIR` 落进位置参数、被当 `declared.json` 打开
+   ⇒ 按文档单独用**必 rc=2**（`relink.sh` 同时传了真 declared 才一直没露馅）。修：`positional_args()`。
+2. `check-site-parity.sh`：只核 `threads` 档 ⇒ **w64 整档不在闸门管辖内**。修：按磁盘动态纳入三档 + 两套 `.oct`。
+3. `probe-browser-floor.mjs`：选档判据 `/threads|w64/` **分辨不出两档** ⇒ "无 memory64 却选 w64"恒绿。
+   修：`expectedLane()` = (COI × memory64 × 站点档清单) 三元一致。
+4. `sweep.sh` + `handoff_facts.py`：记簿文件 `.inputs-error.log` 被当成"缺汇总行的套件" ⇒ 全绿的
+   `PROBES=1` 扫描被判 `clean=False` ⇒ AUTO:STATE **静默退回上一轮旧扫描**，与 AUTO:FACTS 两个口径。
+   修：记簿改名 `.txt` + 消费侧跳过点文件。
+
+**坑**：四格批**不能**走 `promote-webgl.sh` —— 它会从容器 `m2fc-threads-out` 重推线程档，而那份已漂到
+`c2899a71…`（现役 `e570905e…`）⇒ 一次裸跑就把"base/threads 不许变"踩掉。新入口
+`build/promote-w64-lane.sh` 把这条做成**反向断言**（站点现状 ≠ 台账即 FATAL），自证 7/0 并进了闸门名单。

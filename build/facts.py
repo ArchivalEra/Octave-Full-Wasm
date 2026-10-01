@@ -399,9 +399,12 @@ def measure(argv):
                                           "每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；"
                                           "分母见 oct_lane_files + oct_lane_octdir_files")
 
-    # ── ★ 双档探针的实测汇总（B6）：从**保存下来的探针日志**里读（facts.py 不自己开浏览器）──
+    # ── ★ 选档探针的实测汇总（B6 双档 → 工单 30 四格）：从**保存下来的探针日志**里读
+    #    （facts.py 不自己开浏览器）──
     #    为什么要有这条：HANDOFF 会写"probe-lane N PASS / 0 FAIL"，那是**测出来的数字** ⇒ 按 F2 的规矩
     #    必须来自台账、并由闸门核对（否则它会静默漂移）。跑法见本条 cmd。
+    #    ⚠️ 站点是**四格还是双档**决定 PASS 数（四格多 6 格：Cell 1–4 每格多两条 + Cell 6/7 各多一条）
+    #    ⇒ 记录时**连站点一起记**（cmd 里的 SITE_DIR），否则"17"与"四格版"会互相冒充。
     pl = os.environ.get("PROBE_LANE_LOG", os.path.join(os.path.dirname(SITE), "probe-lane.log"))
     if os.path.exists(pl):
         try:
@@ -409,10 +412,10 @@ def measure(argv):
             m = re.search(r"===\s*(\d+) PASS / (\d+) FAIL\s*===", txt)
             if m:
                 facts["probe_lane_pass"] = fact(int(m.group(1)),
-                                                "SITE_DIR=siteWebGL sh test/browser/run.sh "
+                                                "SITE_DIR=<站点> sh test/browser/run.sh "
                                                 "test/browser/probe-lane.mjs > %s" % pl,
                                                 os.path.basename(pl),
-                                                "双档探针的 PASS 数（FAIL 必须 0）")
+                                                "选档探针的 PASS 数（FAIL 必须 0）；站点四格/双档不同 ⇒ 看 cmd 的 SITE_DIR")
                 facts["probe_lane_fail"] = fact(int(m.group(2)),
                                                 "同上（脚本结尾的 `=== N PASS / M FAIL ===`）",
                                                 os.path.basename(pl))
@@ -545,6 +548,32 @@ def measure(argv):
                                       "w64-artifacts/octave.wasm")
     except (OSError, ValueError) as e:
         print("⚠ 读不到 w64 身份证（%s）：%s" % (W64A, e), file=sys.stderr)
+    # ★ **w64-base**（工单 30，2026-10-01）：四格里的第四格 —— memory64 **单线程**回退档。
+    #   为什么上键：发运判据里有一条"只新增两档、base/threads 逐字节不变"，而**新那一档**的
+    #   sha 原来没有任何台账项 ⇒ `promote-w64-lane.sh` 只能拿容器当参照，"部署的到底是不是
+    #   验收过的那一份"就没人拦。上键之后那条判据变成"与台账比"。
+    W64BA = os.environ.get("W64_BASE_ARTIFACTS", os.path.join(os.path.dirname(SITE), "w64-base-artifacts"))
+    try:
+        bj = json.load(open(os.path.join(W64BA, "octave.build.json"), encoding="utf-8"))
+        me = bj.get("measured") or {}
+        facts["w64_base_verdict"] = fact(bj.get("verdict"),
+                                        "python3 build/facts.py（读 %s/octave.build.json）" % W64BA,
+                                        "w64-base-artifacts/octave.build.json")
+        facts["w64_base_wasm64"] = fact(bool(me.get("wasm64")),
+                                        "读 %s 的 measured.wasm64" % W64BA,
+                                        "w64-base-artifacts/octave.build.json",
+                                        "回退档也必须是真 64 位（否则它回退的是**另一个 ABI**，不是同一档）")
+        facts["w64_base_shared_memory"] = fact(bool((me.get("threads") or {}).get("shared_memory")),
+                                               "读 %s 的 measured.threads.shared_memory" % W64BA,
+                                               "w64-base-artifacts/octave.build.json",
+                                               "单线程回退档：**不**是 shared（这是它与 w64 的分界）")
+        wf = (me.get("files") or {}).get("octave.wasm") or {}
+        facts["w64_base_wasm_sha"] = fact(wf.get("sha256"), "sha256sum %s/octave.wasm" % W64BA,
+                                          "w64-base-artifacts/octave.wasm")
+        facts["w64_base_wasm_bytes"] = fact(wf.get("bytes"), "stat -c %%s %s/octave.wasm" % W64BA,
+                                            "w64-base-artifacts/octave.wasm")
+    except (OSError, ValueError) as e:
+        print("⚠ 读不到 w64-base 身份证（%s）：%s" % (W64BA, e), file=sys.stderr)
     # 两份日志：由 build-w64-lane.sh 的 facts 阶段写（`llvm-objdump` / `llvm-readobj` 量的）
     try:
         facts["w64_i64_insns"] = fact(int(open(os.path.join(W64L, "i64.txt"),

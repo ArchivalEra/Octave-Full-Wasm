@@ -76,7 +76,12 @@ while IFS='	' read -r name tmo needs; do
   #   而没人对齐它们。实测代价：`SITE_DIR=site-w64 … probe-lane` 那次，探针照样按自己的默认
   #   起了 siteWebGL 的服务、打出 17 PASS，**全是另一个站点的成绩**（日志里只有 `dir=…` 出卖它）。
   #   值里有空白时模块会**响亮拒绝**（未加引号的 `env $INPUTS` 会静默传错）——见 emit_inputs。
-  INPUTS="$(python3 "$REPO/build/lib/sweep_select.py" --inputs-for "$MAN" "$name" 2>>"$LOGDIR/.inputs-error.log" || true)"
+  #   ⚠️ 记簿文件名**不能是 `.log`**（2026-10-01 实测）：`.inputs-error.log` 会被
+  #   `.githooks/handoff_facts.py` 当成"一个没产汇总行的套件" ⇒ 一次**全绿**的 PROBES=1
+  #   扫描被判成 `clean=False`（missing=1）⇒ HANDOFF 的 AUTO:STATE 静默退回**上一轮旧扫描**
+  #   （表现为"最近一次全绿回归"写着 8848/1077，而 AUTO:FACTS 写着 8761/1084 —— 同一份文档
+  #   两个口径）。改 `.txt`：它不是套件日志，就该长得不像套件日志。
+  INPUTS="$(python3 "$REPO/build/lib/sweep_select.py" --inputs-for "$MAN" "$name" 2>>"$LOGDIR/.inputs-error.txt" || true)"
   # shellcheck disable=SC2086
   env $INPUTS sh "$REPO/test/browser/run.sh" "$REPO/test/browser/$name.mjs" "$URL" >"$log" 2>&1 &
   runner=$!

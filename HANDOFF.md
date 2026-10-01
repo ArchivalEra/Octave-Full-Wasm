@@ -13,12 +13,22 @@
 
 ---
 
-## 0. 现在是什么（2026-09-28）
+## 0. 现在是什么（2026-10-01）
 
-- **8761 = 现役「双档」站点**：根目录基础档 + `threads/` 线程档，**带头服务**（`build/serve-coi.py`）
-  ⇒ 页面按 COI 选**线程档**（实测 `probe-artifact-sha` 2/0：实例化的正是 `threads/octave.wasm`）。
+- **8761 = 现役「四格」站点**（工单 30，2026-10-01 上线）：根目录基础档 + `threads/` + **`w64/`** +
+  **`w64-base/`**，档清单 `lanes.js` = `[base,threads,w64,w64-base]`，**带头服务**（`build/serve-coi.py`）
+  ⇒ 页面按「能力 ∩ 清单」选 **`w64`**（memory64 + pthread）。**三层 SHA 都核过**：四档的磁盘/HTTP
+  逐档一致、页面层自证 4/0（页面实例化的正是 `w64/octave.wasm`，且 == `w64/` 身份证记的 sha）。
+  **`base`/`threads` 两档逐字节未变**（`wasm_sha` / `threads_wasm_sha` 都没动）⇒ 这是一次**只加两档**的批次。
   sha / 体积 / 回归数字都在文末 `AUTO:STATE`；其他实测事实在 `AUTO:FACTS`（源 = `build/FACTS.json`，
   每条带复跑命令）。正文只写**台账的键名**（F2 的规矩，闸门会拦手抄）。
+- ★ **四格的发运入口是 `build/promote-w64-lane.sh`**（工单 30）：`--dry-run`/`--verify`/`--selftest`
+  （自证 7/0，已进 `gates-selftest`）。它**拒收** base/threads 被动过的站点（**反向断言**：本批只许新增两档），
+  且**不能**用 `promote-webgl.sh` 代替 —— 后者会从容器 `m2fc-threads-out` 重推线程档，而那份已漂到
+  `c2899a71…`（现役是台账 `threads_wasm_sha` 那条）。
+- ★ **四格的选择规则与反证（都钉了断言）**：带头 + memory64 ⇒ `w64`；带头但**无 memory64** ⇒ `threads`
+  （**真 Chromium 125（`mem64=false`）实测**：`lane=threads`、页面照常 ready，`w64-logs/floor-8761-old-chromium.log`）；
+  不带头 ⇒ `w64-base`（有 memory64）/ `base`；**显式强选不满足前提的档必须响亮失败**（`probe-lane` Cell 6/7）。
 - **B6（双档 + COI）已收尾并上线**（branch `threads` 已合并到主干工作流；工作令 = `PLAN-threads.md` §6）：
   · **三套矩阵全绿**：线程档（8768 带头 + `PROBES=1`）、基础档（8770 不带头）、**8761 部署态**
     （带头 ⇒ 页面跑线程档）各跑一遍，逐套日志留档在 `sweep-logs/`；**套件数与 PASS 一律看台账**
@@ -56,21 +66,26 @@
   · **两轴选档**（`bridge/lane.js`：COI × memory64）⇒ 最多四格；**`site-w64` 上四档物理齐备**：
     `base`(wasm32 单线程) / `threads`(wasm32+pthread) / **`w64`(memory64+pthread，目标形态)** /
     **`w64-base`(memory64 单线程，回退)**；
-  · **验绿**：w64 站点全量回归全绿（套件数 / PASS 看台账 `accept_suites` / `accept_pass`）；四格矩阵探针 **30 PASS / 0 FAIL**
+  · **验绿**：四格站点（**8768 先验 → 8761 上线**）全量回归全绿（套件数 / PASS 看台账
+    `accept_suites` / `accept_pass`）；四格矩阵探针 PASS 数 = 台账 `probe_lane_pass` / FAIL = `probe_lane_fail`
     （含"缺 COI 强选 w64 硬失败"与"引擎无 memory64 强选 w64 硬失败"两条反证）；
-    **wasm32 回退没退化**（8761 上 `probe_lane_pass` / `probe_lane_fail`）；
-  · **8761/8768 一字未动**（w64 全程在独立端口 **8848** 验）；**w64 尚未 promote**。
+  · ★ **2026-10-01 工单 30 结案：四格已上线 8761**（此前长期只在独立端口 8848 验）。
+    上线过程见下条与 `build/113/NOTES-wasm64.md` 的「四格上线」节。
 - **车道影子是本轮的关键机制**（`build/113/lane-shim.sh`）：给"没地方传编译旗标"的 farm 脚本
   用 PATH 影子注入旗标。B6 用它注 `-pthread`，wasm64 用它注 `-pthread -sMEMORY64=1`。
   ⚠️ `relink.sh link threads` 以前**依赖操作员手工把影子挂上 PATH**（否则 `main.o` 不带 atomics，
   报一个离根因很远的错）⇒ 已**搬进入口**：入口自己挂，缺了就点名 FATAL（工单级教训见 HISTORY §5.67）。
-- ⚠️ **读 `AUTO:STATE` / `accept_*` 时注意口径**：那两个"最近一次全绿回归"取的是**最新的全绿扫描目录**，
-  而 2026-09-28 最新那次是 **w64 实验站点（8848）**的，不是 8761 的。两者套件数/PASS **恰好相同**
-  （所以数字没错），但**URL 列写着 8848** —— 看到它别以为 8761 的回归被什么替代了。
-  8761 自己的最近一次全绿是 `20260928-083050`（数字见 HISTORY §5.66）。
+- ⚠️ **读 `AUTO:STATE` / `accept_*` 时注意口径**：那两个"最近一次全绿回归"取的是**最新的全绿扫描目录**。
+  2026-10-01 起它指的是 **8761 自己的**那次（URL 列写着 8761）；四格站点的 PASS 数含探针/基准，
+  表头那对数字**只数 `accept-*`**（探针另计，写在括号里 —— 口径见 `handoff_facts.sweep_facts`）。
+  ★ 当天修掉一个让它们**互相冒充**的缺陷：`sweep.sh` 的记簿文件 `.inputs-error.log` 被当成
+  "缺汇总行的套件" ⇒ 全绿的 `PROBES=1` 扫描被判不干净 ⇒ AUTO:STATE 静默退回旧扫描。现已改 `.txt`
+  且消费侧跳过点文件（判据：`handoff_facts.sweep_facts()` 在 8761 那轮上必须 `clean=True`）。
 - **F4 输入契约已接线**（2026-09-28 修）：`sweep_select.py --inputs-for` + `sweep.sh` 的
   `env $INPUTS`。**不接这一步，探针会退回它自己的内部默认** —— 实测差点骗过复核（把另一个站点的
-  17 PASS 当成目标站点的）。⇒ 要跑 w64 四格：`SITE_DIR=…/site-w64 PROBES=1 sh build/sweep.sh <URL> probe-lane`。
+  17 PASS 当成目标站点的）。⇒ 要跑**四格**选档探针：`SITE_DIR=<四格站点目录> PROBES=1 sh build/sweep.sh
+  <URL> probe-lane`（环境变量覆盖优先于清单里声明的默认值；8761 那轮就是这么跑的，日志里
+  `dir=/mnt/hdd/octave-wasm-build/site` 是证据）。
 - 现役 farm（`/usr/local`、`/src/deps`）**一字未动**；四条车道 prefix 分开：
   `/usr/local`+`/src/deps`（base）、`-threads`（B6）、`-w64`（wasm64）—— **这是硬要求**。
 - ★ **2026-09-30 无人值守批次**（用户令：持续立工单并解决）：**17 张工单结案**
@@ -92,29 +107,34 @@
 
 ## 1. 下一步（按此顺序）
 
-**⚡ 状态（2026-09-30 晚，无人值守批次收尾）**：
-- **工单台账：30 张 → resolved 26、wontfix 1、open 3**（12 真机、27 发运决定、30 w64 上线=**本任务**）。
-- 本日新增并结案：**19**（USE_THREAD=1 dlopen 挂死修好，插桩+补丁+实测：挂死类清零、
-  matmul 500² 0.006–0.007 s ⇒ ≈6.7× 收益保留）、**20**（页面资产批入口，首跑抓出两处漂移）、
-  **21**（need_arch 阳性 10/10 + 阴性 18/18）、**22**（陈旧变量数）、**23**（选档第三轴：站点档清单）、
-  **24+07**（Chromium 125 下限侧 4/0）、**25**（8768 残留清除）、**28+29**（rebuild 没传车道 install
-  前缀 / link 不校验树前缀 —— 两个"静默坏产物"缺陷，都带自证修掉；教训：**verdict=ok 不覆盖运行期路径**）。
-- **27**（`USE_THREAD=1` 发运）：技术判据三条全过（套件数/PASS 见台账
-  `accept_suites` / `accept_pass`，0 FAIL / 0 超时；`accept-113-oct` 5 秒、matmul 500² 中位数
-  0.006–0.007 s）；**只剩产品决定** ⇒ `ready-for-human`。
-- 验收底线全程未退化：8761 开机自检 0.9s、部署件 SHA 磁盘/HTTP、页面层自证 2/0、parity 三处一致。
+**⚡ 状态（2026-10-01，工单 30 收尾）**：
+- **工单台账：30 张 → resolved 27、wontfix 1、open 2**（剩下的两张都**只能人定**：
+  **12** 真机手测（要设备，清单已入库 `docs/manual-test-checklist.md`）、
+  **27** `USE_THREAD=1` 发运（技术判据三条全过，只剩产品决定））。
+- **本日结案：30（w64 四格上线 8761）** —— 见 §1a（已完成的判据逐条列在里面）。
+  顺带修掉四个真缺陷（都带自证，详见 §1a）：`check-build-manifest.py` 的 `--out-dir` 位置参数
+  解析、`check-site-parity.sh` 只核 threads 档（w64 整档不在闸门里）、`probe-browser-floor.mjs`
+  的选档判据分辨不出 w64/threads、`sweep.sh` 的记簿 `.log` 让全绿扫描被误判不干净。
+- 验收底线全程未退化：8761 开机自检 1.3s、四档部署件 SHA 磁盘/HTTP/页面三层、parity 三处一致、
+  8761 全量 `PROBES=1` 全绿（数字看台账 `accept_suites` / `accept_pass`）。
 
-## 1a. ⭐ 下一任务（用户已拍板）：**工单 30 —— w64（四格）上线**
+## 1a. ✅ 已完成：**工单 30 —— w64（四格）上线 8761**（2026-10-01）
 
-把 `site-w64` 的**四格**（`base`/`threads`/`w64`/`w64-base` + 生成的 `lanes.js`）发运到 **8761**。
-**用户 2026-09-30 拍板**（工单 30，`ready-for-agent`，含逐条判据与坑）：
+用户 2026-09-30 拍板，2026-10-01 执行完毕。逐条判据与实测：
 
-1. 四格发到 **8768**（实验车道）先跑 `PROBES=1` 全量；
-2. promote → **8761 开机自检**（带头 ⇒ `__octaveLanes` 含 `w64` 且选中 `w64`）；
-3. **SHA 三层**——`base`/`threads` 两档 sha **必须不变**（`1ed3e528`/`e570905e`），只**新增**两档；
-4. 8761 全量 + `PROBES=1`（`probe-lane` 应从 17 PASS 涨到四格版）；
-5. `site/` → dist → `parity --strict` → 六道闸门 → 推送。
-**反向断言**：无 memory64 的引擎（Chromium 125 可作替身，`mem64=false`）在 8761 必须**落 `threads`**，不许 404。
+1. **8768 先验**：四格发到实验车道 → `PROBES=1` 全量全绿，`probe-lane` 是四格版的 PASS 数
+   （逐轮原始数字当历史读：`HISTORY.md` §5.70；活状态口径见台账 `probe_lane_pass` / `probe_lane_fail`）。
+2. **promote → 8761 开机自检**：1.3 s 就绪；带头页面 `__octaveLanes = [base,threads,w64,w64-base]`
+   且**选中 `w64`**（`probe-lane` 的日志里 `dir=/mnt/hdd/octave-wasm-build/site` 是"跑的就是 8761 那份"的证据）。
+3. **SHA 三层**：`base` / `threads` 两档 sha **逐字节未变**（`wasm_sha` / `threads_wasm_sha`），
+   只**新增** `w64`（`w64_wasm_sha`）与 `w64-base`（`w64_base_wasm_sha`）；四档的磁盘/HTTP 逐档一致；
+   页面层自证 4/0（`probe-artifact-sha`：页面实例化的字节 == `w64/` 身份证记的 sha）。
+4. **8761 全量 + `PROBES=1`**：全绿（台账 `accept_suites` / `accept_pass`，探针另计），`probe_lane_pass` 已是四格版。
+5. `site/`（仓库镜像）→ `make-dist.sh`（四档包内 sha 与部署件逐档相同）→ `parity --strict` 三处一致
+   → 六道闸门 → 提交推送。
+6. **反向断言（真引擎，不只模拟）**：本机 **Chromium 125**（`mem64=false`）在 8761 上
+   `lane=threads`、页面 ready、D9 门关 —— 日志 `w64-logs/floor-8761-old-chromium.log`；
+   现代 Chromium 同一条判据期望 `w64`（`w64-logs/floor-8761-chromium.log`）。
 
 ## 2. 铁律（违反会被拦或返工）
 
@@ -185,11 +205,16 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 
 `sh build/glue-selftest.sh`（91 项，宿主秒级）→ **8768 验绿**（`sh build/sweep.sh http://127.0.0.1:8768/`）
 → promote 8761（`build/promote-webgl.sh`；**M2 车道必须 `GL_OUT=$SRC_OUT`**）
+   ★ **只改某一档/某一类的批次走各自的受管辖入口**（都不许手 `cp`）：页面资产批 =
+   `build/promote-pages.sh`；**wasm64 车道批 = `build/promote-w64-lane.sh`**（它带"base/threads
+   逐字节不许变"的反向断言，且**不能**用 promote-webgl 代替 —— 理由见 §0）。
 → `sh build/check-boot.sh http://127.0.0.1:8761/` → **部署件 SHA 三层**
-（`check-deploy-sha.sh` + `probe-artifact-sha.mjs`）→ **同步仓库 `site/`**
-（`rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/`；`check-site-parity.sh --strict` 核三处一致）
+（`check-deploy-sha.sh` + `probe-artifact-sha.mjs`；四格站点的第二参数见 AGENTS 那条）
+→ **同步仓库 `site/`**
+（`rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/`；`check-site-parity.sh --strict` 核三处一致
+  —— 它按磁盘**动态**纳入 `threads`/`w64`/`w64-base` 三档，含两套车道 `.oct`）
 → **8761 全量**（`sh build/sweep.sh http://127.0.0.1:8761/`，每批再跑一次 `PROBES=1`）
-→ `sh build/make-dist.sh`（核对包内 wasm 与部署件同 sha）→ §3 的闸门组 → 提交。
+→ `sh build/make-dist.sh`（核对**四档**包内 wasm 与部署件逐档同 sha）→ §3 的闸门组 → 提交。
 **8761 在 promote 之前一动不动。**
 
 ---
@@ -205,8 +230,8 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 
 | 键 | 值 | 复跑命令 |
 |---|---|---|
-| `accept_pass` | **1063**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **42** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20260930-212033 里带汇总行的套件（且 0 FAIL）` |
+| `accept_pass` | **1084**（最近一次**全绿**扫描的 PASS 合计） | `同上，把每个套件的 PASS 相加` |
+| `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20261001-084427 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
 | `e2_lu800_ratio` | **1.4** | `上面两行的比值（车道 / E2）` |
@@ -237,7 +262,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `oct_lane_tls_init` | **44**（每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；分母见 oct_lane_files + oct_lane_octdir_files） | `python3 build/113/check-oct-lane.py <站点>/assets/oct-threads <站点>/assets/octdir-threads --base <站点>/assets/oct <站点>/assets/octdir` |
 | `octdir_base_files` | **28**（基础档 `assets/octdir/` 条数） | `find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' \| wc -l` |
 | `probe_lane_fail` | **0** | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
-| `probe_lane_pass` | **17**（双档探针的 PASS 数（FAIL 必须 0）） | `SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
+| `probe_lane_pass` | **33**（选档探针的 PASS 数（FAIL 必须 0）；站点四格/双档不同 ⇒ 看 cmd 的 SITE_DIR） | `SITE_DIR=<站点> sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
 | `threads_blas_dir` | **/src/work/e2-openblas-lib-s**（**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 inputs.blas.resolved_dir` |
 | `threads_exported_functions` | **725** | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.exported_functions` |
 | `threads_pthread_glue` | **54**（基础档实测是 0） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 measured.threads.pthread_glue` |
@@ -246,6 +271,11 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `threads_verdict` | **ok**（只有 ok 才可部署（fail-closed）） | `读 /mnt/hdd/octave-wasm-build/site/threads/octave.build.json 的 verdict` |
 | `threads_wasm_bytes` | **29495868** | `stat -c%s /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
 | `threads_wasm_sha` | `e570905ecc8927bf…` | `sha256sum /mnt/hdd/octave-wasm-build/site/threads/octave.wasm` |
+| `w64_base_shared_memory` | 否（单线程回退档：**不**是 shared（这是它与 w64 的分界）） | `读 /mnt/hdd/octave-wasm-build/w64-base-artifacts 的 measured.threads.shared_memory` |
+| `w64_base_verdict` | **ok** | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-base-artifacts/octave.build.json）` |
+| `w64_base_wasm64` | 是（回退档也必须是真 64 位（否则它回退的是**另一个 ABI**，不是同一档）） | `读 /mnt/hdd/octave-wasm-build/w64-base-artifacts 的 measured.wasm64` |
+| `w64_base_wasm_bytes` | **29935634** | `stat -c %s /mnt/hdd/octave-wasm-build/w64-base-artifacts/octave.wasm` |
+| `w64_base_wasm_sha` | `091c350054111b96…` | `sha256sum /mnt/hdd/octave-wasm-build/w64-base-artifacts/octave.wasm` |
 | `w64_exported_functions` | **732** | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.exported_functions` |
 | `w64_i64_insns` | **4040751**（64 位的指令层证据（wasm32 版为 0）） | `llvm-objdump -d <w64>/octave.wasm \| grep -c i64（由 build/113/build-w64-lane.sh facts 写出，容器内跑）` |
 | `w64_mem_5g_bytes` | **5242880000**（单线程 memory64 分配 80000 页（非 COI 页，buffer 是 ArrayBuffer）） | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
@@ -264,7 +294,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-09-30T22:55:14+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-10-01T09:17:13+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
@@ -279,7 +309,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20260928-212629` · **43 套 / 1,077 PASS / 0 FAIL** | http://127.0.0.1:8848/ |
-| 交付包 | `octave-full-wasm-site-20260928` · tar.zst 50,063,501 B · `8d2b49c1dfd6922a…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 最近一次**全绿**回归 | `20261001-084427` · **43 套 / 1,084 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 27 套 / 261 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20261001` · tar.zst 91,025,991 B · `2a4bfb92e57c39d4…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `wasm64`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

@@ -80,6 +80,31 @@ if [ "${1:-}" = "--selftest" ]; then
   probe red "★ 车道 .oct 有一处是旧件 ⇒ 必须红（B6：另一套编译的 44 个 side module）"
   rm -f "$tmp/a/assets/oct-threads/a.oct" "$tmp/b/assets/oct-threads/a.oct" "$tmp/c/assets/oct-threads/a.oct"
   probe red "★ 三处都没有车道 .oct ⇒ 必须红（零值守卫：分档检查不许空转）"
+  # ★ 工单 30：四格（w64/w64-base）也要进闸门 —— 一档"三处之一少了/旧了"必须红
+  #   ⚠️ 先把前面用例删掉的 VERSION 复原：它三处都缺时是**红**（零值守卫）⇒ 不复原的话
+  #      下面这两个 ok 用例会因为 VERSION 而红，看起来像"四格判据坏了"（自证自己先踩到）。
+  for d in "$tmp/a" "$tmp/b" "$tmp/c"; do printf 'same-VERSION' > "$d/VERSION"; done
+  printf 'lane-oct' > "$tmp/a/assets/oct-threads/a.oct"
+  printf 'lane-oct' > "$tmp/b/assets/oct-threads/a.oct"
+  printf 'lane-oct' > "$tmp/c/assets/oct-threads/a.oct"
+  mkfix_w64() {
+    mkdir -p "$1/w64" "$1/w64-base" "$1/assets/oct-w64"
+    for f in octave.wasm octave.js octave.data octave.build.json minioct.oct dldprobe.oct; do
+      printf 'same-w64-%s' "$f" > "$1/w64/$f"
+      printf 'same-w64-%s' "$f" > "$1/w64-base/$f"
+    done
+    printf '[]' > "$1/assets/manifest.w64.json"
+    printf 'lane-oct-64' > "$1/assets/oct-w64/a.oct"
+  }
+  mkfix_w64 "$tmp/a"; mkfix_w64 "$tmp/b"; mkfix_w64 "$tmp/c"
+  probe ok "四格：三处齐全且一致 ⇒ 通过（w64 那两档也进了部署件清单）"
+  rm -f "$tmp/c/w64/octave.data"
+  probe red "★ 四格：C 处少了一份 w64/octave.data ⇒ 必须红（动态清单要抓的就是这个）"
+  cp "$tmp/a/w64/octave.data" "$tmp/c/w64/octave.data"
+  printf 'lane-oct-64-OLD' > "$tmp/b/assets/oct-w64/a.oct"
+  probe red "★ 四格：w64 的 .oct 有一处是旧件 ⇒ 必须红（另一套 wasm64 side module）"
+  cp "$tmp/a/assets/oct-w64/a.oct" "$tmp/b/assets/oct-w64/a.oct"
+  probe ok "复原后 ⇒ 再次通过"
   rm -rf "$tmp"
   echo ""
   echo "=== check-site-parity 自证：$((ncases - fails)) PASS / $fails fail ==="
@@ -96,26 +121,46 @@ DEPLOY="octave.wasm octave.js octave.data octave.build.json index.html assets-lo
 DEPLOY="$DEPLOY lane.js octave-core.js octave-worker.js"
 DEPLOY="$DEPLOY threads/octave.wasm threads/octave.js threads/octave.data threads/octave.build.json"
 DEPLOY="$DEPLOY assets/manifest.threads.json"
+# ★ 工单 30（2026-10-01）：其余车道**动态**进清单 —— 三处**任一处**有这一档就都核。
+#   为什么不写死：闸门要在"四格站"和"双档站"上都能用（8768 先落地那半天不能假红），
+#   而"一处有一处没有"恰恰是本闸门最该抓的漂移。判据是**档目录在不在**，不是清单说什么。
+for _L in w64 w64-base; do
+  for _d in "$A" "$B" "$C"; do
+    if [ -d "$_d/$_L" ]; then
+      DEPLOY="$DEPLOY $_L/octave.wasm $_L/octave.js $_L/octave.data $_L/octave.build.json"
+      # 两个 pthread 夹具（验收套件**按档取**它们；缺了全量回归会红）
+      DEPLOY="$DEPLOY $_L/minioct.oct $_L/dldprobe.oct"
+      # 清单只有 `manifest.w64.json` 这一份（w64 与 w64-base 共用），所以只认已存在的那份
+      for _m in "assets/manifest.$_L.json"; do
+        for _dd in "$A" "$B" "$C"; do [ -f "$_dd/$_m" ] && { DEPLOY="$DEPLOY $_m"; break; }; done
+      done
+      break
+    fi
+  done
+done
 
 # 车道 `.oct` 分档（44 个 `-pthread` 的 side module）：不进上面那张清单（它是**集合**不是单件），
 # 单独用 (相对路径, sha256) 列表比对。判据可证伪：任一处的旧件/缺件都会让列表不同。
-lane_list() {
-  python3 - "$1" <<'PY'
+# 工单 30：档名当参数 —— 线程档与 wasm64 档是**两套**编译产物，各比各的。
+lane_list() {  # $1=站点  $2…=档名（默认 threads）
+  python3 - "$@" <<'PY'
 import hashlib, os, sys
 site = sys.argv[1]
-for sub in ("assets/oct-threads", "assets/octdir-threads"):
-    root = os.path.join(site, sub)
-    if os.path.isdir(root):
-        for r, _d, fs in os.walk(root):
-            for f in sorted(fs):
-                if not f.endswith(".oct"):
-                    continue
-                p = os.path.join(r, f)
-                h = hashlib.sha256()
-                with open(p, "rb") as fh:
-                    for c in iter(lambda: fh.read(1 << 20), b""):
-                        h.update(c)
-                print("%s %s" % (os.path.relpath(p, site), h.hexdigest()))
+lanes = sys.argv[2:] or ["threads"]
+for lane in lanes:
+    for sub in ("assets/oct-%s" % lane, "assets/octdir-%s" % lane):
+        root = os.path.join(site, sub)
+        if os.path.isdir(root):
+            for r, _d, fs in os.walk(root):
+                for f in sorted(fs):
+                    if not f.endswith(".oct"):
+                        continue
+                    p = os.path.join(r, f)
+                    h = hashlib.sha256()
+                    with open(p, "rb") as fh:
+                        for c in iter(lambda: fh.read(1 << 20), b""):
+                            h.update(c)
+                    print("%s %s" % (os.path.relpath(p, site), h.hexdigest()))
 PY
 }
 
@@ -180,25 +225,34 @@ for n in $referenced; do
   fi
 done
 
-say "【车道 .oct 分档（44 个 pthread 版 side module）】"
-_lza="$(mktemp)"; _lzb="$(mktemp)"; _lzc="$(mktemp)"
-lane_list "$A" >"$_lza"; lane_list "$B" >"$_lzb"; lane_list "$C" >"$_lzc"
-na=$(grep -c . "$_lza" || true); nb=$(grep -c . "$_lzb" || true); nc=$(grep -c . "$_lzc" || true)
-if [ "${na:-0}" = "0" ] && [ "${nb:-0}" = "0" ] && [ "${nc:-0}" = "0" ]; then
-  # 零值守卫：三处都没有 ⇒ 不许报"一致"（分档检查空转 —— 正是 F1 要消灭的形状）
-  say "  A/8761=0  B/8768=0  C/仓库=0  ← **三处都没有车道 .oct**，不算一致（闸门空转）"
-  diffcount=$((diffcount + 1))
-else
-  if cmp -s "$_lza" "$_lzb" && cmp -s "$_lzb" "$_lzc"; then
-    printf '  %s 个文件（oct-threads+octdir-threads）  %s  三处逐字节一致\n' "$nb" "$(sha256sum "$_lzb" | cut -c1-16)"
-  else
-    printf '  A=%s  B=%s  C=%s 个文件 ← **不一致**，差异前 5 行：\n' "$na" "$nb" "$nc"
-    diff "$_lza" "$_lzb" 2>/dev/null | head -5 | sed 's/^/     A|B /'
-    diff "$_lzb" "$_lzc" 2>/dev/null | head -5 | sed 's/^/     B|C /'
+say "【车道 .oct 分档】"
+# 分档检查按**档**做：线程档一定有（红线）；wasm64 档三处任一有才做
+# （工单 30 —— 不做的话"8761 有 w64/ 而 w64 的 .oct 是旧件"这条**没人拦**）。
+for _LANE in threads w64; do
+  _has=0
+  for _d in "$A" "$B" "$C"; do [ -d "$_d/$_LANE" ] && _has=1; done
+  if [ "$_LANE" = w64 ] && [ "$_has" = 0 ]; then continue; fi
+  say "  · 档 $_LANE"
+  _lza="$(mktemp)"; _lzb="$(mktemp)"; _lzc="$(mktemp)"
+  lane_list "$A" "$_LANE" >"$_lza"; lane_list "$B" "$_LANE" >"$_lzb"; lane_list "$C" "$_LANE" >"$_lzc"
+  na=$(grep -c . "$_lza" || true); nb=$(grep -c . "$_lzb" || true); nc=$(grep -c . "$_lzc" || true)
+  if [ "${na:-0}" = "0" ] && [ "${nb:-0}" = "0" ] && [ "${nc:-0}" = "0" ]; then
+    # 零值守卫：三处都没有 ⇒ 不许报"一致"（分档检查空转 —— 正是 F1 要消灭的形状）
+    say "    A/8761=0  B/8768=0  C/仓库=0  ← **三处都没有该档 .oct**，不算一致（闸门空转）"
     diffcount=$((diffcount + 1))
+  else
+    if cmp -s "$_lza" "$_lzb" && cmp -s "$_lzb" "$_lzc"; then
+      printf '    %s 个文件（oct-%s+octdir-%s）  %s  三处逐字节一致\n' \
+        "$nb" "$_LANE" "$_LANE" "$(sha256sum "$_lzb" | cut -c1-16)"
+    else
+      printf '    A=%s  B=%s  C=%s 个文件 ← **不一致**，差异前 5 行：\n' "$na" "$nb" "$nc"
+      diff "$_lza" "$_lzb" 2>/dev/null | head -5 | sed 's/^/     A|B /'
+      diff "$_lzb" "$_lzc" 2>/dev/null | head -5 | sed 's/^/     B|C /'
+      diffcount=$((diffcount + 1))
+    fi
   fi
-fi
-rm -f "$_lza" "$_lzb" "$_lzc"
+  rm -f "$_lza" "$_lzb" "$_lzc"
+done
 echo ""
 say "【未引用的遗留资产（**不算差异**，只是报出来）】"
 for d in "$A" "$B" "$C"; do

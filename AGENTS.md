@@ -58,6 +58,10 @@
   我顺手把 `bridge/{lane.js,index.html}` 也 `cp` 进了 **8761 站点**，而那里没有 `threads/` 且**带头服务**
   ⇒ 页面按 COI 选线程档 ⇒ `threads/octave.js` **404**，验收底线当时是坏的（回退三步见
   `build/113/NOTES-threads.md` 末节）。⇒ 实验只 `cp` 到 `siteWebGL/`；`site/` 那一份交给 promote。
+  **只改某一档 / 某一类的批次走各自的受管辖入口**（都是 `--dry-run`/`--verify`/`--selftest`，
+  且都带"不许夹带别的改动"的反向断言）：页面资产批 = `build/promote-pages.sh`；
+  **wasm64 车道批 = `build/promote-w64-lane.sh`**（工单 30 起 —— 它拒收 base/threads 被动过的站点，
+  因为 `promote-webgl.sh` 会从容器 `m2fc-threads-out` 重推线程档，而那份已漂走）。
 ★ **服务方式（B6 起，2026-09-27）**：8761/8768 **必须带头**起 —— `python3 build/serve-coi.py
   --dir <站点目录> --port 8761`（它发 `COOP: same-origin` + `COEP: require-corp`）。`python3 -m
   http.server` 发不了这两个头 ⇒ 线程档选不中、页面**静默**落回基础档（不报错，只是没线程）。
@@ -68,12 +72,21 @@
 → **开机自检** `sh build/check-boot.sh http://127.0.0.1:8761/`（30 秒，**不过就别往下走**）
 → **部署件 SHA 检查**（★ 用户点名的铁律，2026-09-25；改完程序用老产物跑 = 本会话多次事故）：
   `sh build/check-deploy-sha.sh <站点目录> <刚构建的wasm sha> <URL>` +
-  `node test/browser/probe-artifact-sha.mjs <URL> <sha>` —— 三层（磁盘/HTTP/页面自证）不全绿就停。
+  `node test/browser/probe-artifact-sha.mjs <URL> [页面实际选中的那一档的 sha]` —— 三层
+  （磁盘/HTTP/页面自证）不全绿就停。
+  ★ **四格站点（带头 ⇒ 页面跑 `w64/`）**：第二参数要么留空（探针会走 ③a 身份证判据：
+  页面实例化的字节 == 那一档自己 `octave.build.json` 记的 sha），要么传 **w64 档**的 sha；
+  传根目录基础档的 sha 没有意义（页面根本不实例化它）。
 → **同步仓库 `site/`**（入库的可部署镜像，部署说明 DEPLOY.md）：
   `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/` 后一并提交
 → **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
   ★ **双档（B6）**：站点里除根目录三大件外还要有 `threads/octave.{js,wasm}`（文件名相同、子目录区分），
   `SITE_DIR=<站点目录> sh build/…` 跑 `probe-lane` 验"带头选线程档 / 不带头落基础档 / 选错档硬失败"。
+  ★ **四格（工单 30，2026-10-01）**：再加 `w64/` 与 `w64-base/`（同名文件、子目录区分）+
+  `assets/{oct-w64,octdir-w64}` + `assets/manifest.w64.json`，档清单由 `gen-lanes.sh` 重生成。
+  期望：带头 ⇒ `w64`（shared）、不带头 ⇒ `w64-base`、**无 memory64 ⇒ `threads`（反向断言）**、
+  无 COI 强选 `w64` ⇒ 硬失败。四格批**只走** `build/promote-w64-lane.sh`（别用 promote-webgl：
+  它会重推已漂走的 `m2fc-threads-out`）。`probe-lane` 的 PASS 数随站点档数变（双档 17 / 四格 33）。
 → `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
 → **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**

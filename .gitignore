@@ -148,6 +148,9 @@
 # 工单 23：档清单的入库默认值（页面引用它，必须能被跟踪）
 !bridge/lanes.js
 
+# 工单 30：wasm64 车道的受管辖发运入口（base/threads 不许动的反向断言在里面）
+!build/promote-w64-lane.sh
+
 # 工单 19：OpenBLAS 空闲退出的补丁脚本
 !build/113/patch-openblas-idle-exit.py
 

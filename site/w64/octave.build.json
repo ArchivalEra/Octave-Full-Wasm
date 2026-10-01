@@ -1,0 +1,124 @@
+{
+ "schema": 1,
+ "tool": {
+  "name": "link-web.sh",
+  "script_sha256": "a04488c9625cde860aede7e9b6afa8479cde8e74e8cd6643e31d2d44ee6b5183",
+  "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 5.0.7 (263db4cffa6f9fc2ec514a70abac81362ea41849)",
+  "manifest_writer": {
+   "name": "write-build-manifest.py",
+   "script_sha256": "fc6db00cf081789ce976ff4c476c7bb59fa43b43d0fdfa56dd80e602c6826dd2"
+  }
+ },
+ "build": {
+  "when": "2026-09-28T12:49:09+0000",
+  "out": "/src/websrc/w64-out",
+  "mode": "w64"
+ },
+ "declared": {
+  "main_module": 2,
+  "simd": true,
+  "jspi_entry": true,
+  "jspi_glue_suspending": 0,
+  "gl4es": true,
+  "idbfs": true,
+  "fontconfig": true,
+  "threads": true,
+  "wasm64": true,
+  "fonts": [
+   "FreeSans.otf",
+   "FreeSansBold.otf",
+   "FreeSansOblique.otf",
+   "FreeSansBoldOblique.otf",
+   "FreeMono.otf",
+   "FreeMonoBold.otf",
+   "FreeMonoOblique.otf",
+   "FreeMonoBoldOblique.otf"
+  ]
+ },
+ "measured": {
+  "exported_functions": 732,
+  "simd": {
+   "v128": 4797,
+   "impl": "llvm-objdump"
+  },
+  "jspi_entry": true,
+  "jspi_glue_suspending": 0,
+  "gl4es": {
+   "symbol_hits": 54
+  },
+  "osmessa_residue": 0,
+  "idbfs": true,
+  "fontconfig": true,
+  "threads": {
+   "pthread_glue": 54,
+   "worker_glue": 1,
+   "shared_memory": true
+  },
+  "fonts": [
+   "FreeMono.otf",
+   "FreeMonoBold.otf",
+   "FreeMonoBoldOblique.otf",
+   "FreeMonoOblique.otf",
+   "FreeSans.otf",
+   "FreeSansBold.otf",
+   "FreeSansBoldOblique.otf",
+   "FreeSansOblique.otf"
+  ],
+  "wasm64": true,
+  "preload_atftp_misplaced": false,
+  "files": {
+   "octave.wasm": {
+    "sha256": "d34d3217f348bcd754d1f2777fe73b67f188e038cd05c54a6aed06a2dd8240ae",
+    "bytes": 30012178
+   },
+   "octave.js": {
+    "sha256": "97c9f37dc50003a2ae93dc00e84c469cc1e1348c2d48eaf49fc20493a9c766b4",
+    "bytes": 513791
+   },
+   "octave.data": {
+    "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
+    "bytes": 9712182
+   }
+  }
+ },
+ "inputs": {
+  "link_web_sh": {
+   "path": "/src/bin/link-web.sh",
+   "sha256": "a04488c9625cde860aede7e9b6afa8479cde8e74e8cd6643e31d2d44ee6b5183"
+  },
+  "blas": {
+   "resolved_dir": "/src/deps-w64/lapack-simd/lib",
+   "search_order": [
+    "/src/deps-w64/lapack-simd/lib",
+    "/usr/local/lib"
+   ],
+   "librefblas": {
+    "path": "/src/deps-w64/lapack-simd/lib/librefblas.a",
+    "sha256": "46665dbd0121ec23c99ff9438fa2241c2373aac54a7169cb3fdbc8696dfd591e",
+    "bytes": 719136
+   },
+   "liblapack": {
+    "path": "/src/deps-w64/lapack-simd/lib/liblapack.a",
+    "sha256": "3a00f2e9d52ac96f42376e441c38485982b8c6ace8537533fc16f29f14ab8b61",
+    "bytes": 10863098
+   }
+  },
+  "keep_list": {
+   "path": "/src/libwork/keep-w64.txt",
+   "sha256": "3eb11d42c6495d4ffb66643666b18b52652f57bdda13edfa6e9f753840e731b6",
+   "lines": 1304
+  },
+  "baseline_wasm": {
+   "path": "/src/websrc/m2fc-threads-out/octave.wasm",
+   "sha256": "c2899a71b5c75fce43475ecaedd35cd76af6aeb5fee542ebd9ad8479276f2cf4"
+  }
+ },
+ "notes": [],
+ "verdict": "ok",
+ "mismatches": [],
+ "checked": {
+  "when": "2026-09-28T13:38:08+0000",
+  "by": "check-build-manifest.py",
+  "script_sha256": "676cb1ccd55bd00f127c1621dcc9bb0958de1fa8e76e9d225e2ca888a8b82e96"
+ }
+}

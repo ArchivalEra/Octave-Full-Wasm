@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-09-30T22:55:14+0800",
+ "generated": "2026-10-01T09:17:13+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -62,14 +62,14 @@
    "source": "build/113/link-web.sh"
   },
   "accept_suites": {
-   "value": 42,
-   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20260930-212033 里带汇总行的套件（且 0 FAIL）",
-   "source": "sweep-logs/20260930-212033"
+   "value": 43,
+   "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20261001-084427 里带汇总行的套件（且 0 FAIL）",
+   "source": "sweep-logs/20261001-084427"
   },
   "accept_pass": {
-   "value": 1063,
+   "value": 1084,
    "cmd": "同上，把每个套件的 PASS 相加",
-   "source": "sweep-logs/20260930-212033",
+   "source": "sweep-logs/20261001-084427",
    "note": "最近一次**全绿**扫描的 PASS 合计"
   },
   "threads_verdict": {
@@ -148,10 +148,10 @@
    "note": "每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；分母见 oct_lane_files + oct_lane_octdir_files"
   },
   "probe_lane_pass": {
-   "value": 17,
-   "cmd": "SITE_DIR=siteWebGL sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log",
+   "value": 33,
+   "cmd": "SITE_DIR=<站点> sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log",
    "source": "probe-lane.log",
-   "note": "双档探针的 PASS 数（FAIL 必须 0）"
+   "note": "选档探针的 PASS 数（FAIL 必须 0）；站点四格/双档不同 ⇒ 看 cmd 的 SITE_DIR"
   },
   "probe_lane_fail": {
    "value": 0,
@@ -275,6 +275,33 @@
    "value": 30012178,
    "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm",
    "source": "w64-artifacts/octave.wasm"
+  },
+  "w64_base_verdict": {
+   "value": "ok",
+   "cmd": "python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-base-artifacts/octave.build.json）",
+   "source": "w64-base-artifacts/octave.build.json"
+  },
+  "w64_base_wasm64": {
+   "value": true,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/w64-base-artifacts 的 measured.wasm64",
+   "source": "w64-base-artifacts/octave.build.json",
+   "note": "回退档也必须是真 64 位（否则它回退的是**另一个 ABI**，不是同一档）"
+  },
+  "w64_base_shared_memory": {
+   "value": false,
+   "cmd": "读 /mnt/hdd/octave-wasm-build/w64-base-artifacts 的 measured.threads.shared_memory",
+   "source": "w64-base-artifacts/octave.build.json",
+   "note": "单线程回退档：**不**是 shared（这是它与 w64 的分界）"
+  },
+  "w64_base_wasm_sha": {
+   "value": "091c350054111b9623812b8ba5c00ce285859a547152b9c2bcff7f1ede03b105",
+   "cmd": "sha256sum /mnt/hdd/octave-wasm-build/w64-base-artifacts/octave.wasm",
+   "source": "w64-base-artifacts/octave.wasm"
+  },
+  "w64_base_wasm_bytes": {
+   "value": 29935634,
+   "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/w64-base-artifacts/octave.wasm",
+   "source": "w64-base-artifacts/octave.wasm"
   },
   "w64_i64_insns": {
    "value": 4040751,

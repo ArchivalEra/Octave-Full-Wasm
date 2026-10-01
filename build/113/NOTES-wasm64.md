@@ -204,3 +204,55 @@ import("playwright-core").then(async pw => {
 });
 '
 ```
+
+---
+
+## 四格上线（工单 30，2026-10-01）
+
+### 1. 实测结论
+
+- **8761 现在是四格站点**：`base`（wasm32 单线程）/ `threads`（wasm32+pthread）/
+  **`w64`（memory64+pthread，目标形态）** / `w64-base`（memory64 单线程，回退），
+  档清单 `lanes.js` 由 `gen-lanes.sh` 按磁盘生成。
+- **只加两档，别的逐字节没动**：`base` / `threads` 的 sha 与批前相同
+  （台账 `wasm_sha` / `threads_wasm_sha`）；新增的 `w64` / `w64-base` sha 已在台账上键
+  （`w64_wasm_sha` / `w64_base_wasm_sha` / `w64_base_verdict` / `w64_base_wasm64` /
+  `w64_base_shared_memory`）。
+- **为什么不能用 `promote-webgl.sh` 做这批**（实测）：它会从容器 `THREADS_OUT`
+  （`/src/websrc/m2fc-threads-out`）重推线程档，而那份已经漂到 `c2899a71…`
+  （现役部署件是 `e570905e…`）⇒ 一次裸跑就会把"base/threads 不许变"这条判据踩掉。
+  新入口 `build/promote-w64-lane.sh` 把这条写成**反向断言**（站点现状 ≠ 台账就 FATAL）。
+- **8768 先验 → 8761 上线**：8768 `PROBES=1` 全量 **72 套 / 1343 PASS / 0 FAIL**、
+  `probe-lane` **33/0**；8761 开机自检 **1.3 s**、全量 `PROBES=1` 全绿、`parity --strict` 三处一致。
+- **反向断言有**真引擎**一格**：Chromium 125（`mem64=false`）在 8761 上落 `threads`（不是 w64、不是 404），
+  页面 ready、D9 门关；现代 Chromium 同一条判据期望 `w64`。两条日志在 `w64-logs/floor-8761-*.log`。
+
+### 2. 复跑命令
+
+```bash
+# ① 发运（受管辖入口；先 8768 后 8761；它会自己核对"只许新增两档"）
+sh build/promote-w64-lane.sh --dry-run /mnt/hdd/octave-wasm-build/siteWebGL
+sh build/promote-w64-lane.sh            /mnt/hdd/octave-wasm-build/siteWebGL
+sh build/promote-w64-lane.sh            /mnt/hdd/octave-wasm-build/site        # 8761
+sh build/promote-w64-lane.sh --verify   /mnt/hdd/octave-wasm-build/site        # 只核不写
+sh build/promote-w64-lane.sh --selftest                                        # 7 PASS / 0 fail
+
+# ② 选档探针（**必须**指对站点目录：四格/双档的 PASS 数不同）
+SITE_DIR=/mnt/hdd/octave-wasm-build/site PROBES=1 sh build/sweep.sh http://127.0.0.1:8761/ probe-lane
+
+# ③ 反向断言：真·无 memory64 引擎（Chromium 125，配旧 playwright）
+FLOOR_ENGINES=old-chromium HARNESS=/mnt/hdd/crossbuild-tools/pw-old \
+  sh test/browser/run.sh test/browser/probe-browser-floor.mjs http://127.0.0.1:8761/
+#   → 期望 lane=threads（判据：expectedLane() = COI × memory64 × 站点档清单 三元一致）
+
+# ④ 页面层 SHA 自证（四格站点：页面跑 w64 ⇒ 期望层跳过，走 ③a 身份证判据）
+cd /mnt/hdd/octave-wasm-build/harness && sh run.sh \
+  /mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/probe-artifact-sha.mjs http://127.0.0.1:8761/
+```
+
+### 3. 本批新增/加强的判据（都在闸门名单里）
+
+- `build/promote-w64-lane.sh --selftest`（7/0）—— 进 `build/gates-selftest.sh`；
+- `build/check-site-parity.sh` 动态纳入三档车道（`threads`/`w64`/`w64-base`）与两套车道 `.oct`（自证 9/0）；
+- `probe-browser-floor.mjs` 的 ④ 判据改成三元一致（老判据分辨不出 w64 与 threads）；
+- `probe-artifact-sha.mjs` 新增 ③a 身份证层（老逻辑在非基础档上整条跳过）。

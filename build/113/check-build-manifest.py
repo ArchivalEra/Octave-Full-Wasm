@@ -182,8 +182,31 @@ def compare(declared, measured, man=None):
     return bad
 
 
+def positional_args(argv):
+    """取位置参数 —— **带值的旗标（`--out-dir DIR`）的值不算位置参数**。
+
+    实测事故（工单 30，2026-10-01）：老实现只按 `startswith("--")` 过滤，于是 `--out-dir DIR`
+    的 `DIR` 落进位置参数、被当成 `declared.json` 打开 ⇒ `IsADirectoryError` ⇒ **一律 rc=2**。
+    `relink.sh` 恰好同时传了真的 declared（`man declared --out-dir DIR`）才一直没露馅；
+    按文档单独用 `--out-dir`（不传 declared）就当场红 —— **文档说能用、实际不能用**。
+    """
+    takes_value = {"--out-dir"}
+    out, i = [], 1
+    while i < len(argv):
+        a = argv[i]
+        if a in takes_value:
+            i += 2
+            continue
+        if a.startswith("--"):
+            i += 1
+            continue
+        out.append(a)
+        i += 1
+    return out
+
+
 def main(argv):
-    args = [a for a in argv[1:] if not a.startswith("--")]
+    args = positional_args(argv)
     flags = {a for a in argv[1:] if a.startswith("--")}
     if len(args) < 1:
         # ⚠️ 别用 `__doc__`：本文件开头是 `#` 注释、**没有模块 docstring** ⇒ `__doc__` 是 None，
@@ -348,6 +371,12 @@ CASES = [
     ("★ 工单 15：不给 --out-dir 且 build.out 指向别处 ⇒ 必须报（当年假红的形状，不许复活）",
      lambda: _copy_with(None, out_dir=False) == 1),
     ("**空声明** ⇒ 必须报（零值守卫）", lambda: True),      # 由 main 的守卫覆盖，这里只作占位
+    # ★ 工单 30（2026-10-01）：`--out-dir` 的**值**不算位置参数（否则被当成 declared.json 打开）
+    ("★ --out-dir 的值不是位置参数（老实现会当成 declared.json ⇒ 一律 rc=2）",
+     lambda: positional_args(["x.py", "man.json", "--out-dir", "/tmp/d", "--write"]) == ["man.json"]),
+    ("★ declared 与 --out-dir 并存时两个位置参数都取到",
+     lambda: positional_args(["x.py", "man.json", "decl.json", "--out-dir", "/tmp/d"])
+     == ["man.json", "decl.json"]),
 ]
 
 

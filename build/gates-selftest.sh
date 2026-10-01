@@ -51,6 +51,7 @@ build/facts.py --selftest
 build/lib/sweep_select.py --selftest
 build/113/lane-pick-selftest.mjs --selftest
 build/promote-pages.sh --selftest
+build/promote-w64-lane.sh --selftest
 build/gen-lanes.sh --selftest
 EOF
 

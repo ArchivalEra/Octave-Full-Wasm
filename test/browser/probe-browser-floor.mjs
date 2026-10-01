@@ -14,7 +14,8 @@
 //     ② eval('2+2') 必须成立
 //     ③ D9 门必须与 jspiApi **一致**：有 API ⇒ suspendOk=1；没 API ⇒ suspendOk=0
 //        （两边不一致都是红：降级判定要么漏报要么误报）
-//     ④ lane 必须与 COI 一致（带头 ⇒ threads/w64；不带头 ⇒ base）
+//     ④ lane 必须与 (COI × memory64 × **站点档清单**) 一致（三者共同决定该选哪一档；
+//        详见 `expectedLane()` —— ★ 无 memory64 的引擎**不许**落 w64，工单 30 的反向断言）
 //
 // 引擎清单（本机有的）与老引擎缺口如实记录：<137 的 Chromium 本机没有 ⇒ 那格
 // 打 `engine-unavailable`，不算失败也不算通过（工单 07 为此保持 ready-for-human）。
@@ -84,6 +85,10 @@ async function probePage (page) {
       sab: !!(c.engine && c.engine.sharedArrayBuffer),
       coi: c.engine ? c.engine.crossOriginIsolated : null,
       lane: (c.lane || {}).chosen || '?',
+      // ★ 工单 30：把**站点档清单**也取回来 —— "该选哪一档"是 (COI × memory64 ×
+      //   **这个站点到底部署了哪几档**) 的确定函数。不读清单就看不出"没有 memory64
+      //   却选了 w64"这种错（老判据只要求 /threads|w64/ ⇒ 那条错**恒绿**）。
+      lanes: (() => { try { return window.__octaveLanes ? Array.from(window.__octaveLanes) : null; } catch (e) { return null; } })(),
       mem64,
       suspendOk: susp && susp.startsWith('ERR') ? susp : (ms ? +ms[1] : null),
       evalOk: evalOk && evalOk.startsWith('ERR') ? evalOk : (me ? +me[1] === 4 : null),
@@ -118,11 +123,25 @@ for (const name of ENGINES) {
   ]);
   rows.push({ name, ...r });
   const tag = r.error ? 'fail' : 'PASS';
-  console.log(`${tag} | ${name.padEnd(12)} ready=${r.ready} lane=${r.lane} jspiApi=${r.jspiApi} suspendOk=${r.suspendOk} mem64=${r.mem64} coi=${r.coi} ${r.error || ''}`);
+  console.log(`${tag} | ${name.padEnd(12)} ready=${r.ready} lane=${r.lane} lanes=${JSON.stringify(r.lanes)} jspiApi=${r.jspiApi} suspendOk=${r.suspendOk} mem64=${r.mem64} coi=${r.coi} ${r.error || ''}`);
   await Promise.race([browser.close(), new Promise(res => setTimeout(res, 8000))]).catch(() => {});
 }
 
 // ── 断言：矩阵的每一条红绿判据 ────────────────────────────────────────────────
+// 该选哪一档 = 优先级顺序里**清单中真的部署了**的第一档（与 `bridge/lane.js` 同构）：
+//   COI + m64     ⇒ w64 → threads → base
+//   COI + 无 m64  ⇒ threads → base          ← ★ 不许是 w64（本批的反向断言）
+//   非 COI + m64  ⇒ w64-base → base
+//   非 COI + 无 m64 ⇒ base
+function expectedLane (r) {
+  const inv = Array.isArray(r.lanes) ? r.lanes : [];
+  const order = r.coi === true
+    ? (r.mem64 === true ? ['w64', 'threads', 'base'] : ['threads', 'base'])
+    : (r.mem64 === true ? ['w64-base', 'base'] : ['base']);
+  for (const l of order) if (inv.includes(l)) return l;
+  return null;
+}
+
 console.log('\n════ 判据 ════');
 for (const r of rows) {
   if (r.error) { check(false, `${r.name} · 页面事实没拿到`, r.error); continue; }
@@ -132,8 +151,19 @@ for (const r of rows) {
     `${r.name} · ③a 有 JSPI API ⇒ D9 门必须开`, `suspendOk=${r.suspendOk}`);
   else check(r.suspendOk === 0 || r.suspendOk === '0',
     `${r.name} · ③b 无 JSPI API ⇒ D9 门必须关（不许误报可挂起）`, `jspiApi=${r.jspiApi} suspendOk=${r.suspendOk}`);
-  const laneOk = r.coi === true ? /threads|w64/.test(r.lane) : r.lane === 'base';
-  check(laneOk, `${r.name} · ④ lane 与 COI 一致`, `coi=${r.coi} lane=${r.lane}`);
+  // ④ lane 与 (COI × memory64 × **站点档清单**) 一致 —— 三者共同决定该选哪一档。
+  //   ★ 工单 30：老判据是 `coi ? /threads|w64/ : lane==='base'`，它**分辨不出 w64 与 threads**
+  //     ⇒ "没有 memory64 的引擎却选了 w64"这种错在那条判据下**恒绿**（正是本批要证伪的那条）。
+  //     现在的判据：按优先级取"清单里真的部署了"的第一档，**必须逐字等于**页面选的档。
+  const want = expectedLane(r);
+  if (want === null) {
+    check(false, `${r.name} · ④ 站点档清单为空 ⇒ 判不了（零值守卫，不许当通过）`,
+          `lanes=${JSON.stringify(r.lanes)}`);
+  } else {
+    check(r.lane === want,
+          `${r.name} · ④ lane 与 (COI × memory64 × 清单) 一致（期望 ${want}）`,
+          `coi=${r.coi} mem64=${r.mem64} lane=${r.lane} lanes=${JSON.stringify(r.lanes)}`);
+  }
 }
 
 console.log('');

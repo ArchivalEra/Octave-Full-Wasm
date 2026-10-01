@@ -42,9 +42,26 @@ if (pageSha) {
   }, laneDir);
   check(httpSha === pageSha, `② HTTP 层：fetch(${laneDir}octave.wasm) 的 sha == 页面自证 sha`,
         `http=${httpSha.slice(0, 16)}… page=${pageSha.slice(0, 16)}… dir=${laneDir || '(根)'}`);
+  // ★ ③a **身份证层**（工单 30，2026-10-01）：页面实例化的字节必须 == **那一档自己的
+  //   `octave.build.json` 记的 sha**。为什么加：四格站点上页面跑的是 `w64/`，而下面那条
+  //   "期望层"老逻辑遇到 `laneDir` 非空就**整条跳过** ⇒ "页面实例化的不是站点身份证说的
+  //   那份产物"在四格站上**没人拦**（跳过 = 那条路径上判据不存在）。这条与档无关，恒跑。
+  const card = await page.evaluate(async (d) => {
+    try {
+      const j = await (await fetch(d + 'octave.build.json')).json();
+      return (((j.measured || {}).files || {})['octave.wasm'] || {}).sha256 || null;
+    } catch (e) { return null; }
+  }, laneDir);
+  check(!!card, `③a ${laneDir || '(根)'}octave.build.json 的身份证可读（零值守卫）`,
+        card ? card.slice(0, 16) + '…' : '缺席（缺身份证 ⇒ 判不了，不算通过）');
+  if (card) {
+    check(pageSha === card.toLowerCase(),
+          `③a 页面实例化的字节 == ${laneDir || '(根)'}身份证记的 sha（档内自洽）`,
+          `page=${pageSha.slice(0, 16)}… card=${card.slice(0, 16)}…`);
+  }
   if (EXPECT && laneDir) {
-    console.log(`   ③ 期望层：页面跑的是 **线程档**（${laneDir}）⇒ 传进来的期望 sha 是基础档的，本层跳过；`);
-    console.log(`      两档各自的 sha 由 check-deploy-sha.sh（磁盘/HTTP/页面三层）在批次收尾核`);
+    console.log(`   ③ 期望层：页面跑的是 **非基础档**（${laneDir}）⇒ 传进来的期望 sha 是基础档的，本层跳过；`);
+    console.log(`      该档已由上面 ③a（身份证）核过；要显式核就传 ${laneDir}octave.wasm 的 sha`);
   } else if (EXPECT) {
     check(pageSha === EXPECT.toLowerCase(), '③ 期望层：== 刚构建的产物', `page=${pageSha.slice(0, 16)}… expect=${EXPECT.slice(0, 16)}…`);
   } else {

@@ -131,7 +131,12 @@ def sweep_facts():
     no_sum = _no_summary_names()
 
     for d in dirs:
-        logs = sorted(f for f in os.listdir(os.path.join(LOGS, d)) if f.endswith(".log"))
+        # ★ 只认**套件日志**：`sweep.sh` 的记簿文件（`.inputs-error.txt` 等）以 `.` 开头，
+        #   不是套件。实测（2026-10-01）：旧版把 `.inputs-error.log` 记成"缺汇总行的套件"
+        #   ⇒ 一次全绿 PROBES=1 扫描被判 `clean=False` ⇒ AUTO:STATE 静默退回上一轮旧扫描，
+        #   与 AUTO:FACTS（accept_*）**同一份文档两个口径**。
+        logs = sorted(f for f in os.listdir(os.path.join(LOGS, d))
+                      if f.endswith(".log") and not f.startswith("."))
         if not logs:
             continue
         suites = p = f_ = missing = 0                      # 表头 = accept-*
