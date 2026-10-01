@@ -660,6 +660,25 @@ def measure(argv):
                                              "跑过的引擎：Chromium 154 / Chromium 125 / Firefox / WebKit（2026-10-01 实测）")
         facts["floor_matrix_pass"] = fact(_fp, "同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）",
                                           "w64-logs/floor-*.log")
+        # ★ **w64 车道的线程版 OpenBLAS 库**（工单 33，2026-10-01）：用户点名的形态
+        #   （memory64 × USE_THREAD=1）。为什么先上键"库"这一半：它是**已建成的实测事实**，
+        #   而"链进去的产物"那一半还被工单 34 挡着（树链不出可校验的模块）。
+        _obl = os.path.join(W64LOGD, "e2-w64-build.log")
+        if os.path.exists(_obl):
+            try:
+                _ot = open(_obl, encoding="utf-8", errors="replace").read()
+                _m = re.search(r"架构断言：(\d+) 个成员全是 wasm64（wasm32=(\d+)）", _ot)
+                if _m:
+                    facts["w64_ob_lib_wasm64_members"] = fact(int(_m.group(1)),
+                                                              "E2_LANE=w64 docker exec o113 bash /src/bin/build-e2-lane.sh "
+                                                              "src patch build > w64-logs/e2-w64-build.log（读那行架构断言）",
+                                                              "w64-logs/e2-w64-build.log",
+                                                              "w64 车道线程版 OpenBLAS 归档里 wasm64 成员数")
+                    facts["w64_ob_lib_wasm32_members"] = fact(int(_m.group(2)), "同上",
+                                                              "w64-logs/e2-w64-build.log",
+                                                              "必须是 0（side module 的指针宽度必须与主模块一致）")
+            except (OSError, ValueError) as e:
+                print("⚠ 读不到 w64 OpenBLAS 构建日志 %s：%s" % (_obl, e), file=sys.stderr)
         # ★ **四档的堆上限与"64 位到底买到了什么"**（工单 31，2026-10-01）：
         #   为什么上键：这两条曾经都是**口号**（用户直觉"w64 更快"、我写"w64 买的是 >4 GiB 地址空间"），
         #   实测**两条都不成立**（已登记翻案 R-013）⇒ 把判据落成可复跑的探针与台账。
