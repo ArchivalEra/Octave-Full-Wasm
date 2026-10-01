@@ -660,6 +660,23 @@ def measure(argv):
                                              "跑过的引擎：Chromium 154 / Chromium 125 / Firefox / WebKit（2026-10-01 实测）")
         facts["floor_matrix_pass"] = fact(_fp, "同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）",
                                           "w64-logs/floor-*.log")
+        # ★ **交付包本身**也要端到端验（2026-10-01）：字节层"包内 wasm == 部署件"只是一半 ——
+        #   包**起不起得来**、**选不选得对档**是另一半。生产者 = 包自带的 serve.py + probe-lane。
+        _dp = os.path.join(W64LOGD, "dist-probe-lane.log")
+        if os.path.exists(_dp):
+            try:
+                _dt = open(_dp, encoding="utf-8", errors="replace").read()
+                _dm = re.search(r"===\s*(\d+) PASS / (\d+) FAIL\s*===", _dt)
+                if _dm:
+                    facts["dist_lane_probe_pass"] = fact(int(_dm.group(1)),
+                                                         "cd <dist 包目录> && python3 serve.py 8788；"
+                                                         "再 SITE_DIR=<dist 包目录> sh build/sweep.sh "
+                                                         "http://127.0.0.1:8788/ probe-lane > w64-logs/dist-probe-lane.log",
+                                                         "w64-logs/dist-probe-lane.log",
+                                                         "交付包**内部**的四格选档通过数（不只是字节相同）")
+                    facts["dist_lane_probe_fail"] = fact(int(_dm.group(2)), "同上", "w64-logs/dist-probe-lane.log")
+            except OSError as e:
+                print("⚠ 读不到交付包选档日志 %s：%s" % (_dp, e), file=sys.stderr)
         facts["floor_matrix_fail"] = fact(_ff, "同上", "w64-logs/floor-*.log",
                                           "必须 0；含「无 memory64 的引擎必须落 threads」这条反向断言")
 

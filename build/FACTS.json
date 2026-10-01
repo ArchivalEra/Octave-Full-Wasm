@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-10-01T09:25:47+0800",
+ "generated": "2026-10-01T09:41:27+0800",
  "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -355,6 +355,17 @@
    "value": 16,
    "cmd": "同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）",
    "source": "w64-logs/floor-*.log"
+  },
+  "dist_lane_probe_pass": {
+   "value": 33,
+   "cmd": "cd <dist 包目录> && python3 serve.py 8788；再 SITE_DIR=<dist 包目录> sh build/sweep.sh http://127.0.0.1:8788/ probe-lane > w64-logs/dist-probe-lane.log",
+   "source": "w64-logs/dist-probe-lane.log",
+   "note": "交付包**内部**的四格选档通过数（不只是字节相同）"
+  },
+  "dist_lane_probe_fail": {
+   "value": 0,
+   "cmd": "同上",
+   "source": "w64-logs/dist-probe-lane.log"
   },
   "floor_matrix_fail": {
    "value": 0,

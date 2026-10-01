@@ -3547,3 +3547,15 @@ refblas，`97affe0`）。
 (COI × memory64 × 站点档清单) 三元一致 —— 老判据分辨不出两档）。
 **顺带修掉台账里一个自身的坑**：引擎数先写成"日志文件数"，而一台文件里跑了两台引擎
 （Firefox + WebKit）⇒ 4 台被写成 3 台；现在按判据行的引擎名去重数。
+
+### 5.72 交付包端到端验证（2026-10-01，branch `wasm64`）
+
+`make-dist.sh` 出的包原来只验到"**字节**"层（包内 wasm 与部署件逐档同 sha）。这一格补上
+"**包能不能跑**"：用包**自带的** `serve.py` 起（它默认发 COOP/COEP）⇒
+
+- 开机自检 **1.1 s** 就绪（`dist-e2e.log`）；
+- 包**内部**的四格选档 **33 PASS / 0 FAIL**（`w64-logs/dist-probe-lane.log`；
+  `SITE_DIR=<dist 包目录> … probe-lane` —— 跑的是包里的 `lanes.js` + 四档字节，不是 8761 的）。
+
+⇒ 台账新增 `dist_lane_probe_pass` / `dist_lane_probe_fail`（生产者 = 包自带 serve.py + probe-lane）。
+判据可证伪：包里漏任一份车道产物或 `lanes.js` 与磁盘不符，这条就红。

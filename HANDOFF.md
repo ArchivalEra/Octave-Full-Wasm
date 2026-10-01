@@ -134,9 +134,12 @@
 4. **8761 全量 + `PROBES=1`**：全绿（台账 `accept_suites` / `accept_pass`，探针另计），`probe_lane_pass` 已是四格版。
 5. `site/`（仓库镜像）→ `make-dist.sh`（四档包内 sha 与部署件逐档相同）→ `parity --strict` 三处一致
    → 六道闸门 → 提交推送。
+   ★ **交付包也起过并验过**（不只是字节相同）：包自带 `serve.py` 起来 ⇒ 开机 1.1 s、包内的四格选档
+   `dist_lane_probe_pass` / `dist_lane_probe_fail`（日志 `w64-logs/dist-probe-lane.log`、`dist-e2e.log`）。
 6. **反向断言（真引擎，不只模拟）**：本机 **Chromium 125**（`mem64=false`）在 8761 上
    `lane=threads`、页面 ready、D9 门关 —— 日志 `w64-logs/floor-8761-old-chromium.log`；
    现代 Chromium 同一条判据期望 `w64`（`w64-logs/floor-8761-chromium.log`）。
+   **引擎矩阵**（`floor_matrix_*`）：Chromium 154 / Firefox / WebKit 三台落 `w64`，Chromium 125 落 `threads`。
 
 ## 2. 铁律（违反会被拦或返工）
 
@@ -236,6 +239,8 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `accept_suites` | **43** | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20261001-084427 里带汇总行的套件（且 0 FAIL）` |
 | `build_json_sha` | `d953d7a7929754be…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json` |
 | `data_sha` | `f250530ae5abe378…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data` |
+| `dist_lane_probe_fail` | **0** | `同上` |
+| `dist_lane_probe_pass` | **33**（交付包**内部**的四格选档通过数（不只是字节相同）） | `cd <dist 包目录> && python3 serve.py 8788；再 SITE_DIR=<dist 包目录> sh build/sweep.sh http://127.0.0.1:8788/ probe-lane > w64-logs/dist-probe-lane.log` |
 | `e2_lu800_ratio` | **1.4** | `上面两行的比值（车道 / E2）` |
 | `e2_lu800_s` | **0.043** | `同 E2 那一行` |
 | `e2_matmul500_ratio` | **1.9** | `上面两行的比值（车道 / E2）` |
@@ -299,7 +304,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `wasm_sha` | `1ed3e528561e4475…` | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_v128` | **4752**（SIMD 判据；非 SIMD 那版是 0） | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
 
-台账生成时间 `2026-10-01T09:25:47+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
+台账生成时间 `2026-10-01T09:41:27+0800`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。
 <!-- /AUTO:FACTS -->
 
 ### 部署状态
@@ -314,7 +319,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20261001-084427` · **43 套 / 1,084 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 27 套 / 261 PASS、基准 2 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20261001-093418` · **0 套 / 0 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 1 套 / 33 PASS） |  |
 | 交付包 | `octave-full-wasm-site-20261001` · tar.zst 91,025,991 B · `2a4bfb92e57c39d4…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `wasm64`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
