@@ -35,7 +35,7 @@
 |---|---|---|---|
 | `base` | 根目录 `octave.{wasm,js,data}` | **任何**静态托管的底线（页面默认回落到它） | 无 |
 | `threads` | `threads/octave.{wasm,js,data}` | 宿主发了 COI 头、但引擎**没有 memory64** | COI + `SharedArrayBuffer` |
-| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（memory64 + pthread + **线程版 OpenBLAS**，2026-10-02 起；**四档里最快的交付形态**，BLAS 重负载见台账 `w64_ob_matmul500_speedup` / `w64_ob_matmul500_s`；**堆上限仍 2 GiB**，见下） | COI + `SharedArrayBuffer` + memory64 |
+| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（memory64 + pthread + **线程版 OpenBLAS -O3**，2026-10-02；**四档里最快的交付形态**，BLAS 重负载见台账 `w64_ob_matmul500_speedup` / `w64_ob_matmul500_s`；**wasm 上限 8GB、实测存活 7.45 GiB** —— 台账 `mem_live_ceiling_gib` / `w64_big_heap`） | COI + `SharedArrayBuffer` + memory64 |
 | `w64-base` | `w64-base/octave.{wasm,js,data}` | 引擎支持 memory64 但宿主**没发** COI 头（单线程 64 位回退） | memory64 |
 
 **选档判据是同步的**（加载胶水**之前**就得定档）：`crossOriginIsolated === true` 且
@@ -78,11 +78,11 @@ Cross-Origin-Embedder-Policy: require-corp
     比交付的 `threads`（单线程 OpenBLAS）也快 ⇒ **四档里最快的交付形态**。R-013 当年测的
     "refblas w64 比 wasm32 慢 1.17–1.72×" 作为**历史**仍成立（i64 指针有代价），只是被
     OpenBLAS 的收益盖过了；解释器标量循环仍无优化目标（Q4=a，见 `.scratch/perf-max/`）。
-  · **也没有更大的堆** —— 四个档的 wasm 内存上限**都是 2 GiB**（`w64/octave.js` 的
-    `new WebAssembly.Memory({..., maximum:32768n, ...})`），逐块分配实测的**存活上限同为 1.49 GiB**
-    （台账 `mem_live_ceiling_gib` / `w64_big_heap`）。引擎级探针能拿 5 GiB（`w64_mem_5g_bytes`）
-    证明的是**引擎能力**，不是产物配置 —— 要兑现 >2 GiB 得显式抬 `MAXIMUM_MEMORY` 重链
-    （perf-max 图票 03 / 工单 31 第二半）。
+  · ~~也没有更大的堆~~ ⇒ **2026-10-02 已兑现**：`MAXIMUM_MEMORY=8GB` 进 relink 受管辖模式表
+    （w64/w64-base），wasm 内存上限 2 GiB → **8GB**，逐块分配实测存活 **7.45 GiB**
+    （台账 `mem_live_ceiling_gib` / `w64_big_heap`）。空载占用**不变**（wasm 初始 128MB 按需增长，
+    上限是虚顶不预占；JS 堆 ~28 MB —— 8GB 版与 2GB 版实测同价）。wasm 内存**只涨不缩**：
+    跑过大题后 buffer 停在峰值直到刷新页面。perf-max 票 03。
   · 复跑：`test/browser/bench-lanes.mjs`（四档竞速）与 `test/browser/probe-heap-ceiling.mjs`（堆上限）。
 
 ## 怎么部署（GitHub Pages）

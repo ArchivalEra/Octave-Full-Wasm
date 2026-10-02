@@ -49,6 +49,10 @@
 - [07 载体与发运决策](issues/07-carrier-and-ship-decision.md)：**用户拍板 —— 单王 w64**。
   wasm32 线冻结于 `wasm32-final` 分支（不发线程版库，工单 27 同结）；lane.js 排序不变
   （w64 本就是最快交付形态）；终局形态 = w64 合体版（-O3 + 8GB），发运令已下（票 08）。
+- [08 终局发运](issues/08-final-ship.md)：**已发运** —— 8761 现役 w64 = `-O3 + 8GB` 合体版
+  （sha `3b0d5e2f…`）；8854 先验 + 8761 r6 双全绿（74 套/1351 PASS）、SHA 三层、四格 33/0；
+  台账 `w64_big_heap`=yes / `mem_live_ceiling_gib`=7.45。**图到达目的地**；
+  剩余杠杆（L1/L2 内核、票 05/06）属"下一张图/后续批次"。
 
 ## Not yet specified
 
