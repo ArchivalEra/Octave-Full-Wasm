@@ -24,6 +24,7 @@ const URL = process.argv.find(a => /^http/.test(a)) || 'http://127.0.0.1:8761/';
 const LANE = process.argv.filter(a => !/^http/.test(a))[2] || 'w64';
 const REPS = 3;
 const CASES = {
+  'dot 1e7':     'x=rand(1,1e7);y=rand(1,1e7);tic;s=dot(x,y);t=toc;',
   'matmul 500':  'A=rand(500);B=rand(500);tic;C=A*B;t=toc;',
   'matmul 1000': 'A=rand(1000);B=rand(1000);tic;C=A*B;t=toc;',
   'lu 800':      'A=rand(800);tic;[L,U,P]=lu(A);t=toc;',

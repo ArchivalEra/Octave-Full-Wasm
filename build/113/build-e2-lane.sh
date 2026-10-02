@@ -86,7 +86,11 @@ stage_src () {
   if [ "${E2_ARCH_WASM_INTRIN:-}" = "1" ]; then
     sed -i 's/#if defined(ARCH_WASM) && defined(__wasm_simd128__)/#if defined(__wasm_simd128__)/' "$WORKDIR/kernel/simd/intrin.h"
     sed -i 's/defined(ARCH_WASM)/1/' "$WORKDIR/kernel/arm/sum.c"
-    say "[src] V_SIMD wasm 守卫点亮（E2_ARCH_WASM_INTRIN=1）"
+    # ★ 内核表改指：构建实际读的是 **kernel/wasm/KERNEL（默认表）**（getarch 的 ARCH=wasm
+    #   决定 include 路径；KERNEL.WASM128_GENERIC 不被读 —— 实测编译行 = ../riscv64/dot.c）。
+    #   DDOT 改指 generic/dot.c（唯一带 V_SIMD 分支的 dot 内核，已实证 46 f64x2）。
+    sed -i 's|^DDOTKERNEL   = ../riscv64/dot.c|DDOTKERNEL   = ../generic/dot.c|' "$WORKDIR/kernel/wasm/KERNEL"
+    say "[src] V_SIMD wasm 守卫点亮 + DDOTKERNEL→generic（E2_ARCH_WASM_INTRIN=1）"
   fi
 }
 

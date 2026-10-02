@@ -60,3 +60,21 @@ upstream objdump 数 v128。）
 
 **基建清单（本夜已落）**：`E2_CC_EXTRA` / `E2_NUM_THREADS` / `E2_ARCH_WASM_INTRIN` 三旋钮 +
 bench-lanes 两段式就绪（工单 40）+ NT=8 基线数字（matmul 0.004/1000 0.025/lu 0.014）。
+
+## 进度补记（2026-10-02 晨：L1 dot 族判决 —— 机制成功、判据不可达、优先级重塑）
+
+**机制全线打通**（四轮构建的矛盾最终定位）：构建读的是 **kernel/wasm/KERNEL 默认表**
+（getarch 的 ARCH=wasm 决定 include 路径，KERNEL.WASM128_GENERIC 不被读）⇒
+`E2_ARCH_WASM_INTRIN` 旋钮补上 默认表 DDOTKERNEL→generic/dot.c + intrin.h 守卫改写 +
+全局 -msimd128（E2_CC_EXTRA）⇒ **产物 v128 6613 vs 基线 6602（+11，dot 内核真点亮）**、
+编译行源路径确认 generic/dot.c、relink verdict=ok、新 sha `f4e92628…`。
+
+**bench 判决（A/B ×2，`w64-logs/l1c-ab-bench3.log`）**：dot 1e7 —— r1 1.57× / r2 1.00×，
+**不可复现，≥1.3× 判据不达成**。机理：1e7 向量的 dot = **内存带宽瓶颈**（SIMD 对
+带宽受限操作帮助有限），且 Octave 的 dot() 未必路由到 BLAS ddot。其余 case 全持平
+（GEMM 未动 ✓）。
+
+**重塑**：L1（memory-bound 的 level-1）**不是值得手写内核的方向** —— 机制通了但天花板
+是内存墙。**真杠杆 = L2（GEMM 微内核，compute-bound，2–4×【推断】仍在桌上）**；
+本票保持 open，下一族直接打 L2（gemmkernel_wasm128.c 的 tile 加宽）。
+NT=8 的 2.0–2.2× 已是本图最大的已落地收益（工单 40）。
