@@ -3653,3 +3653,32 @@ wayfinder 图「w64 极限性能」（`.scratch/perf-max/map.md`）的执行批�
 
 教训补两条：① `&&` 链接在 `&` 前整链后台化（AGENTS 明坑再犯，`tail -f --pid` 哨兵收尾）；
 ② `grep -c` 零命中 rc=1 掐死 `&&` 链（同一坑族的第二种形状）。
+
+### 5.76 工单 38/40/39：嵌入接口层 + 死锁定位 + 内核侦察（2026-10-02 夜，branch `wasm64`）
+
+无人值守批（用户令：按推荐顺序清 38 → 40 → 39，留前端那张=12 号真机继续等设备）：
+
+- **工单 38 嵌入接口层（13/0 验收）**：`bridge/octave-embed.js`（eval/evalJSON 双通道、
+  workspace/pwd/cd/help/history/interrupt/input/fs 五件/on.* 属性式订阅/figures.export）
+  + `embed-demo.html` 上手页 + `test/browser/accept-embed-api.mjs`（13 PASS 含 4 反向断言）。
+  **附带重构**：`bridge/octave-page.js` = index.html 内联页面适配器**逐字抽取**
+  （A2 搬运纪律；零行为变化实测：boot 1.3s + accept-embed-multi 13/0）——工厂从此可装载。
+  四个真发现：factory 返回 Module 形态对象（ready 在注册表不在返回值）；订阅器属性式；
+  workspace 双重 jsonencode 套娃；**embed 页面 GL 纹理边界**（自带 mount 的 boot 形态下
+  plot 的 drawnow 在 opengl_texture::create 打死 wasm 实例、FS 随之不可用 —— wasm 侧
+  webgl_toolkit 的 GL 线待查；shipped index.html 形态图形正常）。8761 未动，上站走
+  promote-pages 批由人确认。
+- **工单 40 死锁定位（翻案级）**：NT=8 "死锁" = **bench-lanes 的就绪循环 boot 中途轮询
+  feval**（AGENTS 红线"execute_interp 之前不许碰解释器"的反模式）× OpenBLAS 建池窗口的
+  竞态 —— NT=4 早期调用干净抛错故从未暴露；NT=8 卡死主线程（页内 setTimeout 都停摆；
+  与池大小无关 8/8、8/12 均挂）。**就绪后 NT=8 四步全绿**（步进隔离取证法：
+  每步独立 page）。修复 = bench-lanes 两段式就绪判定（先 __octaveReady 再 feval）。
+  **修复后 NT=8 性能立刻显形**：matmul500 2.0× / matmul1000 2.2× / lu1500 1.5×
+  （同脚本同窗 A/B）—— 票 05 的"NT=4 甜点"翻面，NT=8 上站 = 新发运候选。
+- **票 39 侦察（进行中）**：level-1 v128=0 的真根因 = **`ARCH_WASM` 从未被 Makefile 定义**
+  （上游 WASM128_GENERIC 的死代码），intrin_wasm.h 后端完整在树上；`-DARCH_WASM` 通路
+  泄漏进 getarch 宿主探测（实测 ARCH 变空 ⇒ Makefile.$(ARCH) 炸）⇒ 正解 = WORKDIR
+  intrin.h 守卫改写（`E2_ARCH_WASM_INTRIN=1` 旋钮）。首战未竟：预处理 46 f64x2 但产物
+  与未点亮版逐字节同（疑 make/ccache 重放）⇒ CCACHE_DISABLE 干净重建验证中。
+  量法订正：.o 成员上 `grep -c v128` 无效（已知 SIMD 的 dgemm.o 也量 0）；
+  有效口径 = 完整 octave.wasm 计数（台账 `w64_v128`）。

@@ -43,5 +43,11 @@
 （另：`.o` 成员上 `llvm-objdump | grep -c v128` **不是有效量法** —— 已知 SIMD 的 dgemm.o 也量出 0；
 有效量法 = relink 后对完整 octave.wasm 计数，即台账 `w64_v128` 的口径。）
 
+**CCACHE_DISABLE=1 干净重建（build4）：仍逐字节相同（6c483538…）⇒ ccache 论死**。
+四轮构建 + 预处理证据互相矛盾（守卫确认替换 / -E 展开 46 个 f64x2 / 产物不变）——
+剩余嫌疑：① dot.c 的 `#include "../simd/intrin.h"` 被**别的 intrin.h 遮蔽**（编译 cwd 与 -I 顺序）；
+② dot.c 的 SIMD 分支内有**更内层的守卫**未过；③ emcc 对 builtin 的吸收。
+下一会话判别法：在 SIMD 分支内加 `#warning` 或 `error "BRANCH-TAKEN"` 探针，一次编译即知分支是否真编入。
+
 **基建清单（本夜已落）**：`E2_CC_EXTRA` / `E2_NUM_THREADS` / `E2_ARCH_WASM_INTRIN` 三旋钮 +
 bench-lanes 两段式就绪（工单 40）+ NT=8 基线数字（matmul 0.004/1000 0.025/lu 0.014）。

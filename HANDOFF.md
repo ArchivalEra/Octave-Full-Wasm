@@ -195,7 +195,13 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
   **夜间批（无人值守）收尾**：05 结（**NT=4 = 甜点**；NT=8 死锁 ⇒ 工单 40）、06 结（链接侧
   三杠杆零采纳 —— 现役 -O2 = emcc 5.0.7 甜点）、04 结（L4 已转正；L5 翻案不采纳 —— OpenBLAS
   内置 LAPACK 是 f2c 标量而现役 lapack-simd 本是 SIMD 版；L1/L2/L3 拆 **票 39**）。
-  **图剩余 = 票 38（UI 嵌入接口层，留给前端 agent 线）+ 票 39（内核开发）+ 工单 40（死锁悬案）**。
+  **夜间第二批（38/40/39）**：**38 结**（`bridge/octave-embed.js` 嵌入接口层 + `octave-page.js`
+  逐字抽取 + embed-demo 上手页 + accept-embed-api 13/0；⚠ embed 页面 GL 纹理边界记档）；
+  **40 结**（NT=8 "死锁" = bench-lanes boot 中途轮询 feval 的调用方反模式 × 建池窗口竞态，
+  两段式就绪修复后 **NT=8 性能 2.0–2.2× 显形** —— 票 05 翻面）；39 进行中（ARCH_WASM 死代码
+  = level-1 标量真根因；`E2_ARCH_WASM_INTRIN` 旋钮就位；CCACHE_DISABLE 干净重建验证中；
+  量法订正：.o 成员上数向量指令无效）。**图剩余 = 39（内核开发，下一会话续）+ 票 38 的
+  GL 纹理边界（图形线）+ NT=8 上站（人拍板）**。
 - **UI 线定界（2026-10-02 用户拍板）**：UI 本体交给专门的前端 agent；本仓交付 = **嵌入接口层**。
   接口表已照官方前端契约落档 **`docs/embed-api.md`**（事件/命令两张表；权威出处 =
   `event-manager.h` / `qt-interpreter-events.h`，逐条映射 Web 原语并标 ✅/🔜/➖）；
