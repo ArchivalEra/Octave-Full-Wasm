@@ -67,12 +67,20 @@ def sha256sum(path, chunk=1 << 20):
     return h.hexdigest()
 
 
-def fact(value, cmd, source, note="", measured_at=None):
+def fact(value, cmd, source, note="", measured_at=None, replay=True):
     # ★ Einfacht issue #3 ②（2026-10-01 移植）：每条事实盖**采集时刻**戳。
     #   时间是采集结果的**记录**（渲染给人看"测龄"），不参与任何判据 ——
     #   按墙上时钟算东西会让 `--check` 永不收敛（Einfacht 的教训，照抄）。
+    # ★ Einfacht issue #4 ④⑤（2026-10-02 移植）：replay 契约 —— cmd 会被
+    #   `check-facts-replay` 逐字执行并要求 stdout（去首尾空白）== str(value)。
+    #   两类显式豁免（**有名单、有明说**，不是静默）：需要构建产物/浏览器的重活；
+    #   派生/散文式复跑方式。③ 每跑必变的量（随机填充、时间戳类）：存**一次实测采样**
+    #   并在 note 里写明它怎么变（消费侧 stable 逐字判 / 不稳定档结构判）——
+    #   **不许裸存**：裸存 = 这条永远红 = 噪音 = 最后整闸被关（值会变 ≠ 不能进台账）。
     d = {"value": value, "cmd": cmd, "source": source,
          "measured_at": measured_at or time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    if not replay:
+        d["replay"] = False
     if note:
         d["note"] = note
     return d
@@ -189,6 +197,21 @@ def changed_keys(old_facts, new_facts):
 def main(argv):
     if argv and argv[0] == "--render":
         sys.stdout.write(render_block(load_ledger()) + "\n")
+        return 0
+    if argv and argv[0] == "--get":
+        # ★ Einfacht issue #4 ④（2026-10-02 移植）：跨语言消费方的**官方只读出口**。
+        #   只打印值本身（不解释、不带前缀）；消费方一律走这里，不许自己解析 JSON
+        #   （uTLS-Gone 的教训：手搓 substring 解析器会把别的键上的同形值判进来）。
+        if len(argv) < 2:
+            print("FATAL: --get 需要一个键名：--get KEY", file=sys.stderr)
+            return 2
+        led = load_ledger()
+        f = led.get("facts") or {}
+        if argv[1] not in f:
+            print("FATAL: 台账里没有键 %s" % argv[1], file=sys.stderr)
+            return 2
+        v = f[argv[1]].get("value")
+        print(v if isinstance(v, str) else json.dumps(v, ensure_ascii=False))
         return 0
     if argv and argv[0] == "--render-doc":
         return write_doc(argv[1] if len(argv) > 1 else DOC, load_ledger())
@@ -884,6 +907,43 @@ def measure(argv):
     doc = {"schema": 1, "generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
            "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
            "facts": facts}
+    # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
+    #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
+    #   · 重活（浏览器/容器/构建/基准）与派生/散文式复跑方式显式 `replay=False`
+    #     （**有名单、有明说**的豁免 —— 不是静默；全豁免会被零值守卫红，见 check-facts-replay）。
+    _no_replay = {
+        # 重活：需要浏览器 / 容器 / 构建 / 基准机（REFLECT_REPLAY_TIMEOUT 会杀掉它们）
+        "probe_lane_pass", "e2_threaded_oct_rc", "w64_mem_5g_bytes", "w64_mem_8g_bytes",
+        "w64_mem_shared_5g_bytes", "w64_ob_lib_wasm64_members", "w64_ob_lib_wasm32_members",
+        "w64_ob_matmul500_s",
+        "mem_live_ceiling_gib", "w64_matmul500_s", "w64_lu800_s", "dist_lane_probe_pass",
+        "native_openblas_matmul500_s", "native_openblas_matmul1024_s",
+        "native_openblas_matmul2000_s", "native_openblas_lu800_s",
+        "native_netlib_matmul500_s", "native_openblas_threads",
+        # 派生 / 散文式复跑方式（比值、日志汇总、跨键引用）
+        "e2_matmul500_ratio", "e2_lu800_ratio", "e2_matmul500_s", "e2_lu800_s",
+        "lane_matmul500_s", "lane_lu800_s", "e2_threaded_matmul500_s",
+        "e2_threaded_matmul500_ratio", "e2_threaded_lu800_s",
+        "w64_ob_matmul500_speedup", "w64_ob_matmul500_native_ratio",
+        "w64_ob_matmul500_vs_netlib", "w64_ob_lu800_s",
+        "accept_suites", "accept_pass", "probe_lane_fail",
+        "floor_matrix_engines", "floor_matrix_pass", "floor_matrix_fail",
+        "w64_mem_probe_fail", "dist_lane_probe_fail", "w64_big_heap",
+        "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns", "oct_lane_tls_init",
+        "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
+        "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
+        "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
+        "threads_shared_memory", "threads_pthread_glue", "threads_v128",
+        "threads_exported_functions", "threads_blas_dir", "wasm_v128",
+        "exported_functions", "fonts_count", "jspi_entry", "env_vars",
+    }
+    for _k in _no_replay:
+        if _k in facts:
+            facts[_k]["replay"] = False
+    for _k, _v in facts.items():
+        _c = _v.get("cmd", "")
+        if _c.startswith("sha256sum ") and "|" not in _c:
+            _v["cmd"] = _c + " | cut -d' ' -f1"
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, indent=1, ensure_ascii=False)
         fh.write("\n")

@@ -7,7 +7,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved（2026-10-02：随 Einfacht #4 移植一并落地）
 
 **Settling:** `sh build/gates-selftest.sh` 全绿**且**新闸门 `check-facts-replay.py` 的
 `--selftest` 至少含三类用例（裸值相符不报 / stdout 含值但不相等必须报 / 全豁免必须报）；
@@ -35,3 +35,20 @@
 - ② `measured_at` 采集戳 + 渲染「测于」列（facts_block.py）；
 - ④ 裸数字判据的**围栏/行内代码豁免**（check-facts.py，自证 16/0）；
 - ③ 摘要行约定本仓早已统一（`=== N PASS / M fail ===`），无需改。
+
+## Answer
+
+（2026-10-02，随上游 Einfacht issue #4 的移植一并落地。）
+
+- **`check_facts_replay` 已移植** = `.githooks/check-facts-replay.py`（本仓 Gate 平台形状）：
+  replay=True 的 cmd 逐字执行（bash -o pipefail，超时 10s 可调），stdout 裸值契约 == 值；
+  零值守卫三条（空台账 / 全豁免 / 整体死亡）；`FACTS_REPLAY=off` 整仓出口（明说未启用）。
+  自证 8/0（含"两条全死 ⇒ 恰 3 个问题"的守卫精确压测 —— 第一版双重报告被自证抓出来修掉）。
+- **首轮标注**：85 条 = 20 条逐字复跑（sha/stat/find 族，sha256sum 补了 `| cut -d' ' -f1`）+
+  65 条显式 `replay=False`（`build/facts.py` 的 `_no_replay` 名单：浏览器/容器/构建/基准重活、
+  派生比值、散文式复跑方式 —— 有名单、有明说）。实战：**20/20 逐字复现**。
+- **同批移植（Einfacht #4）**：`facts.py --get KEY`（跨语言官方只读出口）；fact() 的 `replay`
+  参数与 ⑤ 原则（每跑必变的量：采样+稳定性标记，不许裸存）；**CI gates job**
+  （`.github/workflows/gates.yml` —— 跳过名单明说：依赖部署树的三道只在 pre-commit 跑）。
+- ⑥（md_lines 块排除）：本仓台账无 md_lines 键，陷阱形状不存在 —— 如实记 N/A。
+- ①（会话注入接线）：本仓没有 .zcode/inject-state 接线，不适用 —— Einfacht 本体仓的事。

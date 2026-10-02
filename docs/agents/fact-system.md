@@ -129,3 +129,14 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
 | `Settling:` 行怎么写 | `docs/agents/issue-tracker.md` |
 | 什么话不能说 | `build/lib/retractions.json` |
 | 你这份需求的来龙去脉 | `build/113/PLAN-wasm64.md` |
+
+## 复跑契约（Einfacht #4 ④⑤ 移植，2026-10-02）
+
+- 台账每条事实默认 `replay=True`：`.githooks/check-facts-replay.py` 会**逐字执行** cmd 并要求
+  stdout（去首尾空白）== 值。写不出这种 cmd 的（重活：浏览器/容器/构建/基准；派生/散文式），
+  在 `build/facts.py` 的 `_no_replay` 名单里**显式** `replay=False` —— 有名单、有明说，不静默。
+- **每跑必变的量**（随机填充、时间戳类）：存**一次实测采样** + 在 note 里写明它怎么变
+  （消费侧 stable 逐字判 / 不稳定档结构判），**不许裸存** —— 裸存 = 永远红 = 噪音 = 整闸被关。
+  值会变 ≠ 不能进台账，得先声明它怎么变。
+- 跨语言消费方（CI、编译型语言的测试进程）读值一律走 `python3 build/facts.py --get KEY`
+  （只打印值本身），**不要自己解析 FACTS.json**。
