@@ -67,7 +67,8 @@ def sha256sum(path, chunk=1 << 20):
     return h.hexdigest()
 
 
-def fact(value, cmd, source, note="", measured_at=None, replay=True):
+def fact(value, cmd, source, note="", measured_at=None, replay=True,
+         witness=None, witness_expect=None):
     # ★ Einfacht issue #3 ②（2026-10-01 移植）：每条事实盖**采集时刻**戳。
     #   时间是采集结果的**记录**（渲染给人看"测龄"），不参与任何判据 ——
     #   按墙上时钟算东西会让 `--check` 永不收敛（Einfacht 的教训，照抄）。
@@ -77,10 +78,24 @@ def fact(value, cmd, source, note="", measured_at=None, replay=True):
     #   派生/散文式复跑方式。③ 每跑必变的量（随机填充、时间戳类）：存**一次实测采样**
     #   并在 note 里写明它怎么变（消费侧 stable 逐字判 / 不稳定档结构判）——
     #   **不许裸存**：裸存 = 这条永远红 = 噪音 = 最后整闸被关（值会变 ≠ 不能进台账）。
+    # ★ 第三档：`witness`（2026-10-02，本仓实战反哺 → Einfacht）—— **贵事实的便宜见证**。
+    #   动机（`-flto` 事故）：`replay=False` 的贵事实（浏览器基准、构建产物）此前只有两档 ——
+    #   要么每次真跑（贵到不能进 pre-commit），要么**永不复查**。于是一条"产物没变、但产出
+    #   它的工具变了"（容器 `link-web.sh` 被塞进 `-flto`）能一路走到全量回归才炸。
+    #   `witness` = 一条**便宜、无害、只读**的命令，逐字执行且 stdout == `witness_expect`；
+    #   它与 `replay` **正交** —— 贵事实（`replay=False`）照样可以挂见证，每提交必跑。
+    #   见证的是**上下文**（"产出它的工具/输入就是你以为的那个"），不是值本身。
+    #   形状契约：`witness` 与 `witness_expect` 必须**同时给或同时不给**（只给一个 ⇒ 断言
+    #   不完整，采集器当场报错）。
     d = {"value": value, "cmd": cmd, "source": source,
          "measured_at": measured_at or time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     if not replay:
         d["replay"] = False
+    if (witness is None) != (witness_expect is None):
+        raise ValueError("fact(%s): witness 与 witness_expect 必须同时给或同时不给" % source)
+    if witness is not None:
+        d["witness"] = witness
+        d["witness_expect"] = witness_expect
     if note:
         d["note"] = note
     return d
@@ -606,6 +621,22 @@ def measure(argv):
         wf = (me.get("files") or {}).get("octave.wasm") or {}
         facts["w64_wasm_sha"] = fact(wf.get("sha256"), "sha256sum %s/octave.wasm" % W64A,
                                     "w64-artifacts/octave.wasm")
+        # ★ **构建身份见证**（2026-10-02，`-flto` 事故的通用解 → 事实系统第三档 `witness`）：
+        #   部署件 w64 必须由**仓库现役** `build/113/link-web.sh` 构建。值本身（是不是真由
+        #   现役脚本造的）要重链才知 ⇒ `replay=False`；但这条**便宜见证**每提交必跑，能在
+        #   不碰浏览器的情况下抓到"来源漂移"（容器脚本被改 / 上批实验残留）。
+        #   事故形状：w64 记的 `tool.script_sha256` = `2382ed34…`（容器残留 `-flto` 的那份），
+        #   仓库是 `63d8e7d7…` ⇒ 72/0→44/27 的 dlopen 回归。见 HISTORY §5.78 / 工单 41。
+        facts["w64_build_tool_match"] = fact(
+            "match",
+            cmd="<重链 w64 后：python3 build/113/witness-build-provenance.py w64>",
+            source="site/w64/octave.build.json 的 tool.script_sha256 vs build/113/link-web.sh",
+            note="贵事实的便宜见证：部署件记录的构建脚本 sha 必须 == 仓库现役脚本。"
+                 "做不到就 DRIFT（来源漂移）。注意**旧档**（base/threads/w64-base）建造时间不同、"
+                 "记录 sha 各异 ⇒ 只对活跃迭代并每批重链的 w64 档断言。",
+            replay=False,
+            witness="python3 build/113/witness-build-provenance.py w64",
+            witness_expect="match")
         facts["w64_wasm_bytes"] = fact(wf.get("bytes"), "stat -c %%s %s/octave.wasm" % W64A,
                                       "w64-artifacts/octave.wasm")
     except (OSError, ValueError) as e:
@@ -757,18 +788,18 @@ def measure(argv):
         if _ob_m is not None:
             facts["w64_ob_matmul500_s"] = fact(_ob_m,
                                               "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh "
-                                              "test/browser/bench-lanes.mjs http://127.0.0.1:8849/ w64 > w64-logs/bench-ob-w64.log",
+                                              "test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/bench-ob-w64.log",
                                               "w64-logs/bench-ob-w64.log",
-                                              "w64+线程版 OpenBLAS（memory64+pthread+USE_THREAD=1）的矩阵乘 500² 中位数")
+                                              "现役 w64（线程版 OpenBLAS NT=8，2026-10-02 上站）的矩阵乘 500² 中位数")
         if _ob_l is not None:
             facts["w64_ob_lu800_s"] = fact(_ob_l,
-                                           "同上（8849 那轮）", "w64-logs/bench-ob-w64.log",
-                                           "w64+线程版 OpenBLAS 的 lu(800) 中位数")
+                                           "同上（8761 现役那轮）", "w64-logs/bench-ob-w64.log",
+                                           "现役 w64（线程版 OpenBLAS NT=8）的 lu(800) 中位数")
         if _ob_m is not None and _sh_m is not None and _ob_m > 0:
             facts["w64_ob_matmul500_speedup"] = fact(round(_sh_m / _ob_m, 1),
                                                      "派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项",
                                                      "派生（两个 bench 日志）",
-                                                     "新 w64（OpenBLAS）相对现役 w64（refblas）的加速倍数")
+                                                     "OpenBLAS 版相对 refblas 版 w64 的加速倍数（历史对照：refblas 的现役地位已由 2026-10-02 NT=8 批取代）")
         # ★ **原生基线**（perf-max 图票 02，2026-10-02）：占比仪表盘的"原生"一侧。
         #   为什么上键：6.6× / 1.9× 这类倍数说不清"离顶还有多远"；**原生占比才是刻度**（图 Q1=c）。
         #   同机**同版本** Octave 11.3.0；两个后端都测都记录：netlib = 系统默认（参考实现，

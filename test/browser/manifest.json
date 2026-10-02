@@ -102,6 +102,14 @@
   }
  },
  "inputs": {
+  "accept-embed-api": [
+   {
+    "kind": "path",
+    "env": "EMBED_SITE_FILE",
+    "value": "/mnt/hdd/octave-wasm-build/site/embed-demo.html",
+    "why": "嵌入 API 套件需要站点部署 `embed-demo.html` + `octave-embed.js`（工单 38）。**资产未上站的站点**（如 8761，用户指示『提交但不上站』）⇒ 缺此项，按清单**跳过**而非闪红。要跑它就先 `promote-pages.sh` 把 embed 资产上站（届时覆盖 `EMBED_SITE_FILE=<该站点>/embed-demo.html`）。"
+   }
+  ],
   "probe-threads": [
    {
     "kind": "path",

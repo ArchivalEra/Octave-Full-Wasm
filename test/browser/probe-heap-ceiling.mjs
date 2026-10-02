@@ -46,8 +46,13 @@ for (const lane of LANES) {
   const seen = [];
   page.on('console', m => { const t = m.text(); if (/LIVE /.test(t)) seen.push(t); });
   await page.goto(`${URL}?lane=${lane}`, { waitUntil: 'load', timeout: 300000 });
+  // ★ 两段式就绪（工单 40/42）：先等 __octaveReady 再碰 feval（NT=8 下旧写法会挂死）。
   let ready = false;
   for (let i = 0; i < 300; i++) {
+    if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) { ready = true; break; }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  for (let i = 0; i < 300 && ready; i++) {
     ready = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
     if (ready) break;
     await new Promise(r => setTimeout(r, 300));

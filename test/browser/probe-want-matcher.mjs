@@ -21,6 +21,13 @@ const logs = [];
 page.on('console', m => logs.push(m.text().slice(0, 300)));
 page.on('pageerror', e => logs.push('[pageerror] ' + String(e).slice(0, 300)));
 await page.goto(URL, { waitUntil: 'load', timeout: 240000 });
+// ★ 两段式就绪（工单 40/42）：先等 __octaveReady 再碰 feval（NT=8 下旧写法会挂死）。
+let __ready = false;
+for (let i = 0; i < 300; i++) {
+  if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) { __ready = true; break; }
+  await new Promise(r => setTimeout(r, 200));
+}
+if (!__ready) throw new Error('probe-want-matcher: 60s 内 __octaveReady 未就绪');
 const t0 = Date.now();
 while (Date.now() - t0 < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);

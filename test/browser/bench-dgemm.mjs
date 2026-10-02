@@ -26,6 +26,13 @@ page.on('pageerror', e => console.log('   [pageerror] ' + String(e).slice(0, 200
 const t0 = Date.now();
 await page.goto(URL, { waitUntil: 'load', timeout: 300000 });
 let readyMs = -1;
+// ★ 就绪判定两段式（工单 40/42，2026-10-02）：**先等 __octaveReady，再碰 feval**（同 bench-core）。
+let __ready = false;
+for (let i = 0; i < 600; i++) {
+  if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) { __ready = true; break; }
+  await new Promise(r => setTimeout(r, 200));
+}
+if (!__ready) throw new Error('bench-dgemm: 120s 内 __octaveReady 未就绪');
 while (Date.now() - t0 < 300000) {
   const ok = await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false);
   if (ok) { readyMs = Date.now() - t0; break; }

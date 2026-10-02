@@ -3682,3 +3682,65 @@ wayfinder 图「w64 极限性能」（`.scratch/perf-max/map.md`）的执行批�
   与未点亮版逐字节同（疑 make/ccache 重放）⇒ CCACHE_DISABLE 干净重建验证中。
   量法订正：.o 成员上 `grep -c v128` 无效（已知 SIMD 的 dgemm.o 也量 0）；
   有效口径 = 完整 octave.wasm 计数（台账 `w64_v128`）。
+
+### 5.77 NT=8 上站尝试 → 抓出确定性 dlopen 回归 → 回滚（2026-10-02，branch `wasm64`）
+
+用户拍板"NT=8 同意"后按受管辖入口发运，**在全世界最不该短的地方——全量回归——抓住**：
+
+- **发运本身全绿**：8858 预验（数值四套 79/0 + 堆探针 `W64_BIG_HEAP=yes` 7.45 GiB）→
+  台账扶正（`w64_wasm_sha` = `a69170ec…`，旧 -O3+NT4 版备份
+  `w64-artifacts-o3nt4-backup-20261002/`）→ `promote-w64-lane.sh` 守卫全过（base/threads/
+  w64-base 逐字节未动）→ 开机 1.2 s、四格选档 33/0、SHA 三层（页面自证实例化 `a69170ec`）。
+  **速度确实更快**：8761 实测 matmul 500² 0.004 s、lu(800) 0.014 s（比 NT=4 再快 ~1.75×）。
+- **全量 `PROBES=1` 抓红**：`accept-dldfcn`（全仓唯一大量压 `dlopen` 的套件）
+  **71/0 → 44/27**。首个失败 `gunzip 还原`：`table index is out of bounds`
+  （`wasm-function[34747]`）⇒ wasm 实例被带死 ⇒ 级联 `memory access out of bounds` /
+  `null function`（audioread/convhull/eigs/jsonencode 一串跟红）。
+  `accept-archive`（20/0 那套）也 NO-SUMMARY —— 但它的红经复跑证实为**窗口期竞争**（假红）。
+- **隔离定案**：在独立实验站 8858（**同一 NT=8 产物**、另一端口）单跑 `accept-dldfcn`，
+  **逐条相同**（44/27）⇒ 不是资源竞争，是产物属性。机制吻合工单 16 已记录形态：
+  **OpenBLAS 热自旋池线程（默认几乎不停）挡住 dlopen 所需的共享内存/表增长安全点**，
+  NT=8 池线程是 NT=4 两倍 ⇒ 阈值在 4 与 8 之间。**工单 40 的"NT=8 性能 2.0–2.2×"是真的，
+  但 NT=8 不可交付**。
+- **回滚**：产物复位 NT=4（`3b0d5e2f…`）→ 台账回到 NT=4 → `promote-w64-lane.sh` 换回 `w64/`。
+  复验：开机 1.0 s、`accept-dldfcn` **71/0**、`accept-archive` **20/0**。8761 恢复。
+- **两个流程修正**：
+  ① **`accept-embed-api` 闪红不是回归** —— 它是票 38 新套件（17:34 入库，晚于上轮全绿
+     12:42 扫描），且需站点部署 `embed-demo.html`/`octave-embed.js`（用户指示"提交但不上站"）。
+     ⇒ 在 `test/browser/manifest.json` 的 `inputs` 里给它声明输入路径（`EMBED_SITE_FILE`），
+     缺资产时**按清单跳过并报明原因**，不再污染全量（选中数 44→43）。
+  ② **教训进 AGENTS.md**：上站候选必须过**全量**（含 `accept-dldfcn`）才叫候选 ——
+     只验"数值四套"正是这次事故的形状。
+- 建档：工单 **41**（NT=8 dlopen 回归，research；`Settling:` = 在 NT=8 站上跑 dldfcn 的 rc）。
+
+### 5.78 NT=8 回归**真因 = 容器 `link-web.sh` 漂移（`-flto`）**，非线程数；修复后重发运（2026-10-02 深夜，branch `wasm64`）
+
+用户一句"修啊，注入探针找回退点啊"把工作从"回滚+记档"推进到**挖出真根因**。§5.77 记的
+"NT=8 打破 dlopen"是**错误归因**；真凶是**容器里的构建脚本吃到上批实验残留**。
+
+- **取证链（全部可复跑）**：
+  · NT=8 产物 `octave.build.json` 的 `inputs.link_web_sh.sha256` = `2382ed34…`；现役 NT=4 是
+    `63d8e7d7…`。而 `2382ed34` 与**票 06 的 LTO 实验产物**（`site-w64-lto/w64`）**逐字节同值、
+    `exported_functions` 同为 733**（洁净版 732）。
+  · 容器 `/src/bin/link-web.sh` 与仓库 diff **只有一处**：`EXC_FLAGS` 多了 `-flto`；该数组
+    **同时喂 `main.cc`/`webgl_toolkit.cc` 编译与最终链接行**（`link-web.sh:477/491/588`）。
+  · `git log build/113/link-web.sh` **全史从未含 `-flto`** ⇒ 它是票 06 LTO 杠杆实验
+    （`-O2 -flto`）**残留在容器里**的（mtime 2026-10-02 06:17）。
+  · **独立判别实验**：`site-w64-lto/w64`（`-flto`、OpenBLAS-o3 库、**非 NT8**）起服务 8857
+    跑 `accept-dldfcn` ⇒ **44 PASS / 27 FAIL**，与 NT8 产物**同形态**（同一
+    `table index is out of bounds` 起点）⇒ 元凶 = `-flto`，**与 NUM_THREADS 无关**。
+  · 道理对得上票 06 自己的结论：LTO 的 whole-program metadce 会剥掉**只有 dlopen 才用到**
+    的 `.oct` 支撑符号（票 06 就此判 LTO「边际不采纳」）。
+- **修复复验**：`sudo docker cp` 洁净 `link-web.sh` 回容器 → 重链 NT8（`E2_OPENBLAS=…-nt8`，
+  **不带 `--diag`**）→ 产物 `f2269106…`、`link_web_sh=63d8e7d7…`、`exported_functions=732`、
+  `verdict=ok` → 8858 上 `accept-dldfcn` **71/0**、数值四套 79/0、堆探针 `W64_BIG_HEAP=yes`
+  （7.45 GiB）、bench matmul 500² 0.004 s / lu(800) 0.014 s（2.0–2.2× 收益保住）。
+- **重发运**：台账扶正（`w64_wasm_sha`=`f2269106…`）→ `promote-w64-lane.sh`（base/threads/
+  w64-base 逐字节未动）→ 开机 1.5 s、四格 33/0、SHA 三层（页面自证实例化 `f2269106`）→
+  8761 全量 `PROBES=1` （关键：`accept-dldfcn` **71/0**、archive 20/0、embed-multi 13/0）。
+- **一个撞到的真陷阱**：`relink.sh link w64 --diag` 下 dlsync BigInt 补丁匹配不上（`--diag`
+  关压缩/postprocess，胶水形状不同）⇒ 补丁返 rc=3 ⇒ `link-web.sh` **fail-closed FATAL 中止**
+  （守卫是对的，不是静默）⇒ **发运重链不许带 `--diag`**。
+- **流程教训（已进 AGENTS.md 验收底线）**：① 容器里的构建脚本是**另一份拷贝**，实验后必须
+  还原/隔离，否则下批吃上批残留（**本单即实例**）；② 上站候选必须过**全量**（含
+  `accept-dldfcn`）——只验"数值四套"正是让这个 bug 走到 promote 的原因。

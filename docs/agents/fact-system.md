@@ -140,3 +140,18 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
   值会变 ≠ 不能进台账，得先声明它怎么变。
 - 跨语言消费方（CI、编译型语言的测试进程）读值一律走 `python3 build/facts.py --get KEY`
   （只打印值本身），**不要自己解析 FACTS.json**。
+
+### 第三档：`witness` —— 贵事实的便宜见证（2026-10-02，工单 42）
+
+`replay=False` 的**贵事实**（浏览器基准、构建产物）此前只有两档：要么每次真跑（贵到进不了
+pre-commit），要么**永不复查**。`-flto` 事故（HISTORY §5.78）正是踩这一档 —— "产物没变、
+但产出它的工具变了"（容器 `link-web.sh` 被塞进 `-flto`）一路走到全量浏览器回归才炸。
+
+⇒ `fact(..., witness=<便宜命令>, witness_expect=<期望 stdout>)`：**与 `replay` 正交**，
+贵事实照样挂见证、**每提交必跑**；`check-facts-replay.py` 逐字执行它并要求 stdout 逐字相等。
+见证的是**来源/上下文**，不是值本身。形状契约：两参**同时给或同时不给**。
+首个实例：`build/113/witness-build-provenance.py <车道>`（"部署件由仓库现役 link-web.sh
+构建"），台账键 `w64_build_tool_match`。
+
+⚠ **只对活跃迭代、每批重链的产物断言**（本仓 = w64）：旧档的构建脚本 sha 本就不同，
+硬查 = 永久假红 = 噪声 = 整闸被关。**策略留在各仓，机制（贵事实也能有便宜复查）才上收。**

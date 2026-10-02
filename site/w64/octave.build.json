@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-10-02T03:01:35+0000",
-  "out": "/src/websrc/w64-ob-o3-out",
+  "when": "2026-10-02T15:20:26+0000",
+  "out": "/src/websrc/w64-ob-nt8-clean-out",
   "mode": "w64"
  },
  "declared": {
@@ -69,12 +69,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "3b0d5e2ff124e41fb881db5793ac684a2b3038c345c4c66645aa14d7c5e814e9",
-    "bytes": 30917770
+    "sha256": "f2269106e004e8a862c8a8b735dc380c2b2b63eea62c5fb7d07ac9aa4dc953dd",
+    "bytes": 30918303
    },
    "octave.js": {
-    "sha256": "df308f09c10f507dc2903a5613b25fc7219f61f0d27d217c366742b353541a93",
-    "bytes": 511844
+    "sha256": "3c500e49a8dd46355d7b00f7c7b342b614d5f22e1ae422aaba8ebc9ec97181c8",
+    "bytes": 511865
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -88,16 +88,16 @@
    "sha256": "63d8e7d7fb8ea3fa45550e77c7273b7180f1e829b4449b98c4ca758e9fe8eab2"
   },
   "blas": {
-   "resolved_dir": "/src/work/e2-openblas-lib-w64-o3",
+   "resolved_dir": "/src/work/e2-openblas-lib-w64-nt8",
    "search_order": [
-    "/src/work/e2-openblas-lib-w64-o3",
+    "/src/work/e2-openblas-lib-w64-nt8",
     "/src/deps-w64/lapack-simd/lib",
     "/usr/local/lib"
    ],
    "librefblas": {
-    "path": "/src/work/e2-openblas-lib-w64-o3/librefblas.a",
-    "sha256": "2278459b7271c61d04d0a26c2170670b0c413d4d359f519b093d6f73a716cdfa",
-    "bytes": 3329034
+    "path": "/src/work/e2-openblas-lib-w64-nt8/librefblas.a",
+    "sha256": "6c483538e365b686cd9d77d5c30d898dcde67d4e108595471576658473e9161b",
+    "bytes": 3331594
    },
    "liblapack": null
   },
@@ -115,7 +115,7 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-02T03:01:35+0000",
+  "when": "2026-10-02T15:20:26+0000",
   "by": "check-build-manifest.py",
   "script_sha256": "37bd772a3145f1881d49c5cfba6557f559d8a0894e237d97a55477586268ecf0"
  }

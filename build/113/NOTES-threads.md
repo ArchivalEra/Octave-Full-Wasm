@@ -1246,3 +1246,32 @@ E2_OPENBLAS="$D" bash /src/bin/relink.sh link threads --out /src/websrc/e2-idlee
 **判据**（工单 19 用的就是这四条）：
 `CELLS=C,D,H sh test/browser/run.sh test/browser/probe-e2-threads.mjs <该产物站点>` ⇒ 全返回；
 `bench-core` 的 `矩阵乘 500x500` 中位数应 ≈ **0.006 s**（与补丁前相同 ⇒ 收益未丢）。
+
+---
+
+## 2026-10-02 · NT=8 打破 dlopen 的复现与机制候选（工单 41）
+
+**实测（可复跑）**：
+```sh
+# NT=8 产物站点（现成实验站 8858；或自建）
+HARNESS=/mnt/hdd/octave-wasm-build/harness \
+  sh test/browser/run.sh test/browser/accept-dldfcn.mjs http://127.0.0.1:8858/
+#   ⇒ === 44 PASS / 27 FAIL ===   首个失败：gunzip 还原，table index is out of bounds
+# NT=4 版（现役 8761，回滚后）
+HARNESS=/mnt/hdd/octave-wasm-build/harness \
+  sh test/browser/run.sh test/browser/accept-dldfcn.mjs http://127.0.0.1:8761/
+#   ⇒ === 71 PASS / 0 FAIL ===
+```
+同一 8858 产物在**独立端口**单跑复现 44/27 ⇒ **不是 sweep 窗口期资源竞争**。
+
+**★ 机制（已锁定，2026-10-02 深夜；**不是池线程**）**：真因 = **容器 `link-web.sh` 漂移**——
+`EXC_FLAGS` 多了 `-flto`（该数组**同时喂 `main.cc` 编译与最终链接行**，`link-web.sh:477/491/588`）。
+NT=8 产物记录的 `inputs.link_web_sh.sha256` = `2382ed34…`，与票 06 的 LTO 实验产物
+（`site-w64-lto/w64`）**逐字节同值、导出数同为 733**（现役洁净版 `63d8e7d7…` / 732）。
+`git log` 显示仓库版**从未**含 `-flto` ⇒ 是票 06 LTO 杠杆实验的残留（mtime 06:17）；
+票 06 自己的结论就是 LTO「边际不采纳」（whole-program metadce 剥掉 dlopen 才用的 `.oct`
+支撑符号）—— 与 dldfcn 崩溃面吻合。⇒ 先前"热自旋池线程挡安全点"是**错误假设**，作废。
+
+**结案实验（工单 41 的 `Settling:`）**：`sudo docker cp` 洁净 `link-web.sh` 回容器（**已做**）
+→ 重链 NT=8（`E2_NUM_THREADS=8`）→ `accept-dldfcn` 期望 `=== 71 PASS / 0 FAIL ===`（洗清）；
+仍 `44/27` 才回到池线程假设，按 NT=5/6/7 画阈值。

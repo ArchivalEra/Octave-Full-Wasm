@@ -44,5 +44,14 @@
    shipped index.html 形态图形正常（既有套件覆盖）。→ figures 接口面照常交付（优雅降级），
    探针 I 格如实标注边界。
 
+**⚠ 上站前置缺口（2026-10-02 事后发现，必须在本批上站前修）**：本工单的页面资产
+（`octave-page.js` / `octave-embed.js` / `embed-demo.html`）**不在 `promote-pages.sh` 的清单里**
+—— 它的清单来自 `build/recover-113.sh` 的 `<script src>`/importScripts 列表（11 个文件）。
+后果：`sh build/promote-pages.sh --dry-run` 显示 `index.html` 仓库侧 = 301 行（抽取后）
+vs 站点/镜像 = 465 行（抽取前），✗ —— 若直接上站，会**拷上引用 `octave-page.js` 的新
+index.html 却不带那个文件** ⇒ 站点坏（同 §0 教训的形状：只拷一半）。⇒ 上站批的第一步是
+**把这三个文件并进 promote-pages 的清单**（并在 `--verify` 里核它们三方一致），
+再走受管辖入口。**在那之前 8761 保持现状（用户指示"提交但不上站"）。**
+
 **部署注记**：8761 现状不动（验收在实验站 8854）。上站走 promote-pages 批
 （index.html 的 octave-page.js 抽取必须与新文件**同批**上站），全量回归后由人确认。
