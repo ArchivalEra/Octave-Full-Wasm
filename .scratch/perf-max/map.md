@@ -39,6 +39,9 @@
 - [01 OpenBLAS 杠杆清单](issues/01-openblas-levers.md)：**WASM128_GENERIC 上游自带且已在用**（前提翻案）；
   真空白 = level-1/2 内核零 SIMD（L1）/ GEMM 微内核 2×2（L2）/ -O2 编译档（L4）/ 线程数 4（L6）/
   LAPACK 未编入（L5）；threads 档换线程版库 = 零代码 6.7×【实测】（L7）。杠杆 L1–L12 分级见票。
+- [02 原生基线](issues/02-native-baseline.md)：同机同版本 Octave 11.3.0 双后端实测落台账
+  （netlib=用户默认 / OpenBLAS 0.3.34×24=天花板，键 `native_*`）；仪表盘第一版：
+  浏览器 w64 占天花板 = `w64_ob_matmul500_native_ratio`，比默认原生 Octave 快 = `w64_ob_matmul500_vs_netlib`。
 
 ## Not yet specified
 

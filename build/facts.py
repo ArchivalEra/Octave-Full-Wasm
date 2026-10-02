@@ -746,6 +746,49 @@ def measure(argv):
                                                      "派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项",
                                                      "派生（两个 bench 日志）",
                                                      "新 w64（OpenBLAS）相对现役 w64（refblas）的加速倍数")
+        # ★ **原生基线**（perf-max 图票 02，2026-10-02）：占比仪表盘的"原生"一侧。
+        #   为什么上键：6.6× / 1.9× 这类倍数说不清"离顶还有多远"；**原生占比才是刻度**（图 Q1=c）。
+        #   同机**同版本** Octave 11.3.0；两个后端都测都记录：netlib = 系统默认（参考实现，
+        #   单线程，"用户手里的 Octave"）、openblas24 = LD_PRELOAD 0.3.34 pthread×24（天花板；
+        #   与 wasm 里那份 OpenBLAS 同版本族。装包曾把系统 alternatives 自动切到 openblas，
+        #   已钉回 netlib —— 基准脚本不碰 alternatives，只 preload）。
+        _nbj = os.path.join(W64LOGD, "native-baseline.json")
+        if os.path.exists(_nbj):
+            try:
+                _nb = json.load(open(_nbj, encoding="utf-8"))
+                _nbob = _nb.get("backends", {}).get("openblas24", {})
+                _nbnet = _nb.get("backends", {}).get("netlib", {})
+                _nb_cmd = "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）"
+                for _case, _key in (("matmul500", "native_openblas_matmul500_s"),
+                                    ("matmul1024", "native_openblas_matmul1024_s"),
+                                    ("matmul2000", "native_openblas_matmul2000_s"),
+                                    ("lu800", "native_openblas_lu800_s")):
+                    _v = _nbob.get(_case, {}).get("s")
+                    if _v is not None:
+                        facts[_key] = fact(_v, _nb_cmd, "w64-logs/native-baseline.json",
+                                           "原生天花板（OpenBLAS 0.3.34 pthread）的 %s 中位数" % _case)
+                _vn = _nbnet.get("matmul500", {}).get("s")
+                if _vn is not None:
+                    facts["native_netlib_matmul500_s"] = fact(_vn, _nb_cmd, "w64-logs/native-baseline.json",
+                                                              "系统默认 BLAS（netlib 参考实现，单线程）的 matmul 500² —— 用户手里的原生 Octave")
+                if _nbob.get("threads") is not None:
+                    facts["native_openblas_threads"] = fact(_nbob["threads"], _nb_cmd, "w64-logs/native-baseline.json",
+                                                            "天花板后端的线程数（占比口径的一部分，必须如实记录）")
+                # 派生：浏览器 w64（线程版 OpenBLAS）占原生天花板的比值（<1 = 还有余量）与相对 netlib 的倍数
+                if _ob_m and _nbob.get("matmul500", {}).get("s"):
+                    facts["w64_ob_matmul500_native_ratio"] = fact(
+                        round(_nbob["matmul500"]["s"] / _ob_m, 2),
+                        "派生：w64-logs/native-baseline.json 的 openblas24.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500",
+                        "派生（原生基线 ÷ 浏览器）",
+                        "浏览器 w64 占原生天花板的比值（占比仪表盘的表头）")
+                if _ob_m and _vn:
+                    facts["w64_ob_matmul500_vs_netlib"] = fact(
+                        round(_vn / _ob_m, 1),
+                        "派生：w64-logs/native-baseline.json 的 netlib.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500",
+                        "派生（原生基线 ÷ 浏览器）",
+                        "浏览器 w64 相对『系统默认 BLAS 的原生 Octave』的倍数")
+            except (OSError, ValueError) as e:
+                print("⚠ 读不到原生基线 %s：%s" % (_nbj, e), file=sys.stderr)
         # ★ **四档的堆上限与"64 位到底买到了什么"**（工单 31，2026-10-01）：
         #   为什么上键：这两条曾经都是**口号**（用户直觉"w64 更快"、我写"w64 买的是 >4 GiB 地址空间"），
         #   实测**两条都不成立**（已登记翻案 R-013）⇒ 把判据落成可复跑的探针与台账。
