@@ -54,12 +54,14 @@ def render_block(ledger):
               "（它读持久盘产物；换了机器/没挂盘时它量不到东西，那就**别**渲染，"
               "`--check` 会报，而不是给一张空表）。", BLOCK_END]
         return "\n".join(L)
-    L += ["| 键 | 值 | 复跑命令 |", "|---|---|---|"]
+    L += ["| 键 | 值 | 复跑命令 | 测于 |", "|---|---|---|---|"]
     for k in sorted(f):
         note = ("（%s）" % f[k]["note"]) if f[k].get("note") else ""
         # ⚠️ 复跑命令里可能有 `|`（`link-web.sh` 那条就有）—— 不转义会把表格列切碎
         cmd = (f[k].get("cmd", "") or "").replace("|", "\\|")
-        L.append("| `%s` | %s%s | `%s` |" % (k, fmt_val(f[k].get("value")), note, cmd))
+        # ★ Einfacht issue #3 ②：测龄列（采集时刻的**记录**；旧条目没有 ⇒ “—”）
+        at = (f[k].get("measured_at") or "—")
+        L.append("| `%s` | %s%s | `%s` | %s |" % (k, fmt_val(f[k].get("value")), note, cmd, at))
     L += ["", "台账生成时间 `%s`；每条的值/出处/复跑命令都在 `build/FACTS.json` 里。"
           % ledger.get("generated", "?"), BLOCK_END]
     return "\n".join(L)

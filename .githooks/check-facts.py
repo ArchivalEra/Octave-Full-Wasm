@@ -77,6 +77,26 @@ def living_part(path, text):
     return "\n".join(out)
 
 
+FENCE_RE = re.compile(r"^\s*```")
+INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+
+
+def _naked_scan_lines(body):
+    """裸数字判据要扫的行（Einfacht issue #3 ④，2026-10-01 移植）：
+    **围栏代码块整段豁免、行内代码摘掉** —— 文档里的复跑命令天然带数字，
+    把它当手抄值是误报。返回 [(原行号, 摘掉行内代码后的行)]；围栏开/关行本身不扫。"""
+    in_fence = False
+    out = []
+    for i, line in enumerate(body.split("\n"), 1):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        out.append((i, INLINE_CODE_RE.sub("", line)))
+    return out
+
+
 def lines_of(text, path):
     """要查的行：摘掉机器块 + （HANDOFF）只留活状态段落。返回 [(行号, 行)]。"""
     body = strip_blocks(living_part(path, text))
@@ -115,7 +135,8 @@ def check(g, facts, docs, records=None, live_shas=None):
         for key, rx in RULES.items():
             if key not in f:
                 continue
-            for i, line in lines_of(text, path):
+            body = strip_blocks(living_part(path, text))
+            for i, line in _naked_scan_lines(body):
                 m = rx.search(line)
                 if not m:
                     continue
@@ -268,6 +289,16 @@ CASES = [
     ("★ **引用了不存在的键 ⇒ 必须报**",
      lambda: any("不存在的事实键" in p[0] for p in _problems(
          _LEDGER, {"HANDOFF.md": _doc("见 `build/FACTS.json` 的 `wasm_v999`。\n")}))),
+    # ★★ Einfacht issue #3 ④（2026-10-01 移植）：围栏代码块/行内代码**豁免**
+    ("★ 围栏代码块里的数字 ⇒ 豁免（复跑命令天然带数字）",
+     lambda: _np(_LEDGER, {"HANDOFF.md": _doc(
+         "```sh\nsh build/check-deploy-sha.sh site 4752\n```\n"
+         "对照 `build/FACTS.json` 的 `wasm_v128`。\n")}) == 0),
+    ("★ 行内代码里的数字 ⇒ 豁免（引用键的同时行内代码豁免）",
+     lambda: _np(_LEDGER, {"HANDOFF.md": _doc(
+         "对照 `build/FACTS.json` 的 `wasm_v128`，历史输出 `4752` 仅供参考。\n")}) == 0),
+    ("★ 但**正文裸写**（无代码、无块）仍必须报（豁免不许变成后门）",
+     lambda: _np(_LEDGER, {"HANDOFF.md": _doc("对照输出 v128 计数 4752。\n")}) == 1),
     ("★ 引用机制空转（既无引用也无裸数字）⇒ 必须报",
      lambda: any("空转" in p[0] for p in _problems(_LEDGER, {"HANDOFF.md": _doc("正文。\n")}))),
     ("★ **台账过期 ⇒ 必须报**（站点 sha 与台账不同）",

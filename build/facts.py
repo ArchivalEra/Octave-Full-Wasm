@@ -67,8 +67,12 @@ def sha256sum(path, chunk=1 << 20):
     return h.hexdigest()
 
 
-def fact(value, cmd, source, note=""):
-    d = {"value": value, "cmd": cmd, "source": source}
+def fact(value, cmd, source, note="", measured_at=None):
+    # ★ Einfacht issue #3 ②（2026-10-01 移植）：每条事实盖**采集时刻**戳。
+    #   时间是采集结果的**记录**（渲染给人看"测龄"），不参与任何判据 ——
+    #   按墙上时钟算东西会让 `--check` 永不收敛（Einfacht 的教训，照抄）。
+    d = {"value": value, "cmd": cmd, "source": source,
+         "measured_at": measured_at or time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     if note:
         d["note"] = note
     return d
@@ -133,6 +137,29 @@ def _short(v, n=24):
     """把值缩到一行（sha 只留前 16 位），给"改口"提示用。"""
     s = v if isinstance(v, str) else str(v)
     return s if len(s) <= n else (s[:16] + "…" if len(s) == 64 else s[:n] + "…")
+
+
+def _accepted_keys(argv):
+    """解析 `--accept-changes[=k1,k2]`（Einfacht issue #3 ①，2026-10-01 移植）：
+    裸旗 ⇒ None（全收）；列键 ⇒ 集合（空串 ⇒ 空集 = 一个都不收）；没传 ⇒ False（全拒，同旧行为）。"""
+    for a in argv:
+        if a == "--accept-changes":
+            return None
+        if a.startswith("--accept-changes="):
+            return {k.strip() for k in a.split("=", 1)[1].split(",") if k.strip()}
+    return False
+
+
+def filter_accepted(changed, accepted):
+    """改口清单里**还没被接受**的部分（纯函数：自证要用）。
+
+    `accepted=None` ⇒ 全收；`False` ⇒ 全拒；集合 ⇒ 只留未列出的键。
+    """
+    if accepted is None:
+        return []
+    if accepted is False:
+        return list(changed or [])
+    return [c for c in (changed or []) if c[0] not in accepted]
 
 
 def changed_keys(old_facts, new_facts):
@@ -214,6 +241,17 @@ CASES = [
     ("★ **只改 cmd/source ⇒ 不报**（复跑方式的描述不是「改口」，否则守卫会变噪音）",
      lambda: changed_keys({"a": {"value": 1, "cmd": "旧", "source": "旧"}},
                           {"a": {"value": 1, "cmd": "新", "source": "新"}}) == []),
+    # ★ Einfacht issue #3 ①（2026-10-01 移植）：`--accept-changes[=k1,k2]` 逐条放行
+    ("★ 逐条接受：只收列出的键，未列出的仍留在改口清单",
+     lambda: filter_accepted([("a", 1, 2), ("b", 3, 4)], {"a"}) == [("b", 3, 4)]),
+    ("★ 裸旗 = 全收（清单空）", lambda: filter_accepted([("a", 1, 2)], None) == []),
+    ("★ 没传 = 全拒（清单原样）", lambda: filter_accepted([("a", 1, 2)], False) == [("a", 1, 2)]),
+    ("★ `--accept-changes=`（空列表）= 一个都不收",
+     lambda: filter_accepted([("a", 1, 2)], _accepted_keys(["--accept-changes="])) == [("a", 1, 2)]),
+    ("★ `_accepted_keys` 解析：裸旗/列键/没传 三态",
+     lambda: _accepted_keys(["--accept-changes"]) is None
+     and _accepted_keys(["--accept-changes=a,b"]) == {"a", "b"}
+     and _accepted_keys([]) is False),
     ("★ 新增的键 ⇒ 不算改口（那是新增，不该被这条拦）",
      lambda: changed_keys({"a": {"value": 1}}, {"a": {"value": 1}, "b": {"value": 9}}) == []),
     ("★ 空台账起步（旧为空）⇒ 不报", lambda: changed_keys({}, {"a": {"value": 1}}) == []),
@@ -782,17 +820,24 @@ def measure(argv):
     # ★ 第二道守卫：**改口**（值换了）。见文件头"两道守卫"。没有它，一次量错或输入换了，
     #   旧值就被静默覆盖 —— 而闸门只对 3 个 sha 回盘核对，其余条目再也没人知道它变过。
     changed = changed_keys((load_ledger().get("facts") or {}) if os.path.exists(OUT) else {}, facts)
-    if changed and "--accept-changes" not in argv:
-        print("FATAL: 本次重测会**改掉 %d 条事实的值**（未经接受的改口）：" % len(changed), file=sys.stderr)
-        for k, o, n in changed:
+    # ★ Einfacht issue #3 ①（2026-10-01 移植）：`--accept-changes[=k1,k2]` —— 裸旗全收、
+    #   列键只收列出的，其余照旧拒绝。全收会把"真坏了的测量"一起洗白。
+    accepted = _accepted_keys(argv)
+    remaining = filter_accepted(changed, accepted)
+    if remaining:
+        print("FATAL: 本次重测会**改掉 %d 条事实的值**（未经接受的改口）：" % len(remaining), file=sys.stderr)
+        for k, o, n in remaining:
             print("       %-24s %s → %s" % (k, _short(o), _short(n)), file=sys.stderr)
         print("       台账不写。逐条确认这些变化**是实测出来的**（不是输入不在/量错了）之后，", file=sys.stderr)
-        print("       再显式 `--accept-changes`；若某条是量错了，先修输入 —— 那才是真 bug。", file=sys.stderr)
+        print("       再显式 `--accept-changes`（或 `--accept-changes=k1,k2` 逐条放行）；", file=sys.stderr)
+        print("       若某条是量错了，先修输入 —— 那才是真 bug。", file=sys.stderr)
         return 2
     if changed:
         print("⚠ --accept-changes：本次接受 %d 条改口：" % len(changed))
         for k, o, n in changed:
             print("       %-24s %s → %s" % (k, _short(o), _short(n)))
+        if accepted not in (None, False) and remaining == []:
+            pass  # 列名接受 ⇒ 全部放行（remaining 为空）
     doc = {"schema": 1, "generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
            "_why": "事实台账（F2）：每条 = 一个**测出来**的数字 + 复跑命令 + 出处。别手改，跑 build/facts.py。",
            "facts": facts}
