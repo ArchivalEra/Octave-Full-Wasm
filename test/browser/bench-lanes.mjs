@@ -38,7 +38,18 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage'] });
 const page = await (await browser.newContext()).newPage();
 await page.goto(`${URL}?lane=${LANE}`, { waitUntil: 'load', timeout: 300000 });
+// ★ 就绪判定两段式（工单 40，2026-10-02）：**先等 __octaveReady，再碰 feval**。
+//   AGENTS 红线："execute_interp() 之前不许碰解释器" —— 旧循环从 t=0 就轮询 feval，
+//   早期调用在 NT=4 产物上干净抛错（null function）⇒ 一直没人发现；NT=8 上
+//   boot 中途的调用会撞上 OpenBLAS 建池窗口 ⇒ **主线程卡死在 wasm 里**（连页内
+//   setTimeout 都不再触发，bench 零输出挂死）。机制取证见 `.scratch/open-questions/issues/40-*.md`。
+let __ready = false;
 for (let i = 0; i < 600; i++) {
+  if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) { __ready = true; break; }
+  await new Promise(r => setTimeout(r, 200));
+}
+if (!__ready) throw new Error('bench-lanes: 300s 内 __octaveReady 未就绪');
+for (let i = 0; i < 300; i++) {
   if (await page.evaluate(() => { try { return !!window.Module?.feval?.('strcat', ['a', 'b'], 1); } catch { return false; } }).catch(() => false)) break;
   await new Promise(r => setTimeout(r, 200));
 }

@@ -14,9 +14,33 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved（2026-10-02 夜间批：死锁=调用方反模式×建池窗口竞态；调用方已修，NT=8 解锁）
 
 **Settling:** `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs
 <NT=8 实验站>/ w64` —— 出 `SPEED_JSON` ⇒ 死锁已解；零输出超时 ⇒ 仍死锁。
 （NT=8 产物与实验站都在：容器 `/src/websrc/w64-ob-nt8-out`、`w64-nt8-artifacts/`；复现链见
 `w64-logs/relink-w64-nt8*.log`。）
+
+## Answer
+
+（2026-10-02 夜间批结案：**死锁定位 = 调用方反模式，不是 OpenBLAS NT=8 本身**。）
+
+**取证链**（逐步隔离法：每步一个全新 page，崩溃互不牵连）：
+- bench-lanes 的就绪循环**从 t=0 就轮询 `feval('strcat')`**（不等 `__octaveReady`）——
+  这是 AGENTS 红线（"execute_interp 之前不许碰解释器"）的**自动化反模式**。
+- NT=4 产物：boot 中途调用**干净抛错**（null function）⇒ 循环继续等 ⇒ 从未暴露。
+- NT=8 产物：boot 中途的调用撞上 **OpenBLAS 建池窗口** ⇒ 主线程卡死在 wasm 里
+  （页内 setTimeout 都不再触发；与池大小无关：8/8、8/12 都挂）。
+- **就绪后调用**：NT=8 四步全绿（evalstr plain / evalstr strcat / feval builtin / feval strcat，
+  每步独立 page，`w64-logs/step-check.log`）⇒ NT=8 本身健康。
+
+**修复**（`test/browser/bench-lanes.mjs`）：就绪判定两段式 —— 先等 `__octaveReady`
+（300s 上限），再探 feval。**修复后 NT=8 性能立刻显形**（同脚本同窗 A/B）：
+matmul 500² **2.0×**、matmul 1000 **2.2×**、lu 800 1.3×、lu 1500 1.5×（NT=8 0.004/0.025/0.014/0.061
+vs NT=4 0.008/0.056/0.018/0.091）—— 占原生天花板 ~60%（台账 `w64_ob_matmul500_native_ratio` 口径）。
+
+**连带翻面**：票 05 的"NT=4 = 甜点"结论**作废**（甜点被调用方反模式挡住）—— 已在该票补记。
+**遗留尖角**（防御性加固候选，不阻塞）：boot 中途调用在 NT=8 上"卡死"而非"快速抛错"——
+胶水侧可在 pre-ready 状态把 eval 入口做成快速抛错（加固票候选）。
+**NT=8 + pool=8 上站**：新发运候选（`w64-ob-nt8-out`，sha `a69170ec…`，数值四套全绿），
+promote 由人拍板（模式表需同步 w64 档 NT=8 + 池 8）。
