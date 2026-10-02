@@ -48,7 +48,10 @@ if [ "$E2_LANE" = w64 ]; then
   WORKDIR="${WORKDIR:-/src/work/OpenBLAS-e2-w64}"           # 车道工作树
   OUTLIB="${OUTLIB:-/src/work/e2-openblas-lib-w64}"         # 打包产物目录
   LOGD="${LOGD:-/src/work/e2-lane-logs/w64}"
-  WRAPPERS="${WRAPPERS:-/src/work/e2-f77-wrappers-w64.o}"   # f77 包装对象（**必须也是 wasm64**）
+  # ★ 默认 = **merged3 合并版**（76 包装 + 23 透传壳，工单 36）：裸 76 版缺透传壳 ⇒
+  #   `lsame_` 等无人定义 ⇒ 链接落空自引用 ⇒ 页面爆栈（2026-10-02 票 04 L4 实测抓到）。
+  #   换 WORKDIR/OUTLIB 做实验时**这个默认就是护栏**。
+  WRAPPERS="${WRAPPERS:-/src/work/e2-f77-wrappers-w64-merged3.o}"   # f77 包装对象（**必须也是 wasm64**）
 else
   WORKDIR="${WORKDIR:-/src/work/OpenBLAS-e2}"
   OUTLIB="${OUTLIB:-/src/work/e2-openblas-lib-idleexit}"
@@ -131,7 +134,7 @@ stage_build () {
   set +e
   make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
        NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS" FC="/src/bin/emf77 $LANE_FLAGS" \
-       HOSTCC=gcc -j"$JOBS" > "$LOGD/make.log" 2>&1
+       HOSTCC=gcc COMMON_OPT="${E2_COMMON_OPT:--O3}" -j"$JOBS" > "$LOGD/make.log" 2>&1
   local rc=$?
   set -e
   # ⚠️ `tests`（utest/*.exe）失败是**已知无妨**（我们不需要测试程序），但**库本体必须有**
@@ -152,7 +155,7 @@ stage_build () {
   #   Makefile 构建**，报错行是 `Makefile:265: xscblat1.exe`（路径里根本没有 utest）⇒
   #   第一版把这批误判成致命（自己的判据先假红）。
   bad_err=$(grep -E "^make(\[[0-9]+\])?: \*\*\* .*Error 1" "$LOGD/make.log" \
-            | grep -vE "\.exe($| )" | head -5 || true)
+            | grep -vE "\.exe($| |\])" | head -5 || true)
   if [ -n "$bad_err" ]; then
     echo "FATAL: make 里有 utest/tests 之外的失败 —— 库很可能是**缺成员**的（别打包）：" >&2
     printf '%s\n' "$bad_err" | sed 's/^/       /' >&2
