@@ -36,6 +36,10 @@
 
 <!-- 一行一票：[票名](issues/NN-*.md)：一句话结论 -->
 
+- [01 OpenBLAS 杠杆清单](issues/01-openblas-levers.md)：**WASM128_GENERIC 上游自带且已在用**（前提翻案）；
+  真空白 = level-1/2 内核零 SIMD（L1）/ GEMM 微内核 2×2（L2）/ -O2 编译档（L4）/ 线程数 4（L6）/
+  LAPACK 未编入（L5）；threads 档换线程版库 = 零代码 6.7×【实测】（L7）。杠杆 L1–L12 分级见票。
+
 ## Not yet specified
 
 - 若票 04 证明**内核形态**是主杠杆：OpenBLAS WASM 专有内核（WASM128_GENERIC 一族）的维护
