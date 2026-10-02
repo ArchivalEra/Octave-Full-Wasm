@@ -93,16 +93,17 @@ stage_src () {
     # ★ L2：DGEMMKERNEL 改指手写的 wasm128 微内核（默认表指 generic/gemmkernel_2x2.c
     #   = 标量 + clang 自动向量化；手写版 = 显式 f64x2 累加器/加载，票 39/L2）。
     sed -i 's|^DGEMMKERNEL    =  ../generic/gemmkernel_2x2.c|DGEMMKERNEL    =  gemmkernel_wasm128.c|' "$WORKDIR/kernel/wasm/KERNEL"
-    # ★ L2：4×2 加宽微内核覆盖 + UNROLL_M=4 + ncopy/tcopy 换 _4 变体（ncopy_4 = 每 k 4 行
-    #   连续的面板布局，与 4×2 微内核的零-shuffle 行加载配套；_4 文件上游自带）。
-    if [ -f /src/bin/gemmkernel_wasm128_4x2.c ]; then
+    # ★ L2（独立门控 E2_GEMM_WASM128=1）：4×2 微内核 + UNROLL_M=4 + ncopy_4/tcopy_4。
+    #   ⚠ 实测（票 39）：该形态 matmul 慢 8-13×（寄存器压力 + memory64 边界检查）——
+    #   自动向量化 generic 2×2 = wasm64 实用最优。默认关闭，仅实验时显式开启。
+    if [ "${E2_GEMM_WASM128:-}" = "1" ] && [ -f /src/bin/gemmkernel_wasm128_4x2.c ]; then
       cp /src/bin/gemmkernel_wasm128_4x2.c "$WORKDIR/kernel/wasm/gemmkernel_wasm128.c"
       sed -i 's|^DGEMMONCOPY    = ../generic/gemm_ncopy_2.c|DGEMMONCOPY    = ../generic/gemm_ncopy_4.c|' "$WORKDIR/kernel/wasm/KERNEL"
       sed -i 's|^DGEMMOTCOPY    = ../generic/gemm_tcopy_2.c|DGEMMOTCOPY    = ../generic/gemm_tcopy_4.c|' "$WORKDIR/kernel/wasm/KERNEL"
-      sed -i 's|^DGEMMKERNEL    =  gemmkernel_wasm128.c|DGEMMKERNEL    =  gemmkernel_wasm128.c
+      sed -i 's|^DGEMMKERNEL    =  ../generic/gemmkernel_2x2.c|DGEMMKERNEL    =  gemmkernel_wasm128.c
 DGEMM_UNROLL_M  = 4
 DGEMM_UNROLL_N  = 2|' "$WORKDIR/kernel/wasm/KERNEL"
-      say "[src] L2：4×2 加宽微内核 + UNROLL_M=4 + ncopy/tcopy_4 就位"
+      say "[src] L2：4×2 加宽微内核 + UNROLL_M=4 + ncopy/tcopy_4 就位（实验形态，慢 8-13×）"
     fi
     say "[src] V_SIMD wasm 守卫点亮 + DDOTKERNEL→generic + DGEMMKERNEL→wasm128（E2_ARCH_WASM_INTRIN=1）"
   fi
