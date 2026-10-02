@@ -116,3 +116,15 @@ UNROLL_M=4/N=2 + ncopy/tcopy 换 _4 变体）；L2b 构建 relink `verdict=ok`
    canary 或逐面板二分）。
 另：4×1 块的 `vb = load(ptrbb)` 读 4 double 但 1 列面板每 k-pair 只有 2 double
 ⇒ **确认的越界读**（n 奇数边缘触发）—— 修法 = load64_zero + load64_lane 拼 2 列。
+
+## L2c 补记（2026-10-02 深夜第二场：4×1 修复后 bench 仍挂 —— 机器二次重启，收兵）
+
+- 4×1 块的越界读已修（load64_zero + load64_lane），relink `verdict=ok`
+  （sha `a4916303…`）、boot 1.2s —— 但 **bench 仍零输出超时**（两段式就绪后
+  依旧挂在 feval/首 case，`w64-logs/l2b-bench-diag.log`：dot 1e7 能跑 0.007s、
+  matmul 500 第二轮把标签页打崩 = `memory access out of bounds` 复现）。
+- 机器两次重启（用户："好像给我电脑干崩溃了"）—— 工作负载密度过高的实证。
+  **收兵**：未竟状态全部记档，下一会话用需求书（`.scratch/perf-max/需求书-claude-gemm-review.md`，
+  已写好待发）走外部复核 + 稳定环境下二分。
+- 下一会话入口：① 需求书发 Claude；② matmul 陷阱二分（tcopy_4 回退 / 4×2 块逐段注释）；
+  ③ 8761 已恢复（现役 -O3+8GB 完好）。

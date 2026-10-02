@@ -282,12 +282,15 @@ int CNAME(BLASLONG bm, BLASLONG bn, BLASLONG bk, FLOAT alpha, IFLOAT *ba,
                         v128_t c3 = wasm_f64x2_splat(0.0);
 
                         for (k = 0; k + 2 <= bk; k += 2) {
-                                v128_t vb = wasm_v128_load(ptrbb);
+                                // ⚠ 1 列面板每 k-pair 只有 2 double —— 16B load 会越界
+                                //   （实测 memory access out of bounds）；64 位零载 + lane 补拼。
+                                v128_t vb = wasm_v128_load64_zero(ptrbb);
+                                vb = wasm_v128_load64_lane(ptrbb + 1, vb, 1);   // 签名：(mem, vec, lane) —— 常量 lane
                                 v128_t va0 = wasm_v128_load(ptrba);
                                 v128_t va1 = wasm_v128_load(ptrba + 2);
                                 v128_t va2 = wasm_v128_load(ptrba + 4);
                                 v128_t va3 = wasm_v128_load(ptrba + 6);
-                                v128_t bcol = wasm_i64x2_shuffle(vb, vb, 0, 2);
+                                v128_t bcol = vb;
 
                                 c0 = wasm_f64x2_add(c0, wasm_f64x2_mul(va0, bcol));
                                 c1 = wasm_f64x2_add(c1, wasm_f64x2_mul(va1, bcol));
