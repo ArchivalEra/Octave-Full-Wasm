@@ -47,7 +47,10 @@
 四轮构建 + 预处理证据互相矛盾（守卫确认替换 / -E 展开 46 个 f64x2 / 产物不变）——
 剩余嫌疑：① dot.c 的 `#include "../simd/intrin.h"` 被**别的 intrin.h 遮蔽**（编译 cwd 与 -I 顺序）；
 ② dot.c 的 SIMD 分支内有**更内层的守卫**未过；③ emcc 对 builtin 的吸收。
-下一会话判别法：在 SIMD 分支内加 `#warning` 或 `error "BRANCH-TAKEN"` 探针，一次编译即知分支是否真编入。
+下一会话判别法：在 SIMD 分支内加 `#warning PROBE-SIMD-BRANCH-ACTIVE`，用 make.log 原编译行
+（改 `-c dot.c` → `-c kernel/generic/dot.c`，**从 TOP 目录跑** —— VPATH 解析源文件；
+脚本用 python3 写成 /tmp/probe.sh 避开 sh -c 引号地狱，本夜两轮探针都死在这一步，技法已明）。
+一次编译即知分支是否真编入：warning 出现 ⇒ 分支在编译、查 codegen；不出现 ⇒ 查 include 遮蔽。
 
 **基建清单（本夜已落）**：`E2_CC_EXTRA` / `E2_NUM_THREADS` / `E2_ARCH_WASM_INTRIN` 三旋钮 +
 bench-lanes 两段式就绪（工单 40）+ NT=8 基线数字（matmul 0.004/1000 0.025/lu 0.014）。
