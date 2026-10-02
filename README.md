@@ -219,7 +219,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 <!-- AUTO:FILES -->
 - `.githooks/check-consistency.py` (17258 bytes)
 - `.githooks/check-facts.py` (16449 bytes)
-- `.githooks/check-handoff.py` (12715 bytes)
+- `.githooks/check-handoff.py` (13281 bytes)
 - `.githooks/check-retractions.py` (6687 bytes)
 - `.githooks/check-wants.py` (10926 bytes)
 - `.githooks/check-whitelist.py` (3216 bytes)
@@ -273,7 +273,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `AGENTS.md` (16696 bytes)
 - `CONTEXT.md` (10597 bytes)
 - `DEPLOY.md` (8730 bytes)
-- `HANDOFF.md` (38221 bytes)
+- `HANDOFF.md` (40264 bytes)
 - `HISTORY.md` (294052 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)

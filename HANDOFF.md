@@ -151,9 +151,12 @@
    现代 Chromium 同一条判据期望 `w64`（`w64-logs/floor-8761-chromium.log`）。
    **引擎矩阵**（`floor_matrix_*`）：Chromium 154 / Firefox / WebKit 三台落 `w64`，Chromium 125 落 `threads`。
 
-## 1b. ⭐ 已建成、实测、**待拍板发运**：`w64` + 线程版 OpenBLAS（工单 33，2026-10-01）
+## 1b. ⭐ 已建成、实测、**已 promote 到 8761**：`w64` + 线程版 OpenBLAS（工单 33，2026-10-02）
 
-用户点名的形态（"当然是 w64+thread 啊"）**已经建出来并跑起来了**（实验站点 8849，**未 promote**）：
+用户点名的形态（"当然是 w64+thread 啊"）**已经建出来、跑起来、并已发运**：
+发运入口 `W64_OUT=/src/websrc/w64-ob-out5 sh build/promote-w64-lane.sh <8761站点>`（只换 `w64/` 一档），
+产物 sha = 台账 `w64_wasm_sha`（`ddec34a0…`）；8761 开机 1.3 s、四档磁盘/HTTP SHA 逐档核过、
+四格选档 33/0；全量回归在跑（见 §1c）。
 
 - 产物：memory64 + pthread + `USE_THREAD=1` 的 OpenBLAS + idle-exit 补丁 ⇒ `verdict=ok`，
   `declared` 三条齐（`threads`/`wasm64`/`e2_openblas`），烘死路径 `-w64`；装机**开机 1.3 s**、
@@ -162,7 +165,27 @@
   matmul 500² **0.007 s**、lu(800) **0.019 s** —— 比现役 `w64`（refblas）快 **6.6×**，
   且比 wasm32 的 OpenBLAS 档（`e2_matmul500_s`）**还快** ⇒ i64 的代价远小于线程收益。
 - 堆上限**没变**（`mem_live_ceiling_gib` / `W64_BIG_HEAP=no`）：要"又大又快"，"大"那一半仍要工单 31 第二半。
-- **发运 = 产品决定**（与工单 27 同一面）：改动面只有 `w64/` 一档，其余三档 sha 不变。
+- **发运已完成**（2026-10-02）：`base`/`threads`/`w64-base` 三档 sha 逐字节未动，只有 `w64/` 换成
+  本形态；发运脚本自带"只许新增/台账对齐"守卫全过。
+
+## 1c. ⏳ **进行中**（本压缩时点的活状态，2026-10-02）
+
+- **8761 全量 `PROBES=1` 重跑中**（日志 `/mnt/hdd/octave-wasm-build/sweep-8761-w64ob-r4.txt`；
+  表头口径 = 台账 `accept_suites` / `accept_pass`）。
+  前两轮：r1 被会话重启杀掉（30 套全绿）、r2 死于 **8761 服务进程掉线**（44 个 NO-SUMMARY 全是
+  ERR_CONNECTION_REFUSED，**不是产物问题**——前 28 套全绿）。服务已重新拉起（`serve-coi.py` 8761/8849），
+  开机自检 1.2 s 后重跑本轮。
+- **绿后的收尾序列**（照做即可）：台账重测（`accept_*`/`probe_lane_pass` 等改口 ⇒ `--accept-changes`，
+  注意新工具支持 `--accept-changes=k1,k2` 逐条）→ `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/`
+  → `make-dist`（四档包内 sha 逐档核对）→ `parity --strict` → 文档订正（README/DEPLOY 的 `w64` 档条目：
+  从"不比 wasm32 快"改为"**线程版 OpenBLAS，matmul 500² 6.6×**（台账 `w64_ob_matmul500_speedup`），
+  堆上限仍 2 GiB（工单 31 第二半未做）"）→ 六道闸门 + `gates-selftest` → 提交推送。
+- **阻塞项：origin 推送**——`gh` 的 GitHub token 失效（`gh auth status` 显示 invalid），
+  mirror 推送正常；**需用户跑 `gh auth login -h github.com`** 后补推（`git push origin wasm64`）。
+- 容器 `o113` 第二天开机后**没起**；目前收尾步骤都不需要它，若要动容器先 `sudo docker start o113`。
+- 实验站点：8849 = `site-w64-ob`（新产物全量 `PROBES=1` 全绿，日志 `sweep-8849-w64ob-fix.txt`）、
+  8852 = `site-w64-f2c`（A/B 对照）、
+  8851 = 守门注入版（诊断用，可关）。
 
 ## 2. 铁律（违反会被拦或返工）
 

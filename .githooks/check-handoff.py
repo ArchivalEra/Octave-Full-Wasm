@@ -160,6 +160,14 @@ def main():
     site = F.site_facts()
     sweep = F.sweep_facts()
     current_shas = {n: f["sha256"] for n, f in site["files"].items()} if site["ok"] else {}
+    # ★ 四格车道（工单 30/33，2026-10-02）：子目录档的 wasm **也是部署件**——
+    #   不收进来，正文里写 `w64` 档的 sha（如 `ddec34a0…`）会被 L1 当成“不是任一部署件的 sha”
+    #   误报（实测：w64+线程版 OpenBLAS 发运那一批）。 lane 目录存在才收。
+    if site["ok"]:
+        for _lane in ("threads", "w64", "w64-base"):
+            _lp = os.path.join(F.SITE, _lane, "octave.wasm")
+            if os.path.isfile(_lp):
+                current_shas[_lane + "/octave.wasm"] = F._sha256(_lp)
     problems, notes = check_living(text, current_shas, sweep)
 
     show = lambda rows: [print("  %s: [%s] %s\n      %s" % (l, k, msg, txt)) for l, k, msg, txt in rows]
