@@ -90,7 +90,10 @@ stage_src () {
     #   决定 include 路径；KERNEL.WASM128_GENERIC 不被读 —— 实测编译行 = ../riscv64/dot.c）。
     #   DDOT 改指 generic/dot.c（唯一带 V_SIMD 分支的 dot 内核，已实证 46 f64x2）。
     sed -i 's|^DDOTKERNEL   = ../riscv64/dot.c|DDOTKERNEL   = ../generic/dot.c|' "$WORKDIR/kernel/wasm/KERNEL"
-    say "[src] V_SIMD wasm 守卫点亮 + DDOTKERNEL→generic（E2_ARCH_WASM_INTRIN=1）"
+    # ★ L2：DGEMMKERNEL 改指手写的 wasm128 微内核（默认表指 generic/gemmkernel_2x2.c
+    #   = 标量 + clang 自动向量化；手写版 = 显式 f64x2 累加器/加载，票 39/L2）。
+    sed -i 's|^DGEMMKERNEL    =  ../generic/gemmkernel_2x2.c|DGEMMKERNEL    =  gemmkernel_wasm128.c|' "$WORKDIR/kernel/wasm/KERNEL"
+    say "[src] V_SIMD wasm 守卫点亮 + DDOTKERNEL→generic + DGEMMKERNEL→wasm128（E2_ARCH_WASM_INTRIN=1）"
   fi
 }
 

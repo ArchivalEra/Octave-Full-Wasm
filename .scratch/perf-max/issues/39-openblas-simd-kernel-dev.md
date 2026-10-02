@@ -78,3 +78,21 @@ bench-lanes 两段式就绪（工单 40）+ NT=8 基线数字（matmul 0.004/100
 是内存墙。**真杠杆 = L2（GEMM 微内核，compute-bound，2–4×【推断】仍在桌上）**；
 本票保持 open，下一族直接打 L2（gemmkernel_wasm128.c 的 tile 加宽）。
 NT=8 的 2.0–2.2× 已是本图最大的已落地收益（工单 40）。
+
+## L2 第一刀判别（2026-10-02 深夜：DGEMMKERNEL→wasm128 = 空操作，L2 重构定性）
+
+**发现**：构建实际读的默认表 `kernel/wasm/KERNEL` 里 **DGEMMKERNEL = generic/gemmkernel_2x2.c**
+（标量源 + clang -O3 -msimd128 **自动向量化**）—— 手写的 `gemmkernel_wasm128.c` 从未被接上。
+把 DGEMMKERNEL 改指 wasm128 后重建：**归档与改前逐字节相同**（2935c05d…，L1c 同）⇒
+clang 对 2×2 简单循环的自动向量化**已经生成了与手写 intrinsics 相同的 SIMD 序列**。
+
+**定性翻转**：L2 的增益**不可能来自"手写 SIMD"**（编译器已做）—— 只能来自**自动向量化
+做不到的结构性重构**：寄存器分块加宽（2×2 → 4×2/8×4 tile，更多 f64x2 累加器、更低的
+load/shuffle 比）。前提工作 = **读懂 pack 布局**（`kernel/generic/gemm_ncopy_2.c` 的
+A'/B' 面板排布 —— 微内核里的 vb01/vb23 双加载与 shuffle 模式必须对照 packer 才能重构），
+配套 = KERNEL 表的 DGEMM_UNROLL_M/N + ncopy/tcopy 换 _4 变体（`gemm_ncopy_4.c`/
+`gemm_tcopy_4.c` 已在树上）+ 微内核 m 循环 4 宽化（8 个 f64x2 累加器，注意 wasm 寄存器
+压力 —— 16 个活 v128 可能 spill，4×2=8+4+2=14 个活值是边界）。
+
+**下一会话路径**：读 gemm_ncopy_2.c 定布局 → 写 4×2 微内核 + 换 UNROLL/ncopy/tcopy →
+重建（旋钮全在）→ bench matmul（L2 正主）→ 回归四套 → ≥1.3× 则 L2 结案。
