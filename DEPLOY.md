@@ -35,7 +35,7 @@
 |---|---|---|---|
 | `base` | 根目录 `octave.{wasm,js,data}` | **任何**静态托管的底线（页面默认回落到它） | 无 |
 | `threads` | `threads/octave.{wasm,js,data}` | 宿主发了 COI 头、但引擎**没有 memory64** | COI + `SharedArrayBuffer` |
-| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（memory64 + pthread 的目标形态；**当前不比 wasm32 快、堆也仍是 2 GiB**，见下） | COI + `SharedArrayBuffer` + memory64 |
+| `w64` | `w64/octave.{wasm,js,data}` | 宿主发了 COI 头 **且** 引擎支持 memory64（memory64 + pthread + **线程版 OpenBLAS**，2026-10-02 起；**四档里最快的交付形态**，BLAS 重负载见台账 `w64_ob_matmul500_speedup` / `w64_ob_matmul500_s`；**堆上限仍 2 GiB**，见下） | COI + `SharedArrayBuffer` + memory64 |
 | `w64-base` | `w64-base/octave.{wasm,js,data}` | 引擎支持 memory64 但宿主**没发** COI 头（单线程 64 位回退） | memory64 |
 
 **选档判据是同步的**（加载胶水**之前**就得定档）：`crossOriginIsolated === true` 且
@@ -71,14 +71,18 @@ Cross-Origin-Embedder-Policy: require-corp
   `threads_blas_dir`），但交付形态是 **`USE_THREAD=0`（单线程）** ⇒ 收益来自 OpenBLAS 的内核
   （见台账 `e2_matmul500_ratio` / `e2_lu800_ratio`），**不是**多线程；`USE_THREAD=1`（约 6.7×）
   的技术判据已全过（工单 27 / 19），**发运决定待定**。
-- ⚠️ **`w64` 的两个"想当然"都要收回**（2026-10-01 实测，工单 31 / 翻案 R-013）：
-  · **不比 wasm32 快** —— 同一份工作中位数：matmul 慢 1.17–1.20×、lu 慢 1.18–1.34×、
-    解释器循环慢 1.72×（i64 指针/索引的代价）。四档里**最快的是 `threads`**（OpenBLAS 内核，
-    BLAS 上快 1.7–2.0×），但它在 `sort`/循环上反而慢。
+- ⚠️ **`w64` 的两个"想当然"**（2026-10-01 实测，工单 31 / 翻案 R-013）—— **第一条已被 2026-10-02 的
+  换产物部分推翻，第二条仍然成立**：
+  · ~~不比 wasm32 快~~ ⇒ **w64 已换成线程版 OpenBLAS**（`E2_LANE=w64` 配方，sha 见台账
+    `w64_wasm_sha`）：matmul 500² 相对旧 w64（refblas）快 **6.6×**（台账 `w64_ob_matmul500_speedup`），
+    比交付的 `threads`（单线程 OpenBLAS）也快 ⇒ **四档里最快的交付形态**。R-013 当年测的
+    "refblas w64 比 wasm32 慢 1.17–1.72×" 作为**历史**仍成立（i64 指针有代价），只是被
+    OpenBLAS 的收益盖过了；解释器标量循环仍无优化目标（Q4=a，见 `.scratch/perf-max/`）。
   · **也没有更大的堆** —— 四个档的 wasm 内存上限**都是 2 GiB**（`w64/octave.js` 的
     `new WebAssembly.Memory({..., maximum:32768n, ...})`），逐块分配实测的**存活上限同为 1.49 GiB**
     （台账 `mem_live_ceiling_gib` / `w64_big_heap`）。引擎级探针能拿 5 GiB（`w64_mem_5g_bytes`）
-    证明的是**引擎能力**，不是产物配置 —— 要兑现 >2 GiB 得显式抬 `MAXIMUM_MEMORY` 重链（工单 31 第二半）。
+    证明的是**引擎能力**，不是产物配置 —— 要兑现 >2 GiB 得显式抬 `MAXIMUM_MEMORY` 重链
+    （perf-max 图票 03 / 工单 31 第二半）。
   · 复跑：`test/browser/bench-lanes.mjs`（四档竞速）与 `test/browser/probe-heap-ceiling.mjs`（堆上限）。
 
 ## 怎么部署（GitHub Pages）

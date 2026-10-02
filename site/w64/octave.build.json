@@ -2,7 +2,7 @@
  "schema": 1,
  "tool": {
   "name": "link-web.sh",
-  "script_sha256": "a04488c9625cde860aede7e9b6afa8479cde8e74e8cd6643e31d2d44ee6b5183",
+  "script_sha256": "5d117f887aa236b1bae76a47c6d88c84a7a6bdd6634c4e5583df3e3da82cb21d",
   "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 5.0.7 (263db4cffa6f9fc2ec514a70abac81362ea41849)",
   "manifest_writer": {
    "name": "write-build-manifest.py",
@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-09-28T12:49:09+0000",
-  "out": "/src/websrc/w64-out",
+  "when": "2026-10-01T05:39:52+0000",
+  "out": "/src/websrc/w64-ob-out5",
   "mode": "w64"
  },
  "declared": {
@@ -38,7 +38,7 @@
  "measured": {
   "exported_functions": 732,
   "simd": {
-   "v128": 4797,
+   "v128": 6295,
    "impl": "llvm-objdump"
   },
   "jspi_entry": true,
@@ -68,12 +68,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "d34d3217f348bcd754d1f2777fe73b67f188e038cd05c54a6aed06a2dd8240ae",
-    "bytes": 30012178
+    "sha256": "ddec34a04a4e6c5108c6c886bf77fcb5a5a85bfe221f850772698be286912ef7",
+    "bytes": 30851987
    },
    "octave.js": {
-    "sha256": "97c9f37dc50003a2ae93dc00e84c469cc1e1348c2d48eaf49fc20493a9c766b4",
-    "bytes": 513791
+    "sha256": "81e0ebf538159aecb12ecdeb1096a2d8cb69e0ecf123d16a303cd01b60b9ef22",
+    "bytes": 514503
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -84,24 +84,21 @@
  "inputs": {
   "link_web_sh": {
    "path": "/src/bin/link-web.sh",
-   "sha256": "a04488c9625cde860aede7e9b6afa8479cde8e74e8cd6643e31d2d44ee6b5183"
+   "sha256": "5d117f887aa236b1bae76a47c6d88c84a7a6bdd6634c4e5583df3e3da82cb21d"
   },
   "blas": {
-   "resolved_dir": "/src/deps-w64/lapack-simd/lib",
+   "resolved_dir": "/src/work/e2-openblas-lib-w64",
    "search_order": [
+    "/src/work/e2-openblas-lib-w64",
     "/src/deps-w64/lapack-simd/lib",
     "/usr/local/lib"
    ],
    "librefblas": {
-    "path": "/src/deps-w64/lapack-simd/lib/librefblas.a",
-    "sha256": "46665dbd0121ec23c99ff9438fa2241c2373aac54a7169cb3fdbc8696dfd591e",
-    "bytes": 719136
+    "path": "/src/work/e2-openblas-lib-w64/librefblas.a",
+    "sha256": "25ebf7f92feb89184603c427ec2866eb9d1fa1619aafc8cb11a05f63dddd951c",
+    "bytes": 3242544
    },
-   "liblapack": {
-    "path": "/src/deps-w64/lapack-simd/lib/liblapack.a",
-    "sha256": "3a00f2e9d52ac96f42376e441c38485982b8c6ace8537533fc16f29f14ab8b61",
-    "bytes": 10863098
-   }
+   "liblapack": null
   },
   "keep_list": {
    "path": "/src/libwork/keep-w64.txt",
@@ -117,8 +114,8 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-09-28T13:38:08+0000",
+  "when": "2026-10-01T05:42:54+0000",
   "by": "check-build-manifest.py",
-  "script_sha256": "676cb1ccd55bd00f127c1621dcc9bb0958de1fa8e76e9d225e2ca888a8b82e96"
+  "script_sha256": "37bd772a3145f1881d49c5cfba6557f559d8a0894e237d97a55477586268ecf0"
  }
 }

@@ -190,7 +190,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
   Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
 - **多线程 / 64 位（B6 + wasm64；2026-10-01 起站点是「四档」）**：站点里带**四份产物**
-  （根目录 = `base` 基础档，`threads/` = wasm32 线程档，`w64/` = memory64+线程（目标形态；**实测不比 wasm32 快、堆上限同为 2 GiB** —— 工单 31），
+  （根目录 = `base` 基础档，`threads/` = wasm32 线程档（单线程 OpenBLAS），`w64/` = memory64+线程+**线程版 OpenBLAS**（2026-10-02 起，四档里最快的交付形态 —— 台账 `w64_ob_matmul500_speedup`；堆上限仍 2 GiB，perf-max 图票 03 / 工单 31），
   `w64-base/` = memory64 单线程回退），页面按**同步**判据自动选档：宿主发了
   `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
   且引擎支持 memory64 ⇒ `w64`；没有 memory64 ⇒ `threads`；没有 COI ⇒ `w64-base` / `base`
@@ -281,8 +281,8 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (16696 bytes)
 - `CONTEXT.md` (10597 bytes)
-- `DEPLOY.md` (8730 bytes)
-- `HANDOFF.md` (40264 bytes)
+- `DEPLOY.md` (9207 bytes)
+- `HANDOFF.md` (40155 bytes)
 - `HISTORY.md` (294052 bytes)
 - `LICENSE` (34523 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
@@ -888,10 +888,10 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `site/w64-base/octave.wasm` (29935634 bytes)
 - `site/w64/dldprobe.oct` (3033 bytes)
 - `site/w64/minioct.oct` (5887 bytes)
-- `site/w64/octave.build.json` (3187 bytes)
+- `site/w64/octave.build.json` (3066 bytes)
 - `site/w64/octave.data` (9712182 bytes)
-- `site/w64/octave.js` (513791 bytes)
-- `site/w64/octave.wasm` (30012178 bytes)
+- `site/w64/octave.js` (514503 bytes)
+- `site/w64/octave.wasm` (30851987 bytes)
 - `site/webaudio.js` (7303 bytes)
 - `site/webaudiorec.js` (11861 bytes)
 - `site/webfilepick.js` (6151 bytes)
