@@ -96,3 +96,23 @@ A'/B' 面板排布 —— 微内核里的 vb01/vb23 双加载与 shuffle 模式�
 
 **下一会话路径**：读 gemm_ncopy_2.c 定布局 → 写 4×2 微内核 + 换 UNROLL/ncopy/tcopy →
 重建（旋钮全在）→ bench matmul（L2 正主）→ 回归四套 → ≥1.3× 则 L2 结案。
+
+## L2 4×2 内核首战（2026-10-02 深夜：内核写完、可跑小用例、matmul 陷阱未解 —— 本票 open）
+
+**已落地**：`build/113/gemmkernel_wasm128_4x2.c` = 完整微内核（4×2 SIMD 块 + 4×1 块 +
+2×2/1×1 余量路径 + 余量感知边界 bm-i4）；`E2_ARCH_WASM_INTRIN` 旋钮扩展（4×2 文件覆盖 +
+UNROLL_M=4/N=2 + ncopy/tcopy 换 _4 变体）；L2b 构建 relink `verdict=ok`
+（sha `d4fbc6e6…`）、boot 1.5s、dot 1e7 0.007s、**回归 oct 8/0 libs 17/0 ode15 29/0**。
+
+**未解**：bench 的 matmul 500 **第二/三轮之间标签页崩溃**（`memory access out of bounds`
+复现于 eval 序列）—— 单次 eval_string matmul rc=0、ncopy_4 面板布局已核实与内核假设一致
+（每 k 4 行连续）、回归套件小矩阵全绿 ⇒ 陷阱在**面板边界/特定形状**的组合里。
+
+**两条收口路径（下一会话）**：
+① **tcopy_4 嫌疑**：DGEMMOTCOPY 换的 tcopy_4 是为 UNROLL_N=4 设计的 —— UNROLL_N=2 下
+   它的 2 列块布局可能与微内核的 vb 4-double 假设不符（B 面板末端越界）。判别 = 重建时
+   DGEMMOTCOPY 回退 tcopy_2（保留 ncopy_4/UNROLL_M=4/4×2 内核）看 matmul 是否还崩；
+② **陷阱定位**：eval 序列 + `-fsanitize` 级别的定位（wasm 无 ASAN ⇒ 用 EMMA/自建
+   canary 或逐面板二分）。
+另：4×1 块的 `vb = load(ptrbb)` 读 4 double 但 1 列面板每 k-pair 只有 2 double
+⇒ **确认的越界读**（n 奇数边缘触发）—— 修法 = load64_zero + load64_lane 拼 2 列。
