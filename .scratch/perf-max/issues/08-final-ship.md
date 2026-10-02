@@ -1,5 +1,5 @@
 **Type:** task
-**Status:** open
+**Status:** claimed（2026-10-02，用户令"发运"）
 **Blocked by:** 07
 
 ## Question

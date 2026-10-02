@@ -7,7 +7,7 @@ matmul 500² 中位数 0.006 s ⇒ ≈6.7× 收益保留）。本单 = 把这条
 
 **Blocked by:** None（19 的机制与补丁都已就绪）
 
-**Status:** ready-for-human
+**Status:** resolved（2026-10-02 用户拍板：**不发运** —— wasm32 线冻结于 `wasm32-final` 分支，主线专注 w64 极限版）
 
 **Settling:** ①脚本形态已交付：`bash build/113/build-e2-lane.sh patch` 幂等接线（两条分支实测，见下）；
 ②`sh build/sweep.sh <新线程档产物站点>/` ⇒ rc=0 且全绿（**含 `accept-113-oct`**：

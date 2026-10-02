@@ -21,8 +21,8 @@
 - **车道纪律**：一切构建走既有受管辖机制 —— `build/113/relink.sh` 模式表（不许手设环境变量）、
   `build/113/build-e2-lane.sh`（`E2_LANE`）、发运 `build/promote-w64-lane.sh`；新变量先进
   模式表（`explain` 落口径 + `--selfcheck`）再谈使用。
-- **载体决定缓发**（grilling Q2=b）：调优实验 w64 与 wasm32-threads 两条 E2 配方都跑；
-  改选档排序 / 发运 threads 档（工单 27）是终点前的人工决策（票 07），中途不做。
+- **载体已定（2026-10-02 用户拍板，票 07）**：**单王 w64**；wasm32 线冻结于 `wasm32-final`
+  分支（不发线程版库）；主线专注 w64 极限版。
 - **事实纪律**照 AGENTS：数字只落 `build/FACTS.json`（`--accept-changes` 逐条接受改口）；
   推断进 `build/113/NOTES-*.md` 并注明结案实验；被推翻进 `build/lib/retractions.json`。
 - **仪器已备**：`test/browser/bench-lanes.mjs`（多档竞速）、`bench-core.mjs`、`bench-dgemm.mjs`、
@@ -46,6 +46,9 @@
   w64/w64-base = 8GB）；4GB 版实测存活 3.73 GiB 暴露"判据≥4GiB 与旋钮结构性错位" ⇒ 抬 8GB：
   **存活 7.45 GiB、`W64_BIG_HEAP=yes`**、开机 1.1 s、数值回归全绿、bench 持平、四格 33/0。
   **产物已建成、未 promote**（= 终局票 08 的人工确认点；共享 8GB 的三引擎矩阵待复核）。
+- [07 载体与发运决策](issues/07-carrier-and-ship-decision.md)：**用户拍板 —— 单王 w64**。
+  wasm32 线冻结于 `wasm32-final` 分支（不发线程版库，工单 27 同结）；lane.js 排序不变
+  （w64 本就是最快交付形态）；终局形态 = w64 合体版（-O3 + 8GB），发运令已下（票 08）。
 
 ## Not yet specified
 
@@ -54,7 +57,8 @@
 - 原生占比出来后，若浏览器与原生的主要差距落在 **JS↔wasm 边界 / 内存布局**而非内核，
   可能引出"边界开销"实验票（这正是 Q1 选杠杆清空制的理由：天花板未知，拍百分比容易虚）。
 - 票 03 若兑现 >2 GiB：大堆下解释器/BLAS 的实际行为差异（临时矩阵策略、索引宽度）待观察。
-- 双王若成立（票 07）：wasm32 threads 档的完整验收与发运配方 —— 那时才够格立票。
+- ~~双王若成立（票 07）：wasm32 threads 档的完整验收与发运配方~~ —— **已出雾**（票 07 决策：
+  单王 w64，wasm32 冻结；这条不再会立票）。
 
 ## Out of scope
 
