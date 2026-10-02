@@ -279,7 +279,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/perf-max/issues/06-link-flags.md` (4023 bytes)
 - `.scratch/perf-max/issues/07-carrier-and-ship-decision.md` (1449 bytes)
 - `.scratch/perf-max/issues/08-final-ship.md` (2435 bytes)
-- `.scratch/perf-max/issues/39-openblas-simd-kernel-dev.md` (4514 bytes)
+- `.scratch/perf-max/issues/39-openblas-simd-kernel-dev.md` (5024 bytes)
 - `.scratch/perf-max/map.md` (7039 bytes)
 - `.zcode/config.json` (791 bytes)
 - `AGENTS.md` (16696 bytes)
