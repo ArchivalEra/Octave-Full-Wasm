@@ -23,3 +23,25 @@
 **Settling:** 不存在 —— 第一交付物 = 产地 `build/113/bench-lanes.mjs` 的同题对比
 （L1 第一族内核的 w64 档 bench vs 现役 `w64_ob_matmul500_s` / `w64_ob_lu800_s`，≥1 项 ≥1.3× 且
 数值回归 0 FAIL ⇒ 该族结案；全部三族做完 ⇒ 本票结案）
+
+## 进度（2026-10-02 夜间批：侦察完成，基建就位，首战未竟 —— 本票保持 open）
+
+**侦察结论（改变打法的三条）**：
+1. **`ARCH_WASM` 从未被任何 Makefile 定义**（`grep Makefile.system` 零命中）⇒ intrin.h 的
+   wasm 守卫是上游死代码 ⇒ 这就是 level-1 v128=0 的**真根因**（ticket 01 的"内核标量"证据成立，
+   但机制 = 宏没点亮，不是 wasm 内核缺失）。
+2. `intrin_wasm.h` 完整存在（30 个 v_ 函数、V_SIMD_F64=1、v_muladd_f64…）—— 后端现成。
+3. **`-DARCH_WASM` 通路不可行**：会泄漏进 getarch 的宿主编译 ⇒ ARCH 探测变空 ⇒
+   `Makefile.$(ARCH)` 直接炸（实测两轮）。⇒ 正解 = **src 阶段后改 WORKDIR 的 intrin.h 守卫**
+   （内核编译行本就有 -msimd128；getarch 不受影响）—— 已实现为
+   `build-e2-lane.sh` 的 `E2_ARCH_WASM_INTRIN=1` 旋钮（含 sum.c 守卫）。
+
+**首战未竟（如实）**：旋钮生效（WORKDIR intrin.h 确认替换）+ 预处理确认分支激活
+（dot.c 展开 46 个 wasm_f64x2）**但产物与未点亮版逐字节相同**（归档 sha 均为 6c483538…）——
+疑似 make/ccache 层的对象重放。**下一会话第一步：`CCACHE_DISABLE=1`（或 ccache -C）干净重建**，
+若仍逐字节相同，则 make 层取证（make -d 追踪 dot.c 的重编判据）。
+（另：`.o` 成员上 `llvm-objdump | grep -c v128` **不是有效量法** —— 已知 SIMD 的 dgemm.o 也量出 0；
+有效量法 = relink 后对完整 octave.wasm 计数，即台账 `w64_v128` 的口径。）
+
+**基建清单（本夜已落）**：`E2_CC_EXTRA` / `E2_NUM_THREADS` / `E2_ARCH_WASM_INTRIN` 三旋钮 +
+bench-lanes 两段式就绪（工单 40）+ NT=8 基线数字（matmul 0.004/1000 0.025/lu 0.014）。

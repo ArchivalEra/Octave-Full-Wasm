@@ -48,6 +48,8 @@ if [ "$E2_LANE" = w64 ]; then
   WORKDIR="${WORKDIR:-/src/work/OpenBLAS-e2-w64}"           # 车道工作树
   OUTLIB="${OUTLIB:-/src/work/e2-openblas-lib-w64}"         # 打包产物目录
   LOGD="${LOGD:-/src/work/e2-lane-logs/w64}"
+  # E2_CC_EXTRA：额外的内核编译定义（如 -DARCH_WASM 点亮 intrin.h 的 V_SIMD wasm 后端，
+  #   票 39/L1 —— intrin_wasm.h 一直在树上，缺的只是这个宏；配合 -msimd128 使用）。
   # ★ 默认 = **merged3 合并版**（76 包装 + 23 透传壳，工单 36）：裸 76 版缺透传壳 ⇒
   #   `lsame_` 等无人定义 ⇒ 链接落空自引用 ⇒ 页面爆栈（2026-10-02 票 04 L4 实测抓到）。
   #   换 WORKDIR/OUTLIB 做实验时**这个默认就是护栏**。
@@ -76,6 +78,16 @@ stage_src () {
   local n; n=$(find "$WORKDIR" -maxdepth 1 -name '*.c' -o -maxdepth 1 -name 'Makefile*' | wc -l)
   [ "$n" -gt 0 ] || { echo "FATAL: $WORKDIR 里没有源码（拷贝失败？）" >&2; return 1; }
   echo "   ✅ $WORKDIR 就绪（顶层源码条目 $n）"
+
+  # ★ E2_ARCH_WASM_INTRIN=1：点亮 intrin.h 的 V_SIMD wasm 后端（票 39/L1）。上游守卫
+  #   `defined(ARCH_WASM) && defined(__wasm_simd128__)` 里 ARCH_WASM 从未被 Makefile 定义
+  #   （死代码），而 -D 通路会泄漏进 getarch 宿主探测（实测 ARCH 变空 ⇒ Makefile.$(ARCH) 炸）
+  #   ⇒ 正解 = src 阶段后直接改 WORKDIR 内核树的守卫（内核编译已有 -msimd128）。
+  if [ "${E2_ARCH_WASM_INTRIN:-}" = "1" ]; then
+    sed -i 's/#if defined(ARCH_WASM) && defined(__wasm_simd128__)/#if defined(__wasm_simd128__)/' "$WORKDIR/kernel/simd/intrin.h"
+    sed -i 's/defined(ARCH_WASM)/1/' "$WORKDIR/kernel/arm/sum.c"
+    say "[src] V_SIMD wasm 守卫点亮（E2_ARCH_WASM_INTRIN=1）"
+  fi
 }
 
 # ★ 补丁阶段的形状（工单 27 第①步的核心）：**用 `--check` 的退出码当契约，不解析话术**。
@@ -133,7 +145,7 @@ stage_build () {
   set -e
   set +e
   make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
-       NUM_THREADS="${E2_NUM_THREADS:-4}" E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS" FC="/src/bin/emf77 $LANE_FLAGS" \
+       NUM_THREADS="${E2_NUM_THREADS:-4}" E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS ${E2_CC_EXTRA:-}" FC="/src/bin/emf77 $LANE_FLAGS" \
        HOSTCC=gcc COMMON_OPT="${E2_COMMON_OPT:--O3}" -j"$JOBS" > "$LOGD/make.log" 2>&1
   local rc=$?
   set -e
