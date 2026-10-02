@@ -42,6 +42,10 @@
 - [02 原生基线](issues/02-native-baseline.md)：同机同版本 Octave 11.3.0 双后端实测落台账
   （netlib=用户默认 / OpenBLAS 0.3.34×24=天花板，键 `native_*`）；仪表盘第一版：
   浏览器 w64 占天花板 = `w64_ob_matmul500_native_ratio`，比默认原生 Octave 快 = `w64_ob_matmul500_vs_netlib`。
+- [03 大堆](issues/03-w64-big-heap.md)：`MAXIMUM_MEMORY` 进受管辖模式表（其余模式显式 2GB 不变，
+  w64/w64-base = 8GB）；4GB 版实测存活 3.73 GiB 暴露"判据≥4GiB 与旋钮结构性错位" ⇒ 抬 8GB：
+  **存活 7.45 GiB、`W64_BIG_HEAP=yes`**、开机 1.1 s、数值回归全绿、bench 持平、四格 33/0。
+  **产物已建成、未 promote**（= 终局票 08 的人工确认点；共享 8GB 的三引擎矩阵待复核）。
 
 ## Not yet specified
 

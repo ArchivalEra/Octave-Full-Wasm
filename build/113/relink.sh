@@ -132,6 +132,7 @@ DEPS_ROOT=/src/deps
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
 EOF
+      echo "MAXIMUM_MEMORY=2GB"
       ;;
     scalar|product)
       cat <<'EOF'
@@ -147,6 +148,7 @@ DEPS_ROOT=/src/deps
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
 EOF
+      echo "MAXIMUM_MEMORY=2GB"
       if [ "$m" = product ]; then
         echo "EXTRA_LDFLAGS=-L/src/deps/lapack-simd/lib"
         echo "BASELINE_WASM=$(pick_baseline scalar /src/websrc/m2fc-jspb-out/octave.wasm)"
@@ -177,6 +179,7 @@ DEPS_ROOT=/src/deps-threads
 GL4ES_A=/src/libwork/gl4es-src-threads/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl-threads/lib/libGLU.a
 EOF
+      echo "MAXIMUM_MEMORY=2GB"
       # `-pthread` 自带 SHARED_MEMORY；**池大小必须显式给** —— 否则 Emscripten 只允许
       # "从 worker 里动态起 worker"，主线程 `pthread_create` 直接失败 ⇒ "线程档"名不副实
       # （命令行看着有线程、实际一个都起不来）。4 = 够用且不白占内存（每个 worker 有独立栈）。
@@ -220,6 +223,14 @@ EOF
       #   `/src/deps-w64/lapack-simd/lib`（threads 那条写死 deps-threads ⇒ 照抄会把
       #   wasm32 的 LAPACK 链进 64 位主模块，那是架构错配）。
       #   w64-base（单线程）**不给** `-pthread`/池：它的内存不 shared，线程版库链不进去。
+      # ★ MAXIMUM_MEMORY=8GB（perf-max 图票 03 / 杠杆 L11，2026-10-02）：memory64 车道的
+      #   存在理由之一就是 >2 GiB。**为什么不设 4GB**：堆探针的结算判据是「存活 ≥4 GiB」，
+      #   而逐块网格实测的存活 ≈ 上限的 93%（4GB max ⇒ 存活 3.73 GiB，结构性够不到判据）；
+      #   引擎级探针实测本机可分配 8GB（台账 `w64_mem_8g_bytes`）。上限是虚顶、按需增长，
+      #   不预占内存。产物侧自检：octave.js 的 `maximum:131072n`；运行期判据
+      #   probe-heap-ceiling 的 `W64_BIG_HEAP=yes`。w64-base 同抬（同为 memory64 车道，
+      #   回退档不能回退"小"）。
+      echo "MAXIMUM_MEMORY=8GB"
       if [ "$m" = w64 ]; then
         if [ -n "${E2_OPENBLAS:-}" ]; then
           echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"

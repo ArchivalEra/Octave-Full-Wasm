@@ -5,7 +5,7 @@
 
 **Blocked by:** None（第一半已做；第二半要一次 w64 车道重链）
 
-**Status:** ready-for-agent（第一半已交付；第二半的重链属实验批，**promote 仍要人拍板**）
+**Status:** resolved（2026-10-02：第二半已建成实测 —— MAXIMUM_MEMORY=8GB、存活 7.45 GiB、W64_BIG_HEAP=yes、数值回归全绿；**promote 走 perf-max 票 08 的人工确认点**）
 
 **Settling:** `sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/`
 ⇒ 该探针结尾的 `W64_BIG_HEAP=yes`（当且仅当 `w64` 档量到 ≥4 GiB 存活上限）。

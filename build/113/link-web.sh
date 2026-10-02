@@ -190,7 +190,11 @@ MAIN_MODULE_LEVEL="${MAIN_MODULE_LEVEL:-1}"
 case "$MAIN_MODULE_LEVEL" in 1|2) ;; *) echo "FATAL: MAIN_MODULE_LEVEL 只能是 1 或 2" >&2; exit 2;; esac
 SFLAGS=( -s WASM=1 -s "MAIN_MODULE=$MAIN_MODULE_LEVEL" -s ALLOW_TABLE_GROWTH=1
          -s ERROR_ON_UNDEFINED_SYMBOLS=0
-         -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1 )
+         -s INITIAL_MEMORY=128MB -s ALLOW_MEMORY_GROWTH=1
+         #  MAXIMUM_MEMORY：不传时 emscripten 默认 2GB ⇒ 默认值 = 历史行为逐字节等价；
+         #  w64 车道由 relink.sh 模式表抬到 4GB（perf-max 图票 03 / 杠杆 L11）。
+         #  产物侧自检：grep -o 'maximum:[0-9]*n' "$OUT/octave.js"（65536n = 4GB）。
+         -s "MAXIMUM_MEMORY=${MAXIMUM_MEMORY:-2GB}" )
 echo "== MAIN_MODULE=$MAIN_MODULE_LEVEL$([ "$MAIN_MODULE_LEVEL" = 2 ] && echo '（DCE：保活集由 KEEP_LIST 提供）')"
 
 # KEEP_LIST：**文件路径**，一行一个符号名 —— M2 车道用它喂 `-Wl,--export-if-defined=`

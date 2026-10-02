@@ -182,8 +182,9 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
   → parity `--strict` 三处完全一致（siteWebGL 的 `w64/` 已同步到现役）
   → 文档订正（README/DEPLOY 的 `w64` 档：线程版 OpenBLAS、最快交付形态、堆仍 2 GiB）。
 - origin 推送已恢复（gh 重新认证），本批提交已推 origin。
-- **下一阶段 = wayfinder 图「w64 极限性能」**（`.scratch/perf-max/map.md`）：票 01（杠杆清单）已结，
-  frontier = 票 02（原生基线）/ 票 03（>2 GiB 大堆）。
+- **下一阶段 = wayfinder 图「w64 极限性能」**（`.scratch/perf-max/map.md`）：票 01（杠杆清单）、
+  02（原生基线）、03（>2 GiB 大堆 —— **8GB 版存活 7.45 GiB、`W64_BIG_HEAP=yes`，已建成未 promote**）已结；
+  frontier = 票 04（内核/编译档实验）/ 05（线程调优）/ 06（链接旗标），终局发运 = 票 08（人工确认点）。
 
 ## 2. 铁律（违反会被拦或返工）
 
