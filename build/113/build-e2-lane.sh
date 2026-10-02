@@ -133,7 +133,7 @@ stage_build () {
   set -e
   set +e
   make TARGET=WASM128_GENERIC USE_THREAD=1 NO_LAPACK=1 NO_SHARED=1 \
-       NUM_THREADS=4 E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS" FC="/src/bin/emf77 $LANE_FLAGS" \
+       NUM_THREADS="${E2_NUM_THREADS:-4}" E2PREFIX=ob_ CC="ccache emcc $LANE_FLAGS" FC="/src/bin/emf77 $LANE_FLAGS" \
        HOSTCC=gcc COMMON_OPT="${E2_COMMON_OPT:--O3}" -j"$JOBS" > "$LOGD/make.log" 2>&1
   local rc=$?
   set -e

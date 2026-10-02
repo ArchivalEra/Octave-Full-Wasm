@@ -53,6 +53,9 @@
   （sha `3b0d5e2f…`）；8854 先验 + 8761 r6 双全绿（74 套/1351 PASS）、SHA 三层、四格 33/0；
   台账 `w64_big_heap`=yes / `mem_live_ceiling_gib`=7.45。**图到达目的地**；
   剩余杠杆（L1/L2 内核、票 05/06）属"下一张图/后续批次"。
+- [06 链接旗标](issues/06-link-flags.md)：三杠杆零采纳 —— 链接 -O3 ❌（metadce 剥 .oct 支撑符号，
+  三连实验不可持续修复）/ 后置 wasm-opt ❌（体积 +1%、速度噪声）/ LTO 边际（单题 10% 不复现为普遍优势）。
+  **现役 -O2 管线 = emcc 5.0.7 的甜点**。
 
 ## Not yet specified
 
