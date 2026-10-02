@@ -10,7 +10,39 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved（2026-10-02 夜间批：13/0 验收）
 
 **Settling:** 不存在 —— 本工单的第一交付物（= `test/browser/accept-embed-api.mjs`：
 `sh test/browser/run.sh test/browser/accept-embed-api.mjs <URL>` ⇒ 全 0 FAIL 且含反向断言 ⇒ 结案）
+
+## Answer
+
+（2026-10-02 夜间批结案。**验收 = `accept-embed-api` 13 PASS / 0 FAIL**（8854 实测）。）
+
+**交付物**：
+- `bridge/octave-embed.js`：接口表 🔜 项全部落地 —— `OctaveEmbed.create({mount?,home?,id?,lane?})`
+  → facade：`eval`（rc 通道）/ `evalJSON`（jsonencode 值通道，含错误结构化）/
+  `workspace`（whos 结构化）/ `pwd`/`cd`/`help`/`history` / `interrupt` / `input`（stdin 队列预填）/
+  `fs.read/write/ls/rm/download` / `on.output|error|state|figure`（属性式订阅）/
+  `figures.export`（优雅降级）。零依赖、ES5、不动 wasm。
+- `bridge/octave-page.js`：**页面适配器从 index.html 内联逐字抽出**（A2 搬运纪律）——
+  工厂从此是可装载资产，任何页面两行接线。index.html 改用外置引用；
+  **搬运零行为变化实测**：boot 1.3s + accept-embed-multi 13/0（8854）。
+- `bridge/embed-demo.html`：接口活文档（每接口一个按钮）。
+- `docs/embed-api.md`：🔜 全部翻 ✅e；GL 边界如实标注。
+- 验收：`test/browser/accept-embed-api.mjs`（13/0，含 4 条反向断言：
+  evalJSON 未定义变量 / fs 读不存在 / 挂点缺失 reject / 全豁免语义）。
+
+**实施中的四个真发现**（都修了或记档）：
+1. `createOctaveHost` 返回的是 **Module 形态对象**，就绪信号在注册表 `__octaveHosts` ——
+   把返回值当 inst 读 `.ready` = 永远 undefined（embed 首版的 pending bug）。
+2. 订阅器按接口表**属性式**（`on.output(cb)`），不是方法式 —— 接口表是契约，实现照抄。
+3. `workspace()` 双重 jsonencode 套娃（通道自带，调用方别再包）。
+4. **embed 页面 GL 纹理边界**（⚠ 未解，记档）：自带 mount 的 boot 形态下 plot 的 drawnow
+   在 `opengl_texture::create` 打死 wasm 实例（FS 随之不可用）；与 lane 透传无关、
+   与静态 #p5figure 无关。根因在 wasm 侧 webgl_toolkit 的 GL 线（E6/图形线待查）；
+   shipped index.html 形态图形正常（既有套件覆盖）。→ figures 接口面照常交付（优雅降级），
+   探针 I 格如实标注边界。
+
+**部署注记**：8761 现状不动（验收在实验站 8854）。上站走 promote-pages 批
+（index.html 的 octave-page.js 抽取必须与新文件**同批**上站），全量回归后由人确认。

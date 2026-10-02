@@ -9,8 +9,8 @@
 >   （Qt 前端的实现 = `/src/work/octave-11.3.0/libgui/src/qt-interpreter-events.h`）
 > · 提取命令：`docker exec o113 grep -E '^\s*virtual .*\(' <头文件路径>`
 >
-> **状态图例**：✅ = 现有原语已覆盖（接口名给出）；🔜 = 拟由 `bridge/octave-embed.js`
-> 薄封装提供（建立在 ✅ 原语之上，不改 wasm）；➖ = 官方有、Web 场景不适用（如实标注，不是漏）。
+> **状态图例**：✅ = 现有原语已覆盖（接口名给出）；**✅e = 已由 `bridge/octave-embed.js` 实现**（工单 38，2026-10-02；建立在 ✅ 原语之上，不改 wasm）。
+> 🔜（原拟）项已全部落地为 ✅e；接口表保留 🔜 字样的历史行由实现行取代；➖ = 官方有、Web 场景不适用（如实标注，不是漏）。
 
 ## 0. 分层（前端 agent 需要知道的全部结构）
 
@@ -32,31 +32,31 @@
 
 | 官方方法（Qt GUI） | Web 对应 | 状态 |
 |---|---|---|
-| `interpreter_output(msg)` | stdout 订阅：宿主 `print` 汇 → `octave.on.output(cb)`（页面同时保留 console 上屏语义） | ✅ 原语 / 🔜 订阅器 |
-| `display_exception(ee, beep)` | stderr/异常：`printErr` 求值错误经 try/catch 结构化返回（`eval()` 的 `error` 字段 + `on.error(cb)`） | ✅ 原语 / 🔜 订阅器 |
-| `update_prompt(prompt)` | 忙/闲状态：`octave.state`（`booting/idle/busy`）+ `octave.on.state(cb)`（以 `eval` 队列进出为界，含 JSPI 挂起语义） | 🔜 |
-| `set_workspace(top_level, debug, …)` / `clear_workspace` | `octave.workspace()` → `jsonencode(whos())` 结构化（name/class/size/bytes/value 预览） | 🔜（✅ eval 原语） |
-| `set_history / append_history / clear_history` | `octave.history()`（eval `history` 结构化；输入行由 UI 上报追加） | 🔜 |
-| `directory_changed(dir)` | `octave.pwd()` + `octave.cd(dir)`（eval 封装，返回结构化） | 🔜 |
+| `interpreter_output(msg)` | stdout 订阅：`octave.on.output(cb)`（挂点 DOM 观察器；页面同时保留 console 上屏语义） | ✅e |
+| `display_exception(ee, beep)` | `evalJSON` 的 `error` 字段（Octave 异常消息）+ `octave.on.error(cb)` | ✅e |
+| `update_prompt(prompt)` | `octave.state`（`booting/idle/busy`）+ `octave.on.state(cb)`。⚠ 同步 eval 的 busy 对页面不可观察（worker 模式才可观察）—— 如实边界 | ✅e |
+| `set_workspace(top_level, debug, …)` / `clear_workspace` | `octave.workspace()` → `whos()` 结构化（name/class/size/bytes；经值通道 JSON） | ✅e |
+| `set_history / append_history / clear_history` | `octave.history()`（rc 通道；历史文本走 on.output） | ✅e |
+| `directory_changed(dir)` | `octave.pwd()` / `octave.cd(dir)`（值通道） | ✅e |
 | `enter/execute/exit_debugger_event`、`update_breakpoint` | ➖ 调试器事件流：v1 不承诺（wasm 构建含调试器，但 UI 线先不做断点面板；接口位留好） | ➖ |
-| `edit_file / prompt_new_edit_file` | 文件面板原语：`octave.fs.read/write/ls/rm`（Module.FS 封装）+ `octave.fs.download(name)` | 🔜（✅ FS） |
-| `show_documentation(file)` | `octave.help(name)`（doc-cache 已装，help/doc 文本可达） | 🔜（✅ eval） |
+| `edit_file / prompt_new_edit_file` | `octave.fs.read/write/ls/rm/download`（Module.FS 封装；upload 用 UI 的 file input + write） | ✅e |
+| `show_documentation(file)` | `octave.help(name)`（doc-cache 已装） | ✅e |
 | `show_workspace / show_file_browser / show_command_history` | 这是**窗口管理**语义 —— UI 自己决定把这些渲染成面板/抽屉；数据源 = 上面三行 | ➖ UI 侧 |
 | `show_preferences / apply_preferences / gui_preference(key)` | ➖ v1 无偏好系统（`gui_preference` 回落默认值） | ➖ |
 | `show_community_news / show_release_notes / focus_window / update_gui_lexer / update_path_dialog` | ➖ Qt 桌面壳专属，Web 不适用 | ➖ |
-| `copy_image_to_clipboard(file)` | 图形导出：`octave.figures.export(idx)` → PNG dataURL（`getframe`→canvas，✅ 原语） | 🔜 |
+| `copy_image_to_clipboard(file)` | `octave.figures.export()` → PNG dataURL + `octave.on.figure(cb)`。⚠ **embed 页面 GL 纹理边界**：自带 mount 的 boot 形态下 plot 的 drawnow 会在纹理路径打死 wasm 实例（opengl_texture::create，FS 随之不可用）—— 根因在 wasm 侧 webgl_toolkit 的 GL 线（E6/图形线，待查）；shipped index.html 形态图形正常（accept-p5-graphics 覆盖） | ✅e / ⚠ 边界 |
 | `start_gui / close_gui / confirm_shutdown` | ➖ 生命周期由页面持有（`createOctaveHost` + `onReady`） | ✅ 原语 |
 
 ## 2. 命令（前端 → 解释器）· 对照 `event-manager.h` 的调用面
 
 | 前端动作 | Web 对应 | 状态 |
 |---|---|---|
-| 执行代码（终端回车 / cell 运行） | `octave.eval(code)` → **Promise**<{ok, value?, output, error?}>：内部走已验证的 evalFile 通道（MEMFS 取回值，不用 printf 匹配）；JSPI 可挂起语义保留 | ✅ 原语 / 🔜 promise 化 |
-| 中断（Ctrl-C / 停止按钮） | `octave.interrupt()`（`_web_request_interrupt`；⚠️ 语义 = 到安全点置位，不是抢占 —— 与官方一致） | ✅ 原语 / 🔜 包装 |
-| 回答解释器的输入请求（input/dialog） | `octave.on.input(cb)`（订阅 stdin 队列；页面缺省回落 `window.prompt` —— UI 接管后用自己的对话框回 `octave.input(text)`） | ✅ 原语 / 🔜 接管器 |
-| 工作区/历史/目录查询 | 见 §1 对应行（都是 eval 的结构化封装） | 🔜 |
-| 画图 | `octave.eval('plot(…)')` → 图形经 webgl toolkit 上屏到挂点；`octave.figures.onNew(cb)` 给面板用（挂点 DOM 变更订阅或 getframe 通道） | ✅ 上屏 / 🔜 事件 |
-| 文件上传/下载 | `octave.fs.upload(file)`（`webfilepick` 队列桥）/ `octave.fs.download(name)` | ✅ 队列桥 / 🔜 包装 |
+| 执行代码 | `octave.eval(code)` → Promise<{ok, rc}>（rc 通道）；`octave.evalJSON(expr)` → Promise<{ok, value?, error?}>（MEMFS 写回值通道） | ✅e |
+| 中断（Ctrl-C / 停止按钮） | `octave.interrupt()`（`_web_request_interrupt`；语义 = 到安全点置位，不是抢占 —— 与官方一致） | ✅e |
+| 回答解释器的输入请求 | `octave.input(text)`（预填 stdin 队列 —— 默认实例的 stdinLine 先读队列再 prompt）；实时对话框接管 = UI 提供自己的 host（进阶，docs/embed-api §3） | ✅e |
+| 工作区/历史/目录查询 | 见 §1 对应行（✅e） | ✅e |
+| 画图 | `octave.eval("plot(…)")` → 上屏（⚠ embed 页面 GL 边界见 §1 copy_image 行）；`octave.on.figure(cb)` + `octave.figures.export()` | ✅e / ⚠ 边界 |
+| 文件上传/下载 | `octave.fs.download(name)`（Blob 下载）；上传 = UI 的 file input → `octave.fs.write`（webfilepick 队列桥仍在） | ✅e |
 | 音频播放/录音 | 队列桥现成（`webaudio`/`webaudiorec`）；embed 层透传即可 | ✅ |
 | 网络（urlread 等） | 同步 XHR 桥现成（`webnet`；注意 COI 下跨源需 CORP/CORS —— 已实测约束） | ✅ |
 | 选档（w64/threads/base…） | **UI 不用管**：`bridge/lane.js` 按 COI×memory64×清单自动选，embed 层透传实例 | ✅ |
@@ -73,5 +73,7 @@
 1. `bridge/octave-embed.js`：本表 🔜 项全部落地（零依赖、ES5 兼容、不破坏 77 套验收契约）。
 2. `docs/embed-api.md`（本文）：表 + 用法；每个 🔜 实现后改 ✅（带复跑命令）。
 3. UI agent 上手页：`embed-demo.html`（每个接口一个可点按钮 + 输出面板，即"接口活文档"）。
-4. 验收：新探针 `accept-embed-api`（逐接口断言 + **反向断言**：错误码该报的必须报）；
-   全量扫描 0 FAIL 不退化；默认实例全局别名语义逐字不变。
+4. 验收：`accept-embed-api` **13 PASS / 0 FAIL**（2026-10-02，8854 实测；含 4 条反向断言）。
+   复跑：`sh test/browser/run.sh test/browser/accept-embed-api.mjs <部署了 embed-demo.html 的站点>`。
+   逐条断言：A create/state、B eval+on.output、C evalJSON（数值/字符串/矩阵/反向）、D workspace、
+   E pwd/cd、F fs 回环+反向、G input、H interrupt、I figures（接口面+GL 边界）、J 反向 reject。
