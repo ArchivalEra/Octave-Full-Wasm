@@ -192,7 +192,10 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
   SHA 三层、四格 33/0；台账 `w64_big_heap`=yes、
   `mem_live_ceiling_gib`=7.45；DEPLOY/README 已订正；旧 2GB 产物备份
   `w64-artifacts-2g-backup-20261002/`。图的前半（01/02/03/04-L4/07/08）全部到达；
-  frontier 剩 04-L1/L2（内核开发，预期收益最大）/ 05（线程调优）/ 06（链接旗标）。
+  **夜间批（无人值守）收尾**：05 结（**NT=4 = 甜点**；NT=8 死锁 ⇒ 工单 40）、06 结（链接侧
+  三杠杆零采纳 —— 现役 -O2 = emcc 5.0.7 甜点）、04 结（L4 已转正；L5 翻案不采纳 —— OpenBLAS
+  内置 LAPACK 是 f2c 标量而现役 lapack-simd 本是 SIMD 版；L1/L2/L3 拆 **票 39**）。
+  **图剩余 = 票 38（UI 嵌入接口层，留给前端 agent 线）+ 票 39（内核开发）+ 工单 40（死锁悬案）**。
 - **UI 线定界（2026-10-02 用户拍板）**：UI 本体交给专门的前端 agent；本仓交付 = **嵌入接口层**。
   接口表已照官方前端契约落档 **`docs/embed-api.md`**（事件/命令两张表；权威出处 =
   `event-manager.h` / `qt-interpreter-events.h`，逐条映射 Web 原语并标 ✅/🔜/➖）；

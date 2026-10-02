@@ -56,6 +56,15 @@
 - [06 链接旗标](issues/06-link-flags.md)：三杠杆零采纳 —— 链接 -O3 ❌（metadce 剥 .oct 支撑符号，
   三连实验不可持续修复）/ 后置 wasm-opt ❌（体积 +1%、速度噪声）/ LTO 边际（单题 10% 不复现为普遍优势）。
   **现役 -O2 管线 = emcc 5.0.7 的甜点**。
+- [05 线程数](issues/05-thread-tuning.md)：**NT=4 = 甜点**。NT=8 数值全绿但第一个 promising
+  feval 死锁（池无关）⇒ 悬案 **工单 40**；L8/L9 并入 40 解锁后。曲线数据留档。
+- [04 OpenBLAS 实验](issues/04-openblas-simd-kernels.md)：L4 转正（-O3 编译档，已含于现役）；
+  L5 **翻案不采纳**（OpenBLAS 内置 LAPACK = f2c 标量，现役 lapack-simd 本就是 SIMD 版，
+  +13MB 载荷）；L1/L2/L3 → **票 39**（带方法论判据，ready-for-agent）。
+
+**图状态**：目的地「数学性能吃满（杠杆清空 + 原生占比仪表盘）」**到达** ——
+可配置面杠杆全部实测（03/04-L4/05/06/07/08 结；39/40 为拆出的开发/悬案票，属后续批次）；
+现役 8761 = `-O3 + 8GB` 合体版。
 
 ## Not yet specified
 

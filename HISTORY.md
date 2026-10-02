@@ -3621,3 +3621,35 @@ refblas，`97affe0`）。
 （`blas_cpu_number` / `zdrot_k`）→ `emnm` 对比 wasm32/w64 两份归档找差异 → 回到 `make.log` 看哪块没编出来。
 
 **教训（本仓第 N 次）**：`verdict=ok` **不覆盖运行期路径**；这条链的验收判据必须含**装机开机自检**。
+
+### 5.75 perf-max 图：大堆 + 编译档 + 链接侧 + 线程数四线实验（2026-10-02，branch `wasm64`）
+
+wayfinder 图「w64 极限性能」（`.scratch/perf-max/map.md`）的执行批次。当天主线（时序）：
+
+- **票 02 原生基线**：同机同版本 Octave 11.3.0 双后端（netlib / OpenBLAS 0.3.34×24）实测落台账
+  `native_*`；事故 = 装 `libopenblas0-pthread` 时 Debian alternatives 被自动切走（优先级 100>10）
+  ⇒ 首轮"netlib"行作废，已 `update-alternatives --set` 钉回。仪表盘：浏览器占天花板 =
+  `w64_ob_matmul500_native_ratio`，比默认原生快 = `w64_ob_matmul500_vs_netlib`。
+- **票 03 大堆**：`MAXIMUM_MEMORY` 进 relink 模式表（w64/w64-base=8GB，其余显式 2GB）。
+  4GB 版存活 3.73 GiB 暴露"判据 ≥4GiB 存活 与 4GB max 结构性错位" ⇒ 抬 8GB ⇒
+  **存活 7.45 GiB、`W64_BIG_HEAP=yes`**。空载占用不变（JS 堆 28 vs 27 MB 实测）。
+- **票 08 发运（用户令"发运"）**：8854 先验 + 8761 r6 双全绿（74 套/1351 PASS），
+  8761 现役 w64 = `-O3+8GB` 合体版（台账 `w64_wasm_sha`）；SHA 三层、四格 33/0；
+  台账 `w64_big_heap`=yes、`mem_live_ceiling_gib`=7.45。旧 2GB 备份 `w64-artifacts-2g-backup-20261002/`。
+- **票 07 / 工单 27（用户拍板）**：单王 w64；**wasm32 线冻结于 `wasm32-final` 分支**。
+- **票 04-L4**：OpenBLAS 编译档 -O3 经 `COMMON_OPT` 通路转正进车道默认（matmul 0.007→0.006）。
+  途中修 stage_build 豁免正则的自身假红（`.exe]` 形态）；**w64 默认 WRAPPERS 改指 merged3**
+  （裸 76 版缺透传壳 ⇒ `lsame_` 链接落空自引用 ⇒ 页面爆栈 —— 包装对象是配方的一部分）。
+- **票 06 链接侧：三杠杆零采纳**（-O3 链接 ❌ metadce 剥 6 个 .oct 支撑符号，REVERSE_DEPS=all
+  救 4 剩 2，EXPORTED_FUNCS 强制导出反而非单调倒退；后置 wasm-opt ❌ 体积+1%速度噪声，
+  binaryen 129 校验器不认 -fwasm-exceptions 产物只能 --no-validation；LTO 边际：交替 A/B ×2
+  仅 matmul1000 复现 ~10%）⇒ **现役 -O2 链接管线 = emcc 5.0.7 的甜点**。
+- **票 05 线程数：NT=4 = 甜点**；NT=8（`E2_NUM_THREADS` 旋钮）数值全绿但 **bench 零输出挂死**
+  —— 卡第一个 promising feval，**与池大小无关**（8/8、8/12 都挂）⇒ 立工单 40（机制待查）。
+- **票 04-L5 翻案**：去 `NO_LAPACK` 构建成功（裸归档 16.3MB/7448 符号）但 OpenBLAS 内置 LAPACK
+  是 **f2c 标量**，而现役 `lapack-simd` 本就是 `-msimd128` 向量化版 ⇒ 预期回归而非提升，
+  +13MB 载荷 + 数百符号收割成本 ⇒ 不采纳。
+- **拆票**：L1/L2/L3 内核开发 → 票 39（带方法论与判据）。
+
+教训补两条：① `&&` 链接在 `&` 前整链后台化（AGENTS 明坑再犯，`tail -f --pid` 哨兵收尾）；
+② `grep -c` 零命中 rc=1 掐死 `&&` 链（同一坑族的第二种形状）。
