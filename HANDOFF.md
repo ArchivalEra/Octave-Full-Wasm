@@ -193,6 +193,11 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
   `mem_live_ceiling_gib`=7.45；DEPLOY/README 已订正；旧 2GB 产物备份
   `w64-artifacts-2g-backup-20261002/`。图的前半（01/02/03/04-L4/07/08）全部到达；
   frontier 剩 04-L1/L2（内核开发，预期收益最大）/ 05（线程调优）/ 06（链接旗标）。
+- **UI 线定界（2026-10-02 用户拍板）**：UI 本体交给专门的前端 agent；本仓交付 = **嵌入接口层**。
+  接口表已照官方前端契约落档 **`docs/embed-api.md`**（事件/命令两张表；权威出处 =
+  `event-manager.h` / `qt-interpreter-events.h`，逐条映射 Web 原语并标 ✅/🔜/➖）；
+  工单 **38**（ready-for-agent）= 把 🔜 项落地：`bridge/octave-embed.js` + `embed-demo.html`
+  上手页 + 探针 `accept-embed-api`。硬约束：零依赖、77 套验收契约逐字不变。
 
 ## 2. 铁律（违反会被拦或返工）
 
