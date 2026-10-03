@@ -317,6 +317,17 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
 - 发运：现役 `w64` = 台账 `w64_wasm_sha`（守卫版，735 导出），速度持平；备份
   `w64-artifacts-pre-guard-backup-20261003/`。**台账非人工候选清零** ——
   剩余全部是人的动作/外部依赖（票 12、38 上站、E6 图形线）。
+- **工单 48（2026-10-03）：`octave-page.js` 重写为 TypeScript**（`bridge/octave-page.ts`
+  → 编译产物，`sh build/build-embed-ts.sh`）：拆三道类型化的缝（CoreHooks 契约 / 可替换
+  OutputSink / 输入捕获）；输出改**合并刷新**（DOM 插入 27000→167，-99%）。实测结论：
+  **DOM 不是瓶颈**（compute 2.4s vs DOM 几十 ms）、**不该挪 wasm**（只会多边界穿越）。
+  三套 embed 验收全绿（14/14、13/0、13/0）；8761 现役不受影响（用旧内联版，不 promote）。
+  详单见工单 48 / docs/embed-api.md §5。
+- **工单 49（2026-10-03）：Rust 车道天花板测试——faer 负判决**。faer-1t-wasm32 vs
+  OpenBLAS-1t-wasm32 同条件：matmul500 34.0 vs 21 ms（输 1.6×）；理想 8 线程缩放仍全面
+  落后现役（4.3/34/264 vs 3.0–4.0/25–28/199–203）⇒ **Rust 换 BLAS 车道结案**；Zed/GPUI
+  编不进 wasm；重写解释器=放弃验收资产（反对）。crate 入库 `build/113/faer-bench/`。
+  **"接口不变"前提下所有已知优化路径实测清空**。
 - **★ 工单 47（2026-10-03 收官单）：Embed API 逐接口实测 14/14 PASS**（对照 Qt 官方接口，
   探针 `probe-embed-inventory.mjs`；accept 双套件同站 13/0 复验）——抓出并修掉
   `on.error` 死订阅（接口表 ✅e 但回调永不触发）；两条语义发现入 UI 单（embed 历史为空

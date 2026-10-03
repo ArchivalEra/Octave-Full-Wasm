@@ -1,0 +1,21 @@
+[package]
+name = "oct-faer-bench"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+faer = "0.22"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# wasm32-unknown-unknown：faer→rand→getrandom 需要 js 后端（0.2.x 用 "js" feature）
+[dependencies.getrandom]
+version = "0.2.17"
+features = ["js"]

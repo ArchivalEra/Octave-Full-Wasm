@@ -152,6 +152,8 @@
 
 # 工单 05 结算件：G1 复现探针（main.cpp/side.c/page.html 一层放行）
 !build/113/probe-jspi-g1/*
+!build/113/faer-bench/*
+!build/113/faer-bench/src/*
 
 # 工单 20：页面资产批的受管辖入口
 !build/promote-pages.sh

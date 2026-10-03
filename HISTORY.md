@@ -3795,3 +3795,21 @@ CASES 表），原生两后端与现役 w64（NT=8）同机同窗对表。全表
   + quit 后同源路径的确定性断言 + 二进制证据（守卫串新产物 1 次/旧产物 0 次）。
 - **发运**：`4eda3a79…`（735 导出，备份 `w64-artifacts-pre-guard-backup-20261003/`）⇒
   promote 三档未动 ⇒ boot 1.1s、四格 33/0、SHA 三层、全量 `PROBES=1` 绿（探针自动入选）。
+
+### 5.82 Rust 车道天花板测试：faer 负判决（2026-10-03，branch `wasm64`）
+
+用户对性能不满意，提议"接口不变、引入 Rust 或 Zed（哪怕背离原生树）"。逐条判定：
+Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器（反对——放弃验收资产）；
+唯一可行路 = faer 换 BLAS 层。按"先测量再定"跑纯微基准（不集成、不动接口）：
+
+- **faer-1t-wasm32 vs OpenBLAS-1t-wasm32（e2-single，同条件）**：matmul500 34.0 vs **21 ms**
+  （输 1.6×）；faer 自家 blocking 有效（比 naive 快 2.3×）但 OpenBLAS 的 SIMD128 blocked
+  内核更强（GFLOPS 7.4 vs 11.9）。
+- **理想缩放推演**：rayon 8 线程即使完美线性（4.3 / 34 / 264 ms @500/1000/2000），对现役
+  OpenBLAS-8t-wasm64（3.0–4.0 / 25–28 / 199–203）**仍全面落后** ⇒ 负判决，车道结案。
+- **坑**：faer→getrandom 0.2.x 需 `js` feature；`std::time::Instant` 在 wasm32-unknown-unknown
+  panic ⇒ 显式 `env.now_ms` 导入；带 import 的模块要按 kind 逐个供。
+- 工程教训（重复确认三次的规律）：**"X 是不是瓶颈/能不能更快"一律先测天花板再立项**——
+  本单一天拿到"Rust 车道天花板 < 现役"的数字，避免了数周的集成白干。
+- crate 源码入库：`build/113/faer-bench/`（Cargo.toml + src/lib.rs，80 行）；产物 wasm 与
+  基准页留 `/mnt/hdd/octave-wasm-build/faer-bench/`（8866 可复跑）。
