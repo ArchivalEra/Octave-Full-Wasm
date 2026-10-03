@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-10-03T01:20:19+0000",
-  "out": "/src/websrc/w64-ob-readyguard-out",
+  "when": "2026-10-03T12:36:14+0000",
+  "out": "/src/websrc/w64-ob-rsimd-out",
   "mode": "w64"
  },
  "declared": {
@@ -39,7 +39,7 @@
  "measured": {
   "exported_functions": 735,
   "simd": {
-   "v128": 6602,
+   "v128": 6582,
    "impl": "llvm-objdump"
   },
   "jspi_entry": true,
@@ -69,12 +69,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "4eda3a79a0abb7821b80a190659b0388a6ae68b0c29be0a36046a46b4670881f",
-    "bytes": 30918201
+    "sha256": "5b5bb98122ba9860ddae65098735c87f289e8b82cda4a7700cf72e801306f71b",
+    "bytes": 30916734
    },
    "octave.js": {
-    "sha256": "41e1223665cdb669d4698faaff6dcaa0d1ac39e32bb1eefba954b73f895ed3fe",
-    "bytes": 513104
+    "sha256": "5f27d33992f34f82e00a21e205952bc72430aa4a624a71fbb486eaaa7d6e7f11",
+    "bytes": 513089
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -88,16 +88,16 @@
    "sha256": "63d8e7d7fb8ea3fa45550e77c7273b7180f1e829b4449b98c4ca758e9fe8eab2"
   },
   "blas": {
-   "resolved_dir": "/src/work/e2-openblas-lib-w64-nt8",
+   "resolved_dir": "/src/work/e2-openblas-lib-w64-rsimd",
    "search_order": [
-    "/src/work/e2-openblas-lib-w64-nt8",
+    "/src/work/e2-openblas-lib-w64-rsimd",
     "/src/deps-w64/lapack-simd/lib",
     "/usr/local/lib"
    ],
    "librefblas": {
-    "path": "/src/work/e2-openblas-lib-w64-nt8/librefblas.a",
-    "sha256": "6c483538e365b686cd9d77d5c30d898dcde67d4e108595471576658473e9161b",
-    "bytes": 3331594
+    "path": "/src/work/e2-openblas-lib-w64-rsimd/librefblas.a",
+    "sha256": "015b87ac8cb436ba2ccc3a2445912373538f523bfd2770d60f4705e225b87152",
+    "bytes": 3357888
    },
    "liblapack": null
   },
@@ -115,7 +115,7 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-03T01:20:19+0000",
+  "when": "2026-10-03T12:36:14+0000",
   "by": "check-build-manifest.py",
   "script_sha256": "37bd772a3145f1881d49c5cfba6557f559d8a0894e237d97a55477586268ecf0"
  }

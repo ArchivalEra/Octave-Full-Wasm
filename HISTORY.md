@@ -3813,3 +3813,23 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
   本单一天拿到"Rust 车道天花板 < 现役"的数字，避免了数周的集成白干。
 - crate 源码入库：`build/113/faer-bench/`（Cargo.toml + src/lib.rs，80 行）；产物 wasm 与
   基准页留 `/mnt/hdd/octave-wasm-build/faer-bench/`（8866 可复跑）。
+
+### 5.83 relaxed-simd FMA 内核发运（2026-10-03，branch `wasm64`）
+
+"大矩阵离极限太远"后，盘点全部已测路径（39 手写内核 / 44 线程 / 49 Rust / 06 链接旗标 /
+51 PGO）皆负；最后一颗未拧的螺丝 = **relaxed-simd**（SIMD128 无 f64 FMA，`relaxed_madd`
+在 x86 映射硬件 `vfmadd`；内核单线程 11.9 GFLOPS = SIMD128 理论峰 78%）。
+
+- 三件齐备缺一不可：内核补丁（mul+add ⇒ relaxed_madd）、`-mrelaxed-simd`、**改源码**
+  （实测 LLVM 不收缩显式 intrinsic 的 add(mul())——只给旗标时 relaxed_madd=0）。
+- **交错 3 轮**：matmul1000 0.024 vs 0.027–0.028（−13%）、lu1500 0.065–0.069 vs
+  0.071–0.080（−10%）、matmul500 持平。**数值 79/0 + dldfcn 71/0** 无回归。
+- **三引擎全支持 relaxed-simd 与 memory64**、且 relaxed-simd 先于 memory64 进浏览器
+  ⇒ w64 已有 memory64 门控 ⇒ 无需新 lane 回退轴。已发运 8761（`5b5bb981…`）。
+- **仪器事故（→ Einfacht #6）**：`llvm-objdump -d | grep relaxed_madd` 恒为 0（该 objdump
+  把该指令打成 `<unknown>`）⇒ 两次误判"FMA 没进产物"。正解 = 字节级计数 `fd 87 02`。
+  **值会腐烂，量它的工具也会** —— 这条提给了上游（#6）。
+- **协作碰撞（如实记档）**：本批中 UI 师傅在**另一个仓**（`Shirone-personalized`，Astro dev
+  在 **4321**，其 `scripts/serve.py --dir dist` 占了 **8868**）并行工作；我误把 8868 当空口
+  ⇒ 探测到一个 Astro 页、误判"rsimd 产物起不来"。换 8878 后一切正常（boot 1.4s）。
+  ⇒ **实验端口需登记/独占**（本条即 C1「build-doctor」之外的协作缺口，另行记录）。

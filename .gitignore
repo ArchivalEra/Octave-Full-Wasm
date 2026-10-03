@@ -28,6 +28,7 @@
 !build/BASELINE-10.3.md
 !build/BASELINE-11.3.md
 !build/113/*
+!build/113/patch-openblas-relaxed-fma.py
 !build/BENCH.md
 !build/reconf-bench.sh
 !build/plotbridge/*

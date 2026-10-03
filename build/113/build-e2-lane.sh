@@ -116,6 +116,12 @@ DGEMM_UNROLL_N  = 2|' "$WORKDIR/kernel/wasm/KERNEL"
 #   注意"可打"也用 rc=0（idle-exit 的 `--check` 两种状态都返 0）⇒ **不能只看 rc 决定要不要 apply**，
 #   所以这里 apply 之后**再跑一次 --check 必须仍 rc=0** —— 那才是"最终处于已打状态"的证据。
 PATCHES="patch-openblas-symbol-prefix.py:ob_ patch-openblas-emscripten.py: patch-openblas-f77-ret.py: patch-openblas-idle-exit.py:"
+# ★ E2_RELAXED_FMA=1（工单 52）：dgemm 内循环 mul+add ⇒ relaxed_madd（硬件 FMA）。
+#   需要 E2_CC_EXTRA 含 -mrelaxed-simd（intrinsic 的编译前提）；语义 = 融合 FMA
+#   （少一次中间舍入，BLAS 语境可接受——x86 原生 OpenBLAS 全用 FMA）。
+if [ "${E2_RELAXED_FMA:-0}" = "1" ]; then
+  PATCHES="$PATCHES patch-openblas-relaxed-fma.py:"
+fi
 
 check_one () {  # $1=补丁名  $2=附加参数（可空）⇒ 打印末行并把 rc 放进 $?
   local f="$1" extra="$2" out
