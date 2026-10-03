@@ -38,3 +38,15 @@
 **为什么必须挂在事实系统上**（本单的设计要点）：一个脱离事实系统的"build-doctor"会**自带**
 一套关于构建状态的说法，而那套说法不可复跑、不可证伪、不与产物对账——**又一次制造"照抄旧话"
 的温床**。输入侧不变式走同一批四档 + 同一批复跑闸门，才拿到"可复跑 / 可证伪 / 可登记"的资格。
+
+## 后续（本单延伸，2026-10-03）
+
+- **规格扩到 6 条**（提交 `eda8e12`）：新增 `ALLOW_TABLE_GROWTH=1`（dlopen 表增长）、
+  `E2_RELAXED_FMA` + 补丁名（FMA 接线，删任一 ⇒ 收益静默消失而产物仍 `verdict=ok`）、
+  补丁文件的 `wasm_f64x2_relaxed_madd`（防"补丁在但逻辑被清空"）。证伪测试通过。
+- **⚠ 边界（实测暴露）**：grep 型不变式**分不清注释与代码**——`ALLOW_TABLE_GROWTH=1` 在
+  注释(185)与 `SFLAGS=(…)`(191) 里都出现，只有注释也"通过"。不假装它能证明语义；
+  契约名不暗示、能锚定则锚定、要更强保证用 `calibrate`/`witness`。
+- **上游提案**：已把机制打成**新插件提案**发给 Einfacht（[issue #7](https://github.com/ArchivalEra/Einfacht/issues/7)，
+  留档 `docs/agents/upstream-issues.md`）——请上游作为插件收编（引擎 `check_invariants.py`
+  进 `zreflect/`，规格留各仓）。

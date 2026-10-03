@@ -112,3 +112,28 @@ fact(value, cmd, source, ...,
 - 见证脚本：`Octave-Full-Wasm` 的 `build/113/witness-build-provenance.py`（含 `--selftest`）；
 - 闸门自证：`python3 .githooks/check-facts-replay.py --selftest`（13 PASS / 0 fail）；
 - 事故全记录：`HISTORY.md` §5.77 / §5.78，工单 `41-nt8-dlopen-regression`。
+
+---
+
+# 反哺 #7（2026-10-03）：**新插件提案 —— 声明式不变量闸门**
+
+> 上游 issue：<https://github.com/ArchivalEra/Einfacht/issues/7>
+> 形状 = `zreflect/check_invariants.py`（通用引擎）+ `<repo>/invariants.json`（纯数据规格）
+> + 挂成一条 **`witness` 档事实**（不是外挂工具）。是我们 #6 ② 原则「输入要有便宜的落点」的实例。
+
+**规格**（数据不是代码）：`{"checks":[{path, must_contain:[…], must_not_contain:[…], why}]}`。
+**引擎**：只读文件、不构建不碰容器 ⇒ 进 pre-commit；判据 stdout 裸值 `ok` / `DRIFT: …`；
+零值守卫（空清单/缺 path/读不到 ⇒ 都报）；`--selftest` 三类齐全。**未配 ⇒ 明说未启用退 0**。
+
+**本仓落地**（工单 53）：`build/build-inputs.json`（6 条）+ `build/113/witness-build-inputs.py`
+（自证 5/0）+ 事实键 `w64_build_recipe_ok`（挂 witness），与产物侧 `w64_build_tool_match` 互补：
+`recipe_ok` 管**事前**（仓库配方有被证伪片段/缺必需旗标），`tool_match` 管**事后**（产物不是
+现役脚本造的）。六条检查项全部来自真实事故：`-flto` 漂移、`-fwasm-exceptions` 不对称、
+`ALLOW_TABLE_GROWTH=1`（dlopen 表增长）、`E2_RELAXED_FMA` 接线、`-sMEMORY64=1`。
+
+**与 `calibrate`（#6 ①）正交**：一个守**量测仪器**，一个守**仓库文件本身**（输入）。
+
+**⚠ 已知边界（不藏）**：grep 型不变式**分不清注释与代码**（`ALLOW_TABLE_GROWTH=1` 在注释
+与 `SFLAGS=(…)` 里都出现 ⇒ 只有注释也通过）。契约名不许暗示语义；能锚定就锚定；要更强保证
+的用 `calibrate`（量产物）或 `witness`（量来源）。**声明式检查的强度上限 = 它匹配的文本形态。**
+
