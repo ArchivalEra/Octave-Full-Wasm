@@ -825,6 +825,25 @@ def measure(argv):
                 if _vn is not None:
                     facts["native_netlib_matmul500_s"] = fact(_vn, _nb_cmd, "w64-logs/native-baseline.json",
                                                               "系统默认 BLAS（netlib 参考实现，单线程）的 matmul 500² —— 用户手里的原生 Octave")
+                # ★ 工单 45（最终结算，2026-10-03）：netlib 侧再上三个常被引用的键
+                for _case, _nk in (("matmul1000", "native_netlib_matmul1000_s"),
+                                   ("lu1500", "native_netlib_lu1500_s"),
+                                   ("lu800", "native_netlib_lu800_s"),
+                                   ("loop1e6", "native_netlib_loop1e6_s")):
+                    _vv = _nbnet.get(_case, {}).get("s")
+                    if _vv is not None:
+                        facts[_nk] = fact(_vv, "sh build/113/bench-native.sh",
+                                          "w64-logs/native-baseline.json",
+                                          "netlib 参考实现的 %s（用户手里的原生 Octave；"
+                                          "机器空闲时跑，重活 ⇒ replay 豁免）" % _case)
+                for _case, _ok in (("matmul1000", "native_openblas_matmul1000_s"),
+                                   ("lu1500", "native_openblas_lu1500_s")):
+                    _vv = _nbob.get(_case, {}).get("s")
+                    if _vv is not None:
+                        facts[_ok] = fact(_vv, "sh build/113/bench-native.sh",
+                                          "w64-logs/native-baseline.json",
+                                          "原生天花板（OpenBLAS 0.3.34 pthread）的 %s 中位数；"
+                                          "机器空闲时跑，重活 ⇒ replay 豁免" % _case)
                 if _nbob.get("threads") is not None:
                     facts["native_openblas_threads"] = fact(_nbob["threads"], _nb_cmd, "w64-logs/native-baseline.json",
                                                             "天花板后端的线程数（占比口径的一部分，必须如实记录）")
@@ -841,6 +860,38 @@ def measure(argv):
                         "派生：w64-logs/native-baseline.json 的 netlib.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500",
                         "派生（原生基线 ÷ 浏览器）",
                         "浏览器 w64 相对『系统默认 BLAS 的原生 Octave』的倍数")
+                # ★ 工单 45 最终结算的派生比值：_w1000 = 浏览器 matmul1000（bench-ob-w64.log）
+                _w1000 = _bench(_bo, "matmul 1000")
+                _w1500 = _bench(_bo, "lu 1500")
+                _wloop = _bench(_bo, "loop 1e6")
+                _obm1000 = _nbob.get("matmul1000", {}).get("s")
+                _nl1000 = _nbnet.get("matmul1000", {}).get("s")
+                _nl1500 = _nbnet.get("lu1500", {}).get("s")
+                _nlloop = _nbnet.get("loop1e6", {}).get("s")
+                if _w1000 and _obm1000:
+                    facts["w64_ob_matmul1000_native_ratio"] = fact(
+                        round(_obm1000 / _w1000, 2),
+                        "派生：native-baseline.json 的 openblas24.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000",
+                        "派生（原生基线 ÷ 浏览器）",
+                        "浏览器 w64 matmul1000 占原生天花板的比值（大矩阵是最吃线程的刻度）")
+                if _w1000 and _nl1000:
+                    facts["w64_vs_netlib_matmul1000"] = fact(
+                        round(_nl1000 / _w1000, 1),
+                        "派生：native-baseline.json 的 netlib.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000",
+                        "派生（原生基线 ÷ 浏览器）",
+                        "浏览器 w64 matmul1000 相对『用户手里的原生 Octave』的倍数")
+                if _w1500 and _nl1500:
+                    facts["w64_vs_netlib_lu1500"] = fact(
+                        round(_nl1500 / _w1500, 1),
+                        "派生：native-baseline.json 的 netlib.lu1500 ÷ bench-ob-w64.log 的 lu 1500",
+                        "派生（原生基线 ÷ 浏览器）",
+                        "浏览器 w64 lu1500 相对『用户手里的原生 Octave』的倍数")
+                if _wloop and _nlloop:
+                    facts["w64_vs_netlib_loop1e6"] = fact(
+                        round(_nlloop / _wloop, 2),
+                        "派生：native-baseline.json 的 netlib.loop1e6 ÷ bench-ob-w64.log 的 loop 1e6",
+                        "派生（原生基线 ÷ 浏览器）",
+                        "浏览器解释器循环相对原生的比值（<1 = 浏览器慢 —— 纯解释器轴是唯一明确输的）")
             except (OSError, ValueError) as e:
                 print("⚠ 读不到原生基线 %s：%s" % (_nbj, e), file=sys.stderr)
         # ★ **四档的堆上限与"64 位到底买到了什么"**（工单 31，2026-10-01）：
@@ -957,6 +1008,11 @@ def measure(argv):
         "e2_threaded_matmul500_ratio", "e2_threaded_lu800_s",
         "w64_ob_matmul500_speedup", "w64_ob_matmul500_native_ratio",
         "w64_ob_matmul500_vs_netlib", "w64_ob_lu800_s",
+        "w64_ob_matmul1000_native_ratio", "w64_vs_netlib_matmul1000",
+        "w64_vs_netlib_lu1500", "w64_vs_netlib_loop1e6",
+        "native_netlib_matmul1000_s", "native_netlib_lu1500_s",
+        "native_netlib_lu800_s", "native_netlib_loop1e6_s",
+        "native_openblas_matmul1000_s", "native_openblas_lu1500_s",
         "accept_suites", "accept_pass", "probe_lane_fail",
         "floor_matrix_engines", "floor_matrix_pass", "floor_matrix_fail",
         "w64_mem_probe_fail", "dist_lane_probe_fail", "w64_big_heap",

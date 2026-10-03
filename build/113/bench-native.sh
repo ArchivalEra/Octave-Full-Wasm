@@ -19,19 +19,32 @@ OB_LIB="$(ls /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r*.so 2>/de
 
 PROG="$(mktemp /tmp/bench-native-XXXX.m)"
 trap 'rm -f "$PROG"' EXIT
+# ★ 2026-10-03（工单 45 最终结算）：用例扩到 **bench-lanes 全集**（Octave 代码逐字取自
+#   test/browser/bench-lanes.mjs 的 CASES 表）—— 结算表要的是同题同尺寸，不是近似。
+#   matmul1024/2000 保留作 GFLOPS 连续性参照（与旧台账同键）。
 cat > "$PROG" <<'EOF'
-ts=[];
-for r=1:3, A=rand(500);  B=rand(500);  tic; C=A*B;        ts(r)=toc; endfor
+ts=[];for r=1:3, x=rand(1,1e7);y=rand(1,1e7);tic;s=dot(x,y);t=toc; ts(r)=t; endfor
+printf("dot1e7 %.6f\n", median(ts));
+ts=[];for r=1:3, A=rand(500);B=rand(500);tic;C=A*B;t=toc; ts(r)=t; endfor
 printf("matmul500 %.6f\n", median(ts));
-ts=[];
-for r=1:3, A=rand(1024); B=rand(1024); tic; C=A*B;        ts(r)=toc; endfor
+ts=[];for r=1:3, A=rand(1000);B=rand(1000);tic;C=A*B;t=toc; ts(r)=t; endfor
+printf("matmul1000 %.6f\n", median(ts));
+ts=[];for r=1:3, A=rand(1024);B=rand(1024);tic;C=A*B;t=toc; ts(r)=t; endfor
 printf("matmul1024 %.6f\n", median(ts));
-ts=[];
-for r=1:3, A=rand(2000); B=rand(2000); tic; C=A*B;        ts(r)=toc; endfor
+ts=[];for r=1:3, A=rand(2000);B=rand(2000);tic;C=A*B;t=toc; ts(r)=t; endfor
 printf("matmul2000 %.6f\n", median(ts));
-ts=[];
-for r=1:3, A=rand(800);  tic; [L,U,P]=lu(A);              ts(r)=toc; endfor
+ts=[];for r=1:3, A=rand(800);tic;[L,U,P]=lu(A);t=toc; ts(r)=t; endfor
 printf("lu800 %.6f\n", median(ts));
+ts=[];for r=1:3, A=rand(1500);tic;[L,U,P]=lu(A);t=toc; ts(r)=t; endfor
+printf("lu1500 %.6f\n", median(ts));
+ts=[];for r=1:3, A=rand(400);tic;[U,S,V]=svd(A);t=toc; ts(r)=t; endfor
+printf("svd400 %.6f\n", median(ts));
+ts=[];for r=1:3, x=rand(1,1e7);tic;s=sum(x);t=toc; ts(r)=t; endfor
+printf("sum1e7 %.6f\n", median(ts));
+ts=[];for r=1:3, x=rand(1,2e6);tic;y=sort(x);t=toc; ts(r)=t; endfor
+printf("sort2e6 %.6f\n", median(ts));
+ts=[];for r=1:3, tic;s=0;for k=1:1e6,s=s+k;endfor;t=toc; ts(r)=t; endfor
+printf("loop1e6 %.6f\n", median(ts));
 EOF
 
 run_backend() {  # $1=名字  $2=LD_PRELOAD 值（空=系统默认）
@@ -67,10 +80,11 @@ def read(f):
     return d
 net, ob = read(net_f), read(ob_f)
 def gflops(name, t):
-    n = {"matmul500": 500, "matmul1024": 1024, "matmul2000": 2000}.get(name)
+    n = {"matmul500": 500, "matmul1000": 1000, "matmul1024": 1024, "matmul2000": 2000}.get(name)
     if t <= 0: return None
     if n:  return round(2 * n**3 / t / 1e9, 2)          # matmul ≈ 2n³ FLOP
-    if name == "lu800": return round(2/3 * 800**3 / t / 1e9, 2)  # lu ≈ 2/3 n³
+    if name == "lu800":  return round(2/3 * 800**3 / t / 1e9, 2)   # lu ≈ 2/3 n³
+    if name == "lu1500": return round(2/3 * 1500**3 / t / 1e9, 2)
     return None
 def dress(d):
     return {k: {"s": v, "gflops": gflops(k, v)} for k, v in sorted(d.items())}
@@ -88,6 +102,8 @@ print(f"cpu={cpu}  octave={oct_ver.strip()}  openblas={ob_ver}  threads={ob_thre
 for bk, dd in doc["backends"].items():
     for k, v in dd.items():
         if isinstance(v, dict):
-            print(f"  {bk:10s} {k:11s} {v['s']:8.4f} s  {v['gflops']:8.2f} GFLOPS")
+            g = v.get("gflops")
+            gs = f"{g:8.2f} GFLOPS" if isinstance(g, (int, float)) else "     —      "
+            print(f"  {bk:10s} {k:11s} {v['s']:8.4f} s  {gs}")
 print(f"→ {out_json}")
 EOF
