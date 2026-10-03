@@ -70,7 +70,9 @@ else
      "$REPO/bridge/octave-worker.js" \
      "$REPO/bridge/webaudio.js" "$REPO/bridge/webaudiorec.js" \
      "$REPO/bridge/webfilepick.js" \
-     "$REPO/bridge/webnet.js" "$SITE/"
+     "$REPO/bridge/webnet.js" \
+     "$REPO/bridge/octave-page.js" "$REPO/bridge/octave-embed.js" \
+     "$REPO/bridge/embed-demo.html" "$SITE/"
   sh "$REPO/build/gen-lanes.sh" "$SITE"
   sudo chown -R "$(id -u):$(id -g)" "$SITE"
   echo "  ⚠ 资产目录（assets/）需要另外补——见 HISTORY §10.4 的资产清单"

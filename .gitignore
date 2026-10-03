@@ -111,6 +111,8 @@
 !.zcode/config.json
 !.githooks/check-whitelist.py
 !.githooks/check-wants.py
+!.githooks/check-facts-replay.py
+!.githooks/check-readiness-pattern.py
 !build/webgraphics/*
 !build/webdoc/*
 !build/assets-meta.json

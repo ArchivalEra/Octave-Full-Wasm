@@ -33,8 +33,13 @@ page_files () {
   # ⚠️ `lane.js` **必须在**（工单 23 实测：recover-113.sh 的清单漏了它 ——
   #    照它重建站点会漏掉选档器本身；promote-pages 的第一次 dry-run 就抓到这个漂移）。
   #    `lanes.js`（档清单）**不在这里**：它是**站点专属生成物**，由 gen-lanes.sh 按真实部署写。
+  # ⚠️ 工单 38（2026-10-02）：嵌入接口层三件**必须**在清单里 —— 新 index.html 引用
+  #    `octave-page.js`，缺它 = 站点整个坏（404）；`octave-embed.js`/`embed-demo.html`
+  #    是接口层与上手页（accept-embed-api 也要取 `${URL}embed-demo.html`）。
+  #    之前漏过 lane.js（工单 23）—— 同一形状：清单比页面引用少一件。
   for f in index.html assets-loader.js octave-core.js lane.js queue.js p5canvas.js \
-           octave-worker.js webaudio.js webaudiorec.js webfilepick.js webnet.js; do
+           octave-worker.js webaudio.js webaudiorec.js webfilepick.js webnet.js \
+           octave-page.js octave-embed.js embed-demo.html; do
     printf '%s\n' "$f"
   done
 }
