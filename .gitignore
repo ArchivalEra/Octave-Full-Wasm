@@ -14,6 +14,7 @@
 !DEPLOY.md
 !build/Makefile
 !bridge/octave-page.ts
+!bridge/embed-wgsl.html
 !build/build-embed-ts.sh
 !build/main.cc
 !build/NOTES.md

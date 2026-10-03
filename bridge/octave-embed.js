@@ -31,6 +31,41 @@
     var seq = 0;
     var subs = { output: [], error: [], state: [], figure: [] };
     var state = 'booting';
+    var geometrySeq = 0;
+
+    // ★ 几何导出器（m 源，工单 50）：走图形对象树（**不过 drawnow/GL**），v1 覆盖
+    //   line/text/坐标区语义；输出结构 = {xlim,ylim,xscale,yscale,title,xlabel,ylabel,objects[]}
+    var GEOM_EXPORT_M = [
+    'function s = __oct_geometry_export__(gh)',
+    '  s = struct();',
+    '  ax = get(gh, "currentaxes");',
+    '  if isempty(ax), s.objects = {}; return; end',
+    '  s.xl = get(ax, "xlim"); s.yl = get(ax, "ylim");',
+    '  s.xscale = get(ax, "xscale"); s.yscale = get(ax, "yscale");',
+    '  s.xgrid = get(ax, "xgrid"); s.ygrid = get(ax, "ygrid");',
+    '  s.title = get(get(ax, "title"), "string");',
+    '  s.xlabel = get(get(ax, "xlabel"), "string");',
+    '  s.ylabel = get(get(ax, "ylabel"), "string");',
+    '  kids = get(ax, "children");',
+    '  objs = cell(1, numel(kids)); n = 0;',
+    '  for k = 1:numel(kids)',
+    '    h = kids(k); t = get(h, "type");',
+    '    if strcmp(t, "line")',
+    '      n = n + 1;',
+    '      objs{n} = struct("type", "line", "x", get(h, "xdata"), "y", get(h, "ydata"), ...',
+    '        "color", get(h, "color"), "linewidth", get(h, "linewidth"), ...',
+    '        "linestyle", get(h, "linestyle"), "marker", get(h, "marker"), ...',
+    '        "markersize", get(h, "markersize"));',
+    '    elseif strcmp(t, "text")',
+    '      n = n + 1;',
+    '      objs{n} = struct("type", "text", "x", get(h, "position")(1), ...',
+    '        "y", get(h, "position")(2), "str", get(h, "string"), ...',
+    '        "color", get(h, "color"), "fontsize", get(h, "fontsize"));',
+    '    endif',
+    '  endfor',
+    '  s.objects = objs(1:n);',
+    'endfunction',
+  ].join('\n');
 
     // ★ display_exception 的 Web 面（工单 47 实测补上）：Qt 的 display_exception 在
     //   Web 里 = evalJSON 的 error 字段 **加** on.error 订阅回调。此前 subs.error 只能
@@ -183,6 +218,36 @@
           if (c && c.toDataURL) return c.toDataURL('image/png');
           var img = box.querySelector('img:last-of-type');
           return img ? img.src : null;
+        },
+        // ★ 几何数据通道（工单 50，UI RFC #1 采纳项）：**数据驱动、不过 drawnow/GL**——
+        //   直接走图形对象树（get 语义）导出折线/标记/文本/坐标区语义，UI 侧
+        //   WebGPU/任何渲染器自己画。写导出函数到 /tmp → addpath → 调用 → JSON 回读
+        //   （evalJSON 值通道同款管道）。
+        geometry: function (figH) {
+          var seqg = ++geometrySeq;
+          var jp = '/tmp/.octave_geom_' + seqg + '.json';
+          var mp = '/tmp/__oct_geometry_export.m';
+          mod.FS.writeFile(mp, GEOM_EXPORT_M);
+          var code =
+            "try, addpath('/tmp'); " +
+            (figH ? ("__gh__=" + figH + "; ") : "__gh__=gcf; ") +
+            "T__=__oct_geometry_export(__gh__); " +
+            "fid=fopen('" + jp + "','w'); fprintf(fid,'%s',jsonencode(T__)); fclose(fid); " +
+            "catch e; fid=fopen('" + jp + "','w'); fprintf(fid,'%s',jsonencode(struct('err',e.message))); fclose(fid); end";
+          setState('busy');
+          var rc;
+          try { rc = mod.eval_string(code); } catch (e) { rc = -1; }
+          setState('idle');
+          var val = null, err = null;
+          try {
+            var txt = new TextDecoder().decode(mod.FS.readFile(jp));
+            val = JSON.parse(txt);
+            if (val && typeof val === 'object' && val.err !== undefined) err = val.err;
+          } catch (e) { err = 'geometry 通道失败：' + String(e).slice(0, 120); }
+          try { mod.FS.unlink(jp); } catch (e) {}
+          if (err !== null) fireError(err);
+          return err === null ? Promise.resolve({ ok: rc === 0 && err === null, geometry: val, rc: rc })
+                              : Promise.resolve({ ok: false, error: err, rc: rc });
         },
       },
     };

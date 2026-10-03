@@ -1,0 +1,133 @@
+<!doctype html><meta charset="utf-8"><title>Embed 几何通道 → WebGPU 参考渲染器</title>
+<script src="assets-loader.js"></script><script src="queue.js"></script>
+<script src="p5canvas.js"></script><script src="webaudio.js"></script>
+<script src="webaudiorec.js"></script><script src="webfilepick.js"></script>
+<script src="webnet.js"></script><script src="octave-core.js"></script>
+<script src="octave-page.js"></script><script src="octave-embed.js"></script>
+<body>
+<p>状态：<code id="st">booting…</code>　<span id="gpu"></span></p>
+<canvas id="wgsl" width="640" height="480" style="border:1px solid #999;background:#fff"></canvas>
+<pre id="panel"></pre>
+<script src="octave.js"></script>
+<script>
+const panel = document.getElementById('panel');
+const show = (t, v) => panel.textContent += '[' + t + '] ' + v + '\n';
+const WGSL = `
+struct VOut { @builtin(position) pos: vec4f, @location(0) color: vec3f, }
+@vertex fn vs(@builtin(vertex_index) vi: u32,
+              @location(0) pos: vec2f,
+              @location(1) color: vec3f) -> VOut {
+  var o: VOut;
+  o.pos = vec4f(pos, 0.0, 1.0);
+  o.color = color;
+  return o;
+}
+@fragment fn fs(in: VOut) -> @location(0) vec4f {
+  return vec4f(in.color, 1.0);
+}`;
+window.__wgslDone = false;
+(async () => {
+  const o = await OctaveEmbed.create({});
+  document.getElementById('st').textContent = o.state;
+  show('embed', 'ready');
+  // 画三条不同样式的线（**只取数据，不 drawnow**）
+  await o.eval("figure('visible','off');");
+  await o.eval("plot(1:10, (1:10).^2, 'r-', 1:10, 10:-1:1, 'b--', 1:2:9, ones(1,5), 'k*'); grid on; title('测试图'); xlabel('x'); ylabel('y');");
+  const g = await o.figures.geometry();
+  window.__lastGeometry = g;
+  show('geometry', JSON.stringify({ objects: (g.geometry.objects || []).length,
+                                    xl: g.geometry.xl, yl: g.geometry.yl }));
+  if (!navigator.gpu) { show('webgpu', '不可用（需 Chrome/Edge 113+）'); window.__wgslDone = true; return; }
+  const adapter = await navigator.gpu.requestAdapter();
+  const device = await adapter.requestDevice();
+  window.__gpuAdapter = adapter; window.__gpuDevice = device;   // 防 GC（mapAsync 必需）
+  document.getElementById('gpu').textContent = 'WebGPU: ' + (adapter.info?.vendor || 'ok');
+  const canvas = document.getElementById('wgsl');
+  const ctx = canvas.getContext('webgpu');
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  ctx.configure({ device, format, alphaMode: 'opaque' });
+  // 数据坐标 → clip space（y 翻转）
+  const [x0, x1] = g.geometry.xl, [y0, y1] = g.geometry.yl;
+  const map = (x, y) => [ (x - x0) / (x1 - x0) * 2 - 1, 1 - (y - y0) / (y1 - y0) * 2 ];
+  const shader = device.createShaderModule({ code: WGSL });
+  const pipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: shader, entryPoint: 'vs', buffers: [{
+      arrayStride: 20,
+      attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x2' },
+                   { shaderLocation: 1, offset: 8, format: 'float32x3' }] }] },
+    fragment: { module: shader, entryPoint: 'fs', targets: [{ format }] },
+    primitive: { topology: 'line-strip' },
+  });
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginRenderPass({ colorAttachments: [{
+    view: ctx.getCurrentTexture().createView(),
+    clearValue: { r: 1, g: 1, b: 1, a: 1 }, loadOp: 'clear', storeOp: 'store' }] });
+  pass.setPipeline(pipeline);
+  let drawn = 0;
+  for (const obj of (g.geometry.objects || [])) {
+    if (obj.type !== 'line' || obj.linestyle === 'none') continue;
+    const xs = obj.x, ys = obj.y, c = obj.color;
+    const verts = new Float32Array(xs.length * 5);
+    for (let i = 0; i < xs.length; i++) {
+      const [cx, cy] = map(xs[i], ys[i]);
+      verts.set([cx, cy, c[0], c[1], c[2]], i * 5);
+    }
+    const vbuf = device.createBuffer({ size: verts.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(vbuf, 0, verts);
+    pass.setVertexBuffer(0, vbuf);
+    pass.draw(xs.length);
+    drawn++;
+  }
+  pass.end();
+  device.queue.submit([encoder.finish()]);
+  show('webgpu-render', drawn + ' 条线已提交（line-strip）');
+  window.__wgslDrawn = drawn;
+  // ★ 确定性回读：同数据渲到离屏纹理 → copyTextureToBuffer → mapAsync 数字节
+  const W = 640, H = 480;
+  const tex = device.createTexture({ size: [W, H], format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  const enc2 = device.createCommandEncoder();
+  const pass2 = enc2.beginRenderPass({ colorAttachments: [{
+    view: tex.createView(), clearValue: { r: 1, g: 1, b: 1, a: 1 },
+    loadOp: 'clear', storeOp: 'store' }] });
+  pass2.setPipeline(pipeline);
+  let drawn2 = 0;
+  for (const obj of (g.geometry.objects || [])) {
+    if (obj.type !== 'line' || obj.linestyle === 'none') continue;
+    const xs = obj.x, ys = obj.y, c = obj.color;
+    const verts = new Float32Array(xs.length * 5);
+    for (let i = 0; i < xs.length; i++) {
+      const [cx, cy] = map(xs[i], ys[i]);
+      verts.set([cx, cy, c[0], c[1], c[2]], i * 5);
+    }
+    const vbuf = device.createBuffer({ size: verts.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(vbuf, 0, verts);
+    pass2.setVertexBuffer(0, vbuf);
+    pass2.draw(xs.length);
+    drawn2++;
+  }
+  pass2.end();
+  const stag = device.createBuffer({ size: 2560 * H,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  enc2.copyTextureToBuffer({ texture: tex },
+    { buffer: stag, bytesPerRow: 2560, rowsPerImage: H }, [W, H, 1]);
+  device.queue.submit([enc2.finish()]);
+  await stag.mapAsync(GPUMapMode.READ);
+  const d = new Uint8Array(stag.getMappedRange());
+  let red = 0, blue = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * 2560 + x * 4;
+      if (d[i] > 200 && d[i+1] < 120 && d[i+2] < 120) red++;
+      if (d[i+2] > 200 && d[i] < 120 && d[i+1] < 120) blue++;
+    }
+  }
+  stag.unmap();
+  window.__wgslPixels = { red, blue, drawn2 };
+  show('gpu-readback', 'red=' + red + ' blue=' + blue + ' (drawn2=' + drawn2 + ')');
+  window.__wgslDone = true;
+})().catch(e => { show('ERR', String(e).slice(0, 300)); window.__wgslDone = true; });
+</script>

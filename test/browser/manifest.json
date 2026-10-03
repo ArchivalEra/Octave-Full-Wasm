@@ -202,6 +202,14 @@
     "value": "/mnt/hdd/octave-wasm-build/site/embed-demo.html",
     "why": "输出路径成本对照（工单 48）：DOM sink vs 计数不插树。需站点部署 embed-demo.html（工单 38）。资产未上站的站点（如 8761）⇒ 缺此项按清单跳过，不误报红；跑它用 `EMBED_SITE_FILE=<站点>/embed-demo.html` 覆盖。"
    }
+  ],
+  "probe-figures-geometry": [
+   {
+    "kind": "path",
+    "env": "EMBED_SITE_FILE",
+    "value": "/mnt/hdd/octave-wasm-build/site/embed-demo.html",
+    "why": "几何通道+WebGPU 参考渲染（工单 50）。需站点部署 embed 资产（wgsl-demo.html 等）；未上站站点按清单跳过。"
+   }
   ]
  }
 }

@@ -56,6 +56,7 @@
 | 回答解释器的输入请求 | `octave.input(text)`（预填 stdin 队列 —— 默认实例的 stdinLine 先读队列再 prompt）；实时对话框接管 = UI 提供自己的 host（进阶，docs/embed-api §3） | ✅e |
 | 工作区/历史/目录查询 | 见 §1 对应行（✅e） | ✅e |
 | 画图 | `octave.eval("plot(…)")` → 上屏（⚠ embed 页面 GL 边界见 §1 copy_image 行）；`octave.on.figure(cb)` + `octave.figures.export()` | ✅e / ⚠ 边界 |
+| **画图（数据驱动，推荐）** | **`octave.figures.geometry()`** → Promise<{ok, geometry}>：**直接走图形对象树导出**（xlim/ylim/标题/轴标 + line 的 x/y/color/linewidth/linestyle/marker + text），**不过 drawnow/GL** ⇒ embed 页 GL 边界对本通道不适用；UI 用 WebGPU/任何渲染器自绘。实测 14 断言全绿（`probe-figures-geometry`，GPU 回读 red=777/blue=573）；参考渲染器 `bridge/embed-wgsl.html`（WGSL line-strip，站点页 `wgsl-demo.html`） | ✅e（工单 50） |
 | 文件上传/下载 | `octave.fs.download(name)`（Blob 下载）；上传 = UI 的 file input → `octave.fs.write`（webfilepick 队列桥仍在） | ✅e |
 | 音频播放/录音 | 队列桥现成（`webaudio`/`webaudiorec`）；embed 层透传即可 | ✅ |
 | 网络（urlread 等） | 同步 XHR 桥现成（`webnet`；注意 COI 下跨源需 CORP/CORS —— 已实测约束） | ✅ |
@@ -104,3 +105,11 @@ sh build/build-embed-ts.sh                                          # → bridge
 ⚠ 兼容硬约束：产物逐名兼容旧版对外面（`window.createOctaveHost` / `__octaveHosts` /
 `__octaveClicks` / `__octaveRequestInterrupt` / 两个全局监听器）—— `accept-embed-api`
 （13/0）、`accept-embed-multi`（13/0）、`probe-embed-inventory`（14/14）在重写后全绿。
+
+## 6. 几何通道参考页（工单 50，2026-10-03）
+
+`bridge/embed-wgsl.html`（站点 `wgsl-demo.html`）：embed 就绪 → plot 三条线 →
+`figures.geometry()` → **WGSL line-strip 渲染**（数据坐标→clip 映射、逐线颜色）。
+验收：`test/browser/probe-figures-geometry.mjs`（A 组=几何结构断言；B 组=WebGPU，
+B3 的 GPU 回读需 `xvfb-run -a env HEADLESS_GPU=1`——plain headless 的 SwiftShader
+不支持 mapAsync/合成器截图，环境限制如实记档）。
