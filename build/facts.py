@@ -673,6 +673,20 @@ def measure(argv):
         #   不碰浏览器的情况下抓到"来源漂移"（容器脚本被改 / 上批实验残留）。
         #   事故形状：w64 记的 `tool.script_sha256` = `2382ed34…`（容器残留 `-flto` 的那份），
         #   仓库是 `63d8e7d7…` ⇒ 72/0→44/27 的 dlopen 回归。见 HISTORY §5.78 / 工单 41。
+        # ★ 构建输入不变式（工单 53；Einfacht #6 ② "输入要有便宜的落点"）：**配方层**的见证。
+        #   与 w64_build_tool_match（产物侧：部署件记的工具 sha == 仓库）互补——这条看**仓库配方
+        #   本身有没有被证伪的片段 / 缺必需旗标**（-flto 漂移、丢 -sMEMORY64=1）。声明式清单
+        #   build/build-inputs.json；只读、不构建、不碰容器 ⇒ 进 witness 档每提交真跑。
+        facts["w64_build_recipe_ok"] = fact(
+            "ok",
+            cmd="python3 build/113/witness-build-inputs.py",
+            source="build/build-inputs.json 的声明式检查 vs 仓库配方文件",
+            note="构建**输入**的不变式（配方层）：link-web.sh 无 -flto / 含 -fwasm-exceptions；"
+                 "w64 车道含 -sMEMORY64=1。把「输入」也当事实，由同一批复跑闸门核对 ——"
+                 "由同一批复跑闸门每提交核对。",
+            replay=False,
+            witness="python3 build/113/witness-build-inputs.py",
+            witness_expect="ok")
         facts["w64_build_tool_match"] = fact(
             "match",
             cmd="<重链 w64 后：python3 build/113/witness-build-provenance.py w64>",
@@ -1065,7 +1079,7 @@ def measure(argv):
         "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns", "oct_lane_tls_init",
         "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
         "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
-        "w64_relaxed_madd",
+        "w64_relaxed_madd", "w64_build_recipe_ok",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

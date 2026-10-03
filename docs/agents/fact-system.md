@@ -173,3 +173,22 @@ emsdk 5.0.7 上**恒为 0**（该 objdump 对这条指令打印 `<unknown>`）�
 - `FACTS_INSTRUMENTS=build/instruments.json` —— **量法登记位**：被证伪的**量法**像
   `retractions.json` 管"被推翻的断言"那样有登记；台账任何 cmd 含被证伪片段 ⇒ 报。
 两旋钮未配 ⇒ 明说未启用、退 0。pre-commit 已显式启用（30 天 + `build/instruments.json`）。
+
+### 第五档（同 `witness` 档）：**构建输入的不变式**（2026-10-03，工单 53；Einfacht #6 ②）
+
+上游 #6 给 `collect.py` 原则表加了第 5 条：**「输入要有便宜的落点」**——产物生成后，它的输入
+（源/工具/旗标/环境）必须有一条**不依赖重跑**的可读记录 + 一条便宜来源不变式，每提交核对。
+本仓的实例化（**不是外挂工具，是事实**）：
+
+- **声明式清单** `build/build-inputs.json`：`{path, must_contain, must_not_contain, why}`
+  —— 数据不是代码，换配方只改数据。
+- **见证** `build/113/witness-build-inputs.py`（自证 5/0）：只读配方文件、**不构建、不碰容器**，
+  ⇒ 进 `witness` 档每提交真跑。判据 `ok` / `DRIFT: …`。
+- **事实键** `w64_build_recipe_ok`（挂上述见证）+ 既有的 `w64_build_tool_match`
+  （产物侧：部署件记的 `tool.script_sha256` == 仓库现役 `link-web.sh`）。
+  ⚠ 两者互补：`tool_match` 抓"**产物**不是现役脚本造的"（事后）；`recipe_ok` 抓"**仓库配方**
+  本身有被证伪片段 / 缺必需旗标"（事前）。发现的真实事故：`-flto` 漂移进 `link-web.sh`
+  （工单 41/52）、w64 车道丢 `-sMEMORY64=1`（工单 52）。
+- **为什么必须挂在事实系统上**：脱离它另起一个 `build-doctor`，就等于再造一个**自带
+  "我以为的构建状态"** 的组件——那正是幻觉的温床。输入侧的不变式走同一批四档与同一批复跑
+  闸门，才有"可复跑、可证伪、可登记"的资格。

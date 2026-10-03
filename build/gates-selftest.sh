@@ -41,6 +41,7 @@ build/113/check-dylink-signatures.py --selftest
 build/113/check-oct-lane.py --selftest
 build/113/atomics_scan.py --selftest
 build/113/witness-build-provenance.py --selftest
+build/113/witness-build-inputs.py --selftest
 build/113/wasm_symbols.py --selftest
 build/113/stage-oct-by-manifest.py --selftest
 build/113/make-lane-manifest.py --selftest

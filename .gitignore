@@ -29,6 +29,7 @@
 !build/BASELINE-11.3.md
 !build/113/*
 !build/instruments.json
+!build/build-inputs.json
 !build/113/patch-openblas-relaxed-fma.py
 !build/BENCH.md
 !build/reconf-bench.sh
