@@ -13,6 +13,8 @@
 !CONTEXT.md
 !DEPLOY.md
 !build/Makefile
+!bridge/octave-page.ts
+!build/build-embed-ts.sh
 !build/main.cc
 !build/NOTES.md
 !build/reconf.sh

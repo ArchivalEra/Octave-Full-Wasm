@@ -186,6 +186,22 @@
     "value": "/mnt/hdd/octave-wasm-build/g1-probe",
     "why": "G1 复现探针产物（control/startup 两变体），由容器里的 `bash build/113/probe-jspi-g1.sh` 生成；探针自托管（不看 URL）"
    }
+  ],
+  "probe-embed-inventory": [
+   {
+    "kind": "path",
+    "env": "EMBED_SITE_FILE",
+    "value": "/mnt/hdd/octave-wasm-build/site/embed-demo.html",
+    "why": "逐接口盘点（工单 47）：对照 Qt 官方接口逐条实测。需站点部署 embed-demo.html（工单 38）。资产未上站的站点（如 8761）⇒ 缺此项按清单跳过，不误报红；跑它用 `EMBED_SITE_FILE=<站点>/embed-demo.html` 覆盖。"
+   }
+  ],
+  "probe-output-cost": [
+   {
+    "kind": "path",
+    "env": "EMBED_SITE_FILE",
+    "value": "/mnt/hdd/octave-wasm-build/site/embed-demo.html",
+    "why": "输出路径成本对照（工单 48）：DOM sink vs 计数不插树。需站点部署 embed-demo.html（工单 38）。资产未上站的站点（如 8761）⇒ 缺此项按清单跳过，不误报红；跑它用 `EMBED_SITE_FILE=<站点>/embed-demo.html` 覆盖。"
+   }
   ]
  }
 }

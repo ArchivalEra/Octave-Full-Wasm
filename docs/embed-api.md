@@ -77,3 +77,30 @@
    复跑：`sh test/browser/run.sh test/browser/accept-embed-api.mjs <部署了 embed-demo.html 的站点>`。
    逐条断言：A create/state、B eval+on.output、C evalJSON（数值/字符串/矩阵/反向）、D workspace、
    E pwd/cd、F fs 回环+反向、G input、H interrupt、I figures（接口面+GL 边界）、J 反向 reject。
+
+## 5. 开发者注记（工单 48，2026-10-03）：页面适配器是 **TypeScript 源**
+
+`bridge/octave-page.js` 现在是 **`bridge/octave-page.ts` 的编译产物**（无打包器、ES5 全局脚本，
+类型只在源码里）。改页面适配器**改 `.ts`**，然后：
+
+```sh
+npm install --prefix /mnt/hdd/crossbuild-tools/npm-ts typescript@5   # 一次性（仓库外，不污染白名单）
+sh build/build-embed-ts.sh                                          # → bridge/octave-page.js
+```
+
+**重写动机**：旧版把三件不相干的事揉在一处，重画成三道**类型化的缝**：
+① **Host 契约** = `CoreHooks`（内核/页面之间唯一的接口面）；② **输出** = 可替换的 `OutputSink`
+（默认 `createCoalescedPreSink`：合并刷新，行为兼容旧页）；③ **输入捕获** = 独立小函数。
+
+**为什么合并刷新**（实测，`test/browser/probe-output-cost.mjs` + 纯净 sink 基准）：
+旧 sink 每行一次 DOM 写 ⇒ 一次 1.4MB 输出 = **27000 次插入**；合并后 **167 次（−99%）**、
+原始 `createTextNode+appendChild` 耗时 107ms → **4.5ms（−96%）**。纯净 sink 基准（无 wasm）：
+27000 行/321KB 逐行追加 **12.8ms**、合并 **≈0ms（425×）**。
+⇒ **DOM 不是瓶颈**（compute ~2.4s vs DOM 几十 ms 量级），但削减 99% 插入去掉了
+强制布局/重排的抖动量；且 `OutputSink` 这道缝让**富 UI 换自己的渲染器**（终端网格/ANSI/
+行号/高亮）而不动内核。**⚠ 不要把输出挪进 wasm**：wasm 碰不到 DOM，每写一次反而多一次边界穿越；
+成本在布局，只有 DOM 侧能治。
+
+⚠ 兼容硬约束：产物逐名兼容旧版对外面（`window.createOctaveHost` / `__octaveHosts` /
+`__octaveClicks` / `__octaveRequestInterrupt` / 两个全局监听器）—— `accept-embed-api`
+（13/0）、`accept-embed-multi`（13/0）、`probe-embed-inventory`（14/14）在重写后全绿。
