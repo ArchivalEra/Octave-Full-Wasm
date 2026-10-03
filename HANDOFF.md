@@ -576,3 +576,15 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
   日志当缝（`read_facts` 纯函数 → 事实系统）。**关键发现**：符号构建不需要新做 ——
   `relink --diag` 早给 name 段（`--profiling-funcs`）。首个答案 `dgemm_kernel 89.1%`
   （印证 FMA 打对了地方）。台账 **100 条**（`hotpath_top` + `hotpath_instrument_ok` 挂 witness）。
+- **工单 55/56/57 结案（扫描 → 修 bug → 找到杠杆）**：
+  · **55 扫描**（11 负载）：计算密集负载 ~100% 落内核（`dgemm` 89% / `sort` 89% / 字符串比较 88%，
+    无平台税）；**对象/分配密集负载有共同成本**：`dlmalloc`+`dlfree`+**pthread 锁** 24–44%。
+  · **55 结案实验（证实）**：同一 `func-handle`，`w64` 锁 **16%** vs `w64-base`（单线程）**0%**
+    ⇒ 线程安全分配器在单线程路径上的税。
+  · **56 修复**：`dlsync BigInt` 补丁把 `rc=3`（不适用）当失败 ⇒ 挡住 `w64-base` 符号站。
+    改成：**有 dlsync 但形状不认识 ⇒ rc=4（FATAL）**；**无 dlsync ⇒ rc=3（放行）**。自证 8/0。
+  · **57 结案（采纳候选）**：**`-sMALLOC=mimalloc` 成立** —— 同旗标交错 3 轮：墙钟
+    **1016→740 ms（−27%）**、pthread 锁 **10.3%→0%**、体积 +0.2%、**数值 79/0 + dldfcn 71/0 全绿**。
+    ⚠ 更正了一个混淆变量（基线用了全套 `--diag` 含 ASSERT ⇒ 首报 −39% 虚高，同旗标后 −27%）。
+    **发运前**：进模式表 + 全量验收 + 产品决定（未做）。详单 `build/113/NOTES-hotpath.md`。
+
