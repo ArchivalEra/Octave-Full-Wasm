@@ -1,0 +1,10 @@
+{
+  "_why": "被证伪的**量法**登记位（Einfacht issue #6 ① 移植）。像 retractions.json 管「被推翻的断言」，这里管「量它的工具/方法本身腐烂」。台账任何 cmd 含某条 text 片段 ⇒ check-instruments 报（坏量法不许留在台账里）。",
+  "methods": [
+    {
+      "text": "grep -c relaxed_madd",
+      "why": "llvm-objdump(emsdk 5.0.7) 对 relaxed-simd 的 f64x2.relaxed_madd 只打印 `<unknown>` ⇒ `grep -c relaxed_madd` 恒返回 0（命令成功、值稳定、复跑永远通过）—— 据此两次误判「FMA 没进产物」，白跑一轮构建。",
+      "fixed_in": "字节级计数：python3 -c \"print(open(p,'rb').read().count(bytes([0xFD,0x87,0x02])))\"（fd 87 02 = f64x2.relaxed_madd）；或先跑校准样本证明仪器看得见。见工单 52 / HISTORY §5.83。"
+    }
+  ]
+}

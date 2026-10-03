@@ -28,6 +28,7 @@
 !build/BASELINE-10.3.md
 !build/BASELINE-11.3.md
 !build/113/*
+!build/instruments.json
 !build/113/patch-openblas-relaxed-fma.py
 !build/BENCH.md
 !build/reconf-bench.sh
@@ -90,6 +91,7 @@
 !build/forge-fetch.py
 !build/forge-build.sh
 !test/browser/*.mjs
+!test/fixtures/*
 !bridge/p5canvas.js
 !bridge/octave-worker.js
 !bridge/octave-core.js
@@ -117,6 +119,7 @@
 !.githooks/check-wants.py
 !.githooks/check-facts-replay.py
 !.githooks/check-readiness-pattern.py
+!.githooks/check-instruments.py
 !build/webgraphics/*
 !build/webdoc/*
 !build/assets-meta.json

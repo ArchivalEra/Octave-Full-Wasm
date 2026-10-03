@@ -65,11 +65,18 @@ def check(g, facts, have_bash):
     #   动机见 build/facts.py 的 fact() docstring 与 build/113/witness-build-provenance.py。
     wit = {k: v for k, v in facts.items()
            if isinstance(v, dict) and v.get("witness")}
-    if not todo and not wit:
-        g.problem("replay=True 的事实为 0 且无 witness —— 全豁免不是「通过」，是这个闸门什么都没查")
+    # ★ 第四档：**仪器校准**（Einfacht #6 ① 移植）：声称"产物里有没有 X"的 cmd 配一个
+    #   已知含 X 的样本（`calibrate` + `calibrate_expect`）—— 抓"仪器静默失真"
+    #   （命令成功、值稳定、复跑永远通过，而它量的根本不是想量的）。与 replay/witness 正交。
+    cal = {k: v for k, v in facts.items()
+           if isinstance(v, dict) and v.get("calibrate")}
+    if not todo and not wit and not cal:
+        g.problem("replay=True 的事实为 0、且无 witness / calibrate —— "
+                  "全豁免不是「通过」，是这个闸门什么都没查")
         return 0
     if not todo:
-        g.note("replay=True 的事实为 0，但台账挂 %d 条 witness ⇒ 由见证档覆盖" % len(wit))
+        g.note("replay=True 的事实为 0，但台账挂 %d 条探针（witness %d / calibrate %d）"
+               " ⇒ 由探针档覆盖" % (len(wit) + len(cal), len(wit), len(cal)))
     ok = 0
     for k in sorted(todo):
         v = todo[k]
@@ -102,45 +109,50 @@ def check(g, facts, have_bash):
         g.problem("replay=True 的 %d 条全部执行失败 —— 台账的复跑方式整体死了" % len(todo))
     elif todo:
         g.note("复跑闸门：%d/%d 条逐字复现（裸值契约）" % (ok, len(todo)))
-    ok += _witness_pass(g, wit, shell)
+    ok += _probe_pass(g, wit, "witness", "见证", shell)
+    ok += _probe_pass(g, cal, "calibrate", "仪器校准", shell)
     return ok
 
 
-def _witness_pass(g, wit, shell):
-    """见证档：逐字执行 `witness`，要求 stdout == `witness_expect`（与 replay 正交）。
-    没挂见证**不算失败**（机制可以逐步落地）；但挂了就必须过。返回通过条数。"""
-    if not wit:
+def _probe_pass(g, items, kind, noun, shell):
+    """探针档（witness / calibrate）：逐字执行，要求 stdout == `<kind>_expect`（与 replay 正交）。
+    没挂**不算失败**（机制可以逐步落地）；挂了就必须过。返回通过条数。
+    witness = 来源见证；calibrate = 仪器校准（不符 = 仪器失真：先用已知正样本证明
+    仪器看得见 X，再计数 —— Einfacht #6 ①）。"""
+    if not items:
         return 0
     ok = 0
-    for k in sorted(wit):
-        v = wit[k]
-        cmd, want = v.get("witness"), v.get("witness_expect")
+    for k in sorted(items):
+        v = items[k]
+        cmd, want = v.get(kind), v.get(kind + "_expect")
         if not isinstance(cmd, str) or not isinstance(want, str):
-            g.problem("%s: witness 与 witness_expect 必须都是字符串（形状契约）" % k)
+            g.problem("%s: %s 与 %s_expect 必须都是字符串（形状契约）" % (k, kind, kind))
             continue
         try:
             p = subprocess.run(shell + [cmd], cwd=root(),
                                capture_output=True, text=True, timeout=_timeout())
             rc, out, err = p.returncode, p.stdout, p.stderr
         except subprocess.TimeoutExpired:
-            g.problem("%s: witness 超时（>%ss）" % (k, _timeout()))
+            g.problem("%s: %s 超时（>%ss）" % (k, noun, _timeout()))
             continue
         if rc != 0:
             tail = (err or "").strip().splitlines()
-            g.problem("%s: witness 退出码 %d：%s"
-                      % (k, rc, tail[-1][:120] if tail else "（无 stderr）"))
+            g.problem("%s: %s 退出码 %d：%s"
+                      % (k, noun, rc, tail[-1][:120] if tail else "（无 stderr）"))
             continue
         got = out.strip()
         if got != want:
-            g.problem("%s: **见证失败（来源漂移）** —— witness stdout=%r ≠ 期望 %r"
-                      % (k, got[:80], want[:40]))
+            hint = ("**见证失败（来源漂移）**" if kind == "witness"
+                    else "**仪器失真**（校准不符：先用已知正样本证明仪器看得见 X，再计数）")
+            g.problem("%s: %s —— %s stdout=%r ≠ 期望 %r" % (k, hint, noun, got[:80], want[:40]))
             continue
         ok += 1
-        g.note("\u2713 witness %s：%s" % (k, got[:40]))
-    if ok == 0 and len(wit) > 1:
-        g.problem("witness 的 %d 条全部失败 —— 贵的测量全部失去了便宜的复查" % len(wit))
+        g.note("\u2713 %s %s：%s" % (kind, k, got[:40]))
+    if ok == 0 and len(items) > 1:
+        g.problem("%s 的 %d 条全部失败 —— %s" % (noun, len(items),
+                  "贵的测量全部失去了便宜的复查" if kind == "witness" else "仪器全部失真"))
     else:
-        g.note("见证档：%d/%d 条通过（贵事实的便宜复查）" % (ok, len(wit)))
+        g.note("%s档：%d/%d 条通过" % (noun, ok, len(items)))
     return ok
 
 
@@ -194,6 +206,19 @@ CASES = [
     ("★ witness 与 witness_expect 只给一个（形状残缺）⇒ 必须报",
      lambda: _np({"big": {"value": "x", "cmd": "true", "replay": False,
                           "witness": "echo match"}}) >= 1),
+    # ── 仪器校准档（calibrate，issue #6 ① 移植）──
+    ("校准通过（样本已知输出对上）⇒ 不报",
+     lambda: _np({"x": {"value": "5", "cmd": "true", "replay": False,
+                        "calibrate": "echo 1", "calibrate_expect": "1"}}) == 0),
+    ("★ 校准不符（仪器失真）⇒ 必须报",
+     lambda: _np({"x": {"value": "5", "cmd": "true", "replay": False,
+                        "calibrate": "echo 0", "calibrate_expect": "1"}}) >= 1),
+    ("★ 校准命令 rc≠0 ⇒ 必须报",
+     lambda: _np({"x": {"value": "5", "cmd": "true", "replay": False,
+                        "calibrate": "exit 3", "calibrate_expect": "1"}}) >= 1),
+    ("★ calibrate 与 calibrate_expect 只给一个 ⇒ 必须报（形状残缺）",
+     lambda: _np({"x": {"value": "5", "cmd": "true", "replay": False,
+                        "calibrate": "echo 1"}}) >= 1),
     ("★ 只有 witness 事实、没有 replay 事实 ⇒ 不报（全豁免守卫已被见证档覆盖）",
      lambda: _np({"big": {"value": "x", "cmd": "true", "replay": False,
                           "witness": "echo match", "witness_expect": "match"}}) == 0

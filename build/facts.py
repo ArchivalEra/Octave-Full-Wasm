@@ -68,7 +68,8 @@ def sha256sum(path, chunk=1 << 20):
 
 
 def fact(value, cmd, source, note="", measured_at=None, replay=True,
-         witness=None, witness_expect=None):
+         witness=None, witness_expect=None,
+         calibrate=None, calibrate_expect=None):
     # ★ Einfacht issue #3 ②（2026-10-01 移植）：每条事实盖**采集时刻**戳。
     #   时间是采集结果的**记录**（渲染给人看"测龄"），不参与任何判据 ——
     #   按墙上时钟算东西会让 `--check` 永不收敛（Einfacht 的教训，照抄）。
@@ -87,15 +88,31 @@ def fact(value, cmd, source, note="", measured_at=None, replay=True,
     #   见证的是**上下文**（"产出它的工具/输入就是你以为的那个"），不是值本身。
     #   形状契约：`witness` 与 `witness_expect` 必须**同时给或同时不给**（只给一个 ⇒ 断言
     #   不完整，采集器当场报错）。
+    # ★ 第四档：**仪器校准**（Einfacht issue #6 ① 移植，2026-10-03）—— 复跑契约抓
+    #   "命令死了"（rc≠0），却抓不到**仪器静默失真**：命令成功、值稳定、复跑永远"通过"，
+    #   而它量的根本不是想量的。事故（本仓 relaxed-simd 实验）：`llvm-objdump -d | grep -c
+    #   relaxed_madd` 在该 objdump 不认这条指令时**成功退出并返回 0** —— 两次误判"FMA 没进产物"。
+    #   ⇒ 声称"产物里有没有 X"的 cmd 配一个**已知含 X 的样本**：`calibrate`（对样本跑的命令）+
+    #   `calibrate_expect`（样本的已知输出）。与 replay / witness 正交，每提交真跑。
+    #   `witness` / `calibrate` 两对各自**同给或同不给**（残缺形状当场报错）。
+    #   `first_seen`：值不变时由 measure() 沿用旧日期、换值时取今天 —— 恒常检测
+    #   （"这条 cmd 是在量，还是恒返回同一个数？"）的状态（记录，不是测量输入）。
+    for _a, _b, _n in ((witness, witness_expect, "witness"),
+                       (calibrate, calibrate_expect, "calibrate")):
+        if (_a is None) != (_b is None):
+            raise ValueError("fact(%s): `%s` 与 `%s_expect` 必须同时给或同时不给"
+                             "（残缺断言比静默缺失好抓）" % (source, _n, _n))
     d = {"value": value, "cmd": cmd, "source": source,
-         "measured_at": measured_at or time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+         "measured_at": measured_at or time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+         "first_seen": time.strftime("%Y-%m-%d")}
     if not replay:
         d["replay"] = False
-    if (witness is None) != (witness_expect is None):
-        raise ValueError("fact(%s): witness 与 witness_expect 必须同时给或同时不给" % source)
     if witness is not None:
         d["witness"] = witness
         d["witness_expect"] = witness_expect
+    if calibrate is not None:
+        d["calibrate"] = calibrate
+        d["calibrate_expect"] = calibrate_expect
     if note:
         d["note"] = note
     return d
@@ -615,6 +632,35 @@ def measure(argv):
             facts["w64_v128"] = fact(me["simd"]["v128"], "读 %s 的 measured.simd.v128" % W64A,
                                     "w64-artifacts/octave.build.json")
         if me.get("exported_functions") is not None:
+            # ★ **首个 calibrate 事实**（Einfacht #6 ① 移植，2026-10-03）：工单 52 的
+            #   relaxed-simd FMA 指令计数。**声称"产物里有没有 X"就必须先校准仪器**——
+            #   事故：`llvm-objdump -d | grep -c relaxed_madd` 在 emsdk 5.0.7 上恒为 0
+            #   （该 objdump 对这条指令打印 `<unknown>`），据此两次误判。正解 = 字节级计数
+            #   `fd 87 02`，并先用**已知含它的样本**（test/fixtures/relaxed_madd_min.wasm）
+            #   证明仪器看得见。`cli` 命令对产物与样本跑同一段字节计数脚本。
+            _rm_py = ("import sys;d=open(sys.argv[1],'rb').read();"
+                      "print(d.count(bytes([0xFD,0x87,0x02])))")
+            def _rm_count(_path):
+                import subprocess as _sp
+                try:
+                    return int(_sp.run(["python3", "-c", _rm_py, _path],
+                                       capture_output=True, text=True, timeout=30).stdout.strip() or 0)
+                except Exception:                                     # noqa: BLE001
+                    return None
+            _w64wasm = os.path.join(W64A, "octave.wasm")
+            _rmn = _rm_count(_w64wasm)
+            if _rmn is not None:
+                facts["w64_relaxed_madd"] = fact(
+                    _rmn,
+                    cmd=("<重活：产物 + test/fixtures/relaxed_madd_min.wasm 各数 fd 87 02>"),
+                    source="%s 的字节级 f64x2.relaxed_madd 计数（×dd 87 02）" % _w64wasm,
+                    note="relaxed-simd FMA 指令数（工单 52）。⚠ 量法本身有生命周期："
+                         "`grep relaxed_madd` 是**被证伪的量法**（见 build/instruments.json）——"
+                         "本键的 cmd 已避开它（字节级）。calibrate= 用已知含它的样本自证。",
+                    replay=False,
+                    calibrate="python3 -c \"import sys;d=open(sys.argv[1],'rb').read();print(d.count(bytes([0xFD,0x87,0x02])))\" test/fixtures/relaxed_madd_min.wasm",
+                    calibrate_expect="1",
+                )
             facts["w64_exported_functions"] = fact(me["exported_functions"],
                                                   "读 %s 的 measured.exported_functions" % W64A,
                                                   "w64-artifacts/octave.build.json")
@@ -1019,6 +1065,7 @@ def measure(argv):
         "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns", "oct_lane_tls_init",
         "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
         "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
+        "w64_relaxed_madd",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
@@ -1031,6 +1078,16 @@ def measure(argv):
         _c = _v.get("cmd", "")
         if _c.startswith("sha256sum ") and "|" not in _c:
             _v["cmd"] = _c + " | cut -d' ' -f1"
+    # ★ first_seen 沿用（issue #6 ① 移植）：值不变 ⇒ 沿用旧日期；换值 ⇒ 今天。
+    #   恒常检测的状态（"这条 cmd 是在量，还是恒返回同一个数？"）靠它。
+    _old = (load_ledger().get("facts") or {}) if os.path.exists(OUT) else {}
+    _today = time.strftime("%Y-%m-%d")
+    for _k, _v in facts.items():
+        _o = _old.get(_k)
+        if isinstance(_o, dict) and _o.get("value") == _v.get("value") and _o.get("first_seen"):
+            _v["first_seen"] = _o["first_seen"]
+        else:
+            _v.setdefault("first_seen", _today)
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, indent=1, ensure_ascii=False)
         fh.write("\n")

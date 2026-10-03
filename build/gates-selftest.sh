@@ -31,6 +31,7 @@ cat >"$LIST" <<'EOF'
 .githooks/check-facts.py --selftest
 .githooks/check-facts-replay.py --selftest
 .githooks/check-readiness-pattern.py --selftest
+.githooks/check-instruments.py --selftest
 build/check-site-parity.sh --selftest
 build/check_m.py --selftest
 build/serve-coi.py --selftest

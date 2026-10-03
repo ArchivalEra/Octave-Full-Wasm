@@ -155,3 +155,21 @@ pre-commit），要么**永不复查**。`-flto` 事故（HISTORY §5.78）正�
 
 ⚠ **只对活跃迭代、每批重链的产物断言**（本仓 = w64）：旧档的构建脚本 sha 本就不同，
 硬查 = 永久假红 = 噪声 = 整闸被关。**策略留在各仓，机制（贵事实也能有便宜复查）才上收。**
+
+### 第四档：`calibrate` —— 仪器校准（2026-10-03，Einfacht #6 ① 移植）
+
+复跑契约抓"命令死了"（rc≠0），抓不到**仪器静默失真**：命令成功、值稳定、复跑永远"通过"，
+而它量的根本不是想量的。本仓实例（工单 52）：`llvm-objdump -d | grep -c relaxed_madd` 在
+emsdk 5.0.7 上**恒为 0**（该 objdump 对这条指令打印 `<unknown>`）—— 据此两次误判"FMA 没进产物"。
+
+⇒ `fact(..., calibrate=<样本命令>, calibrate_expect=<样本已知输出>)`：声称"产物里有没有 X"
+的 cmd 配一个**已知含 X 的样本**。与 `replay`/`witness` 正交、**每提交真跑**，
+`check-facts-replay.py` 不符即报"**仪器失真**"（先用已知正样本证明仪器看得见，再计数）。
+首个实例：`w64_relaxed_madd`（校准样本 `test/fixtures/relaxed_madd_min.wasm`，字节计数 `fd 87 02`）。
+
+**配套：仪器生命周期闸门** `.githooks/check-instruments.py`（可插拔）：
+- `FACTS_INSTRUMENT_DAYS=天` —— **恒常检测**：台账键 `first_seen` 超阈值 ⇒ 报
+  "人工确认：这条 cmd 是在量，还是恒返回同一个数？"
+- `FACTS_INSTRUMENTS=build/instruments.json` —— **量法登记位**：被证伪的**量法**像
+  `retractions.json` 管"被推翻的断言"那样有登记；台账任何 cmd 含被证伪片段 ⇒ 报。
+两旋钮未配 ⇒ 明说未启用、退 0。pre-commit 已显式启用（30 天 + `build/instruments.json`）。
