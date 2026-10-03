@@ -282,6 +282,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/47-embed-inventory-and-handoff-issues.md` (2602 bytes)
 - `.scratch/open-questions/issues/48-page-adapter-ts-rewrite.md` (3600 bytes)
 - `.scratch/open-questions/issues/49-rust-lane-ceiling.md` (3833 bytes)
+- `.scratch/open-questions/issues/50-geometry-plot-channel.md` (2173 bytes)
 - `.scratch/perf-max/issues/01-openblas-levers.md` (4724 bytes)
 - `.scratch/perf-max/issues/02-native-baseline.md` (2545 bytes)
 - `.scratch/perf-max/issues/03-w64-big-heap.md` (2680 bytes)
