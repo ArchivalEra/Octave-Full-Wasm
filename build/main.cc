@@ -46,6 +46,25 @@ const std::string SPARSE_COMPLEX_MATRIX_TYPE_VALUE = "sparse_complex_matrix";
 
 std::unique_ptr<octave::interpreter> interpreter;
 
+// ── 就绪守卫（工单 46，2026-10-03）─────────────────────────────────────────────
+// 票 40 的残留尖角：boot 中途（OpenBLAS 建池窗口）调 eval/feval，NT=4 上干净抛错、
+// **NT=8 上主线程卡死在 wasm 里**（页内 setTimeout 都停摆 ⇒ 任何 JS 层 catch 都救不了，
+// embed 门面的 try/catch 也被穿透）。守卫 = wasm 边界上的**快速 JS Error**：
+// execute_interp() 完成前置位旗标，两个 eval 入口（feval / eval_string）先查旗标，
+// 未就绪就 throw 一个真 JS Error（emscripten::val::throw_ —— 消息逐字到 JS，
+// 不依赖 embind 的异常映射）。quit_interp 后复位 ⇒ 退出后的调用同样干净拒绝。
+#include <atomic>
+static std::atomic<bool> g_interp_ready{false};
+
+static void require_interp_ready () {
+  if (!g_interp_ready.load (std::memory_order_acquire)) {
+    emscripten::val::global ("Error")
+        .new_(std::string ("octave interpreter not ready: await __octaveReady "
+                           "before eval/feval (see ticket 40/46)"))
+        .throw_ ();
+  }
+}
+
 octave_value em_val_to_octave_value(emscripten::val em_val) {
   if (em_val.instanceof(emscripten::val::global("Boolean"))) {
     return octave_value(em_val.as<bool>());
@@ -283,6 +302,7 @@ std::string EMSCRIPTEN_KEEPALIVE last_err_msg() {
 }
 
 emscripten::val EMSCRIPTEN_KEEPALIVE feval(std::string fn_name, emscripten::val args_val, int nargout) {
+  require_interp_ready ();
   if (!args_val.isArray()) {
     std::cerr << "error: feval args value must be an array" << std::endl;
     return emscripten::val::undefined();
@@ -312,6 +332,7 @@ emscripten::val EMSCRIPTEN_KEEPALIVE feval(std::string fn_name, emscripten::val 
 }
 
 int EMSCRIPTEN_KEEPALIVE eval_string(std::string eval_str) {
+  require_interp_ready ();
   bool silent = false;
   int parse_status = 0;
   int nargout = 0;
@@ -532,6 +553,9 @@ int EMSCRIPTEN_KEEPALIVE execute_interp() {
   }
 #endif
 
+  // ★ 就绪旗标置位（工单 46）：到这里 interpreter 全部装配完（含 GL toolkit），
+  //   与页面侧 `__octaveReady` 的语义严格对齐 —— 旗标只保证"碰解释器不再挂"。
+  g_interp_ready.store (true, std::memory_order_release);
   return 0;
 }
 
@@ -541,6 +565,7 @@ void EMSCRIPTEN_KEEPALIVE quit_interp() {
   } catch (const octave::exit_exception& ex) {
   }
   interpreter.reset();
+  g_interp_ready.store (false, std::memory_order_release);
 }
 
 int main(int argc, char **argv) {

@@ -3775,3 +3775,23 @@ CASES 表），原生两后端与现役 w64（NT=8）同机同窗对表。全表
 - 工具链小修：bench-native 汇总打印对无 GFLOPS 公式的用例（dot/sum/sort/loop/svd）不再崩。
 - 口径注记：native openblas lu800 对机器状态极敏感（10-02 记 0.0076，今日 0.0261）——
   结算表全部采用同窗实测。
+
+### 5.81 pre-ready eval 守卫：NT=8 挂死尖角落地为快速 JS Error（2026-10-03，branch `wasm64`）
+
+工单 40 的残留尖角（"加固候选，不阻塞"）随"继续"令落地：
+
+- **修法（main.cc +25 行）**：`g_interp_ready` 原子旗标（`execute_interp` 尾置位、
+  `quit_interp` 复位）；`feval`/`eval_string` 入口先查旗标，未就绪 ⇒
+  `val::global("Error").new_(msg).throw_()` —— 抛**真 JS Error**，消息逐字到 JS，
+  不依赖 embind 异常映射。embed 门面的 try/catch 从此能接住（此前挂死穿透一切 catch）。
+- **探针（probe-preready-guard，5/0）**：形状 = 票 40 调用方本尊（boot 中 1ms 轮询 feval，
+  不挂死、首试 727ms 成功）+ **确定性断言 ⑤**：`quit_interp` 复位旗标后 eval_string 必须
+  抛精确的 "octave interpreter not ready…"（守卫产物 PASS）；同探针跑无守卫产物 ⇒ 抛老式
+  `null function`（FAIL）—— 探针能确定性区分两个世界。
+- **两版探针教训**：第一版用 `__octaveReady !== true` 判 pre-ready —— 页面从不把它置
+  false ⇒ 恒真 ⇒ 自欺"已进窗口"（实测首试 778ms 其实已在 execute_interp 之后，notReady=0）。
+  第二版靠 init 脚本包 `Module.execute_interp` —— 也没生效（boot 走闭包引用不走
+  `window.Module` 属性，execCalls=0）。第三版放弃黑盒踩窗口：调用方形状回归（不挂死）
+  + quit 后同源路径的确定性断言 + 二进制证据（守卫串新产物 1 次/旧产物 0 次）。
+- **发运**：`4eda3a79…`（735 导出，备份 `w64-artifacts-pre-guard-backup-20261003/`）⇒
+  promote 三档未动 ⇒ boot 1.1s、四格 33/0、SHA 三层、全量 `PROBES=1` 绿（探针自动入选）。

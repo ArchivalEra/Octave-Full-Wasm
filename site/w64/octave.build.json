@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-10-02T15:20:26+0000",
-  "out": "/src/websrc/w64-ob-nt8-clean-out",
+  "when": "2026-10-03T01:20:19+0000",
+  "out": "/src/websrc/w64-ob-readyguard-out",
   "mode": "w64"
  },
  "declared": {
@@ -37,7 +37,7 @@
   ]
  },
  "measured": {
-  "exported_functions": 732,
+  "exported_functions": 735,
   "simd": {
    "v128": 6602,
    "impl": "llvm-objdump"
@@ -69,12 +69,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "f2269106e004e8a862c8a8b735dc380c2b2b63eea62c5fb7d07ac9aa4dc953dd",
-    "bytes": 30918303
+    "sha256": "4eda3a79a0abb7821b80a190659b0388a6ae68b0c29be0a36046a46b4670881f",
+    "bytes": 30918201
    },
    "octave.js": {
-    "sha256": "3c500e49a8dd46355d7b00f7c7b342b614d5f22e1ae422aaba8ebc9ec97181c8",
-    "bytes": 511865
+    "sha256": "41e1223665cdb669d4698faaff6dcaa0d1ac39e32bb1eefba954b73f895ed3fe",
+    "bytes": 513104
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -115,7 +115,7 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-02T15:20:26+0000",
+  "when": "2026-10-03T01:20:19+0000",
   "by": "check-build-manifest.py",
   "script_sha256": "37bd772a3145f1881d49c5cfba6557f559d8a0894e237d97a55477586268ecf0"
  }
