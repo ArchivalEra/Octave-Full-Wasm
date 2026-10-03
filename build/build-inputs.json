@@ -16,6 +16,21 @@
       "path": "build/113/build-e2-lane.sh",
       "must_contain": ["-sMEMORY64=1"],
       "why": "E2 车道脚本必须把 lane 旗标带进 make 的 CC=（LANE_FLAGS 含 -sMEMORY64=1）——不带就是 wasm32 库（同工单 52）。"
+    },
+    {
+      "path": "build/113/link-web.sh",
+      "must_contain": ["ALLOW_TABLE_GROWTH=1"],
+      "why": "dlopen（.oct side module）需要可增长的函数表；去掉它 = `.oct` 装载失败（工单 38 的 dldfcn 面就是压这条）。"
+    },
+    {
+      "path": "build/113/build-e2-lane.sh",
+      "must_contain": ["E2_RELAXED_FMA", "patch-openblas-relaxed-fma.py"],
+      "why": "FMA 内核的接线必须还在（工单 52 的收益靠它）——旋钮与补丁名任一被删 = 收益静默消失、产物仍 verdict=ok。"
+    },
+    {
+      "path": "build/113/patch-openblas-relaxed-fma.py",
+      "must_contain": ["wasm_f64x2_relaxed_madd"],
+      "why": "FMA 补丁必须真的产出 relaxed_madd 调用（不是空壳补丁）——防「补丁文件在、但改写逻辑被清空」。"
     }
   ]
 }

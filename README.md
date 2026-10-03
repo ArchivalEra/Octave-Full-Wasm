@@ -468,7 +468,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/assets-meta.json` (7457 bytes)
 - `build/assets.py` (16114 bytes)
 - `build/build-embed-ts.sh` (1186 bytes)
-- `build/build-inputs.json` (1465 bytes)
+- `build/build-inputs.json` (2280 bytes)
 - `build/build_dldfcn.sh` (1448 bytes)
 - `build/build_oct.sh` (2441 bytes)
 - `build/build_pkg_oct.sh` (11790 bytes)
