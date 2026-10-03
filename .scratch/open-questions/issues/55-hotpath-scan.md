@@ -6,9 +6,8 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：扫描完成 11 个负载；**首个非平台税发现** = 分配/对象密集
-负载里 `dlmalloc`+`dlfree`+**pthread 锁** 占 24–44%（锁单独 8–16%）—— 推断 = 线程安全分配器
-在单线程路径上的税；结案实验已列，w64-base 对照跑中）
+**Status:** resolved（2026-10-03：扫描 11 负载；**首个非平台税发现已由结案实验 ① 证实** ——
+`w64-base` 单线程对照：pthread 锁 **16% → 0%**、alloc+锁 41% → 20.7%；墙钟线程档慢 35%）
 
 **Settling:** `python3 build/113/hotpath-scan.py --port <p>`（工作站在
 `hotpath-stations/w64-sym`）；**结案实验 ①** = 同负载在 `w64-base`（单线程，无 pthread）上扫

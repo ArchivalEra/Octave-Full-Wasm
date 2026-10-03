@@ -20,13 +20,19 @@ worker 在跑，循环空转，**从不触发**（这就是它藏了这么久的
 
 ## 用法（容器/宿主通用）
 
-    python3 patch-glue-proxy-dlsync-bigint.py --check  <octave.js>   # 0=已打 1=可打 3=不适用
+    python3 patch-glue-proxy-dlsync-bigint.py --check  <octave.js>   # 0=已打 1=可打 3=不适用 4=形状不认识
     python3 patch-glue-proxy-dlsync-bigint.py --apply  <octave.js>
     python3 patch-glue-proxy-dlsync-bigint.py --revert <octave.js>
     python3 patch-glue-proxy-dlsync-bigint.py --selftest
 
-退出码是**契约**（工单 27/35 定的形状）：0=已打 ⇒ 调用方跳过；1=可打 ⇒ apply 后复查必须回 0；
-3=不适用（非 MEMORY64 胶水：调用点不存在，或已经长成别的样子）。
+退出码是**契约**（工单 27/35 定的形状）：
+  0=已打 ⇒ 调用方跳过；1=可打 ⇒ apply 后复查必须回 0；
+  3=**不适用**（胶水里根本没有 dlsync 调用 —— 非线程 memory64 / wasm32）；
+  4=**形状不认识**（胶水**有** dlsync 调用点，但不是已知形状 ⇒ 版本变了，**调用方必须 FATAL**）。
+
+⚠ 3 与 4 必须分开（工单 56）：此前两者都返 3，于是 `link-web.sh` 的 `|| FATAL` 把
+"非线程 memory64 本来就不需要这个补丁" 也当成了失败 ⇒ **w64-base 车道的符号构建被挡住**。
+判据 = 胶水里有没有 `__emscripten_dlsync_threads` 这个函数。
 """
 import io
 import os
@@ -35,11 +41,21 @@ import sys
 
 CALL = "{__emscripten_proxy_dlsync(pthread_ptr)}"
 FIXED = "{__emscripten_proxy_dlsync(BigInt(pthread_ptr))}"
+FUNC = "__emscripten_dlsync_threads"     # 判 3 与 4 的锚：有没有这个 dlsync 调用点所在函数
 MARK = "dlsync-bigint"
 
 
 def counts(s):
     return s.count(CALL), s.count(FIXED)
+
+
+def classify(s, raw, done):
+    """返回契约码：0=已打 / 1=可打 / 3=不适用（无 dlsync）/ 4=形状不认识（有 dlsync 但形状变）。"""
+    if raw > 0:
+        return 1
+    if done > 0:
+        return 0
+    return 4 if FUNC in s else 3
 
 
 def main(argv):
@@ -56,14 +72,18 @@ def main(argv):
     raw, done = counts(s)
     if mode == "--check":
         print("octave.js：可打 %d 处、已打 %d 处" % (raw, done))
-        if raw == 0 and done == 0:
-            print("（非 MEMORY64 胶水或形状不认识 ⇒ 不适用）")
-            return 3
-        return 1 if raw > 0 else 0
+        code = classify(s, raw, done)
+        if code == 3:
+            print("（无 dlsync 调用点 ⇒ 非线程 memory64 / wasm32 ⇒ 不适用）")
+        elif code == 4:
+            print("（有 dlsync 调用点但形状不认识 ⇒ 版本变了？调用方应 FATAL）")
+        return code
     if mode == "--apply":
-        if raw == 0:
-            print("无可打调用点（%s）" % ("已打" if done else "不适用"))
-            return 0 if done else 3
+        code = classify(s, raw, done)
+        if code in (0, 3, 4):
+            print("无可打调用点（%s）" % ("已打" if code == 0 else
+                                     "不适用（无 dlsync）" if code == 3 else "形状不认识"))
+            return code
         s2 = s.replace(CALL, FIXED)
         io.open(path, "w", encoding="utf-8", errors="replace").write(s2)
         d2, done2 = counts(io.open(path, encoding="utf-8", errors="replace").read())
@@ -89,8 +109,14 @@ def selftest():
          lambda: main(["--check", _write(_S)]) == 1),
         ("★ 已打的胶水必须返 0（驱动据此跳过）",
          lambda: main(["--check", _write(_S.replace(CALL, FIXED))]) == 0),
-        ("★ 非 MEMORY64 胶水（调用点不存在）必须返 3（不适用，不许硬打）",
-         lambda: main(["--check", _write(_S.replace(CALL, "{__emscripten_proxy_dlsync(BigInt(ptr))}"))]) == 3),
+        ("★ 有 dlsync 但形状不认识 ⇒ 必须返 4（调用方 FATAL，不是「不适用」——工单 56）",
+         lambda: main(["--check", _write(_S.replace(CALL, "{__emscripten_proxy_dlsync(BigInt(ptr))}"))]) == 4),
+        ("★ 无 dlsync 函数（非线程 memory64 / wasm32）⇒ 必须返 3（真不适用，放行）",
+         lambda: main(["--check", _write("function other(){return 1}")]) == 3),
+        ("★ apply 在「无 dlsync」上也返 3（不是 0，别被当成已打）",
+         lambda: main(["--apply", _write("function other(){return 1}")]) == 3),
+        ("★ apply 在「形状不认识」上返 4（不硬打）",
+         lambda: main(["--apply", _write(_S.replace(CALL, "{__emscripten_proxy_dlsync(BigInt(ptr))}"))]) == 4),
         ("apply 后：调用点变成 BigInt 且其余字节不动",
          lambda: _apply_writes(_S).endswith(FIXED + "}}")),
         ("revert 后：逐字节回到未打状态",

@@ -51,6 +51,7 @@ build/113/lane-shim.sh --selftest
 build/113/patch-openblas-f77-ret.py --selftest
 build/113/patch-openblas-symbol-prefix.py --selftest
 build/113/patch-openblas-emscripten.py --selftest
+build/113/patch-glue-proxy-dlsync-bigint.py --selftest
 build/113/gen-f77-wrappers.py --selftest
 build/113/relink.sh --selftest
 build/facts.py --selftest

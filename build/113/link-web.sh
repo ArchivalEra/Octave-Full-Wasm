@@ -601,8 +601,18 @@ set +x
 # （`USE_THREAD=1` 的 worker 在 dlopen 时活着）才炸 ⇒ 藏了很久。
 # wasm32 车道 pthread_t 是 i32、Number 合法 ⇒ 不适用（补丁自己对形状说不适用）。
 if [ "${MEMORY64:-0}" = "1" ]; then
-  python3 "$HERE/patch-glue-proxy-dlsync-bigint.py" --apply "$OUT/octave.js" || {
-    echo "FATAL: dlsync BigInt 补丁没打上 ⇒ 运行期 dlopen 会崩" >&2; exit 3; }
+  # 退出码契约（工单 56 修）：0=已打 / 3=不适用（无 dlsync 调用点：非线程 memory64）/
+  # 4=形状不认识（有 dlsync 但形状变 ⇒ **必须 FATAL**）。此前 3 与 4 都返 3 而被 `||FATAL`
+  # 一律当失败 ⇒ 非线程 memory64（w64-base）建不出符号站。
+  set +e
+  python3 "$HERE/patch-glue-proxy-dlsync-bigint.py" --apply "$OUT/octave.js"
+  _drc=$?
+  set -e
+  case "$_drc" in
+    0) : ;;
+    3) echo "== dlsync BigInt 补丁：无调用点（非线程 memory64）⇒ 不适用，放行" ;;
+    *) echo "FATAL: dlsync BigInt 补丁没打上（rc=$_drc）⇒ 运行期 dlopen 会崩" >&2; exit 3 ;;
+  esac
 fi
 
 # ---- 自检：JSPI 到底有没有按 **B 姿势** 落进产物（2026-09-25 翻面）--------------

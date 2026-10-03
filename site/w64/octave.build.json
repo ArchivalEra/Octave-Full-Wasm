@@ -2,7 +2,7 @@
  "schema": 1,
  "tool": {
   "name": "link-web.sh",
-  "script_sha256": "63d8e7d7fb8ea3fa45550e77c7273b7180f1e829b4449b98c4ca758e9fe8eab2",
+  "script_sha256": "71a80d7e27d6dce644e74cd7e17e3435c948bcd2a3155982c02f9e6ab8abf34e",
   "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 5.0.7 (263db4cffa6f9fc2ec514a70abac81362ea41849)",
   "manifest_writer": {
    "name": "write-build-manifest.py",
@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-10-03T12:36:14+0000",
-  "out": "/src/websrc/w64-ob-rsimd-out",
+  "when": "2026-10-03T15:03:50+0000",
+  "out": "/src/websrc/w64-ob-relink-dlsyncfix",
   "mode": "w64"
  },
  "declared": {
@@ -73,8 +73,8 @@
     "bytes": 30916734
    },
    "octave.js": {
-    "sha256": "5f27d33992f34f82e00a21e205952bc72430aa4a624a71fbb486eaaa7d6e7f11",
-    "bytes": 513089
+    "sha256": "0c79885a3a76f7d98718cc3b4766ca86605f2ba6e08db94a0c5e3334aa1ad55b",
+    "bytes": 513110
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -85,7 +85,7 @@
  "inputs": {
   "link_web_sh": {
    "path": "/src/bin/link-web.sh",
-   "sha256": "63d8e7d7fb8ea3fa45550e77c7273b7180f1e829b4449b98c4ca758e9fe8eab2"
+   "sha256": "71a80d7e27d6dce644e74cd7e17e3435c948bcd2a3155982c02f9e6ab8abf34e"
   },
   "blas": {
    "resolved_dir": "/src/work/e2-openblas-lib-w64-rsimd",
@@ -115,7 +115,7 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-03T12:36:14+0000",
+  "when": "2026-10-03T15:03:50+0000",
   "by": "check-build-manifest.py",
   "script_sha256": "37bd772a3145f1881d49c5cfba6557f559d8a0894e237d97a55477586268ecf0"
  }

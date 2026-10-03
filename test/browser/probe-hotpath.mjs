@@ -22,6 +22,7 @@ const PORT = Number(process.env.HOTPATH_PORT || 8892);
 const SNIPPET = process.env.HOTPATH_SNIPPET || "A=rand(1200); tic; for k=1:25, B=A*A; end";
 const SECONDS = Number(process.env.HOTPATH_SECONDS || 3);
 const OUT = process.env.HOTPATH_OUT || '/tmp/hotpath-raw.json';
+const EXPECT_LANE = process.env.HOTPATH_EXPECT_LANE || 'w64';
 const RUN = '/mnt/hdd/zcode-projects/Octave-Full-Wasm/test/browser/run.sh';
 
 if (!DIR) { console.error('缺 HOTPATH_DIR'); process.exit(2); }
@@ -48,7 +49,8 @@ page.on('pageerror', e => console.log('   [pageerror] ' + String(e).slice(0, 200
 
 let frames = [], samples = 0, chosen = null;
 try {
-  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load', timeout: 120000 });
+  const Q = process.env.HOTPATH_QUERY ? ('?' + process.env.HOTPATH_QUERY) : '';
+  await page.goto(`http://127.0.0.1:${PORT}/${Q}`, { waitUntil: 'load', timeout: 120000 });
   // 两段式就绪
   let ready = false;
   for (let i = 0; i < 600; i++) {
@@ -61,7 +63,7 @@ try {
     await wait(200);
   }
   chosen = await page.evaluate(() => (window.__octaveCaps?.lane || {}).chosen || null);
-  check(chosen === 'w64', '② 选中的是 w64 档（不是落回 base）', `chosen=${chosen}`);
+  check(chosen === EXPECT_LANE, `② 选中的是 ${EXPECT_LANE} 档（不是落回别的档）`, `chosen=${chosen}`);
 
   // CDP 采样
   const cdp = await ctx.newCDPSession(page);
