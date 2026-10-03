@@ -32,6 +32,15 @@
     var subs = { output: [], error: [], state: [], figure: [] };
     var state = 'booting';
 
+    // ★ display_exception 的 Web 面（工单 47 实测补上）：Qt 的 display_exception 在
+    //   Web 里 = evalJSON 的 error 字段 **加** on.error 订阅回调。此前 subs.error 只能
+    //   注册、没有任何触发点（死订阅）—— 逐接口实测抓出来的。
+    function fireError (msg) {
+      for (var i = 0; i < subs.error.length; i++) {
+        try { subs.error[i](msg); } catch (e) { /* 订阅者异常不毒死解释器 */ }
+      }
+    }
+
     function setState(s) {
       if (state === s) return;
       state = s;
@@ -96,6 +105,7 @@
           if (val && typeof val === 'object' && val.err !== undefined) err = val.err;
         } catch (e) { err = 'embed 值通道失败：' + String(e).slice(0, 120); }
         try { mod.FS.unlink(p); } catch (e) {}
+        if (err !== null) fireError(err);
         resolve(err === null ? { ok: rc === 0 && err === null, value: val, rc: rc }
                              : { ok: false, error: err, rc: rc });
       });
@@ -109,6 +119,7 @@
         var rc;
         try { rc = mod.eval_string(code); } catch (e) { rc = -1; }
         setState('idle');
+        if (rc !== 0) fireError('eval 失败 rc=' + rc + '（Octave 错误文本走 on.output 通道）');
         return Promise.resolve({ ok: rc === 0, rc: rc });
       },
       evalJSON: evalJSON,

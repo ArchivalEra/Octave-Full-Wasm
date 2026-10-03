@@ -317,6 +317,13 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
 - 发运：现役 `w64` = 台账 `w64_wasm_sha`（守卫版，735 导出），速度持平；备份
   `w64-artifacts-pre-guard-backup-20261003/`。**台账非人工候选清零** ——
   剩余全部是人的动作/外部依赖（票 12、38 上站、E6 图形线）。
+- **★ 工单 47（2026-10-03 收官单）：Embed API 逐接口实测 14/14 PASS**（对照 Qt 官方接口，
+  探针 `probe-embed-inventory.mjs`；accept 双套件同站 13/0 复验）——抓出并修掉
+  `on.error` 死订阅（接口表 ✅e 但回调永不触发）；两条语义发现入 UI 单（embed 历史为空
+  ⇒ UI 自维护命令历史；GL 边界 ⇒ v1 不在 embed 页画图）。**两张 gh issue 已提**：
+  [#1 UI 开工包](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1)（14 行实测清单 +
+  用法片段 + 四条必知边界）、[#2 部署工单](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2)
+  （交付包 + COI/MIME 硬要求 + 五条验收程序）——等 UI 工作者与网站管理员各自开工。
 - **守卫版全量 `PROBES=1` 全绿（0 FAIL）**：accept 口径 = 台账 `accept_suites` /
   `accept_pass`（源 = `sweep-logs/` 最新轮）；新探针 `probe-preready-guard` 自动入选
   **5 PASS / 0 FAIL**；parity 三处一致（siteWebGL 的 `w64/` 已同步到守卫版）；
