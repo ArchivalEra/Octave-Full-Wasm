@@ -701,6 +701,18 @@ def measure(argv):
                                       "w64-artifacts/octave.wasm")
     except (OSError, ValueError) as e:
         print("⚠ 读不到 w64 身份证（%s）：%s" % (W64A, e), file=sys.stderr)
+    # ★ **hotpath 性能热点仪器**（wasm64-NEXT 工单 54）：从它写的 report.json 读（**纯函数**，
+    #   不重开浏览器）。这是"消费者/生产者分离"的落点 —— facts.py 只读日志，与读别的探针日志同形。
+    try:
+        import importlib.util as _ilu
+        _hp_path = os.path.join(REPO, "build", "113", "hotpath.py")
+        _spec = _ilu.spec_from_file_location("hotpath", _hp_path)
+        _hp = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_hp)
+        for _k, _v in (_hp.read_facts() or {}).items():
+            facts[_k] = _v        # _v 已是 fact 形状（含 measured_at/first_seen）⇒ 直接并入，别重盖
+    except Exception as _e:                                          # noqa: BLE001
+        print("⚠ hotpath 事实读不到（%s）：%s" % (_hp_path, _e), file=sys.stderr)
     # ★ **w64-base**（工单 30，2026-10-01）：四格里的第四格 —— memory64 **单线程**回退档。
     #   为什么上键：发运判据里有一条"只新增两档、base/threads 逐字节不变"，而**新那一档**的
     #   sha 原来没有任何台账项 ⇒ `promote-w64-lane.sh` 只能拿容器当参照，"部署的到底是不是

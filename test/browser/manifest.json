@@ -80,6 +80,10 @@
    "manual": true,
    "why": "**硬编码 8767 端口**的 gl4es 冒烟探针（不接 URL 参数）⇒ 那台服务不在时必然 ERR_CONNECTION_REFUSED"
   },
+  "probe-hotpath": {
+   "manual": true,
+   "why": "由 build/113/hotpath.py 编排驱动（需 HOTPATH_DIR/端口/片段 env）——走它自己的入口，不进 sweep；单独跑：`python3 build/113/hotpath.py profile <片段> --lane w64`"
+  },
   "probe-p5-run": {
    "manual": true,
    "why": "跑 fixtures/*.m 并打印，无汇总行"
