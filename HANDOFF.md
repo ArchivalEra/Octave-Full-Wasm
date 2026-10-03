@@ -328,6 +328,11 @@ PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c�
   落后现役（4.3/34/264 vs 3.0–4.0/25–28/199–203）⇒ **Rust 换 BLAS 车道结案**；Zed/GPUI
   编不进 wasm；重写解释器=放弃验收资产（反对）。crate 入库 `build/113/faer-bench/`。
   **"接口不变"前提下所有已知优化路径实测清空**。
+- **工单 51（2026-10-03）：PGO 不可行判定 + 优化方向清单终态**。PGO：emcc 5.0.7 的
+  wasm32-emscripten **缺 profile 运行时**（链接器 `symbol not found: llvm_profile_write_file`
+  硬错误 + emsdk 全目录无 libclang_rt.profile* 为证）⇒ 探针三步可复现；LTO 维持票 06 否决；
+  懒加载 LAPACK 量化后不立项（收益首屏 -20% vs "主→side 静态调用面"大手术——emscripten
+  dylink 只支持 side→main）。**八条优化方向全部有数字判决**（本单 Answer 的终态表）。
 - **★ 工单 47（2026-10-03 收官单）：Embed API 逐接口实测 14/14 PASS**（对照 Qt 官方接口，
   探针 `probe-embed-inventory.mjs`；accept 双套件同站 13/0 复验）——抓出并修掉
   `on.error` 死订阅（接口表 ✅e 但回调永不触发）；两条语义发现入 UI 单（embed 历史为空
