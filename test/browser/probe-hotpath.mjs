@@ -69,12 +69,22 @@ try {
   await cdp.send('Profiler.setSamplingInterval', { interval: 100 });   // 100µs
   await cdp.send('Profiler.start');
   const t0 = Date.now();
-  const rc = await page.evaluate(({ snippet, seconds }) => {
-    try {
-      const r = window.Module.eval_string(snippet);
-      return { rc: r, ms: 0 };
-    } catch (e) { return { rc: -1, err: String(e).slice(0, 120) }; }
-  }, { snippet: SNIPPET, seconds: SECONDS }).catch(e => ({ rc: -9, err: String(e).slice(0, 120) }));
+  // ★ 片段超时（实测教训：逐元素扩结构体数组是 O(n²)，能把仪器挂死）——用 eval_string 的
+  //   中断旗标（_web_request_interrupt 到安全点生效；CPU 密集纯循环不吃安全点 ⇒ 超时后
+  //   放弃这次采样，如实标 timeout，不让整个扫描卡住）。采样窗 = SECONDS + 余量。
+  const hardMs = (SECONDS + 8) * 1000;
+  const evalP = page.evaluate((snippet) => {
+    try { return { rc: window.Module.eval_string(snippet) }; }
+    catch (e) { return { rc: -1, err: String(e).slice(0, 120) }; }
+  }, SNIPPET).catch(e => ({ rc: -9, err: String(e).slice(0, 120) }));
+  const rc = await Promise.race([
+    evalP,
+    new Promise(res => setTimeout(() => {
+      // 先请求中断（安全点会停；纯循环停不了则浏览器端会超时/被 kill）
+      page.evaluate(() => { try { window.Module._web_request_interrupt && window.Module._web_request_interrupt(); } catch {} }).catch(() => {});
+      res({ rc: -2, err: 'timeout' });
+    }, hardMs)),
+  ]);
   const wallMs = Date.now() - t0;
   const { profile } = await cdp.send('Profiler.stop');
 
