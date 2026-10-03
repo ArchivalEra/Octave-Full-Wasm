@@ -13,8 +13,11 @@
 
 ---
 
-## 0. 现在是什么（2026-10-02）
+## 0. 现在是什么（2026-10-03）
 
+- ★★ **当前活跃工作 = 分支 `wasm64-NEXT`**（性能极限冲刺，见 **§1k**）：工单 54–58 已结 ——
+  hotpath 热点仪器、扫描 + 锁税证实、dlsync 修复、**mimalloc −27%（候选）**、部件盘点
+  （**部件空间基本到边**）。**8761 一字未动**（仍是 FMA 版）；**三选项待你拍板**（§1k 末）。
 - ★ **2026-10-02 当日批次**（摘要；细节见 §1d/§1e）：① **NT=8 已上站**（`w64` = 台账
   `w64_wasm_sha`；曾一度判"NT=8 打破 dlopen"，真因是**容器脚本漂移 `-flto`**，已翻案并修复
   —— 见 §1d）；② **事实系统第三档 `witness`**（贵事实的便宜见证，工单 42，见 §1e）；
@@ -587,4 +590,23 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
     **1016→740 ms（−27%）**、pthread 锁 **10.3%→0%**、体积 +0.2%、**数值 79/0 + dldfcn 71/0 全绿**。
     ⚠ 更正了一个混淆变量（基线用了全套 `--diag` 含 ASSERT ⇒ 首报 −39% 虚高，同旗标后 −27%）。
     **发运前**：进模式表 + 全量验收 + 产品决定（未做）。详单 `build/113/NOTES-hotpath.md`。
+- **工单 58 结案（部件盘点）—— 一个会改计划的结论**：用仪器盘了 15 个库组件轴
+  （libm/libc/fftw/suitesparse/qhull/glpk/arpack/sundials/zlib/…）：
+  · **不是热点的部件**：fftw（fft 热点是 Octave 的 `rec_permute` 19%，非 fftw）、
+    arpack（热点是底下 BLAS `dgemv` 53%）、稀疏（热点是 Octave 自己的 `SparseMatrix` 乘 31%
+    + `octave_sort` 24%）；glpk/sundials/hdf5/zlib 等未进 top。
+  · **下一个真部件候选 = `libm`（重）**：元素级数学热点全是 **musl 标量超越函数**
+    （`exp_inline` 24% / `log_inline` 10% / `sin+cos+__rem_pio2` 51% / `pow` 15%）；
+    **wasm SIMD128 无向量超越函数** ⇒ 换它 = 自带 SIMD 批量 libm（SLEEF 风格）**+ 改 Octave
+    元素循环批量调用** —— **集成项目，不是链接旗标**。
+  · **其余热点全是 Octave 自身源码**（`octave_sort` = `sort` 的 85%、`rec_permute`、`do_rc_map`、
+    `idx_vector::fill`、`elem_xpow`）—— **不是部件，换不了**（要动 = 改 Octave 源码，另一类工作）。
+  · **★ 诚实结论：部件空间基本到边**（否证"再扫一批就有下一个 mimalloc"）。分配器是最后一块
+    **结构性**好摘的果子（一个链接选择 → 跨负载 −27%）；再往下是 libm 集成项目 或 Octave 源码优化。
+- **⏸ 三选项待用户拍板（关机点，2026-10-03）**：① **注册 mimalloc + 跑全量**（收割确定性胜利，
+  赔率最高最便宜）② **libm 集成项目**（建议先做"SIMD libm 对单向量 sin/exp/log 微基准"当 spike）
+  ③ **转 Octave 源码优化**（sort/fft-wrap/index/sparse，改 C++ 本体）。**建议先 1**。
+- ⚠ **分支状态**：`wasm64-NEXT` = 实验分支（工单 54–58），**8761 一字未动**（仍是 FMA 版 `5b5bb981`）；
+  mimalloc 是**候选**（手驱动、`declared=null`，不可发布）。`wasm64` 分支 = 现役线（HEAD 见 `git log -1`）。
+
 
