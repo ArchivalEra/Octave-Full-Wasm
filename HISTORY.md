@@ -3888,3 +3888,36 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
   全部声明驱动，事实系统自动接线）；Rust 优化件与第三方开发者的组件经插件接入。
 
 
+
+### 5.86 工单 59：mimalloc 出厂批 —— 分配器旋钮进模式表 + 全量全绿（2026-10-04，branch `wasm64-NEXT`）
+
+- **接口设计（工单 61 插件系统的第一个实例）**：分配器是模式表的一个**模式内旋钮**（不是新模式）
+  —— `relink.sh` w64 模式 `MALLOC=mimalloc`，其余模式空（= emcc 默认 dlmalloc，链接行零变化；
+  同一变量只出现一行，MEMORY64 的教训）。`declared` 的 malloc 标签**从模式表推出**（单一真值
+  来源：explain 的调用路径上表变量还没 export ⇒ 从环境读会与真链分叉，文档不能撒谎）。
+  缝有两个真实适配器（dlmalloc / mimalloc，工单 57 的 A/B）⇒ 按 codebase-design 的判据是真缝。
+- **产物侧判据（§5.46"只信旗标不算验收"的落点）**：`-Wl,--export-if-defined=mi_version` 探针
+  —— mimalloc 归档定义 `mi_version`、dlmalloc 没有（llvm-nm 实测 T）⇒ 未定义时 lld 静默忽略，
+  **strip 过的产物导出表还在** ⇒ `write-build-manifest.py` 从导出段量 `measured.malloc`；
+  `check-build-manifest.py` **双向**核对（声明 mimalloc 但量到 default ⇒ 拒；产物有探针但模式
+  没声明 ⇒ 拒，`malloc_drift_problem` 反向断言）。这是"从产物读出来"的路线，不是回显旗标。
+- **出厂三步**：① 模式表 + 消费侧 + 量测/判定/见证五件齐改，宿主自证 relink **18 PASS** /
+  check-build-manifest **27 PASS**（各 +2/+6 条新用例，全带反向）；② 容器重链 ⇒
+  verdict=ok、**12 项声明全有实测背书**（declared/measured.malloc 双侧 = mimalloc）、
+  BLAS = FMA 版 OpenBLAS、体积 +0.2%、导出 735 → 751；③ 全量 `PROBES=1`（实验站 8861，
+  `sweep-logs/20261004-140751`）：**43 套 / 1084 PASS / 0 FAIL + 探针 30 套 274 PASS**
+  （与现役基线逐数一致；**dldfcn 71/0**、probe-lane 33/0、页面自证 4/0）。台账 100 → 110 条
+  （`w64_cand_*` 10 键；候选与现役分键，防"互相冒充"）。
+- **产品级交错 3×3**（候选 8861 vs 现役 8761 同窗配对，非诊断产物）：**loop 1e6 **0.574 vs
+  0.737 = **−22%**（分配/解释器密集轴真收益，与工单 57 诊断级 −27% 同向）；lu800 持平、
+  matmul1000 0.96（BLAS 密集轴不动 —— dgemm 内核不分配，符合预期）；matmul500 1.25
+  （4–5 ms 尺度，接近毫秒分辨率，如实记噪声内）。方法论 §5.79：首跑 8761 服务不在
+  （ERR_CONNECTION_REFUSED 现形）⇒ 修好环境后**全部重跑**，单窗配对作数。
+- **环境事故（如实记）**：机器重启过 ⇒ o113 容器**与 8761 服务进程都没了**。按 B6 口径重启
+  8761 服务（文件零改动，boot 1.3s）。⇒ "8761 一字未动"管的是文件；**服务进程不在 git 管辖内**
+  ——环境恢复检查（容器 + 两台服务）应进每批开工清单。
+- 台账改口两条（`--accept-changes`，均为实测）：`env_vars` 30 → 31（MALLOC 旋钮进 link-web.sh
+  的读取面）；`hotpath_top` 换成最新扫描的 top（工单 58 的 23:39 扫描比上次台账重测晚 ⇒
+  "最新 report"的指针合法移动；note 自适应采样数）。
+- **发运决策呈用户**（未发运，8761 仍是 FMA 版 `w64_wasm_sha`）：候选 = `w64_cand_wasm_sha`
+  （`01fb52fc…`）。发运 ⇒ `build/promote-w64-lane.sh` 换 8761 的 w64 档 + 全量复扫 + 台账重测。

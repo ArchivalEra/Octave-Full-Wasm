@@ -568,11 +568,21 @@ DEPS_ROOT="${DEPS_ROOT:-/src/deps}"
 #   当前用途：`-Wl,-u,dlsode_` —— 强制把 odepack 的入口从归档里拉进主模块
 #   （`lsode` 整页 trap 的候选根因：dlsode_ 没被链进来，调用落到空导入 → trap；
 #    与 HISTORY §10.3 坑 3 的 zlib 完全同一类问题、同一个修法）。
+# ★ 工单 59（2026-10-04）：**分配器旋钮**（relink.sh 模式表给 `MALLOC`；w64 车道 = mimalloc）。
+#   消费侧两行：非空 ⇒ `-sMALLOC=$MALLOC`；mimalloc ⇒ 追加 mi_version 探针导出
+#   （`--export-if-defined` 未定义时静默忽略 —— dlmalloc 没有 mi_version，零影响）。
+#   判据在产物侧：write-build-manifest.py 从**导出段**量 measured.malloc（§5.46：只信
+#   命令行旗标不算验收）；判定方 check-build-manifest.py 拿 declared.malloc 双向核对。
+MALLOC_FLAGS=()
+if [ -n "${MALLOC:-}" ]; then MALLOC_FLAGS+=("-sMALLOC=$MALLOC"); fi
+if [ "${MALLOC:-}" = mimalloc ]; then MALLOC_FLAGS+=("-Wl,--export-if-defined=mi_version"); fi
+
 em++ --bind \
   "${DIAG[@]}" \
   "${SFLAGS[@]}" \
   ${GL_ES_FLAGS[@]+"${GL_ES_FLAGS[@]}"} \
   ${EXTRA_LDFLAGS:-} \
+  ${MALLOC_FLAGS[@]+"${MALLOC_FLAGS[@]}"} \
   ${GL_INC_FLAGS[@]+"${GL_INC_FLAGS[@]}"} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   ${JSPI_FLAGS[@]+"${JSPI_FLAGS[@]}"} \

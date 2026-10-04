@@ -31,6 +31,16 @@
       "path": "build/113/patch-openblas-relaxed-fma.py",
       "must_contain": ["wasm_f64x2_relaxed_madd"],
       "why": "FMA 补丁必须真的产出 relaxed_madd 调用（不是空壳补丁）——防「补丁文件在、但改写逻辑被清空」。"
+    },
+    {
+      "path": "build/113/relink.sh",
+      "must_contain": ["MALLOC=mimalloc"],
+      "why": "工单 59：w64 车道的分配器旋钮注册在模式表里——这行被删 = mimalloc 静默掉回 dlmalloc，收益消失而构建全绿（§5.46 的形状）。"
+    },
+    {
+      "path": "build/113/link-web.sh",
+      "must_contain": ["--export-if-defined=mi_version"],
+      "why": "工单 59：mimalloc 的产物侧探针导出——没有它 measured.malloc 量不出分配器，declared.malloc 的核验整个失效。"
     }
   ]
 }

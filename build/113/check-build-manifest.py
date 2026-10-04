@@ -47,6 +47,18 @@ def sha256_file(p, chunk=1 << 20):
     return h.hexdigest()
 
 
+def malloc_drift_problem(declared, measured):
+    """★ 工单 59 的**反向断言**：产物导出表里有 mimalloc 探针（`mi_version`）、
+    模式却没声明 `malloc` ⇒ 表/产物漂移（有人手加了 `-sMALLOC=mimalloc` 而模式不知情 ——
+    "声明了却没检查"的反面："链进去了却没声明"，同样不许静默放过）。
+    正向（声明了 malloc）由 compare() 的 malloc 规则核对。纯函数 ⇒ 自证直接喂合成输入。"""
+    if declared.get("malloc") == "mimalloc":
+        return None
+    if measured.get("malloc") == "mimalloc":
+        return ("产物导出 mi_version（mimalloc 探针）但模式没声明 malloc ⇒ 表/产物漂移")
+    return None
+
+
 def lane_blas_problem(declared, man):
     """★ 车道一致性（B6）：声明 `threads=true` 的产物，**链进去的 BLAS 必须来自车道**。
 
@@ -171,6 +183,17 @@ def compare(declared, measured, man=None):
                 if bool(declared[k]) != got:
                     add(k, declared[k], {"resolved_dir": rd},
                         "声明 e2_openblas=%s，但 BLAS 溯源是 `%s`" % (declared[k], rd or "(空)"))
+        elif k == "malloc":
+            # ★ 工单 59（2026-10-04）：分配器声明的判据 = **产物导出段**里的探针符号。
+            #   `mi_version` 只在真链了 mimalloc 时被 `--export-if-defined` 导出（dlmalloc
+            #   没这个符号 ⇒ 静默忽略），strip 过的产物导出表还在 ⇒ 量测落在产物上
+            #   （§5.46：只信命令行旗标不算验收）。measured.malloc == None ⇒ 判拒（不许猜）。
+            got = measured.get("malloc")
+            if got is None:
+                add(k, declared[k], None, "量不到分配器事实（导出段没读到）⇒ **无法核验，判拒**")
+            elif got != declared[k]:
+                add(k, declared[k], got,
+                    "声明分配器 %s，产物导出段量到 %s" % (declared[k], got))
         elif k == "gl4es":
             hits = (measured.get("gl4es") or {}).get("symbol_hits", 0)
             if bool(declared[k]) != (hits > 0):
@@ -263,6 +286,12 @@ def main(argv):
         rd = ((man.get("inputs") or {}).get("blas") or {}).get("resolved_dir") or ""
         bad.append({"key": "(车道 BLAS)", "declared": "含 `-threads` 的路径", "measured": rd, "why": why})
 
+    # ── ★ 分配器漂移（工单 59）：产物里有 mimalloc 探针、模式没声明 ⇒ 也算 mismatch ──
+    why = malloc_drift_problem(declared, measured)
+    if why:
+        bad.append({"key": "(malloc 反向)", "declared": "（未声明）",
+                    "measured": measured.get("malloc"), "why": why})
+
     ok = not bad and not file_bad
     verdict = "ok" if ok else "rejected"
     print("== 核对模式声明 vs 产物实测：%s" % ("**OK**" if ok else "**拒绝**"))
@@ -294,6 +323,7 @@ def main(argv):
 # ── 自证（F1）：`compare()` 是纯函数 ⇒ 直接喂合成输入 ─────────────────────────
 _MEAS = {"exported_functions": 710, "jspi_entry": True, "jspi_glue_suspending": 0,
          "idbfs": True, "fontconfig": True, "gl4es": {"symbol_hits": 5},
+         "malloc": "default",
          "simd": {"v128": 4752}, "fonts": ["a.otf"], "main_module": 2,
          "threads": {"pthread_glue": 0, "worker_glue": 0, "shared_memory": False},
          "wasm64": False}
@@ -363,6 +393,23 @@ CASES = [
      lambda: len(compare({**_DECL, "wasm64": True}, _MEAS)) == 1),
     ("★ 声明 wasm64=false 但产物是 wasm64 ⇒ 必须报",
      lambda: len(compare({**_DECL, "wasm64": False}, {**_MEAS, "wasm64": True})) == 1),
+    # ★ 工单 59：分配器声明的核验（探针 = 产物导出段的 mi_version）
+    ("★ 声明 malloc=mimalloc 且产物量到 mimalloc ⇒ 不报",
+     lambda: len(compare({**_DECL, "malloc": "mimalloc"},
+                         {**_MEAS, "malloc": "mimalloc"})) == 0),
+    ("★ 声明 malloc=mimalloc 但产物是 default ⇒ 必须报（旗标传了、产物没有）",
+     lambda: any(b["key"] == "malloc"
+                 for b in compare({**_DECL, "malloc": "mimalloc"}, _MEAS))),
+    ("★ 声明 malloc=mimalloc 但量不到（None）⇒ 判拒（不许猜）",
+     lambda: any(b["key"] == "malloc" for b in compare(
+         {**_DECL, "malloc": "mimalloc"}, {**_MEAS, "malloc": None}))),
+    ("★ 反向：产物有 mimalloc 探针但模式没声明 ⇒ 必须报（malloc_drift_problem）",
+     lambda: malloc_drift_problem(_DECL, {**_MEAS, "malloc": "mimalloc"}) is not None),
+    ("★ 反向：产物是 default 且没声明 ⇒ 不报（正常 dlmalloc 产物）",
+     lambda: malloc_drift_problem(_DECL, _MEAS) is None),
+    ("★ 反向：声明了 mimalloc ⇒ 反向规则让位给正向核对（不双报）",
+     lambda: malloc_drift_problem({**_DECL, "malloc": "mimalloc"},
+                                  {**_MEAS, "malloc": "default"}) is None),
     # ★ 工单 15：--out-dir 指**副本** ⇒ 按**副本所在目录**核对，不许退回 build.out 的旧路径
     ("★ 工单 15：--out-dir 副本、文件在且 sha 相符 ⇒ 不报（副本也能验）",
      lambda: _copy_with(None) == 0),

@@ -701,6 +701,37 @@ def measure(argv):
                                       "w64-artifacts/octave.wasm")
     except (OSError, ValueError) as e:
         print("⚠ 读不到 w64 身份证（%s）：%s" % (W64A, e), file=sys.stderr)
+    # ★ **w64 发运候选**（工单 59，2026-10-04）：mimalloc 版产物（**未发运** —— 发运是产品决定）。
+    #   为什么独立一组 `w64_cand_*`：候选不是部署件（promote 之前 `w64-artifacts/` 站着的仍是
+    #   现役 FMA 版）——混进 `w64_*` 会让"现役"与"候选"互相冒充。真发运之后这组与 `w64_*`
+    #   汇合（同一份产物），届时 `w64_cand_*` 可删或留作历史。
+    W64C = os.environ.get("W64_CAND_ARTIFACTS",
+                          os.path.join(os.path.dirname(SITE), "w64-artifacts-mimalloc"))
+    try:
+        bj = json.load(open(os.path.join(W64C, "octave.build.json"), encoding="utf-8"))
+        me = bj.get("measured") or {}
+        facts["w64_cand_verdict"] = fact(bj.get("verdict"),
+                                         "python3 build/facts.py（读 %s/octave.build.json）" % W64C,
+                                         "w64-artifacts-mimalloc/octave.build.json",
+                                         "候选产物：verdict=ok + 全量验收全绿 ⇒ 可发运（发运=产品决定）")
+        facts["w64_cand_malloc"] = fact(
+            (bj.get("declared") or {}).get("malloc") or me.get("malloc"),
+            "读 %s 的 declared.malloc / measured.malloc" % W64C,
+            "w64-artifacts-mimalloc/octave.build.json",
+            "分配器（产物探针 = 导出段里的 mi_version；工单 59；mimalloc 工单 57 实测 −27%）")
+        facts["w64_cand_exported_functions"] = fact(
+            me.get("exported_functions"),
+            "读 %s 的 measured.exported_functions" % W64C,
+            "w64-artifacts-mimalloc/octave.build.json")
+        _cf = (me.get("files") or {}).get("octave.wasm") or {}
+        facts["w64_cand_wasm_sha"] = fact(_cf.get("sha256"),
+                                         "sha256sum %s/octave.wasm" % W64C,
+                                         "w64-artifacts-mimalloc/octave.wasm")
+        facts["w64_cand_wasm_bytes"] = fact(_cf.get("bytes"),
+                                           "stat -c %%s %s/octave.wasm" % W64C,
+                                           "w64-artifacts-mimalloc/octave.wasm")
+    except (OSError, ValueError) as e:
+        print("⚠ 读不到 w64 候选身份证（%s）：%s" % (W64C, e), file=sys.stderr)
     # ★ **hotpath 性能热点仪器**（wasm64-NEXT 工单 54）：从它写的 report.json 读（**纯函数**，
     #   不重开浏览器）。这是"消费者/生产者分离"的落点 —— facts.py 只读日志，与读别的探针日志同形。
     try:
@@ -872,6 +903,56 @@ def measure(argv):
                                                      "派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项",
                                                      "派生（两个 bench 日志）",
                                                      "OpenBLAS 版相对 refblas 版 w64 的加速倍数（历史对照：refblas 的现役地位已由 2026-10-02 NT=8 批取代）")
+        # ★ **w64 候选（mimalloc）产品级基准**（工单 59，2026-10-04）：交错 3×3 同窗配对
+        #   （候选实验站 8861 vs 现役 8761；方法论 HISTORY §5.79/§5.84：单轮方差 ±30% ⇒ 必须交错）。
+        #   值 = 三轮中位数的**中位数**；诊断级的 −27%（工单 57）落到**非诊断产物**上是什么，看这里。
+        def _bench3(pattern, case):
+            vals = []
+            for r in (1, 2, 3):
+                p = os.path.join(W64LOGD, pattern % r)
+                try:
+                    t = open(p, encoding="utf-8", errors="replace").read()
+                except OSError:
+                    return None
+                m = re.search(r"SPEED_JSON(\{.*\})", t)
+                if not m:
+                    return None
+                v = (json.loads(m.group(1)).get("results") or {}).get(case, {}).get("median")
+                if v is None:
+                    return None
+                vals.append(float(v))
+            return sorted(vals)[1]                      # 三轮 ⇒ 取中位（第 2 小）
+        _cm = _bench3("bench-mi2-r%d.log", "matmul 500")
+        _cl = _bench3("bench-mi2-r%d.log", "lu 800")
+        _co = _bench3("bench-mi2-r%d.log", "loop 1e6")
+        _sm = _bench3("bench-ship2-r%d.log", "matmul 500")
+        _sl = _bench3("bench-ship2-r%d.log", "lu 800")
+        if _cm is not None:
+            facts["w64_cand_matmul500_s"] = fact(
+                _cm,
+                "<交错 3 轮取中位：HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh "
+                "test/browser/bench-lanes.mjs http://127.0.0.1:8861/ w64（×3 ⇒ w64-logs/bench-mi2-r1..3.log）>",
+                "w64-logs/bench-mi2-r1..3.log",
+                "候选（mimalloc，工单 59）产品级 matmul 500²；与现役的同窗配对见 w64_cand_vs_ship_*")
+        if _cl is not None:
+            facts["w64_cand_lu800_s"] = fact(
+                _cl, "同上（lu 800）", "w64-logs/bench-mi2-r1..3.log",
+                "候选（mimalloc）产品级 lu(800)")
+        if _co is not None:
+            facts["w64_cand_loop1e6_s"] = fact(
+                _co, "同上（loop 1e6）", "w64-logs/bench-mi2-r1..3.log",
+                "候选的纯解释器轴（分配器不该动它 —— 诚实记录，防「把好数字全记在头上」）")
+        if _cm is not None and _sm is not None and _sm > 0:
+            facts["w64_cand_vs_ship_matmul500"] = fact(
+                round(_cm / _sm, 2),
+                "派生：w64-logs/bench-mi2-r1..3.log 的中位 ÷ bench-ship2-r1..3.log 的中位",
+                "派生（两组交错日志）",
+                "候选/现役 的 matmul500 比值（<1 = 候选更快；同窗配对，不是跨窗对比）")
+        if _cl is not None and _sl is not None and _sl > 0:
+            facts["w64_cand_vs_ship_lu800"] = fact(
+                round(_cl / _sl, 2),
+                "派生：同上（lu 800）", "派生（两组交错日志）",
+                "候选/现役 的 lu800 比值")
         # ★ **原生基线**（perf-max 图票 02，2026-10-02）：占比仪表盘的"原生"一侧。
         #   为什么上键：6.6× / 1.9× 这类倍数说不清"离顶还有多远"；**原生占比才是刻度**（图 Q1=c）。
         #   同机**同版本** Octave 11.3.0；两个后端都测都记录：netlib = 系统默认（参考实现，
@@ -1092,6 +1173,11 @@ def measure(argv):
         "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
         "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
         "w64_relaxed_madd", "w64_build_recipe_ok",
+        # ★ 工单 59：w64 发运候选（mimalloc）—— 同 w64_* 的散文式读法
+        "w64_cand_verdict", "w64_cand_malloc", "w64_cand_exported_functions",
+        "w64_cand_wasm_sha", "w64_cand_wasm_bytes",
+        "w64_cand_matmul500_s", "w64_cand_lu800_s", "w64_cand_loop1e6_s",
+        "w64_cand_vs_ship_matmul500", "w64_cand_vs_ship_lu800",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

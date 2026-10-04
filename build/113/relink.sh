@@ -251,6 +251,15 @@ EOF
   #   那正是本仓记过的"同一旗标两处"的形状（消费者若 `grep -m1` 就会拿到 0）；
   #   而且 `exports` 的条数也会比别的模式多一条（自证/对比会莫名其妙地不一致）。
   case "$m" in w64|w64-base) ;; *) echo "MEMORY64=0" ;; esac
+
+  # ★ 工单 59（2026-10-04）：**分配器旋钮** —— w64 车道换 mimalloc（工单 57 实测：墙钟 −27%、
+  #   pthread 锁 10.3%→0%、体积 +0.2%、数值 79/0 + dldfcn 71/0；也是工单 61 插件系统的
+  #   第一个旋钮）。其余模式空 = emcc 默认（dlmalloc）⇒ 消费侧不加旗标，行为零变化。
+  #   产物侧判据（§5.46：只信旗标不算验收）：MALLOC=mimalloc 时 link-web.sh 追加
+  #   `-Wl,--export-if-defined=mi_version`；mimalloc 归档定义 mi_version、dlmalloc 没有
+  #   （llvm-nm 实测 T）⇒ strip 过的产物也能从**导出段**量出分配器（身份证 measured.malloc）。
+  #   同一变量只出现一行（上面 MEMORY64 的教训：两行 MALLOC 靠"后导出覆盖"是会翻车的形状）。
+  case "$m" in w64) echo "MALLOC=mimalloc" ;; *) echo "MALLOC=" ;; esac
 }
 
 # ── 声明（declared）：模式**承诺**产物里该有什么。由 check-build-manifest.py 逐条核对 ──
@@ -290,9 +299,14 @@ EOF
       #   把 BLAS 溯源判据从"必须含 -w64"换成"必须指向 E2 目录"（与 threads 那条同规则）。
       _e2=""
       [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
+      # ★ 工单 59：分配器声明**从模式表推出**（单一真值来源）—— 别从环境读：explain 的
+      #   调用路径上表变量还没 export，从环境读会和真链分叉（explain 是文档，文档不能撒谎）。
+      _malloc_decl=""
+      case "$m" in w64) [ "$(mode_table "$1" | sed -n 's/^MALLOC=//p')" = mimalloc ] \
+        && _malloc_decl=', "malloc": "mimalloc"' ;; esac
       cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true${_e2},
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true${_e2}${_malloc_decl},
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -889,6 +903,24 @@ cmd_selftest() {
     echo "fail | 没给 E2_OPENBLAS 却声明了 e2_openblas"; bad=1
   else
     echo "PASS | ★ 不给 E2_OPENBLAS ⇒ 不声明 e2_openblas（反向断言）"
+  fi
+  # ⑬ ★ 工单 59：分配器旋钮必须**从模式表推出** —— exports w64 有 MALLOC=mimalloc，
+  #    其余模式空（同一变量一行）；且 declared 的 malloc 标签跟表走（w64 有、product 无）。
+  n=$((n + 1))
+  w64m="$(bash "$0" exports w64 2>/dev/null | grep -c '^MALLOC=mimalloc$' || true)"
+  pm="$(bash "$0" exports product 2>/dev/null | grep -c '^MALLOC=$' || true)"
+  if [ "${w64m:-0}" -eq 1 ] && [ "${pm:-0}" -eq 1 ]; then
+    echo "PASS | ★ 工单 59：exports w64 ⇒ MALLOC=mimalloc；exports product ⇒ MALLOC=（空）"
+  else
+    echo "fail | 分配器旋钮没进模式表（w64=$w64m product=$pm）"; bad=1
+  fi
+  n=$((n + 1))
+  wd="$(bash "$0" explain w64 2>/dev/null | grep -c '"malloc": "mimalloc"' || true)"
+  pd="$(bash "$0" explain product 2>/dev/null | grep -c '"malloc"' || true)"
+  if [ "${wd:-0}" -ge 1 ] && [ "${pd:-0}" -eq 0 ]; then
+    echo "PASS | ★ 工单 59：explain w64 的声明含 malloc=mimalloc；product 不含（双向）"
+  else
+    echo "fail | malloc 声明与模式表分叉（w64=$wd product=$pd）"; bad=1
   fi
   rm -rf "$tmp"
   echo ""

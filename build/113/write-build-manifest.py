@@ -242,6 +242,52 @@ def count_wasm_exports(path):
         return None
 
 
+def wasm_export_names(path):
+    """读 wasm **导出段（section 7）的名字**。分配器探针的量测面（工单 59）：
+    `-Wl,--export-if-defined=mi_version` 只在真链了 mimalloc 时产出该导出
+    （mimalloc 归档定义 `mi_version`、dlmalloc 没有 —— llvm-nm 实测；未定义 ⇒ lld 静默忽略），
+    而 strip 过的产物**导出表还在** ⇒ 这是"从产物读出用的哪个分配器"的窗口
+    （§5.46：只信命令行旗标不算验收）。返回 None = 读不出（不许猜，判定方会判拒）。
+    探针只认 mimalloc：dlmalloc/emmalloc 都量成 "default" —— 工单 61 插件系统
+    将来注册新分配器适配器时，在这里加它自己的探针符号。"""
+    def uleb(fh):
+        r = sh = 0
+        while True:
+            b = fh.read(1)
+            if not b:
+                return None
+            b = b[0]
+            r |= (b & 0x7F) << sh
+            if not (b & 0x80):
+                return r
+            sh += 7
+    try:
+        with open(path, "rb") as fh:
+            if fh.read(4) != b"\0asm":
+                return None
+            fh.read(4)
+            while True:
+                h = fh.read(1)
+                if not h:
+                    return None
+                sid = h[0]
+                size = uleb(fh)
+                if size is None:
+                    return None
+                if sid == 7:
+                    n = uleb(fh)
+                    names = []
+                    for _ in range(n):
+                        ln = uleb(fh)
+                        names.append(fh.read(ln).decode("utf-8", errors="replace"))
+                        fh.read(1)          # kind
+                        uleb(fh)            # index
+                    return names
+                fh.seek(size, 1)
+    except OSError:
+        return None
+
+
 def blas_resolved(extra_ldflags, js_dir="/usr/local/lib"):
     """**"用的哪个 BLAS"以前没有判据** —— 这里给出来：按链接行的搜索顺序（EXTRA_LDFLAGS 的
     `-L` 先、`/usr/local/lib` 后，见 link-web.sh:526 在 LIBS 之前）取**第一个**含
@@ -289,9 +335,19 @@ def main():
     if v128_note:
         notes.append("simd.v128: " + v128_note)
 
+    # ★ 工单 59：分配器（从导出段量 —— 探针 mi_version 只在真链 mimalloc 时存在；
+    #   读不出 ⇒ None，判定方对 None 判拒，不许猜）。
+    exp_names = wasm_export_names(os.path.join(OUT, "octave.wasm"))
+    if exp_names is None:
+        malloc_val = None
+        notes.append("malloc: 导出段读不出 ⇒ 无法核验分配器（判定方会判拒）")
+    else:
+        malloc_val = "mimalloc" if "mi_version" in exp_names else "default"
+
     measured = {
         # ⚠️ **量出来的**，不是读环境变量猜的（曾经的 bug：手跑时清单写死 main_module=1）
         "exported_functions": count_wasm_exports(os.path.join(OUT, "octave.wasm")),
+        "malloc": malloc_val,
         "simd": {"v128": v128, "impl": "llvm-objdump|unavailable" if v128 is None else "llvm-objdump"},
         "jspi_entry": b"eval_wait" in js,
         "jspi_glue_suspending": count_bytes(js, b"new WebAssembly.Suspending"),
@@ -367,6 +423,8 @@ def main():
         fh.write("\n")
     os.replace(tmp, os.path.join(OUT, "octave.build.json"))
     log("导出条目 = %s（M2 基准 710 / M1 基准 44987）" % measured["exported_functions"])
+    log("分配器 = %s（探针 = 导出段里的 mi_version：mimalloc 有、dlmalloc 无 —— 工单 59）"
+        % measured["malloc"])
     _t = measured["threads"]
     log("线程事实 = 内存 shared=%s / PThread 胶水 %s 次 / new Worker %s 次 ⇒ %s"
         % (_t["shared_memory"], _t["pthread_glue"], _t["worker_glue"],
