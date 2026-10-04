@@ -260,6 +260,11 @@ EOF
   #   （llvm-nm 实测 T）⇒ strip 过的产物也能从**导出段**量出分配器（身份证 measured.malloc）。
   #   同一变量只出现一行（上面 MEMORY64 的教训：两行 MALLOC 靠"后导出覆盖"是会翻车的形状）。
   case "$m" in w64) echo "MALLOC=mimalloc" ;; *) echo "MALLOC=" ;; esac
+
+  # ★ 仓库架构批 B4：上游树路径**透传**（provision/等价性验证用）。表从环境读——
+  #   操作员设 OCT_TREE=... 时透传给 link-web.sh；不设则空 = 脚本默认路径。
+  #   与 E2_OPENBLAS 同族：操作员输入由表读取，不许在表外手设。
+  echo "OCT_TREE=${OCT_TREE:-}"
 }
 
 # ── 声明（declared）：模式**承诺**产物里该有什么。由 check-build-manifest.py 逐条核对 ──

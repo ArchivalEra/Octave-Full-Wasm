@@ -15,6 +15,9 @@
 !doctor.json
 !build/plugins.json
 !build/upstream-lock.json
+!build/provision-upstream.sh
+!build/upstream-pins.json
+!.githooks/witness-upstream-pin.py
 !upstream-patches/*
 !.gitmodules
 !upstream/

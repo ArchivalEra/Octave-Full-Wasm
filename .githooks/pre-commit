@@ -22,6 +22,8 @@ python3 "$HOOK_DIR/check-wants.py"
 python3 "$HOOK_DIR/check-whitelist.py"
 python3 "$HOOK_DIR/check-retractions.py"
 python3 "$HOOK_DIR/check-facts.py"
+# ★ 上游 pin 见证（仓库架构批 B4）：容器树 == submodule pin；读不到容器 ⇒ SKIP 明说。
+python3 "$HOOK_DIR/witness-upstream-pin.py"
 # ★ 部件插件登记闸门（工单 61）：登记表 ↔ 现役产物 declared 双向一致；站点读不到 ⇒ SKIP 明说。
 python3 "$HOOK_DIR/../build/113/plugin-check.py"
 # ★ 仪器生命周期闸门（Einfacht #6 ① 移植，2026-10-03）：可插拔；这里显式启用两旋钮 ——

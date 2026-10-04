@@ -1,0 +1,12 @@
+{
+  "_comment": "上游 pin 断言面（仓库架构批 B4）。kind=tree 的条目由 build/provision-upstream.sh 供给（容器树 + .upstream-pin stamp），.githooks/witness-upstream-pin.py 每提交核对「容器树 == 这里登记的 fork/分支/commit」——容器死版本继续被用而指针已 bump ⇒ DRIFT（工单 43 承重文件盲区的对偶）。kind=toolchain 的只断言版本串（emsdk 是 portable SDK，不流容器）。初始只有 octave 是 active（provisioned=true）；B5 等价性批次后按需追加。",
+  "pins": [
+    { "name": "octave", "kind": "tree", "provisioned": true,
+      "submodule_path": "upstream/octave", "branch": "wasm/11.3.0",
+      "container_path": "/src/work/upstream/octave-11.3.0",
+      "why": "Octave 树 = 主构建输入（rebuild/configure/link 全吃它）；现役树是 tarball 解包死版本——供给后由 pin 断言接管" },
+    { "name": "emsdk", "kind": "toolchain", "provisioned": true,
+      "submodule_path": "upstream/emsdk", "expect_version": "5.0.7",
+      "why": "工具链身份已记在产物身份证 tool.emcc；这里断言容器 emcc 仍是 submodule 钉的版本" }
+  ]
+}

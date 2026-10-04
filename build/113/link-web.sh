@@ -23,7 +23,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 OUT="${1:-/src/websrc/out}"
-OCT="$(cd /src/work/octave-11.3.0 && pwd)"
+# ★ 仓库架构批（B4）：树路径可覆盖（上游 fork 供给/provision 用；默认现役路径不变）
+OCT="$(cd "${OCT_TREE:-/src/work/octave-11.3.0}" && pwd)"
 INST=/src/work/octave-install
 MV="11.3.0"
 M="$INST/share/octave/$MV/m"

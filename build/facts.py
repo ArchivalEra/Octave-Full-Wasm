@@ -756,6 +756,27 @@ def measure(argv):
             facts[_k] = _v        # _v 已是 fact 形状（含 measured_at/first_seen）⇒ 直接并入，别重盖
     except Exception as _e:                                          # noqa: BLE001
         print("⚠ hotpath 事实读不到（%s）：%s" % (_hp_path, _e), file=sys.stderr)
+    # ★ **上游 pin**（仓库架构批 B4，2026-10-04）：upstream/ submodule 钉版事实。
+    #   上游更新 = bump 指针/merge tag（SOP 见 build/113/NOTES-upstream.md）；
+    #   容器树 == pin 的一致性由 witness-upstream-pin.py 每提交核对（.githooks/）。
+    import subprocess as _sp
+    def _git(*a):
+        try:
+            return _sp.run(["git", *a], capture_output=True, text=True, timeout=20).stdout.strip()
+        except Exception:
+            return ""
+    _pins = _git("submodule", "status")
+    if _pins:
+        facts["upstream_submodule_count"] = fact(len(_pins.splitlines()),
+                                                 "git submodule status | wc -l",
+                                                 ".gitmodules")
+        _oct = _git("-C", "upstream/octave", "rev-parse", "--short=12", "HEAD")
+        if _oct:
+            facts["octave_pin"] = fact(_oct,
+                                       "git -C upstream/octave rev-parse --short=12 HEAD",
+                                       ".gitmodules + upstream/octave",
+                                       "Octave wasm 分支（tarball 生成件 + 平台补丁）的 pin")
+
     # ★ **libm spike**（工单 60，2026-10-04）：链接期标量 libm 替换的实测判决。
     #   门槛 = 每调用几何均值 ≥1.5（热点压降 ≥1/3 的操作化）；实测 0.991 两轮一致 ⇒ 否决。
     #   机制根因（wasm 无标量 FMA）与全部数字见 build/113/NOTES-libm.md。
@@ -1209,6 +1230,7 @@ def measure(argv):
         "w64_cand_matmul500_s", "w64_cand_lu800_s", "w64_cand_loop1e6_s",
         "w64_cand_vs_ship_matmul500", "w64_cand_vs_ship_lu800",
         "libm_spike_geomean",
+        "upstream_submodule_count", "octave_pin",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
