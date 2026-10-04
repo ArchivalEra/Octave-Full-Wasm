@@ -1,10 +1,18 @@
 {
-  "_why": "被证伪的**量法**登记位（Einfacht issue #6 ① 移植）。像 retractions.json 管「被推翻的断言」，这里管「量它的工具/方法本身腐烂」。台账任何 cmd 含某条 text 片段 ⇒ check-instruments 报（坏量法不许留在台账里）。",
-  "methods": [
-    {
-      "text": "grep -c relaxed_madd",
-      "why": "llvm-objdump(emsdk 5.0.7) 对 relaxed-simd 的 f64x2.relaxed_madd 只打印 `<unknown>` ⇒ `grep -c relaxed_madd` 恒返回 0（命令成功、值稳定、复跑永远通过）—— 据此两次误判「FMA 没进产物」，白跑一轮构建。",
-      "fixed_in": "字节级计数：python3 -c \"print(open(p,'rb').read().count(bytes([0xFD,0x87,0x02])))\"（fd 87 02 = f64x2.relaxed_madd）；或先跑校准样本证明仪器看得见。见工单 52 / HISTORY §5.83。"
-    }
-  ]
+ "_why": "被证伪的**量法**登记位（Einfacht issue #6 ① 移植）。像 retractions.json 管「被推翻的断言」，这里管「量它的工具/方法本身腐烂」。台账任何 cmd 含某条 text 片段 ⇒ check-instruments 报（坏量法不许留在台账里）。",
+ "methods": [
+  {
+   "text": "grep -c relaxed_madd",
+   "why": "llvm-objdump(emsdk 5.0.7) 对 relaxed-simd 的 f64x2.relaxed_madd 只打印 `<unknown>` ⇒ `grep -c relaxed_madd` 恒返回 0（命令成功、值稳定、复跑永远通过）—— 据此两次误判「FMA 没进产物」，白跑一轮构建。",
+   "fixed_in": "字节级计数：python3 -c \"print(open(p,'rb').read().count(bytes([0xFD,0x87,0x02])))\"（fd 87 02 = f64x2.relaxed_madd）；或先跑校准样本证明仪器看得见。见工单 52 / HISTORY §5.83。"
+  },
+  {
+   "text": "min-of-3",
+   "why": "排序基准的**被证伪量法**（2026-10-04，工单 63）：min-of-3 采样若不在每次计时前重随机化，第 2/3 次量到的是 timsort 对已排序数组的 O(n) 快路径（2M 随机 430ms → 重排 4.7ms，90 倍假象）⇒ min-of-3 全被快路径统治，'Rust 慢 10 倍'的假结论差点落档。正确量法 = 每次计时前重随机化（fill inside loop）+ 交错 ≥3 轮 + 取 min/中位。凡排序/重排类基准的计时 cmd 含 min-of-3 且无重随机化步骤 ⇒ 可疑。见 HISTORY §5.88 / 工单 63。"
+  },
+  {
+   "text": "已排序数组再排",
+   "why": "同上条：'对已排序数组再排一次'是 O(n) 快路径，任何以它为样本的计时都在量快路径而不是量算法。登记为独立片段以防换一种写法（如 pre-sorted fixture）复活。"
+  }
+ ]
 }
