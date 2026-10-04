@@ -189,7 +189,7 @@ def main():
 _SHA_A = "a" * 64
 _SHA_B = "b" * 64
 _SWEEP_OK = {"ok": True, "suites": 43, "pass": 1076}
-_HEAD = "# HANDOFF\n\n## 0. 铁律\n\n"
+_HEAD = "# STATE\n\n## 0. 现在是什么\n\n"
 
 
 def _nprob(text, shas=None, sweep=None):

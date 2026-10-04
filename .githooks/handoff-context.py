@@ -25,7 +25,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def state_lines():
-    doc = os.path.join(REPO, "HANDOFF.md")
+    doc = os.path.join(REPO, "STATE.md")
     if not os.path.isfile(doc):
         return []
     text = open(doc, encoding="utf-8").read()
