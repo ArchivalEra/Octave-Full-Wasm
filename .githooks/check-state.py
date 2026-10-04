@@ -224,4 +224,4 @@ CASES = [
 
 
 if __name__ == "__main__":
-    sys.exit(selftest("check-handoff", CASES) if "--selftest" in sys.argv else main())
+    sys.exit(selftest("check-state", CASES) if "--selftest" in sys.argv else main())

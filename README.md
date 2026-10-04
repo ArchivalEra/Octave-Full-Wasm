@@ -223,7 +223,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/check-instruments.py` (9771 bytes)
 - `.githooks/check-readiness-pattern.py` (5523 bytes)
 - `.githooks/check-retractions.py` (6698 bytes)
-- `.githooks/check-state.py` (13272 bytes)
+- `.githooks/check-state.py` (13270 bytes)
 - `.githooks/check-wants.py` (10926 bytes)
 - `.githooks/check-whitelist.py` (3216 bytes)
 - `.githooks/handoff-context.py` (3072 bytes)
