@@ -9,8 +9,8 @@
 
 **Status:** resolved（2026-10-04：出厂三步完成——模式表注册 + declared/measured 双向核对 +
 全量 **43 套 / 1084 PASS / 0 FAIL**（含 dldfcn 71/0、probe-lane 33/0、页面自证 4/0）；
-候选 sha = 台账 `w64_cand_wasm_sha`；**发运决策已呈用户**——候选可发运，走
-`build/promote-w64-lane.sh`）
+候选 sha = 台账 `w64_cand_wasm_sha`；**2026-10-04 用户拍板发运**：8761/8768 双站已换 mimalloc 版（守卫全绿、页面自证 4/0、
+parity 三处一致；FMA 版备份 `w64-artifacts-fma-backup-20261004/`））
 
 **Settling:** `bash build/113/relink.sh explain w64`（注册后输出**必须**列出 MALLOC 旋钮；
 现在 `grep MALLOC relink.sh` 零命中 ⇒ 尚未注册，explain 不含即红）+ `PROBES=1 sh build/sweep.sh

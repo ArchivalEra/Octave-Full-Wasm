@@ -628,6 +628,12 @@ def measure(argv):
                                           "读 %s 的 measured.threads.shared_memory" % W64A,
                                           "w64-artifacts/octave.build.json",
                                           "目标形态 = memory64 **+ 多线程**（shared 是这个轴的硬身份）")
+        # ★ 工单 59 发运（2026-10-04）：现役 w64 的分配器上台账（旋钮进模式表后它是产物身份的一部分；
+        #   探针 = 导出段 mi_version；候选那组的 witness 见 w64_cand_malloc）。
+        facts["w64_malloc"] = fact((bj.get("declared") or {}).get("malloc") or me.get("malloc"),
+                                   "读 %s 的 declared.malloc / measured.malloc" % W64A,
+                                   "w64-artifacts/octave.build.json",
+                                   "现役 w64 的分配器（工单 59 起 = mimalloc，由 relink.sh w64 模式表声明）")
         if (me.get("simd") or {}).get("v128") is not None:
             facts["w64_v128"] = fact(me["simd"]["v128"], "读 %s 的 measured.simd.v128" % W64A,
                                     "w64-artifacts/octave.build.json")
@@ -1178,6 +1184,7 @@ def measure(argv):
         "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns", "oct_lane_tls_init",
         "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
         "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
+        "w64_malloc",
         "w64_relaxed_madd", "w64_build_recipe_ok",
         # ★ 工单 59：w64 发运候选（mimalloc）—— 同 w64_* 的散文式读法
         "w64_cand_verdict", "w64_cand_malloc", "w64_cand_exported_functions",

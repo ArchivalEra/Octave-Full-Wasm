@@ -3921,3 +3921,28 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
   "最新 report"的指针合法移动；note 自适应采样数）。
 - **发运决策呈用户**（未发运，8761 仍是 FMA 版 `w64_wasm_sha`）：候选 = `w64_cand_wasm_sha`
   （`01fb52fc…`）。发运 ⇒ `build/promote-w64-lane.sh` 换 8761 的 w64 档 + 全量复扫 + 台账重测。
+
+### 5.87 工单 59 发运：mimalloc 版 w64 上 8761（2026-10-04，branch `wasm64-NEXT`）
+
+用户拍板发运。走受管辖入口，两处全绿：
+
+- **发运**：`W64_OUT=/src/websrc/w64-mimalloc-out sh build/promote-w64-lane.sh`（8768 = siteWebGL）
+  与同命令指 `/mnt/hdd/octave-wasm-build/site`（8761）。守卫全过：**base / threads 两档逐字节
+  未动**（反向断言）、verdict=ok、身份证自查、清单与 `.oct` 条数自洽、lanes.js 四档。
+  （w64-base 连带重推 = 容器里未动过的同一份，逐字节相同。）
+- **发运后核**：8761 boot **1.0 s**；SHA 三层（磁盘 `w64/octave.wasm` == 台账
+  `w64_wasm_sha`=`01fb52fc…`；HTTP fetch == 页面实例化；页面字节 == 档内身份证）——
+  `probe-artifact-sha` **4/0**。根目录三件（base 档）逐字节未变（`wasm_sha`/`js_sha`/`data_sha`）。
+  ⚠ 调用口径自纠一次：`check-deploy-sha.sh` 查的是**根目录基础档**，传 w64 档 sha 是
+  类别错误（AGENTS 那条"四格站点第二参数"写过的形状）；四格批次核 base 档用台账键比对、
+  核 w64 档用 promote --verify + 页面自证。
+- **收尾**：仓库 `site/` 镜像同步（w64/ 三件 + build.json 变化）；`make-dist.sh` ⇒
+  `octave-full-wasm-site-20261004`；`parity --strict` **三处完全一致**。
+- **台账**：改口 3 条全部接受（`w64_wasm_sha` 5b5bb981…→01fb52fc…、`w64_exported_functions`
+  735→751、`w64_wasm_bytes` +0.2%）+ 新键 **`w64_malloc`** = mimalloc（现役产物的分配器身份）；
+  `w64_relaxed_madd` **未变**（47 条）⇒ FMA 内核在新产物里原样（反证旋钮只动了分配器轴）。
+  111 条事实。`w64_cand_*` 组与 `w64_*` 现值汇合（候选即现役），组保留作历史。
+- Einfacht 反哺两件同日：**#9 提了即撤**（机制不缺，witness/calibrate 现有档位覆盖；
+  `w64_cand_malloc` 改挂 witness 档），**#10 已提**（进程/端口活性开工预检，#7/#8 档位对照后
+  的真缺口）；另修 pre-commit 重算顺序（HANDOFF 先于 README，README 记字节数 ⇒ 旧顺序每批
+  制造 pre-push 假红）。
