@@ -777,6 +777,26 @@ def measure(argv):
                 "实测 >1 ⇒ 候选②否决——带宽绑定热点换语言无益",
                 replay=False)
 
+    # ★ **sort spike**（工单 63 / 候选③，2026-10-04）：Rust stable sort vs 真
+    #   octave_sort<double> 内核——语义差分 22 域逐位一致 + 内核 4× 加速 ⇒ ADOPT。
+    _rs = os.path.join(os.path.dirname(SITE), "w64-logs", "rustsort-spike.log")
+    if os.path.exists(_rs):
+        import re as _re4
+        _m8 = _re4.search(r"sort 2e6: base=([0-9.]+)ms cand=([0-9.]+)ms 比值=([0-9.]+)",
+                          open(_rs, encoding="utf-8", errors="replace").read())
+        if _m8:
+            facts["rust_sort_spike_base_ms"] = fact(float(_m8.group(1)),
+                "sh test/fixtures/rustsort-spike/run-spike.sh（读 w64-logs/rustsort-spike.log）",
+                "w64-logs/rustsort-spike.log",
+                "octave_sort<double>（timsort）2M 随机 doubles 排序", replay=False)
+            facts["rust_sort_spike_cand_ms"] = fact(float(_m8.group(2)),
+                "同上", "w64-logs/rustsort-spike.log",
+                "Rust driftsort（stable）同负载", replay=False)
+            facts["rust_sort_spike_ratio"] = fact(float(_m8.group(3)),
+                "派生：cand ÷ base", "派生（rustsort-spike.log）",
+                "内核比值（<0.867 = ≥1.15× 加速门槛）；实测 0.247 = 4× ⇒ ADOPT",
+                replay=False)
+
     _e6 = os.path.join(os.path.dirname(SITE), "w64-logs", "emcc6-probe.log")
     if os.path.exists(_e6):
         import re as _re2
@@ -1264,7 +1284,8 @@ def measure(argv):
         "w64_cand_vs_ship_matmul500", "w64_cand_vs_ship_lu800",
         "libm_spike_geomean",
         "upstream_submodule_count", "octave_pin", "emcc6_probe_geomean",
-        "rust_fill_spike_ratio",
+        "rust_fill_spike_ratio", "rust_sort_spike_base_ms", "rust_sort_spike_cand_ms",
+        "rust_sort_spike_ratio",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
