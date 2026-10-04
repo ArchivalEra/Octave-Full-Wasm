@@ -16,20 +16,25 @@
   部件盘点（**部件空间基本到边**，下一块 = libm 集成项目）。实验产物只进实验站，**8761 一字未动**。
   过程详单 = `HISTORY.md` §5.84 + `build/113/NOTES-hotpath.md`；热点事实 =
   `build/FACTS.json` 的 `hotpath_top` / `hotpath_instrument_ok`（witness 档，提交时逐字复跑）。
-- **⏸ 关机点：三选项待用户拍板**：① 注册 mimalloc + 跑全量（最便宜的确定性胜利，建议先做）
-  ② libm 集成项目（先做单向量 sin/exp/log SIMD spike）③ 转 Octave 源码优化
-  （sort / fft-wrap / index / sparse，改 C++ 本体）。
-- **工单台账**：无 open 状态票；剩的全是人的动作 / 外部依赖 —— 票 12 真机手测（等生产部署）、
-  票 38 页面资产上站（走 `build/promote-pages.sh`）、E6 图形线（embed 页 GL 纹理边界）。
+- **拍板（2026-10-04）：三工单立项** —— **59** mimalloc 出厂批（模式表 → 全量 → 发运决策）、
+  **60** libm 部件插件 spike（量"不改 Octave 调用点"的收益上限）、**61** 部件插件系统
+  （换部件 = 一行声明，构建期替换 × 事实系统接线；Rust 优化件与第三方组件由此接入）。
+  **用户两条硬约束：极其不想脱离 Octave 树**（原③ Octave 源码优化挂起，61 的契约写死
+  "Octave 源码零改动"）+ **换部件不需要繁琐动作**（声明驱动，不许手设散装变量）。
+- **工单台账**：未结 = 59 / 60 / 61（ready-for-agent）+ 人的动作：票 12 真机手测
+  （等生产部署）、票 38 页面资产上站（走 `build/promote-pages.sh`）、E6 图形线
+  （embed 页 GL 纹理边界）。
 
 ## 1. 下一步（按此顺序）
 
-1. **用户拍板三选项**（§0）→ 执行对应批次。每批照 `AGENTS.md` 的批次收尾走；
-   ★ 换产物 / 改线程数 / 改 GL / 改资源的批次，进件前必须跑一次 `PROBES=1` 全量
-   （至少含 `accept-dldfcn`）。
-2. 若走 ①：mimalloc 进 `build/113/relink.sh` 模式表（`explain` 打出来的就是口径）→ 全量 →
-   发运走 `build/promote-w64-lane.sh` → 台账重测（`python3 build/facts.py`）。
-3. 外部依赖到位时：票 38 上站 / 票 12 真机手测（清单 = `docs/manual-test-checklist.md`）。
+1. **工单 59（mimalloc 出厂批）**：`-sMALLOC=mimalloc` 进 `build/113/relink.sh` 模式表
+   → 重链（`declared` 带分配器标签）→ 全量 `PROBES=1`（含 `accept-dldfcn`）→ 台账重测
+   （`python3 build/facts.py`）→ 发运决策呈用户（走 `build/promote-w64-lane.sh`）。
+   每批照 `AGENTS.md` 的批次收尾走；★ 换产物的批次进件前必须跑一次 `PROBES=1` 全量。
+2. **工单 60（libm 插件 spike）**：先造结算件（`bench-libm-spike.sh` 单向量微基准），
+   量插件边界内上限；≥1/3 热点压降才注册插件，否则如实否决。
+3. **工单 61（部件插件契约）**：设计稿 + `plugin-check` 闸门（吸收 59/60 经验）。
+4. 外部依赖到位时：票 38 上站 / 票 12 真机手测（清单 = `docs/manual-test-checklist.md`）。
 
 ## 2. 指针表（哪类知识住哪；规约 = `docs/agents/memory.md`）
 
