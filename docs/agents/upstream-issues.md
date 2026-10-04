@@ -137,3 +137,27 @@ fact(value, cmd, source, ...,
 与 `SFLAGS=(…)` 里都出现 ⇒ 只有注释也通过）。契约名不许暗示语义；能锚定就锚定；要更强保证
 的用 `calibrate`（量产物）或 `witness`（量来源）。**声明式检查的强度上限 = 它匹配的文本形态。**
 
+
+---
+
+# 记录：#9 提了即撤（2026-10-04）—— 先核对已收编档位，再提新缺口
+
+> issue：<https://github.com/ArchivalEra/Einfacht/issues/9>（已 close，not planned）
+> 提问前没先核对 #5–#8 的现有档位，被用户当场拦下。自查结论：
+> **机制层不缺** —— 产物侧便宜核验 = #5 `witness` 档（挂部署件/候选件的只读复查命令）；
+> 「先证明仪器看得见 X」= #6 ① `calibrate`；#7 的边界一节**早已写明**这个分工
+> （"要更强保证的，那是 calibrate 或 witness 的活"）。
+
+本条的真实增量只有**使用层**两件，降级回本仓留档（不占上游 issue）：
+
+1. **linker 技巧**：被换部件的独有符号（mimalloc 的 `mi_version`，dlmalloc 没有，`llvm-nm`
+   可验证）+ `--export-if-defined` ⇒ strip 过的产物仍可从**导出段**量出"旋钮生效了没"；
+2. **双向漂移断言**（声明了但产物没有 ⇒ 拒；产物有但没声明 ⇒ 拒）—— 判定器的**策略**，各仓自查。
+
+两条已在本仓落地：`write-build-manifest.py --exports`（witness 出口，四态实测：mimalloc /
+default / unknown / 缺文件）、`check-build-manifest.py` 的 malloc 双向规则；
+`w64_cand_malloc` 挂 witness 档每提交复查。
+
+**反哺流程的教训（写给下一个自己）**：提 issue 前先做"现有档位对照表"——
+#5 witness / #6 calibrate+instruments / #7 invariants / #8 envfile 各管哪层，
+新需求先问"哪一层、是不是已有档位换了个用法"。

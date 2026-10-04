@@ -718,7 +718,13 @@ def measure(argv):
             (bj.get("declared") or {}).get("malloc") or me.get("malloc"),
             "读 %s 的 declared.malloc / measured.malloc" % W64C,
             "w64-artifacts-mimalloc/octave.build.json",
-            "分配器（产物探针 = 导出段里的 mi_version；工单 59；mimalloc 工单 57 实测 −27%）")
+            "分配器（产物探针 = 导出段里的 mi_version；工单 59；mimalloc 工单 57 实测 −27%）。"
+            "★ witness = #5 档对**产物**的便宜复查（Einfacht #9 提了即撤：机制不缺，"
+            "witness/calibrate 现有档位已覆盖）——每提交重读候选产物导出段，"
+            "旋钮没生效/产物被换 ⇒ 见证红。",
+            replay=False,
+            witness="python3 build/113/write-build-manifest.py --exports %s/octave.wasm" % W64C,
+            witness_expect="mimalloc")
         facts["w64_cand_exported_functions"] = fact(
             me.get("exported_functions"),
             "读 %s 的 measured.exported_functions" % W64C,

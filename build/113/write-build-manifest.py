@@ -26,6 +26,12 @@ import time
 
 OUT, LINK_SH = sys.argv[1], sys.argv[2]
 MODE = sys.argv[3] if len(sys.argv) > 3 else ""
+# ★ `--exports <wasm>`：**只量导出段**的见证入口（工单 59；Einfacht #9 撤回后改用 #5 的
+#   witness 档满足同一需求——不新增机制，给现有量测函数开一个 stdout 裸值出口）。
+#   契约：stdout 逐字 == `mimalloc` | `default` | `unknown`（读不出 ⇒ unknown，不许猜）。
+EXPORTS_MODE = "--exports" in sys.argv
+if EXPORTS_MODE:
+    OUT = LINK_SH = None
 
 BIG = ("octave.wasm", "octave.js", "octave.data")
 
@@ -310,6 +316,12 @@ def blas_resolved(extra_ldflags, js_dir="/usr/local/lib"):
 
 
 def main():
+    if EXPORTS_MODE:
+        _p = sys.argv[sys.argv.index("--exports") + 1]
+        _n = wasm_export_names(_p) if os.path.exists(_p) else None
+        print("mimalloc" if (_n and "mi_version" in _n)
+              else ("default" if _n is not None else "unknown"))
+        return 0
     notes = []
     if not os.path.isdir(OUT):
         print("FATAL: 产物目录不存在: %s" % OUT, file=sys.stderr)
