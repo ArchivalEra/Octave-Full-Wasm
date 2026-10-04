@@ -756,6 +756,23 @@ def measure(argv):
             facts[_k] = _v        # _v 已是 fact 形状（含 measured_at/first_seen）⇒ 直接并入，别重盖
     except Exception as _e:                                          # noqa: BLE001
         print("⚠ hotpath 事实读不到（%s）：%s" % (_hp_path, _e), file=sys.stderr)
+    # ★ **libm spike**（工单 60，2026-10-04）：链接期标量 libm 替换的实测判决。
+    #   门槛 = 每调用几何均值 ≥1.5（热点压降 ≥1/3 的操作化）；实测 0.991 两轮一致 ⇒ 否决。
+    #   机制根因（wasm 无标量 FMA）与全部数字见 build/113/NOTES-libm.md。
+    _ls = os.path.join(os.path.dirname(SITE), "w64-logs", "libm-spike-verdict.txt")
+    if os.path.exists(_ls):
+        _t = open(_ls, encoding="utf-8", errors="replace").read()
+        import re as _re
+        _m = _re.search(r"geomean\(cand/base\) = ([0-9.]+)", _t)
+        if _m:
+            facts["libm_spike_geomean"] = fact(
+                float(_m.group(1)),
+                "sh build/113/bench-libm-spike.sh 8（读 w64-logs/libm-spike-verdict.txt 的 geomean 行）",
+                "w64-logs/libm-spike-verdict.txt",
+                "链接期标量 libm 替换（同源重编覆盖）的每调用几何均值；≥1.5 才值得注册插件 —— "
+                "实测 <1.0 ⇒ 负判决（wasm 无标量 FMA，见 NOTES-libm.md）",
+                replay=False)
+
     # ★ **w64-base**（工单 30，2026-10-01）：四格里的第四格 —— memory64 **单线程**回退档。
     #   为什么上键：发运判据里有一条"只新增两档、base/threads 逐字节不变"，而**新那一档**的
     #   sha 原来没有任何台账项 ⇒ `promote-w64-lane.sh` 只能拿容器当参照，"部署的到底是不是
@@ -1191,6 +1208,7 @@ def measure(argv):
         "w64_cand_wasm_sha", "w64_cand_wasm_bytes",
         "w64_cand_matmul500_s", "w64_cand_lu800_s", "w64_cand_loop1e6_s",
         "w64_cand_vs_ship_matmul500", "w64_cand_vs_ship_lu800",
+        "libm_spike_geomean",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

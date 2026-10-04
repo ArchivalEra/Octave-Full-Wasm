@@ -22,6 +22,8 @@ python3 "$HOOK_DIR/check-wants.py"
 python3 "$HOOK_DIR/check-whitelist.py"
 python3 "$HOOK_DIR/check-retractions.py"
 python3 "$HOOK_DIR/check-facts.py"
+# ★ 部件插件登记闸门（工单 61）：登记表 ↔ 现役产物 declared 双向一致；站点读不到 ⇒ SKIP 明说。
+python3 "$HOOK_DIR/../build/113/plugin-check.py"
 # ★ 仪器生命周期闸门（Einfacht #6 ① 移植，2026-10-03）：可插拔；这里显式启用两旋钮 ——
 #   恒常检测（first_seen 超 30 天 ⇒ 人工确认该 cmd 是在量还是恒返回同一个数）
 #   + 量法登记（build/instruments.json：被证伪的量法不许留在台账 cmd 里）。

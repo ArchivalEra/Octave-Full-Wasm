@@ -114,6 +114,7 @@ python3 .githooks/check-handoff.py           # 活状态断言不得与产物矛
 python3 .githooks/check-consistency.py       # 挂载点/启动清单/车道路径一致
 python3 .githooks/check-wants.py             # 断言可证伪性（裸数字匹配/截断后匹配）
 python3 .githooks/check-whitelist.py         # 白名单覆盖
+python3 build/113/plugin-check.py            # 部件插件登记闸门（工单 61）：登记表↔产物 declared 双向
 sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门必须能证明自己"会红"
 ```
 **★ 闸门自证（F1，2026-09-26）**：前六道查仓库，这第七道查**检查器本身**。

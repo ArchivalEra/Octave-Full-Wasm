@@ -8,7 +8,7 @@ musl 标量超越函数（各负载里 `exp_inline` 24% / `log_inline` 10% / sin
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved（2026-10-04 **负判决**：spike A 两轮一致 geomean 0.991（sin/exp/log/pow 全部噪声内），精度与 musl 逐位一致；机制根因 = **wasm 无标量 FMA**（relaxed_madd 是 v128 专用，覆盖对象实测 0 条），musl 标量已在 ~2.7ns/调用（≈10 周期）的地板上，1.5× 门槛不可达。**链接期 libm 替换轴否决**；批量向量化路线（v128 madd）需要改调用点/整树重向量化，在插件契约之外。详见 build/113/NOTES-libm.md）
 
 **Settling:** 不存在 —— 本工单的第一交付物（`build/113/bench-libm-spike.sh`：
 候选标量实现（SLEEF 纯标量 u10 / musl-express 等）对 musl 现役，单向量 sin/exp/log/pow
@@ -34,3 +34,32 @@ musl 标量超越函数（各负载里 `exp_inline` 24% / `log_inline` 10% / sin
 - 探针/基准**不进开机路径**；实验产物只进实验站（wasm64-NEXT 分支纪律）；
 - SLEEF 等候选是**第三方源码树**引入 ⇒ 就算采纳也要先过"白名单 + 精度验收（数值全绿）+
   体积代价"三关；本单只做测量，不带依赖进产物。
+
+## Answer
+
+（2026-10-04 结案：**负判决**。结算件 `build/113/bench-libm-spike.sh` 两轮复跑一致。）
+
+**spike A（零新依赖）**：emscripten 自带 musl 的 exp/log/pow/sin/cos/__rem_pio2 以
+`-O3 -fno-math-errno -ffp-contract=fast -mrelaxed-simd` 重编覆盖对象（wasm64 车道，
+显式对象先于 libc），同一 node 进程同窗对拍（交错 3 轮 × 5 次取中位）：
+
+| 函数 | 基线 | 覆盖 | 比值 | 精度（vs host Math.*） |
+|---|---|---|---|---|
+| sin | 23.0 | 23.0–23.2 | 0.998–1.010 | 1.60e-16（逐位一致） |
+| exp | 22.7 | 22.7–22.8 | 1.003–1.004 | 2.13e-16（逐位一致） |
+| log | 24.9–25.6 | 25.5–25.6 | 1.003–1.025 | 2.21e-16（逐位一致） |
+| pow | 38.1–38.6 | 35.8–36.6 | 0.941–0.949 | 0（逐位一致） |
+
+**geomean 0.991（两轮同值）＜ 1.5 门槛 ⇒ REJECT**。
+
+**机制根因（比数字更重要）**：wasm **没有标量 FMA** —— `f64x2.relaxed_madd` 是 v128
+专用指令（覆盖对象 `exp.o` 的 `fd 87 02` 字节实测 **0 条**：`-ffp-contract=fast` 在标量
+代码上无事可做）；多项式 Horner 链是依赖链，标量上 mul+add 分开收不到 contraction 的
+一半链长收益。musl 标量本身已在 ~2.7 ns/调用（≈10 周期）的地板；`-fno-math-errno`/-O3
+结果与速度双双无感。spike B（SLEEF 标量）不单测：同为标量、同受上限，对 1.5× 门槛
+无判别力。
+
+**推论**：元素级数学热点的唯一有 headroom 的路 = v128 批量求值（向量 libm）+ 调用点
+批量调用/整树重向量化 —— **在插件契约之外**（用户硬约束：不脱离 Octave 树）。
+**插件可换部件空间实测封口**：分配器（mimalloc，已发运）是最后一块换成的，libm 是
+最后一块候选的实测否决。

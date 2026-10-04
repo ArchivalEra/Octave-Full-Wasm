@@ -13,6 +13,7 @@
 !CONTEXT.md
 !DEPLOY.md
 !doctor.json
+!build/plugins.json
 !build/Makefile
 !bridge/octave-page.ts
 !bridge/embed-wgsl.html
@@ -94,6 +95,7 @@
 !build/forge-build.sh
 !test/browser/*.mjs
 !test/fixtures/*
+!test/fixtures/libm-spike/*
 !bridge/p5canvas.js
 !bridge/octave-worker.js
 !bridge/octave-core.js

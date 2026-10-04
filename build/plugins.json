@@ -1,0 +1,32 @@
+{
+  "_comment": "部件插件登记表（工单 61，2026-10-04）—— 数据不是代码。每条 = 一次『构建期部件替换』的登记：哪个车道、模式表哪个旋钮、declared 里必须出现什么标签。闸门 build/113/plugin-check.py 拿它双向核对现役产物：①登记了的标签必须在产物 declared 里（旋钮没生效 ⇒ 红）；②产物 declared 里不许出现登记表之外的插件键（手加了旋钮没登记 ⇒ 红；判定器 check-build-manifest 的同款反向在产物出生时已拦一道，这里是登记层）。declared_base_keys = 不算插件的基础键（能力面声明）。硬边界：插件只换『链接进来的部件』（库/旗标/第三方补丁），Octave 自身源码零改动；缝上必须有两个真实适配器才许登记。",
+  "declared_base_keys": ["main_module", "simd", "jspi_entry", "jspi_glue_suspending", "gl4es", "idbfs", "fontconfig", "threads", "wasm64", "fonts"],
+  "plugins": [
+    {
+      "name": "e2-openblas",
+      "lanes": ["w64", "threads"],
+      "knob": "E2_OPENBLAS",
+      "applied": "库序：-L$E2_OPENBLAS 排最前 ⇒ -lrefblas 解析到线程版 OpenBLAS（FMA 内核已烘进归档）",
+      "declared_label": { "e2_openblas": true },
+      "probe": "输入侧溯源：octave.build.json 的 inputs.blas.resolved_dir 必须含 openblas（check-build-manifest 的 lane_blas_problem/判定规则）",
+      "witness": ["build-inputs.json：E2_RELAXED_FMA + patch-openblas-relaxed-fma.py 接线行"],
+      "since": "2026-09-27（E2，工单 33 发运）"
+    },
+    {
+      "name": "mimalloc",
+      "lanes": ["w64"],
+      "knob": "MALLOC",
+      "applied": "链接旗标 -sMALLOC=mimalloc（relink.sh w64 模式表；探针 -Wl,--export-if-defined=mi_version）",
+      "declared_label": { "malloc": "mimalloc" },
+      "probe": "产物探针：导出段里的 mi_version（mimalloc 独有，dlmalloc 没有）——write-build-manifest 量 measured.malloc，check-build-manifest 双向核对",
+      "witness": ["build-inputs.json：MALLOC=mimalloc 行 + --export-if-defined=mi_version 行", "事实键 w64_cand_malloc 挂 witness 档（每提交复查候选产物导出段）"],
+      "since": "2026-10-04（工单 57 实测 −27% → 59 发运）"
+    }
+  ],
+  "lane_expect": {
+    "base": {},
+    "threads": { "e2_openblas": true },
+    "w64": { "e2_openblas": true, "malloc": "mimalloc" },
+    "w64-base": {}
+  }
+}
