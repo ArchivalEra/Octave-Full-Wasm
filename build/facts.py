@@ -760,6 +760,23 @@ def measure(argv):
     #   纯工具链对比（clang 23 vs 24；dgemm/qsort/mem/bytesum 四面交错 3 轮）。
     #   结论：codegen 红利 ≈ 0（geomean 1.00）；旗标存活矩阵全绿（JSPI/MEMORY64/
     #   relaxed-simd/MAIN_MODULE 全活）。详情 build/113/NOTES-upstream.md。
+    # ★ **fill spike**（工单 63 / 候选②，2026-10-04）：idx_vector::fill 91% 热点的
+    #   Rust slice::fill 对照。实测 2^24 填充 9.5 vs 10.2 ms（比值 1.071，Rust 更慢）
+    #   ⇒ **否决**：该热点是内存带宽绑定（134MB/9.5ms ≈ 14GB/s ≈ 带宽顶），
+    #   任何实现语言都拿不到。仪器成果（差分门 G2 + 变异自证 G2b 31/31）保留。
+    _rf = os.path.join(os.path.dirname(SITE), "w64-logs", "rustfill-spike.log")
+    if os.path.exists(_rf):
+        import re as _re3
+        _m7 = _re3.search(r"比值=([0-9.]+)", open(_rf, encoding="utf-8", errors="replace").read())
+        if _m7:
+            facts["rust_fill_spike_ratio"] = fact(
+                float(_m7.group(1)),
+                "sh test/fixtures/rustfill-spike/run-spike.sh（读 w64-logs/rustfill-spike.log 的比值行）",
+                "w64-logs/rustfill-spike.log",
+                "Rust slice::fill / C++ 标量 fill 的 2^24 填充比值（<1 = Rust 快）；"
+                "实测 >1 ⇒ 候选②否决——带宽绑定热点换语言无益",
+                replay=False)
+
     _e6 = os.path.join(os.path.dirname(SITE), "w64-logs", "emcc6-probe.log")
     if os.path.exists(_e6):
         import re as _re2
@@ -1247,6 +1264,7 @@ def measure(argv):
         "w64_cand_vs_ship_matmul500", "w64_cand_vs_ship_lu800",
         "libm_spike_geomean",
         "upstream_submodule_count", "octave_pin", "emcc6_probe_geomean",
+        "rust_fill_spike_ratio",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
