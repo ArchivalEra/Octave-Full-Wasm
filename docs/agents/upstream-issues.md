@@ -161,3 +161,18 @@ default / unknown / 缺文件）、`check-build-manifest.py` 的 malloc 双向�
 **反哺流程的教训（写给下一个自己）**：提 issue 前先做"现有档位对照表"——
 #5 witness / #6 calibrate+instruments / #7 invariants / #8 envfile 各管哪层，
 新需求先问"哪一层、是不是已有档位换了个用法"。
+
+---
+
+# 反哺 #10（2026-10-04）：进程/端口活性的开工预检（doctor）
+
+> 上游 issue：<https://github.com/ArchivalEra/Einfacht/issues/10>
+> **先对照过档位再提的**（#9 的教训）：#7 管输入文本、#8 管配置载体——都不管**活物**。
+
+- **缺口**：git/闸门/witness 全管文件与产物；服务进程、容器、端口占用不在任何机制管辖内
+  ⇒ "文件不变量全绿"与"环境可用"是两个命题。两次实测事故：机器重启杀掉容器 + 8761 服务
+  （文件层全真、底线实际不可用，白跑一轮基准才现形，§5.86）；实验端口被别的 dev server 占用
+  ⇒ 探测误判"产物起不来"（§5.83）。
+- **建议形状**：声明式 doctor（spec 数据：http/docker/port-free 三种 kind + why 必填），
+  挂**开工/跑套件前**（不挂 pre-commit——查的是会死的东西，频率错）；两类断言：
+  必须活着 + 必须空着；stdout 裸值 `ok` / `DOWN: <哪条>`；每条带超时（探针失败模式与被探测物解耦）。

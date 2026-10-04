@@ -720,7 +720,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `docs/agents/issue-tracker.md` (3217 bytes)
 - `docs/agents/memory.md` (3553 bytes)
 - `docs/agents/triage-labels.md` (1606 bytes)
-- `docs/agents/upstream-issues.md` (10184 bytes)
+- `docs/agents/upstream-issues.md` (11242 bytes)
 - `docs/embed-api.md` (10543 bytes)
 - `docs/manual-test-checklist.md` (4475 bytes)
 - `site/VERSION` (14 bytes)
