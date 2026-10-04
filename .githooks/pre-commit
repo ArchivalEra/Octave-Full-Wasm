@@ -10,13 +10,13 @@ HOOK_DIR="$(dirname "$0")"
 # ★ 顺序（2026-10-04 实测踩到）：**HANDOFF 在前、README 在后** —— README 的 AUTO:FILES
 #   记的是各文件**字节数**，其中就有 HANDOFF.md；旧顺序先算 README 再重算 HANDOFF 机器块
 #   ⇒ HANDOFF 大小一变，README 记的数当提交落地时就过期 ⇒ pre-push 必红、每批补一刀。
-python3 "$HOOK_DIR/update-handoff.py"
-git add HANDOFF.md
-python3 build/facts.py --render-doc HANDOFF.md
-git add HANDOFF.md
+python3 "$HOOK_DIR/update-state.py"
+git add STATE.md
+python3 build/facts.py --render-doc STATE.md
+git add STATE.md
 python3 "$HOOK_DIR/update-readme.py"
 git add README.md
-python3 "$HOOK_DIR/check-handoff.py"
+python3 "$HOOK_DIR/check-state.py"
 python3 "$HOOK_DIR/check-consistency.py"
 python3 "$HOOK_DIR/check-wants.py"
 python3 "$HOOK_DIR/check-whitelist.py"

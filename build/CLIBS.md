@@ -178,7 +178,7 @@ autoload → **path 上的函数** → package → builtin（`fcn-info.cc:811-83
 
 ### 四件事缺一不可
 1. **恢复 `oct-shlib.cc`**：fork 把 `octave_dlopen_shlib` 的 `dlopen`/`dlsym`/`dlclose`
-   全删了（详见 HANDOFF §4.1）。用上游同名文件覆盖即可，diff 只有 3 处 hunk：
+   全删了（详见 `git show 0f20395:HANDOFF.md` §4.1——HANDOFF 已退役入历史）。用上游同名文件覆盖即可，diff 只有 3 处 hunk：
    `m_library = dlopen (m_file.c_str (), flags);` + 失败报错、析构里的 `dlclose`、
    `search()` 里的 `dlsym (m_library, …)`。取法：
    `curl -sSL https://raw.githubusercontent.com/gnu-octave/octave/release-7-2-0/liboctave/util/oct-shlib.cc`
@@ -218,7 +218,7 @@ autoload → **path 上的函数** → package → builtin（`fcn-info.cc:811-83
 
 ### 已采用（2026-09-20 拍板）
 用户决定采用：**贴近原版 Octave 的插件模型优先于体积**，整站 gzip 后交付。
-基线 8761 已换成该构建（实测 **20/20**），交付包见 HANDOFF §2.1.1。
+基线 8761 已换成该构建（实测 **20/20**），交付包见 `git show 0f20395:HANDOFF.md` §2.1.1。
 主链 flag 已同步进 `build/Makefile`（`MAIN_MODULE=1` + `-fPIC`，含回退说明）。
 
 直接后果：**新 dldfcn 模块可以只编 `.oct` 运行时加载，不必重链那 38MB 主 wasm**
@@ -654,7 +654,7 @@ TypeError: Cannot read properties of undefined (reading 'apply')
 **问题**：`help NAME` 对所有走 texinfo 渲染的输入都报
 `system: unable to start subprocess for 'makeinfo …'`。上游 `__makeinfo__.m:155`
 最后一步是 `system()` 起 makeinfo 子进程，而本构建**没有 shell**（有意为之，
-见 HANDOFF §7）。只有 `.m` 文件的 plain-text docstring 能看（`help plot`）；
+见 `git show 0f20395:HANDOFF.md` §7）。只有 `.m` 文件的 plain-text docstring 能看（`help plot`）；
 内建函数的 docstring 在 C++ `DOCSTRINGS` 表里、标记为 texinfo，全部失败。
 
 ### 关键认识：makeinfo 不该被"替代"，而该被"提前调用"
@@ -1453,7 +1453,7 @@ emmake make -k -j24
    三条自检全绿**，但运行时**默认 toolkit 掉回 `web`**（图走 SVG 回落），很容易误判成
    "fontconfig 把 GL 弄坏了"。已把那段改成"恢复不了就 FATAL"。
 9. `make` 的 in-tree 链接（`octave-cli`、各 `.oct`）会因 `cgejsv_`/`zgejsv_` 未定义报错 ——
-   **既存状态**（HANDOFF §4.7 记过），需要的是三个 `.a`（liboctinterp/liboctave/libcorefcn），
+   **既存状态**（`git show 0f20395:HANDOFF.md` §4.7 记过），需要的是三个 `.a`（liboctinterp/liboctave/libcorefcn），
    它们正常产出。别被 `make -k` 的 Error 计数吓到。
 
 ## 验收（判别性）

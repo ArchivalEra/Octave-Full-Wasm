@@ -1,58 +1,31 @@
-# HANDOFF · Octave-Full-Wasm（给 AI 的接续说明 · **指路牌版**）
+# STATE · 活状态
 
-> **唯一目的：抗上下文压缩**。2026-10-04 起按新记忆架构运行（规约 = `docs/agents/memory.md`）：
-> **本文只做三件事 —— 现在是什么 / 下一步 / 指针表**；**记忆主力 = 事实系统**（文末两个 AUTO 块，
-> 源 = `build/FACTS.json`），**规则 = `AGENTS.md`**（每次会话自动载入，本文不再重复抄）。
-> 上一版（612 行）全文：`git show ce4f4d7:HANDOFF.md`；更早 1034 行版：`git show 76176bb:HANDOFF.md`。
+正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
+方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
-## 0. 现在是什么（2026-10-04）
+## 现在是什么（2026-10-04）
 
 - **现役 8761 = 四格站点**（根目录 base + `threads/` + `w64/` + `w64-base/`；w64 档 =
   relaxed-simd FMA **+ mimalloc** 版，工单 59 已发运）。各档 sha 看文末 AUTO 块与
-  `build/FACTS.json` 的 `w64_wasm_sha`；最近一次全绿回归 = `build/FACTS.json` 的
-  `accept_suites` / `accept_pass`。发运入口与批次收尾动作 = `AGENTS.md`（本文件不再抄）。
-- **当前活跃工作 = 分支 `wasm64-NEXT`**（性能极限冲刺）：工单 54–59 已结 —— hotpath 热点仪器、
-  全负载扫描（分配器锁税 24–44%）、dlsync 补丁修复、**mimalloc 已发运**（工单 59：模式表旋钮
-  `MALLOC=mimalloc` + 产物探针 + 全量全绿 + 8761/8768 双站发运；loop 轴 −22%；FMA 内核未动 =
-  `w64_relaxed_madd` 不变）、部件盘点（**部件空间基本到边**，下一块 = libm）。
-  过程详单 = `HISTORY.md` §5.84/§5.86/§5.87 + `build/113/NOTES-hotpath.md`；热点事实 =
-  `build/FACTS.json` 的 `hotpath_top` / `hotpath_instrument_ok`（witness 档，提交时逐字复跑）。
-- **拍板三工单全部结案（2026-10-04 无人值守长跑）** —— **59** mimalloc ✅ 已发运 8761/8768；
-  **60** libm spike **负判决**（链接期标量替换 geomean 0.96–0.99 三跑全 REJECT；机制根因 =
-  **wasm 无标量 FMA**，relaxed_madd 是 v128 专用，musl 标量已在 ~2.7ns/调用地板 ——
-  `build/113/NOTES-libm.md`）；**61** 插件契约 v1 定稿（`build/113/NOTES-plugins.md` +
-  `build/plugins.json` 登记表 + `plugin-check.py` 闸门 R1/R2/R3，挂 pre-commit）。
-  **★ 结论：插件可达的部件空间实测封口** —— 现役两插件（e2-openblas / mimalloc）即全部；
-  余下热点（octave_sort / SparseMatrix / idx_vector 等）全在 Octave 自身源码，
-  在"不脱离 Octave 树"约束下不可达。
-- **工单台账**：全结（54–61 无 open）+ 人的动作：票 12 真机手测（等生产部署）、
-  票 38 页面资产上站（走 `build/promote-pages.sh`）、E6 图形线（embed 页 GL 纹理边界）。
-
-## 1. 下一步（按此顺序）
-
-1. 等人的动作（见 §0 台账行）：票 38 上站 / 票 12 真机手测 / E6 图形线 —— 均是外部依赖。
-2. 若要再提性能：唯一在约束内的剩余路线 = **Octave 源码级优化**（改 C++ 本体，
-   用户此前拍板"极其不想脱离树"⇒ 挂起，除非用户解除）。
-3. 新部件替换需求出现时：照 `build/113/NOTES-plugins.md` 契约 + component-swap skill 施工。
-4. 8761 现役 w64 = mimalloc 版（`01fb52fc…`）；FMA 版备份 =
-   `/mnt/hdd/octave-wasm-build/w64-artifacts-fma-backup-20261004/`。
-
-## 2. 指针表（哪类知识住哪；规约 = `docs/agents/memory.md`）
-
-| 要找什么 | 去哪 |
-|---|---|
-| 铁律 / 闸门 / 批次收尾 / 硬坑 / 操作纪律 | `AGENTS.md`（自动载入；唯一权威，本文不重复） |
-| 测出来的数字 | 文末 AUTO:FACTS / AUTO:STATE（机器块）；源 = `build/FACTS.json`（正文只写键引用） |
-| 批次过程 / 事故 / 翻案 | `HISTORY.md` §5.x（append-only） |
-| 未结案的问题 | `.scratch/open-questions/issues/NN-*.md`（本地 tracker；规约 `docs/agents/issue-tracker.md`） |
-| 机制推断 / 为什么 | `build/113/NOTES-{jspi,threads,webgl,wasm64,hotpath}.md` |
-| 被推翻的断言 | `build/lib/retractions.json`（重现即红） |
-| 术语 | `CONTEXT.md` |
-| 事实系统 / 记忆架构 | `docs/agents/fact-system.md` / `docs/agents/memory.md` |
-| 嵌入接口（UI 方开工包） | `docs/embed-api.md`；真机手测清单 = `docs/manual-test-checklist.md` |
-| 当前工作令 | `build/113/PLAN-arch.md` §0.5 |
-
----
+  `build/FACTS.json` 的 `w64_wasm_sha`；最近一次全绿回归 = `accept_suites` / `accept_pass`。
+  发运入口与批次收尾 = `AGENTS.md`。
+- **上游架构已接入**（`upstream/` 18 个浅 submodule + `build/upstream-lock.json`）：
+  5 fork 的 wasm 补丁分支（octave `wasm/11.3.0` @ `build/FACTS.json` 的 `octave_pin`、
+  openblas `wasm-e2`、gl4es `wasm`、rapidjson `wasm/1.1.0`；suitesparse 对官方 tag 零差异）
+  + 13 直连 tag。供给 = `build/provision-upstream.sh`；一致性 = `witness-upstream-pin.py`
+  （容器树 == pin，每提交核对）。升级 SOP = `build/113/NOTES-upstream.md`。
+- **性能线结论**：插件可达部件空间实测封口——现役两插件（e2-openblas / mimalloc）即全部；
+  libm 标量替换负判决（wasm 无标量 FMA，`build/113/NOTES-libm.md`）；热点余下部分全在
+  Octave 自身源码（`build/113/NOTES-hotpath.md`）。
+- **⏸ 唯一 agent 可做的活 = 工单 62**：全量 clean rebuild 露出 Fortran→BLAS ABI 分叉
+  （发运谱系 1 条 mismatch vs 供给树全量 55 条 ⇒ wasm-opt 拒收）——增量谱系不可复现，
+  **上游升级 SOP 被阻断**。结算件 = `CCACHE_DISABLE=1` 供给树对照重编
+  （`.scratch/open-questions/issues/62-full-rebuild-abi-divergence.md`）。
+- **8761 在 promote 之前一字未动**；FMA 版备份 =
+  `/mnt/hdd/octave-wasm-build/w64-artifacts-fma-backup-20261004/`。
+- **人的动作**（外部依赖）：票 38 页面资产上站（`build/promote-pages.sh`）、票 12 真机手测
+  （清单 `docs/manual-test-checklist.md`）、E6 图形线（embed 页 GL 纹理边界）。
+- **Einfacht 反哺**：PR #11（check_pins + check_locks 两插件，发现式收编）在途。
 
 ## 附 · 机器维护的区块（**自动生成，别手改**）
 
@@ -186,7 +159,7 @@
 ### 部署状态
 
 <!-- AUTO:STATE -->
-> 本区块由 `.githooks/update-handoff.py` 重算，**不要手改**（pre-commit 会刷新并 `git add`；pre-push 会 `--check`）。
+> 本区块由 `.githooks/update-state.py` 重算，**不要手改**（pre-commit 会刷新并 `git add`；pre-push 会 `--check`）。
 
 | 项 | 值 |
 |---|---|

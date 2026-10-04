@@ -46,13 +46,13 @@ def state_lines():
 
 def main():
     # 先把机器块刷新（静默），这样注入的就是**当前**状态
-    subprocess.run([sys.executable, os.path.join(REPO, ".githooks", "update-handoff.py"),
+    subprocess.run([sys.executable, os.path.join(REPO, ".githooks", "update-state.py"),
                     "--quiet"], cwd=REPO, capture_output=True)
-    ctx = ["[HANDOFF] 本仓库是浏览器版 Octave（wasm）。接续工作**先读 HANDOFF.md**"
+    ctx = ["[STATE] 本仓库是浏览器版 Octave（wasm）。接续工作**先读 maintaince.md（方向）与 STATE.md（活状态）**"
            "（指路牌版：§0 现在是什么 / §1 下一步 / §2 指针表；记忆架构规约 = "
            "docs/agents/memory.md），规则在 AGENTS.md（每次自动载入），"
            "历史与过程在 HISTORY.md（append-only）。",
-           "当前部署状态（由 .githooks/update-handoff.py 从持久盘产物重算，**别手写**）："]
+           "当前活状态（由 .githooks/update-state.py 从持久盘产物重算，**别手写**）："]
     ctx += ["  · " + r for r in state_lines()]
     ctx.append("改动前先读 AGENTS.md 的三条不可违背；验收底线是 8761 永不退化（先在 8768 上验）。")
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",

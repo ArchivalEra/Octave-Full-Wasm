@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Octave-Full-Wasm — HANDOFF 陈旧断言检查（活状态段落不得与产物矛盾）
+# Octave-Full-Wasm — STATE 陈旧断言检查（活状态段落不得与产物矛盾）
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -26,19 +26,19 @@
      烂法：早就上线了，§8 还写着"仍未上 8761"。
 
 用法：
-  check-handoff.py           # 违规即 exit 1（pre-commit / pre-push 用）
-  check-handoff.py --list    # 只列不改、永远 exit 0（人工巡检用）
+  check-state.py           # 违规即 exit 1（pre-commit / pre-push 用）
+  check-state.py --list    # 只列不改、永远 exit 0（人工巡检用）
 """
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import handoff_facts as F  # noqa: E402
+import state_facts as F  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "lib"))
 from gate import Gate, selftest          # noqa: E402
 
-DOC = "HANDOFF.md"
+DOC = "STATE.md"
 HISTORICAL_SECTIONS = ("5", "9", "10")   # 见文件头：这些是 append-only 的历史记录
 RETIRED = ("osmesa",)                    # 退役组件名（加新名字时同步 HANDOFF 开头那段）
 
@@ -172,16 +172,16 @@ def main():
 
     show = lambda rows: [print("  %s: [%s] %s\n      %s" % (l, k, msg, txt)) for l, k, msg, txt in rows]
     if notes:
-        print("HANDOFF 提示（%d 条，不拦提交）：" % len(notes))
+        print("STATE 提示（%d 条，不拦提交）：" % len(notes))
         show(notes)
     if problems:
-        print("HANDOFF 陈旧断言（%d 条，**必须改**）：" % len(problems), file=sys.stderr)
+        print("STATE 陈旧断言（%d 条，**必须改**）：" % len(problems), file=sys.stderr)
         for l, k, msg, txt in problems:
             print("  %s: [%s] %s\n      %s" % (l, k, msg, txt), file=sys.stderr)
         print("\n要么把断言改成当前事实（数字可从文中 AUTO:STATE 区块里取），"
               "要么把它移进 HISTORY.md。", file=sys.stderr)
         return 0 if "--list" in sys.argv else 1
-    print("HANDOFF 活状态断言与产物一致")
+    print("STATE 活状态断言与产物一致")
     return 0
 
 

@@ -43,7 +43,7 @@ from gate import Gate, root, run_quiet, selftest                          # noqa
 
 FACTS = "build/FACTS.json"
 # 活状态文档（规则 A/C 生效）
-LIVING_DOCS = ("HANDOFF.md", "AGENTS.md", "README.md", "CONTEXT.md", "DEPLOY.md")
+LIVING_DOCS = ("STATE.md", "maintaince.md", "AGENTS.md", "README.md", "CONTEXT.md", "DEPLOY.md")
 # 批次记录（只查"抄了要与实测一致"；它们是带日期的"当时如此"）
 RECORD_DOCS = ("build/113/PLAN-arch.md", "build/113/PLAN-threads.md")
 MARK = re.compile(r"历史|退役|留档|当时|曾经|之前|已翻案|更正|是错的|误读|实测复跑|旧版|上一个提交|回退点|基线")
@@ -63,7 +63,7 @@ RULES = {
 
 def living_part(path, text):
     """HANDOFF 只取活状态段落（§5/§9/§10 是历史；`## 附` 是机器块区）。"""
-    if not path.endswith("HANDOFF.md"):
+    if not path.endswith("STATE.md"):
         return text
     out, keep = [], True
     for ln in text.split("\n"):
@@ -113,18 +113,18 @@ def check(g, facts, docs, records=None, live_shas=None):
     known = set(f)
 
     # ── 规则 B：HANDOFF 的块必须与台账一致 ────────────────────────────────────────
-    ho = docs.get("HANDOFF.md")
+    ho = docs.get("STATE.md")
     if ho is None:
-        g.problem("HANDOFF.md 不在扫描面里", "块规则无从核对")
+        g.problem("STATE.md 不在扫描面里", "块规则无从核对")
     else:
         cur = extract_block(ho)
         if cur is None:
-            g.problem("HANDOFF.md 缺 AUTO:FACTS 块标记",
+            g.problem("STATE.md 缺 AUTO:FACTS 块标记",
                       "数字没有产地（块由 build/facts.py --render-doc 生成）")
         else:
             if cur != block_body(facts):
                 g.problem("事实块与台账不一致（块过期）",
-                          "HANDOFF.md 的 AUTO:FACTS ≠ build/FACTS.json 的渲染结果"
+                          "STATE.md 的 AUTO:FACTS ≠ build/FACTS.json 的渲染结果"
                           "（跑 python3 build/facts.py --render-doc）")
             else:
                 g.note("自动块与台账一致（%d 条事实）" % len(f))
@@ -146,7 +146,7 @@ def check(g, facts, docs, records=None, live_shas=None):
                 else:
                     g.problem("活状态文档里手抄了数字（%s）" % key,
                               "%s:%d 「%s」\n      改成引用台账的键名：`build/FACTS.json` 的 `%s`"
-                              "（数字只在 HANDOFF 的 AUTO:FACTS 块里生产）"
+                              "（数字只在 STATE 的 AUTO:FACTS 块里生产）"
                               % (path, i, m.group(0).strip(), key))
 
     # ── 规则 C：正文引用的键必须存在 ─────────────────────────────────────────────
@@ -222,7 +222,7 @@ def live_site_shas():
     读不到就返回 None（"换了机器"不是错，只记 note）。"""
     try:
         sys.path.insert(0, _HERE)
-        import handoff_facts as HF                      # noqa: E402
+        import state_facts as HF                      # noqa: E402
         out = {}
         for rel, key in (("octave.wasm", "wasm_sha"), ("octave.js", "js_sha"),
                          ("octave.data", "data_sha")):
@@ -270,37 +270,37 @@ def _problems(facts, docs, records=None, live=None):
     return g.problems
 
 
-GOOD = {"HANDOFF.md": _doc("现役数字见 `build/FACTS.json` 的 `wasm_v128` 与 `env_vars`。\n")}
+GOOD = {"STATE.md": _doc("现役数字见 `build/FACTS.json` 的 `wasm_v128` 与 `env_vars`。\n")}
 CASES = [
     ("★ 正文只引用键、块与台账一致 ⇒ 不报", lambda: _np(_LEDGER, GOOD) == 0),
     ("★ **正文手抄数字 ⇒ 必须报**（这是本轮新增的核心否定用例）",
-     lambda: _np(_LEDGER, {"HANDOFF.md": _doc("现役 v128 计数 = 4752。\n")}) == 1),
+     lambda: _np(_LEDGER, {"STATE.md": _doc("现役 v128 计数 = 4752。\n")}) == 1),
     ("★ 抄的数字与实测**一致**也照报（「抄对了」不再是合规形态）",
-     lambda: any("手抄" in p[0] for p in _problems(_LEDGER, {"HANDOFF.md": _doc("23 个环境变量\n")}))),
+     lambda: any("手抄" in p[0] for p in _problems(_LEDGER, {"STATE.md": _doc("23 个环境变量\n")}))),
     ("★ 数字写在 AUTO:FACTS 块里 ⇒ 不算手抄（块内那行确实有 4752，但块本身被豁免）",
      lambda: "**4752**" in _doc("见 `build/FACTS.json` 的 `wasm_v128`。\n")
      and not any("手抄" in p[0] for p in _problems(
-         _LEDGER, {"HANDOFF.md": _doc("见 `build/FACTS.json` 的 `wasm_v128`。\n")}))),
+         _LEDGER, {"STATE.md": _doc("见 `build/FACTS.json` 的 `wasm_v128`。\n")}))),
     ("★ **块过期 ⇒ 必须报**（块里写 4000、台账 4752）",
      lambda: any("块过期" in p[0] for p in _problems(
-         _LEDGER, {"HANDOFF.md": _doc("x\n").replace("**4752**", "**4000**")}))),
+         _LEDGER, {"STATE.md": _doc("x\n").replace("**4752**", "**4000**")}))),
     ("★ **缺块标记 ⇒ 必须报**",
-     lambda: any("缺 AUTO:FACTS" in p[0] for p in _problems(_LEDGER, {"HANDOFF.md": "正文\n"}))),
+     lambda: any("缺 AUTO:FACTS" in p[0] for p in _problems(_LEDGER, {"STATE.md": "正文\n"}))),
     ("★ **引用了不存在的键 ⇒ 必须报**",
      lambda: any("不存在的事实键" in p[0] for p in _problems(
-         _LEDGER, {"HANDOFF.md": _doc("见 `build/FACTS.json` 的 `wasm_v999`。\n")}))),
+         _LEDGER, {"STATE.md": _doc("见 `build/FACTS.json` 的 `wasm_v999`。\n")}))),
     # ★★ Einfacht issue #3 ④（2026-10-01 移植）：围栏代码块/行内代码**豁免**
     ("★ 围栏代码块里的数字 ⇒ 豁免（复跑命令天然带数字）",
-     lambda: _np(_LEDGER, {"HANDOFF.md": _doc(
+     lambda: _np(_LEDGER, {"STATE.md": _doc(
          "```sh\nsh build/check-deploy-sha.sh site 4752\n```\n"
          "对照 `build/FACTS.json` 的 `wasm_v128`。\n")}) == 0),
     ("★ 行内代码里的数字 ⇒ 豁免（引用键的同时行内代码豁免）",
-     lambda: _np(_LEDGER, {"HANDOFF.md": _doc(
+     lambda: _np(_LEDGER, {"STATE.md": _doc(
          "对照 `build/FACTS.json` 的 `wasm_v128`，历史输出 `4752` 仅供参考。\n")}) == 0),
     ("★ 但**正文裸写**（无代码、无块）仍必须报（豁免不许变成后门）",
-     lambda: _np(_LEDGER, {"HANDOFF.md": _doc("对照输出 v128 计数 4752。\n")}) == 1),
+     lambda: _np(_LEDGER, {"STATE.md": _doc("对照输出 v128 计数 4752。\n")}) == 1),
     ("★ 引用机制空转（既无引用也无裸数字）⇒ 必须报",
-     lambda: any("空转" in p[0] for p in _problems(_LEDGER, {"HANDOFF.md": _doc("正文。\n")}))),
+     lambda: any("空转" in p[0] for p in _problems(_LEDGER, {"STATE.md": _doc("正文。\n")}))),
     ("★ **台账过期 ⇒ 必须报**（站点 sha 与台账不同）",
      lambda: any("台账过期" in p[0] for p in _problems(
          _LEDGER, GOOD, None, {"wasm_sha": "b" * 64}))),

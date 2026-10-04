@@ -38,7 +38,7 @@ from gate import Gate, root, run_quiet, selftest          # noqa: E402
 
 LEDGER = "build/lib/retractions.json"
 # 扫哪些文件（"活状态"面）。HISTORY.md 故意不在列（append-only 历史）。
-LIVE_DOCS = ("HANDOFF.md", "AGENTS.md", "CONTEXT.md", "DEPLOY.md",
+LIVE_DOCS = ("STATE.md", "maintaince.md", "AGENTS.md", "CONTEXT.md", "DEPLOY.md",
              "build/113/PLAN-arch.md", "build/113/PLAN-threads.md")
 # HANDOFF 里 §5/§9/§10 是历史章节（与 check-handoff.py 同一约定：那边是历史，不查）
 HISTORICAL_SECTIONS = ("5", "9", "10")
@@ -47,7 +47,7 @@ MARK = re.compile(r"已翻案|翻案|更正|是错的|错话|误读|推翻|退�
 
 def living_part(path, text):
     """HANDOFF 只取活状态段落；其余文档整体算活状态。"""
-    if not path.endswith("HANDOFF.md"):
+    if not path.endswith("STATE.md"):
         return text
     out, keep = [], True
     for ln in text.split("\n"):
@@ -132,7 +132,7 @@ CASES = [
     ("带更正标记出现 ⇒ 放行（那是记录）",
      lambda: _np(_LED, {"AGENTS.md": "已翻案：以前说『月亮是方的』是错的\\n"}) == 0),
     ("HISTORY 类历史章节不扫（HANDOFF §5）",
-     lambda: _np(_LED, {"HANDOFF.md": "## 5. 历史\\n月亮是方的\\n"}) == 0),
+     lambda: _np(_LED, {"STATE.md": "## 5. 历史\\n月亮是方的\\n"}) == 0),
     ("**台账为空** ⇒ 必须报（零值守卫）", lambda: _np({"retractions": []}, {"AGENTS.md": "x"}) == 1),
     ("**扫描面为空** ⇒ 必须报（零值守卫）", lambda: _np(_LED, {}) == 1),
 ]

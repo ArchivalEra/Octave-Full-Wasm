@@ -1,8 +1,8 @@
 # AGENTS.md · Octave-Full-Wasm
 
-> **接续先读两份**：`HANDOFF.md`（活状态 · **指路牌版**：现在是什么/下一步/指针表，
-> 记忆架构规约 = `docs/agents/memory.md`）+ `build/113/PLAN-arch.md` 的
-> **§0.5「现在的状态与下一步顺序」**（当前工作令）。
+> **接续先读两份**：`maintaince.md`（**方向与地图**，只指方向不抄数字）+
+> `STATE.md`（活状态：现在是什么 + 文末机器块）。
+> 记忆架构规约 = `docs/agents/memory.md`（Einfacht 吞噬形态：HANDOFF 已退役）。
 > **并行度线**（SIMD/线程/Worker/嵌入契约）在 `build/113/PLAN-threads.md`，与本条并行、共享同一个产物。
 > 历史与旧数字在 **`HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only；正文里单写的这些编号都指它）。
 > 分门别类的坑：C 库配方 `build/CLIBS.md`、图形线 `build/113/NOTES-webgl.md`、JSPI 机制 `build/113/NOTES-jspi.md`。
@@ -109,8 +109,8 @@
 ## 提交前（六道闸门 + 闸门自证）
 ```bash
 python3 .githooks/update-readme.py --check   # README 的 AUTO:FILES 要新鲜
-python3 .githooks/update-handoff.py          # HANDOFF 的 AUTO:STATE 机器块
-python3 .githooks/check-handoff.py           # 活状态断言不得与产物矛盾（只查 HANDOFF.md）
+python3 .githooks/update-state.py            # STATE 的 AUTO:STATE 机器块
+python3 .githooks/check-state.py             # 活状态断言不得与产物矛盾（只查 STATE.md）
 python3 .githooks/check-consistency.py       # 挂载点/启动清单/车道路径一致
 python3 .githooks/check-wants.py             # 断言可证伪性（裸数字匹配/截断后匹配）
 python3 .githooks/check-whitelist.py         # 白名单覆盖
@@ -185,7 +185,7 @@ sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门�
 ### Issue tracker
 
 工单是本仓的 markdown 文件，在 `.scratch/open-questions/issues/NN-*.md` 下 —— **本地 tracker，
-不用 GitHub Issues**（本仓是私有仓且从未建过任何 issue；活状态由 `HANDOFF.md` 承载，工单只装
+不用 GitHub Issues**（本仓是私有仓且从未建过任何 issue；活状态由 `STATE.md` 承载，工单只装
 "未结案"）。见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels

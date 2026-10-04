@@ -18,7 +18,7 @@
 ## 多义词"闸门"拆成五个具名术语
 
 ### 提交前六项检查（别名：六道闸门）
-提交代码前必须全绿的六个 python 检查（README/HANDOFF 的机器块、活状态断言、路径一致性、
+提交代码前必须全绿的六个 python 检查（README/STATE 的机器块、活状态断言、路径一致性、
 断言可证伪性、白名单覆盖）。
 **证据：** `.githooks/check-consistency.py`
 
@@ -154,14 +154,14 @@ JSPI 的"挂起"= wasm 栈整体让出，页面定时器照常跑（验收判据
 ## 流程与文档
 
 ### 活状态 / 历史
-`HANDOFF.md` = 活状态（那里的断言必须与产物一致，否则 pre-commit 直接拦）；
+`STATE.md` = 活状态（那里的断言必须与产物一致，否则 pre-commit 直接拦）；
 `HISTORY.md` = 历史（append-only，里面的数字是"当时如此"，检查器不查）。
-**证据：** `.githooks/check-handoff.py`
+**证据：** `.githooks/check-state.py`
 
 ### AUTO:STATE
-`HANDOFF.md` 文末由 `.githooks/update-handoff.py` **机器维护**的区块（部署件 sha/体积、
+`STATE.md` 文末由 `.githooks/update-state.py` **机器维护**的区块（部署件 sha/体积、
 最近一次全绿回归、交付包、包内 wasm 与部署件同 sha）。**别手写、别手改**。
-**证据：** `.githooks/update-handoff.py`
+**证据：** `.githooks/update-state.py`
 
 ### 白名单（仓库策略）
 `.gitignore` 是**白名单**：默认拒绝一切（`*`），逐项放行（`!路径`）。新增文件必须同步放行，

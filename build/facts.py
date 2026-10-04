@@ -125,7 +125,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 from facts_block import (BLOCK_BEGIN, BLOCK_END, block_body,  # noqa: E402
                          render_block)
 
-DOC = "HANDOFF.md"
+DOC = "STATE.md"
 
 
 def load_ledger(path=None):

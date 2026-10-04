@@ -3,17 +3,20 @@
 > 用户指令：「将记忆架构推向 **『小 maintenance 指明方向 + 事实系统记忆主力』** ——
 > handoff 已经膨胀到难以维护，是时候拆分了。」本文件就是那次拆分的设计记录 + 现行规约。
 
-## 问题
+## 问题与终局
 
-HANDOFF 曾两度膨胀（1034 行 → 2026-09-26 瘦身 → 又涨回 612 行）：批次叙述被当"活状态"
-写进去，越写越长，而其中大半是"已完成" = 历史；规则/硬坑与 `AGENTS.md` 整节重复；
-数字靠闸门拦着不让手抄，可维护成本仍全花在"把历史改写成现在"。
+HANDOFF 曾两度膨胀（1034 行 → 2026-09-26 瘦身 → 又涨回 612 行 → 再瘦身 181 行），2026-10-04
+**按 Einfacht 规矩被吞噬**：内容分进 `maintaince.md`（仅方向与地图）与 `STATE.md`（活状态 +
+机器块），`HANDOFF.md` 本体退役（历史全文 `git show 0f20395:HANDOFF.md`）。闸门随迁：
+`check-handoff.py` → `check-state.py`、`update-handoff.py` → `update-state.py`、
+`handoff_facts.py` → `state_facts.py`（文件名换、契约不变）。
 
 ## 分层（每类知识只有一个家）
 
 | 记忆类型 | 家 | 谁维护 | 闸门 |
 |---|---|---|---|
-| **方向 + 当前态** | `HANDOFF.md`（只许：现在是什么 / 下一步 / 指针表） | 人（每批收尾改 §0/§1） | `check-handoff.py`（陈旧断言 L1–L4）+ `check-facts.py`（键引用/块一致） |
+| **方向** | `maintaince.md`（只指方向与地图，不抄数字不抄流程） | 人 | `check-facts.py`（键引用） |
+| **当前态** | `STATE.md`（活状态正文 + 文末机器块） | 人（正文）/ 机器（块） | `check-state.py`（陈旧断言 L1–L4）+ `check-facts.py`（键引用/块一致） |
 | **数字（记忆主力）** | `build/FACTS.json`（源）→ HANDOFF 文末 `AUTO:FACTS`/`AUTO:STATE`（渲染） | 机器（`build/facts.py` / `update-handoff.py`，pre-commit 重算） | `check-facts.py` 规则 A–D |
 | 规则 / 纪律 / 硬坑 | `AGENTS.md`（每次会话自动载入 ⇒ 唯一权威，HANDOFF 不重复） | 人 | `check-facts.py`（键引用） |
 | 批次过程 / 事故 / 翻案 | `HISTORY.md`（append-only） | 人（**收尾当场写**，别攒） | 无（历史不查现状；§5/§9/§10 豁免） |

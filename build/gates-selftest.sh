@@ -25,7 +25,7 @@ LIST="$(mktemp)"
 cat >"$LIST" <<'EOF'
 .githooks/check-whitelist.py --selftest
 .githooks/check-wants.py --selftest
-.githooks/check-handoff.py --selftest
+.githooks/check-state.py --selftest
 .githooks/check-consistency.py --selftest
 .githooks/check-retractions.py --selftest
 .githooks/check-facts.py --selftest

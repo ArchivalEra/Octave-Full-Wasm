@@ -14,22 +14,22 @@
 交给机器写，人只写结论。
 
 用法：
-  update-handoff.py            # 就地重写
-  update-handoff.py --check    # 只校验：会变就 exit 1（给 pre-push 用）
-  update-handoff.py --quiet    # 无变化时不打印（给 hook/Stop 用）
+  update-state.py            # 就地重写
+  update-state.py --check    # 只校验：会变就 exit 1（给 pre-push 用）
+  update-state.py --quiet    # 无变化时不打印（给 hook/Stop 用）
 
-口径与"为什么这么设计"见 `.githooks/handoff_facts.py` 的文件头。
+口径与"为什么这么设计"见 `.githooks/state_facts.py` 的文件头。
 """
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import handoff_facts as F  # noqa: E402
+import state_facts as F  # noqa: E402
 
 BEGIN = "<!-- AUTO:STATE -->"
 END = "<!-- /AUTO:STATE -->"
-DOC = "HANDOFF.md"
+DOC = "STATE.md"
 
 
 def render(prev):
@@ -40,7 +40,7 @@ def render(prev):
     nassets = F.assets_count()
 
     L = [BEGIN,
-         "> 本区块由 `.githooks/update-handoff.py` 重算，**不要手改**"
+         "> 本区块由 `.githooks/update-state.py` 重算，**不要手改**"
          "（pre-commit 会刷新并 `git add`；pre-push 会 `--check`）。",
          "",
          "| 项 | 值 |",
@@ -97,7 +97,7 @@ def render(prev):
 
     # ⚠️ 只写分支名：日期与 sha 从 HEAD 派生 ⇒ **在同一个提交里不可满足**（写进去的时候
     #    HEAD 还是旧提交，提交完就"过期" ⇒ 逼出第二个"刷新机器块"提交，或 `--no-verify`）。
-    #    详见 `.githooks/handoff_facts.py::git_facts()` 的实测记录。
+    #    详见 `.githooks/state_facts.py::git_facts()` 的实测记录。
     L.append(f"| 仓库 | 分支 `{git['branch'] or '?'}`"
              f"（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |")
     L.append(END)
@@ -121,16 +121,16 @@ def main():
             print(f"{DOC} 的 AUTO:STATE 区块已过期：先提交（pre-commit 会自动重算）再推",
                   file=sys.stderr)
             return 1
-        print("HANDOFF 机器块新鲜")
+        print("STATE 机器块新鲜")
         return 0
 
     if new_text != text:
         with open(DOC, "w", encoding="utf-8") as fh:
             fh.write(new_text)
         if "--quiet" not in sys.argv:
-            print("HANDOFF 机器块已重算")
+            print("STATE 机器块已重算")
     elif "--quiet" not in sys.argv:
-        print("HANDOFF 机器块无变化")
+        print("STATE 机器块无变化")
     return 0
 
 

@@ -3946,3 +3946,32 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
   `w64_cand_malloc` 改挂 witness 档），**#10 已提**（进程/端口活性开工预检，#7/#8 档位对照后
   的真缺口）；另修 pre-commit 重算顺序（HANDOFF 先于 README，README 记字节数 ⇒ 旧顺序每批
   制造 pre-push 假红）。
+
+### 5.88 仓库架构批：上游全量 fork/submodule 接入 + B5 等价性发现（2026-10-04，branch `wasm64-NEXT`）
+
+用户拍板："不属于我们的"直接以 fork 形式接入仓库（上游更新立刻尝到）——**全 farm 一次到位、
+官方 git 镜像形态**。落地：
+
+- **B0 抢救**：QuantStack Octave-Wasm 19 件参考补丁入库存档（`upstream-patches/octave-wasm-quantstack/`，
+  谱系出处非构建输入）。
+- **B1/B2**：5 个 fork（`ArchivalEra/{octave,OpenBLAS,gl4es,rapidjson}` + suitesparse 直连）；
+  `upstream/` 18 个浅 submodule 全部钉官方 tag（emsdk 5.0.7 / freetype VER-2-13-3 / …）；
+  7 个无官方 git 的上游（lapack 3.4.2/f2c/glu/gl2ps/qrupdate/glpk）进 `build/upstream-lock.json`
+  （URL+sha256）。mesa 退役不接入。
+- **B3 补丁分支**：octave `tarball/11.3.0`（release tarball 原样 commit = git 树与 tarball 树的
+  桥，免 bootstrap）→ `wasm/11.3.0`（+ 平台补丁 commits，`37dd7409e6df`）；openblas `wasm-e2`
+  （五补丁，`a1dd0b9`）；gl4es `wasm`（`a2e64b6`）；rapidjson `wasm/1.1.0`（`fa07488`）；
+  suitesparse 对官方 tag **零差异** ⇒ 无补丁分支。
+- **B4 接线**：`provision-upstream.sh`（checkout → 容器树 + `.upstream-pin` stamp）、
+  `upstream-pins.json` + `witness-upstream-pin.py`（容器树 == pin 三断言，自证 6/0，挂
+  pre-commit，39 闸门）、FACTS +2 键（`upstream_submodule_count`=18、`octave_pin`=37dd7409e6df）、
+  `link-web.sh` 的 `OCT_TREE` 可覆盖（模式表透传，31→32 变量）。
+- **B5 等价性发现（负结果，立工单 62）**：供给/pin/witness 全部工作；但供给树的
+  **全量 clean rebuild** 暴露 55 条 Fortran→BLAS `function signature mismatch`
+  （发运谱系仅 1 条）⇒ wasm-opt 拒收。已排除 configure/`='-fPIC'`/F2C_PREFIX 三个假说
+  （configure 两树逐字节同；裸行 pristine 自带；F2C 链全对）。**根因指向**：现役 w64 树
+  的 .libs 是 10-01 时代增量构建的千层饼——全量 rebuild 不可复现其 ABI 混合。结算件 =
+  `CCACHE_DISABLE=1` 重编对照（工单 62）。**升级 SOP 在此结案前被阻断**（如实记）。
+- **Einfacht 反哺**：#9 的教训前置——先对照档位（#7 文本 / #10 活性都不覆盖），两个新插件
+  **check_pins**（派生树 pin 一致性）+ **check_locks**（锁定源清单）以 PR #11 提交
+  （发现式收编 10→12 闸门；本仓 witness-upstream-pin 为其消费实例）。

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Octave-Full-Wasm — pre-push：校验 README/HANDOFF 的 AUTO 区块是否新鲜、活状态断言是否与产物一致
+# Octave-Full-Wasm — pre-push：校验 README/STATE 的 AUTO 区块是否新鲜、活状态断言是否与产物一致
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -9,6 +9,6 @@
 set -e
 HOOK_DIR="$(dirname "$0")"
 python3 "$HOOK_DIR/update-readme.py" --check
-python3 "$HOOK_DIR/update-handoff.py" --check
-python3 "$HOOK_DIR/check-handoff.py"
+python3 "$HOOK_DIR/update-state.py" --check
+python3 "$HOOK_DIR/check-state.py"
 python3 "$HOOK_DIR/check-consistency.py"
