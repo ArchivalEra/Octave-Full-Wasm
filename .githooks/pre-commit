@@ -29,6 +29,7 @@ python3 "$HOOK_DIR/../build/113/plugin-check.py"
 # ★ 仪器生命周期闸门（Einfacht #6 ① 移植，2026-10-03）：可插拔；这里显式启用两旋钮 ——
 #   恒常检测（first_seen 超 30 天 ⇒ 人工确认该 cmd 是在量还是恒返回同一个数）
 #   + 量法登记（build/instruments.json：被证伪的量法不许留在台账 cmd 里）。
+#   登记含被证伪的排序基准量法（工单 63：min-of-3 不重随机化 ⇒ 430ms→4.7ms 假象）。
 FACTS_INSTRUMENT_DAYS=30 FACTS_INSTRUMENTS=build/instruments.json python3 "$HOOK_DIR/check-instruments.py"
 # ★ F1（2026-09-26）：**闸门自证** —— 闸门不能证明自己会红，就不许提交。
 #   放在最后是有意的：前六道是"查仓库"，这一道是"查检查器本身"。
