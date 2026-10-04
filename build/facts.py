@@ -756,6 +756,22 @@ def measure(argv):
             facts[_k] = _v        # _v 已是 fact 形状（含 measured_at/first_seen）⇒ 直接并入，别重盖
     except Exception as _e:                                          # noqa: BLE001
         print("⚠ hotpath 事实读不到（%s）：%s" % (_hp_path, _e), file=sys.stderr)
+    # ★ **emcc 6 探针**（IllegalPerformance 线，2026-10-04）：emcc 5.0.7 vs 6.0.10
+    #   纯工具链对比（clang 23 vs 24；dgemm/qsort/mem/bytesum 四面交错 3 轮）。
+    #   结论：codegen 红利 ≈ 0（geomean 1.00）；旗标存活矩阵全绿（JSPI/MEMORY64/
+    #   relaxed-simd/MAIN_MODULE 全活）。详情 build/113/NOTES-upstream.md。
+    _e6 = os.path.join(os.path.dirname(SITE), "w64-logs", "emcc6-probe.log")
+    if os.path.exists(_e6):
+        import re as _re2
+        _m6 = _re2.search(r"geomean\(cand6/base\) = ([0-9.]+)", open(_e6, encoding="utf-8", errors="replace").read())
+        if _m6:
+            facts["emcc6_probe_geomean"] = fact(
+                float(_m6.group(1)),
+                "sh test/fixtures/emcc6-probe/run-probe.sh 1（读 w64-logs/emcc6-probe.log 的 geomean 行）",
+                "w64-logs/emcc6-probe.log",
+                "emcc 6.0.10/5.0.7 每调用几何均值（<1 = 6 更快）；实测 ≈1.00 ⇒ 工具链升级无编译器红利",
+                replay=False)
+
     # ★ **上游 pin**（仓库架构批 B4，2026-10-04）：upstream/ submodule 钉版事实。
     #   上游更新 = bump 指针/merge tag（SOP 见 build/113/NOTES-upstream.md）；
     #   容器树 == pin 的一致性由 witness-upstream-pin.py 每提交核对（.githooks/）。
@@ -1230,7 +1246,7 @@ def measure(argv):
         "w64_cand_matmul500_s", "w64_cand_lu800_s", "w64_cand_loop1e6_s",
         "w64_cand_vs_ship_matmul500", "w64_cand_vs_ship_lu800",
         "libm_spike_geomean",
-        "upstream_submodule_count", "octave_pin",
+        "upstream_submodule_count", "octave_pin", "emcc6_probe_geomean",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
