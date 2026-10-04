@@ -170,5 +170,5 @@
 | 资产条目 | 49 | |
 | 最近一次**全绿**回归 | `20261004-163145` · **43 套 / 1,084 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 30 套 / 274 PASS、基准 3 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20261004` · tar.zst 91,295,785 B · `4075b82c04725a4b…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `wasm64-NEXT`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
+| 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

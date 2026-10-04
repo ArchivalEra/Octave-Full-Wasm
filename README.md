@@ -314,7 +314,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (325892 bytes)
 - `LICENSE` (34523 bytes)
-- `STATE.md` (27170 bytes)
+- `STATE.md` (27177 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
