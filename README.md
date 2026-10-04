@@ -298,6 +298,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.scratch/open-questions/issues/60-libm-plugin-spike.md` (4582 bytes)
 - `.scratch/open-questions/issues/61-component-plugin-system.md` (4100 bytes)
 - `.scratch/open-questions/issues/62-full-rebuild-abi-divergence.md` (1825 bytes)
+- `.scratch/open-questions/issues/63-rustpatch-fact-coverage.md` (3676 bytes)
 - `.scratch/perf-max/issues/01-openblas-levers.md` (4724 bytes)
 - `.scratch/perf-max/issues/02-native-baseline.md` (2545 bytes)
 - `.scratch/perf-max/issues/03-w64-big-heap.md` (2680 bytes)
