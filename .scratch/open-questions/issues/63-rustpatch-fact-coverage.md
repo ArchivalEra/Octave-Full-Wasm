@@ -63,3 +63,22 @@ G6 延迟断言仍缺（候选④前置）。
   G1 的"模板内联吃符号"问题留给候选③（octave_sort）验证。
 - 剩余仪器：G6 延迟断言（候选④前置）；G5 rust 不变式行（rustpatch.py 落地时收编）。
 - 下一个真候选 = **③ octave_sort<double>**（树补丁改调用点方案）。
+
+## 候选③ spike 判决（2026-10-04）：**ADOPT——内核 4× 加速**
+
+- **G1 落定**：Array-d.cc:47 `#include "oct-sort.cc"` ⇒ 模板定义进消费 TU、零导出符号
+  ⇒ 符号覆盖死路，**树补丁改调用点是唯一路径**（Array-base.cc 宏体 `lsort.sort (v, kl)`）。
+- **G2 语义镜像**：`test/fixtures/rustsort-spike/`——spike 镜像宏 stride==1 分支
+  （NaN 分区 + 内核 + reverse/rotate），base=真 octave_sort<double>（timsort），
+  cand=Rust stable sort（driftsort 谱系）。**22 域逐位一致**
+  （随机×5种子 × n∈{1,17,1e3,1e5} × asc/desc + 20k 重复值 + desc 顺序断言）。
+- **G2b 变异自证**：恒等排序变异 4/4 被抓（恒等排序在未排序输入上必被差分抓住）。
+- **G8 计时**（2M 随机 doubles，交错 3 轮 × 重随机化）：
+  timsort **352ms** vs Rust **87ms** = **比值 0.249（4× 加速）**，两跑一致（0.247/0.249）。
+  门槛 ≥1.15× ⇒ **ADOPT**。
+- **benchmark 方法学坑（新）**：排完序的数组再排 = timsort O(n) 快路径（430→4.7ms）——
+  min-of-3 采样若不在每次计时前重随机化，量到的是快路径假象。与 ±30% 方差同族的
+  第二条基准纪律：**排序基准每次计时前必须重随机化**。
+- **下一步（树补丁打样）**：Array-base.cc 宏体 `lsort.sort (v, kl)` 处加
+  `if constexpr (std::is_same_v<T,double>)` 分派到 `octave_rust_sort_f64`（Rust crate
+  进车道构建），增量 relink → 实验站全量 → hotpath sort 负载 A/B。
