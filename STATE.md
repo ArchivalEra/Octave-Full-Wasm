@@ -30,7 +30,11 @@
   `/mnt/hdd/octave-wasm-build/w64-artifacts-fma-backup-20261004/`。
 - **人的动作**（外部依赖）：票 38 页面资产上站（`build/promote-pages.sh`）、票 12 真机手测
   （清单 `docs/manual-test-checklist.md`）、E6 图形线（embed 页 GL 纹理边界）。
-- **Einfacht 反哺**：PR #11（check_pins + check_locks 两插件，发现式收编）在途。
+- **Einfacht 反哺（暗线持续推进）**：PR #11（check_pins + check_locks）**已并**（76ff1f5）；
+  **PR #12（check_ab，A/B 同旗标）已并**（dfd8af8）——上游并后抓到我一处真 bug
+  （check_ab 缺 `__main__` 入口 ⇒ 直接跑静默退 0）并修之（ef14f67），已同步本地
+  main 并验证全绿；本仓 tools 教训：**所有可执行闸门脚本必须显式 __main__ 入口**。
+  量法登记 3 条（含被证伪的排序基准法）。
 
 ## 附 · 机器维护的区块（**自动生成，别手改**）
 
