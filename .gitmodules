@@ -1,0 +1,58 @@
+[submodule "upstream/octave"]
+	path = upstream/octave
+	url = https://github.com/ArchivalEra/octave.git
+	branch = wasm/11.3.0
+[submodule "upstream/emsdk"]
+	path = upstream/emsdk
+	url = https://github.com/emscripten-core/emsdk.git
+[submodule "upstream/freetype"]
+	path = upstream/freetype
+	url = https://github.com/freetype/freetype.git
+[submodule "upstream/fontconfig"]
+	path = upstream/fontconfig
+	url = https://github.com/fontconfig/fontconfig.git
+[submodule "upstream/expat"]
+	path = upstream/expat
+	url = https://github.com/libexpat/libexpat.git
+[submodule "upstream/pcre2"]
+	path = upstream/pcre2
+	url = https://github.com/PCRE2Project/pcre2.git
+[submodule "upstream/hdf5"]
+	path = upstream/hdf5
+	url = https://github.com/HDFGroup/hdf5.git
+[submodule "upstream/fftw"]
+	path = upstream/fftw
+	url = https://github.com/FFTW/fftw3.git
+[submodule "upstream/zlib"]
+	path = upstream/zlib
+	url = https://github.com/madler/zlib.git
+[submodule "upstream/bzip2"]
+	path = upstream/bzip2
+	url = https://github.com/libarchive/bzip2.git
+[submodule "upstream/qhull"]
+	path = upstream/qhull
+	url = https://github.com/qhull/qhull.git
+[submodule "upstream/arpack-ng"]
+	path = upstream/arpack-ng
+	url = https://github.com/opencollab/arpack-ng.git
+[submodule "upstream/sundials"]
+	path = upstream/sundials
+	url = https://github.com/LLNL/sundials.git
+[submodule "upstream/sndfile"]
+	path = upstream/sndfile
+	url = https://github.com/libsndfile/libsndfile.git
+[submodule "upstream/openblas"]
+	path = upstream/openblas
+	url = https://github.com/ArchivalEra/OpenBLAS.git
+	branch = wasm-e2
+[submodule "upstream/gl4es"]
+	path = upstream/gl4es
+	url = https://github.com/ArchivalEra/gl4es.git
+	branch = wasm
+[submodule "upstream/suitesparse"]
+	path = upstream/suitesparse
+	url = https://github.com/ArchivalEra/SuiteSparse.git
+[submodule "upstream/rapidjson"]
+	path = upstream/rapidjson
+	url = https://github.com/ArchivalEra/rapidjson.git
+	branch = wasm/1.1.0

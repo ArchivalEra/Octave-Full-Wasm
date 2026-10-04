@@ -1,0 +1,61 @@
+{
+ "_comment": "上游 lock-tarball 清单（仓库架构批 B2）——无官方 GitHub git 的库以 URL+位置+sha256 钉版（同 forge-fetch 体例）；有官方 git 的在 .gitmodules（upstream/ submodule）。mesa 243M 已退役不接入。suitesparse 对官方 v5.4.0 tag 零差异 ⇒ tag 即现役，无补丁分支。",
+ "locked": [
+  {
+   "name": "lapack",
+   "version": "3.4.2",
+   "url": "https://www.netlib.org/lapack/lapack-3.4.2.tgz",
+   "file": "octave-wasm/third_party/lapack-3.4.2",
+   "form": "目录",
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+  },
+  {
+   "name": "libf2c2",
+   "version": "20130926",
+   "url": "https://www.netlib.org/f2c/libf2c2.zip",
+   "file": "octave-wasm/third_party/libf2c2-20130926",
+   "form": "目录",
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+  },
+  {
+   "name": "f2c",
+   "version": "20160102",
+   "url": "https://www.netlib.org/f2c/",
+   "file": "octave-wasm/third_party/f2c-20160102",
+   "form": "目录",
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+  },
+  {
+   "name": "glu",
+   "version": "9.0.3",
+   "url": "https://cgit.freedesktop.org/mesa/glu 快照",
+   "file": "third_party/glu-src.tar.xz",
+   "form": "文件",
+   "sha256": "bd43fe12f374b1192eb15fe20e45ff456b9bc26ab57f0eee919f96ca0f8a330f"
+  },
+  {
+   "name": "gl2ps",
+   "version": "1.4.2",
+   "url": "http://www.geuz.org/gl2ps/（Debian 源）",
+   "file": "third_party/gl2ps-1.4.2.orig.tar.xz",
+   "form": "文件",
+   "sha256": "f5a390ea332e756f8d08d2058b54d3d48600dc9e31d28146b6b780270ea26f94"
+  },
+  {
+   "name": "qrupdate",
+   "version": "1.1.2",
+   "url": "https://sourceforge.net/projects/qrupdate/",
+   "file": "third_party/qrupdate-1.1.2",
+   "form": "目录",
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+  },
+  {
+   "name": "glpk",
+   "version": "5.0",
+   "url": "https://ftp.gnu.org/gnu/glpk/glpk-5.0.tar.gz",
+   "file": "third_party/glpk-5.0.tar.gz",
+   "form": "文件",
+   "sha256": "4a1013eebb50f728fc601bdd833b0b2870333c3b3e5a816eeba921d95bec6f15"
+  }
+ ]
+}

@@ -14,7 +14,12 @@
 !DEPLOY.md
 !doctor.json
 !build/plugins.json
+!build/upstream-lock.json
 !upstream-patches/*
+!.gitmodules
+!upstream/
+!upstream/*
+!upstream-patches/octave-wasm-quantstack/*
 !upstream-patches/octave-wasm-quantstack/*
 !build/Makefile
 !bridge/octave-page.ts
