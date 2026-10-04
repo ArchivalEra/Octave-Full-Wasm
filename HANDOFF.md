@@ -17,24 +17,25 @@
   `w64_relaxed_madd` 不变）、部件盘点（**部件空间基本到边**，下一块 = libm）。
   过程详单 = `HISTORY.md` §5.84/§5.86/§5.87 + `build/113/NOTES-hotpath.md`；热点事实 =
   `build/FACTS.json` 的 `hotpath_top` / `hotpath_instrument_ok`（witness 档，提交时逐字复跑）。
-- **拍板（2026-10-04）：三工单立项** —— **59** mimalloc 出厂批（✅ 已发运 8761/8768）、
-  **60** libm 部件插件 spike（量"不改 Octave 调用点"的收益上限，**下一步**）、
-  **61** 部件插件系统（换部件 = 一行声明，构建期替换 × 事实系统接线；Rust 优化件与
-  第三方组件由此接入）。**用户两条硬约束：极其不想脱离 Octave 树**（原③ Octave 源码优化挂起，
-  61 的契约写死"Octave 源码零改动"）+ **换部件不需要繁琐动作**（声明驱动，不许手设散装变量）。
-- **工单台账**：未结 = 60 / 61（ready-for-agent）+ 人的动作：票 12 真机手测（等生产部署）、
+- **拍板三工单全部结案（2026-10-04 无人值守长跑）** —— **59** mimalloc ✅ 已发运 8761/8768；
+  **60** libm spike **负判决**（链接期标量替换 geomean 0.96–0.99 三跑全 REJECT；机制根因 =
+  **wasm 无标量 FMA**，relaxed_madd 是 v128 专用，musl 标量已在 ~2.7ns/调用地板 ——
+  `build/113/NOTES-libm.md`）；**61** 插件契约 v1 定稿（`build/113/NOTES-plugins.md` +
+  `build/plugins.json` 登记表 + `plugin-check.py` 闸门 R1/R2/R3，挂 pre-commit）。
+  **★ 结论：插件可达的部件空间实测封口** —— 现役两插件（e2-openblas / mimalloc）即全部；
+  余下热点（octave_sort / SparseMatrix / idx_vector 等）全在 Octave 自身源码，
+  在"不脱离 Octave 树"约束下不可达。
+- **工单台账**：全结（54–61 无 open）+ 人的动作：票 12 真机手测（等生产部署）、
   票 38 页面资产上站（走 `build/promote-pages.sh`）、E6 图形线（embed 页 GL 纹理边界）。
 
 ## 1. 下一步（按此顺序）
 
-1. **工单 60（libm 插件 spike）**：先造结算件（`bench-libm-spike.sh` 单向量微基准），
-   量插件边界内上限；≥1/3 热点压降才注册插件，否则如实否决。
-2. **工单 61（部件插件契约）**：设计稿 + `plugin-check` 闸门（吸收 59 的完整样板：
-   模式表声明 + declared 标签 + 产物探针 + witness；上游已收编的
-   `check_invariants.py` / envfile 插件可作基座）。
-3. 8761 现役 w64 = mimalloc 版（`01fb52fc…`）；FMA 版备份 =
+1. 等人的动作（见 §0 台账行）：票 38 上站 / 票 12 真机手测 / E6 图形线 —— 均是外部依赖。
+2. 若要再提性能：唯一在约束内的剩余路线 = **Octave 源码级优化**（改 C++ 本体，
+   用户此前拍板"极其不想脱离树"⇒ 挂起，除非用户解除）。
+3. 新部件替换需求出现时：照 `build/113/NOTES-plugins.md` 契约 + component-swap skill 施工。
+4. 8761 现役 w64 = mimalloc 版（`01fb52fc…`）；FMA 版备份 =
    `/mnt/hdd/octave-wasm-build/w64-artifacts-fma-backup-20261004/`。
-4. 外部依赖到位时：票 38 上站 / 票 12 真机手测（清单 = `docs/manual-test-checklist.md`）。
 
 ## 2. 指针表（哪类知识住哪；规约 = `docs/agents/memory.md`）
 
