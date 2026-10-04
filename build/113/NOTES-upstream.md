@@ -58,6 +58,27 @@ python3 .githooks/witness-upstream-pin.py     # ⇒ ok / DRIFT / SKIP（读不�
   `check-build-manifest` = declared/measured fail-closed。
 - 自证：`witness-upstream-pin.py --selftest`（6 用例）已登记 `build/gates-selftest.sh`（39 闸门）。
 
+## 四·五、emcc 6.0.10 探针实测（IllegalPerformance 线，2026-10-04）
+
+**问题**：emcc 5.0.7 → 6.0.10（clang 23 → 24，musl 1.2.5→1.2.6，mimalloc→3.5.1）
+能白拿多少？
+
+**实测**（`test/fixtures/emcc6-probe/`，6.0.10 并行装 `/opt/emsdk-6`，o113 车道 5.0.7 未动；
+同源 dgemm-naive 384³ / qsort 2^20 / memcpy / byte-sum，交错 3 轮，两跑一致）：
+
+- **codegen 红利 ≈ 0**：geomean 1.003 / 1.001（四面全在噪声内）。
+  机制：两侧 clang 仅差一个主版本位（23/24 git-main），标量/向量 codegen 无实质演化。
+- **旗标存活矩阵全绿**：`-sMEMORY64=1` / `-fwasm-exceptions` / `-sJSPI` / `-pthread` /
+  `-mrelaxed-simd` / `-sMAIN_MODULE=2` 在 6.0.10 全部编译通过。
+- **6.0.0 破坏面对照**（ChangeLog + 本仓 grep）：`-shared` 默认真动态库——本仓 .oct
+  全部显式 `-sSIDE_MODULE=1` 不受影响；`PThread.runningWorkers` 移除——本仓无暴露；
+  musl 1.2.6 / mimalloc 3.5.1——随全 farm 重编才有意义。
+
+**结论**：emcc 6 升级**当前不值得立项**——编译器红利实测为零，而成本 = 全 farm 重编
+（且被工单 62 的 ABI 分叉悬案阻断）。合理的重启时机 = 工单 62 结案之后（那时重编是
+必经之路，顺路升级零边际成本）。探针永久可复跑（`emcc6_probe_geomean` 台账键），
+6.0.x 后续版若有 codegen 演化会立刻显形。
+
 ## 五、诚实注记
 
 - B5 等价性批次（供给树 rebuild w64 + 全量）是架构成立的**实测门槛**；结果记 HISTORY。
