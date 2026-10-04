@@ -62,6 +62,13 @@
    闸门自身也吃这条：每个闸门必须 `--selftest`（`build/gates-selftest.sh`，接在 pre-commit）。
 
 ## 批次收尾（固定动作，缺一步等于没做完）
+★ **开工预检（Einfacht #10 收编，2026-10-04）**：每批先跑
+  `sudo -E $(which python3) build/lib/doctor.py` —— stdout 必须是 **ok** 才开工；
+  `DOWN: <哪条>` = 环境问题点名（8761 活性+COI 头 / o113 容器 / 实验独占端口 8868，
+  策略在 `doctor.json`）。动机 = 两次实测：机器重启杀掉 8761 服务与容器、文件层全绿
+  但底线不可用（HISTORY §5.86）；8868 被占 ⇒ 探测误判（§5.83）。
+  ⚠ 本机用 sudo：shell 的 docker socket 需 root，否则 docker 项假阳 DOWN（工具在如实
+  报"探针看不见"）。
 ★ **8761 只由 `build/promote-webgl.sh` 改**（2026-09-27 真踩到）：为了在 8768 上试页面改动，
   我顺手把 `bridge/{lane.js,index.html}` 也 `cp` 进了 **8761 站点**，而那里没有 `threads/` 且**带头服务**
   ⇒ 页面按 COI 选线程档 ⇒ `threads/octave.js` **404**，验收底线当时是坏的（回退三步见

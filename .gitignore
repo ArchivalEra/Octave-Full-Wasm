@@ -12,6 +12,7 @@
 !AGENTS.md
 !CONTEXT.md
 !DEPLOY.md
+!doctor.json
 !build/Makefile
 !bridge/octave-page.ts
 !bridge/embed-wgsl.html
