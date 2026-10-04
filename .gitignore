@@ -110,6 +110,7 @@
 !test/browser/*.mjs
 !test/fixtures/*
 !test/fixtures/libm-spike/*
+!test/fixtures/emcc6-probe/*
 !bridge/p5canvas.js
 !bridge/octave-worker.js
 !bridge/octave-core.js
