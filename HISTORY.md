@@ -3833,3 +3833,42 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
   在 **4321**，其 `scripts/serve.py --dir dist` 占了 **8868**）并行工作；我误把 8868 当空口
   ⇒ 探测到一个 Astro 页、误判"rsimd 产物起不来"。换 8878 后一切正常（boot 1.4s）。
   ⇒ **实验端口需登记/独占**（本条即 C1「build-doctor」之外的协作缺口，另行记录）。
+
+### 5.84 `wasm64-NEXT` 分支：热点仪器 + 全负载扫描 + mimalloc 候选 + 部件盘点（2026-10-03，branch `wasm64-NEXT`）
+
+> 本节收编自旧 HANDOFF §1k（该节随 2026-10-04 记忆架构拆分迁来，见 §5.85）。
+> 分支纪律：实验产物只进实验站（`hotpath-stations/`），**不碰 8761/8768、不 promote**；
+> 合并判据四条：① 全量全绿（含 `accept-dldfcn`）② `octave.build.json` 的 `declared` 不变
+> ③ embed/geometry 的 v1 签名逐字未变 ④ 有实测数字。
+
+- **工单 54 结案：`hotpath` 热点仪器**（`build/113/hotpath.py`，自证 7/0）。三条 fail-closed
+  不变量（I1 只写实验站 / I2 先校准再信任 / I3 名字或拒绝）+ Kind 协议（内部缝）+
+  日志当缝（`read_facts` 纯函数 → 事实系统）。关键发现：符号构建不需要新做 ——
+  `relink --diag` 早给 name 段（`--profiling-funcs`）。首个答案 `dgemm_kernel 89.1%`
+  （印证 FMA 打对了地方）。台账新增 `hotpath_top` + `hotpath_instrument_ok`（挂 witness 档）。
+- **工单 55 结案：扫描（11 负载）+ 锁税证实**：计算密集负载 ~100% 落内核（`dgemm` 89% /
+  `sort` 89% / 字符串比较 88%，无平台税）；**对象/分配密集负载有共同成本**：
+  `dlmalloc`+`dlfree`+pthread 锁 24–44%。结案实验：同一 `func-handle`，`w64` 锁 **16%** vs
+  `w64-base`（单线程）**0%** ⇒ 线程安全分配器在单线程路径上的税。
+- **工单 56 结案：dlsync 补丁修复**：旧补丁把 `rc=3`（不适用）当失败 ⇒ 挡住 `w64-base`
+  符号站。改成：**有 dlsync 但形状不认识 ⇒ rc=4（FATAL）；无 dlsync ⇒ rc=3（放行）**。自证 8/0。
+- **工单 57 结案：mimalloc 成立（采纳候选）**：同旗标交错 3 轮：墙钟 **1016→740 ms（−27%）**、
+  pthread 锁 10.3%→0%、体积 +0.2%、数值 79/0 + dldfcn 71/0 全绿。
+  ⚠ 更正了一个混淆变量：基线用了全套 `--diag` 含 ASSERT ⇒ 首报 −39% 虚高，同旗标后 −27%。
+  **发运前未做**：进 relink 模式表 + 全量验收 + 产品决定。详单 `build/113/NOTES-hotpath.md`。
+- **工单 58 结案：部件盘点（一个会改计划的结论）**：仪器盘 15 个库组件轴。
+  · **不是热点的部件**：fftw（fft 热点是 Octave 的 `rec_permute` 19%）、arpack（热点是底下
+  BLAS `dgemv` 53%）、稀疏（热点是 Octave 自己的 `SparseMatrix` 乘 31% + `octave_sort` 24%）；
+  glpk/sundials/hdf5/zlib 未进 top。
+  · **下一个真部件候选 = `libm`（重）**：元素级数学热点全是 musl 标量超越函数（`exp_inline`
+  24% / `log_inline` 10% / sin+cos+`__rem_pio2` 51% / `pow` 15%）；wasm SIMD128 无向量超越
+  函数 ⇒ 换它 = 自带 SIMD 批量 libm（SLEEF 风格）+ 改 Octave 元素循环批量调用 = **集成项目，
+  不是链接旗标**。
+  · **其余热点全是 Octave 自身源码**（`octave_sort`、`rec_permute`、`do_rc_map`、
+  `idx_vector::fill`、`elem_xpow`）—— 不是部件，换不了。
+  · ★ 诚实结论：**部件空间基本到边**。分配器是最后一块结构性好摘的果子；再往下是 libm
+  集成项目或 Octave 源码优化。
+- **关机点三选项（待用户拍板）**：① 注册 mimalloc + 跑全量（最便宜的确定性胜利，建议先做）
+  ② libm 集成项目（先做单向量 sin/exp/log SIMD spike）③ 转 Octave 源码优化。
+- 方法论同 §5.79：本机单轮 bench 方差 ≈ ±30% ⇒ 性能判决必须交错 ≥3 轮。
+

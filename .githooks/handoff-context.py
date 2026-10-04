@@ -49,11 +49,12 @@ def main():
     subprocess.run([sys.executable, os.path.join(REPO, ".githooks", "update-handoff.py"),
                     "--quiet"], cwd=REPO, capture_output=True)
     ctx = ["[HANDOFF] 本仓库是浏览器版 Octave（wasm）。接续工作**先读 HANDOFF.md**"
-           "（活状态：§0 铁律 / §7 已知偏差 / §8 仍待办），历史与过程在 HISTORY.md"
-           "（第三轮 T1–T10、批次 A–E、图形线、§5.23–§5.32 的逐批实况）。",
+           "（指路牌版：§0 现在是什么 / §1 下一步 / §2 指针表；记忆架构规约 = "
+           "docs/agents/memory.md），规则在 AGENTS.md（每次自动载入），"
+           "历史与过程在 HISTORY.md（append-only）。",
            "当前部署状态（由 .githooks/update-handoff.py 从持久盘产物重算，**别手写**）："]
     ctx += ["  · " + r for r in state_lines()]
-    ctx.append("改动前先读 §0 三条不可违背；验收底线是 8761 永不退化（先在 8768 上验）。")
+    ctx.append("改动前先读 AGENTS.md 的三条不可违背；验收底线是 8761 永不退化（先在 8768 上验）。")
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
                                              "additionalContext": "\n".join(ctx)}},
                      ensure_ascii=False))

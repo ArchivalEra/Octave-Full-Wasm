@@ -1,6 +1,8 @@
 # AGENTS.md · Octave-Full-Wasm
 
-> **接续先读两份**：`HANDOFF.md`（活状态）+ `build/113/PLAN-arch.md` 的 **§0.5「现在的状态与下一步顺序」**（当前工作令）。
+> **接续先读两份**：`HANDOFF.md`（活状态 · **指路牌版**：现在是什么/下一步/指针表，
+> 记忆架构规约 = `docs/agents/memory.md`）+ `build/113/PLAN-arch.md` 的
+> **§0.5「现在的状态与下一步顺序」**（当前工作令）。
 > **并行度线**（SIMD/线程/Worker/嵌入契约）在 `build/113/PLAN-threads.md`，与本条并行、共享同一个产物。
 > 历史与旧数字在 **`HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only；正文里单写的这些编号都指它）。
 > 分门别类的坑：C 库配方 `build/CLIBS.md`、图形线 `build/113/NOTES-webgl.md`、JSPI 机制 `build/113/NOTES-jspi.md`。
@@ -164,6 +166,10 @@ sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门�
   `eval_async` / `feval` **一律抛 `RuntimeError: null function`**（同步异步一样）。
   开机路径上的任何探测/预热**必须 try/catch**，否则异常会打断 `postRun` 剩下的步骤
   ⇒ `__octaveReady` 永远 false ⇒ **页面看起来"卡死"**（G1 那次事故的真身）。
+- **shell 陷阱**（本会话反复咬人，各闸门注释里也有）：`pkill -f 'x'` **会匹配到自己这条命令行**
+  （用 `'x[y]'` 括号技巧）；`rc=$?` 接在管道后拿的是最后一个命令的状态；`&&` 放在 `&` 前会把整条链
+  后台化；`echo` 里的反引号会被当命令替换；`grep -c` 零命中**退出 1**；`grep -E` 里 `{` 是区间表达式；
+  正则字符类漏数字（`[A-Z_]+` 匹配不到 `P5_OBJS`）；`-sENV=…` 不是 emcc 5.0.7 的设置项。
 - 结论只认**产物**：`sha256sum`、`sweep-logs/<时间戳>/`、探针输出；不认印象。
 
 ## Agent skills
