@@ -93,6 +93,9 @@
 !build/113/probe-jspi-worker/*
 !build/113/probe-threads/*
 !build/113/probe-blas-threads/*
+!build/113/rust/*
+!build/113/rust/src/*
+!build/113/rust/.cargo/*
 !build/forge-preload/*
 !build/webfile/*
 !build/pkgfix/*

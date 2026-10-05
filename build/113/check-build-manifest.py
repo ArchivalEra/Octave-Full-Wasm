@@ -59,6 +59,17 @@ def malloc_drift_problem(declared, measured):
     return None
 
 
+def rust_sort_drift_problem(declared, measured):
+    """★ 工单 63 的**反向断言**：产物导出 octave_rust_sort_f64（rust-sort 探针）、
+    模式却没声明 rust_sort ⇒ 表/产物漂移（手加了 librustsort.a 而模式不知情）。
+    正向（声明了 rust_sort）由 compare() 的 rust_sort 规则核对。纯函数 ⇒ 自证喂合成输入。"""
+    if declared.get("rust_sort") == "f64-stable":
+        return None
+    if measured.get("rust_sort") == "f64-stable":
+        return ("产物导出 octave_rust_sort_f64（rust-sort 探针）但模式没声明 rust_sort ⇒ 表/产物漂移")
+    return None
+
+
 def lane_blas_problem(declared, man):
     """★ 车道一致性（B6）：声明 `threads=true` 的产物，**链进去的 BLAS 必须来自车道**。
 
@@ -194,6 +205,16 @@ def compare(declared, measured, man=None):
             elif got != declared[k]:
                 add(k, declared[k], got,
                     "声明分配器 %s，产物导出段量到 %s" % (declared[k], got))
+        elif k == "rust_sort":
+            # ★ 工单 63：rust_sort 声明判据 = 产物导出段探针（同 malloc 形状；
+            #   measured 缺键 ≠ None？measured.rust_sort 恒存在（write 侧写入），
+            #   手造清单缺键 ⇒ .get ⇒ None ⇒ 判拒，不许猜）。
+            got = measured.get("rust_sort")
+            if got is None:
+                add(k, declared[k], None, "量不到 rust_sort（导出段没读到探针）⇒ **无法核验，判拒**")
+            elif got != declared[k]:
+                add(k, declared[k], got,
+                    "声明 rust_sort=%s，产物导出段量到 %s" % (declared[k], got))
         elif k == "gl4es":
             hits = (measured.get("gl4es") or {}).get("symbol_hits", 0)
             if bool(declared[k]) != (hits > 0):
@@ -291,6 +312,11 @@ def main(argv):
     if why:
         bad.append({"key": "(malloc 反向)", "declared": "（未声明）",
                     "measured": measured.get("malloc"), "why": why})
+
+    why = rust_sort_drift_problem(declared, measured)
+    if why:
+        bad.append({"key": "(rust_sort 反向)", "declared": "（未声明）",
+                    "measured": measured.get("rust_sort"), "why": why})
 
     ok = not bad and not file_bad
     verdict = "ok" if ok else "rejected"
@@ -410,6 +436,20 @@ CASES = [
     ("★ 反向：声明了 mimalloc ⇒ 反向规则让位给正向核对（不双报）",
      lambda: malloc_drift_problem({**_DECL, "malloc": "mimalloc"},
                                   {**_MEAS, "malloc": "default"}) is None),
+    # ★ 工单 63：rust_sort 插件的核验（探针 = 产物导出段的 octave_rust_sort_f64）
+    ("★ 声明 rust_sort 且产物量到 ⇒ 不报",
+     lambda: len(compare({**_DECL, "rust_sort": "f64-stable"},
+                         {**_MEAS, "rust_sort": "f64-stable"})) == 0),
+    ("★ 声明 rust_sort 但产物没有探针 ⇒ 必须报（旗标传了、产物没有）",
+     lambda: any(b["key"] == "rust_sort"
+                 for b in compare({**_DECL, "rust_sort": "f64-stable"}, _MEAS))),
+    ("★ 声明 rust_sort 但量不到（None）⇒ 判拒（不许猜）",
+     lambda: any(b["key"] == "rust_sort" for b in compare(
+         {**_DECL, "rust_sort": "f64-stable"}, {**_MEAS, "rust_sort": None}))),
+    ("★ 反向：产物有探针但模式没声明 ⇒ 必须报（rust_sort_drift_problem）",
+     lambda: rust_sort_drift_problem(_DECL, {**_MEAS, "rust_sort": "f64-stable"}) is not None),
+    ("★ 反向：双方都无 rust_sort ⇒ 不报（旋钮关 = 未发运态，零影响）",
+     lambda: rust_sort_drift_problem(_DECL, _MEAS) is None),
     # ★ 工单 15：--out-dir 指**副本** ⇒ 按**副本所在目录**核对，不许退回 build.out 的旧路径
     ("★ 工单 15：--out-dir 副本、文件在且 sha 相符 ⇒ 不报（副本也能验）",
      lambda: _copy_with(None) == 0),

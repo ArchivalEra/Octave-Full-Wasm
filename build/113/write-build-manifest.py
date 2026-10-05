@@ -356,10 +356,17 @@ def main():
     else:
         malloc_val = "mimalloc" if "mi_version" in exp_names else "default"
 
+    # ★ 工单 63：rust-sort 插件（导出段量 —— 探针 octave_rust_sort_f64 只在真链
+    #   librustsort.a 时被 --export-if-defined 导出；旋钮关 ⇒ 不存在 ⇒ None = 未发运态）。
+    rust_sort_val = ("f64-stable"
+                     if (exp_names is not None and "octave_rust_sort_f64" in exp_names)
+                     else None)
+
     measured = {
         # ⚠️ **量出来的**，不是读环境变量猜的（曾经的 bug：手跑时清单写死 main_module=1）
         "exported_functions": count_wasm_exports(os.path.join(OUT, "octave.wasm")),
         "malloc": malloc_val,
+        "rust_sort": rust_sort_val,
         "simd": {"v128": v128, "impl": "llvm-objdump|unavailable" if v128 is None else "llvm-objdump"},
         "jspi_entry": b"eval_wait" in js,
         "jspi_glue_suspending": count_bytes(js, b"new WebAssembly.Suspending"),

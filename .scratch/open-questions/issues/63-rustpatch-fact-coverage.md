@@ -82,3 +82,36 @@ G6 延迟断言仍缺（候选④前置）。
 - **下一步（树补丁打样）**：Array-base.cc 宏体 `lsort.sort (v, kl)` 处加
   `if constexpr (std::is_same_v<T,double>)` 分派到 `octave_rust_sort_f64`（Rust crate
   进车道构建），增量 relink → 实验站全量 → hotpath sort 负载 A/B。
+
+
+## 候选③ w64 落地判决（2026-10-05）：**ADOPT——w64 端到端 2.0×**
+
+- **路线变更（用户裁定）**：IllegalPerformance = wasm64-NEXT 线的延伸，8G 大堆性能
+  必须用上 ⇒ 靶子从 wasm32 车道改为 **w64 直上**。外部评审（需求书
+  /mnt/hdd/octave-wasm-build/rust-wasm64-requirements.md）判定：rustc 无
+  wasm64-emscripten target ⇒ 走 **nightly build-std（core+alloc）+
+  wasm64-unknown-unknown + 显式 +atomics,+bulk-memory,+mutable-globals**。
+- **评审实验 E0–E5 全绿**：E1 cargo build-std 11s 过（rustc 直编不认 -Z build-std）；
+  E2 库体检（未定义恰好 = 宿主 libc 系 abort/malloc/free/realloc/posix_memalign/mem*，
+  无 unwind/probestack；胶水 = panic_handler→abort + global_allocator 转发）；
+  E3 混链 shared-memory 成功且端到端真跑；E4 **弱符号判空可靠（ghost=0）** ⇒
+  缝保持链接期旋钮；E5 严格链接（ERROR_ON_UNDEFINED_SYMBOLS=1）+ map 证明
+  "链接绿=符号在"。
+- **w64 候选**：`rebuild w64` + RUST_SORT=1 + e2-w64 + mimalloc（全现役口径）
+  = verdict=ok，mismatch 1 条（zdotu_，容忍）；同树旋钮关对照 verdict=ok。
+- **验收**：全量 PROBES=1（COI/w64 档）= 1357 PASS / 1 FAIL——唯一红是装配脚本
+  漏拷身份证（probe-artifact-sha ③a 档内自洽），修后双站 4/0 ⇒ 等效 1358/0。
+  **端到端逐位抽查**（固定 twister 种子，2 万元素 asc/desc，%.17g 回读）：
+  候选/对照 sha 逐位一致 PASS——IEEE 红线在产物级闭合。
+- **A/B（`w64_rustsort_ab_*` 台账键）**：asc 中位 185 vs 377ms = **0.491（2.0×）**；
+  desc 0.487（2.1×）；3 轮交错、冷启动 = 重随机化（instruments.json 排序纪律）。
+  与内核 spike 4× 的差 = rand + 解释器开销（候选绝对值与 87ms 内核 + rand 预测吻合）。
+- **站点归属（用户指令）**：本线专属站 = site-illegalperf(8868 候选)/
+  -baseline(8869 对照)，装配入口 `build/113/site-illegalperf.sh`
+  （谱系标记 SITE-ILLEGALPERF.json；只动 w64 槽）。8761 一字未动。
+- **正典源** = build/113/rust/src/lib.rs（no_std + 胶水；wasm32 rustc 直编 /
+  wasm64 build-std 双路同源；G2 门消费同一份）。工具链钉版 = E7 后翻
+  rust-toolchain.toml。
+- 下一步：发运（模式表默认值翻 1 + lane_expect + promote = **产品决定**）；
+  候选④ elem_xpow 前置 G6 延迟断言；可替换件空间审计（libm 被 IEEE 逐位红线
+  + 无 SLEEF wasm 后端实质封口；fill 带宽绑定）。

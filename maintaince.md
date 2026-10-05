@@ -31,11 +31,14 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 
 ## 方向
 
-1. **Rust 补丁线（IllegalPerformance，当前前端）**：hotpath 定位热点 → Rust 符号补丁
-   → 差分门（G2）+ 变异自证（G2b）+ hotpath A/B。**候选③ sort 内核 spike 已 ADOPT
-   （Rust driftsort 4× 于 timsort，语义差分 22 域逐位一致）**——下一步 = 树补丁打样
-   （Array-base.cc 宏体 `if constexpr (T==double)` 分派 + 增量 relink + 全量验收）。
-   事实覆盖矩阵与判决 = 工单 63。候选② fill 已否决（带宽绑定）。
+1. **Rust 补丁线（IllegalPerformance，当前前端）**：Rust 内核 = **源缝插件**
+   （Array-base.cc 弱符号缝 + RUST_SORT 链接期旋钮，摘除 = 旋钮关）→ 差分门（G2）+
+   变异自证（G2b）+ hotpath A/B。**候选③ sort 已在 w64 落地 ADOPT——端到端 2.0×**
+   （nightly build-std wasm64 库；`w64_rustsort_ab_*` 台账键；全量 PROBES=1 1358/0
+   等效；端到端逐位抽查双站一致；工单 63），**发运 = 产品决定**。专属站 =
+   site-illegalperf/-baseline（装配入口 build/113/site-illegalperf.sh）。
+   剩余部件轴：libm（IEEE 逐位红线 + 无 SLEEF wasm 后端 ⇒ 实质封口）、
+   fill（带宽绑定，已否决）。候选④ elem_xpow 前置 G6 延迟断言。
 2. **上游更新线**：SOP 已通（工单 62 结案——供给树 rebuild 恢复可复现）。**emcc 6.0.10
    探针判决：编译器红利 ≈ 0（geomean 1.001），旗标矩阵全绿——升级不立项**，重启时机 =
    Octave/emsdk 新版发布 → fork merge → 重编 → 验收（`emcc6_probe_geomean` 台账键哨兵）。

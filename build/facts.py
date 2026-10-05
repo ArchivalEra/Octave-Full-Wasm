@@ -797,6 +797,50 @@ def measure(argv):
                 "内核比值（<0.867 = ≥1.15× 加速门槛）；实测 0.247 = 4× ⇒ ADOPT",
                 replay=False)
 
+    # ★ **sort 落地 A/B**（工单 63 / 候选③，2026-10-05）：w64 车道端到端——候选
+    #   （RUST_SORT=1：rust_sort+mimalloc+e2-openblas+wasm64 全口径）vs 同树旋钮关
+    #   对照。专属站 site-illegalperf(8868)/-baseline(8869)，COI、交错 3 轮、
+    #   冷启动=重随机化（instruments.json 排序纪律）。
+    _ab = os.path.join(os.path.dirname(SITE), "w64-logs", "rust-sort-ab.log")
+    if os.path.exists(_ab):
+        import re as _re5
+        _ab_txt = open(_ab, encoding="utf-8", errors="replace").read()
+        _med = {}
+        for _side in ("on", "off"):
+            for _tag in ("asc", "desc"):
+                _vals = sorted(int(_x) for _x in _re5.findall(
+                    r"round\d+ %s %s wall=(\d+)ms" % (_side, _tag), _ab_txt))
+                if _vals:
+                    _med[(_side, _tag)] = _vals[len(_vals) // 2]
+        if ("on", "asc") in _med and ("off", "asc") in _med and _med[("off", "asc")]:
+            facts["w64_rustsort_ab_asc_ms"] = fact(_med[("on", "asc")],
+                "bash build/113/sort-ab.sh /mnt/hdd/octave-wasm-build/site-illegalperf "
+                "/mnt/hdd/octave-wasm-build/site-illegalperf-baseline 3（读 w64-logs/rust-sort-ab.log）",
+                "w64-logs/rust-sort-ab.log",
+                "候选（rust_sort 开）2M 随机 double 排序墙钟中位（含 rand；w64 槽 COI）", replay=False)
+            facts["w64_rustsort_base_ab_ms"] = fact(_med[("off", "asc")],
+                "同上", "w64-logs/rust-sort-ab.log",
+                "对照（同树旋钮关）同负载墙钟中位", replay=False)
+            facts["w64_rustsort_ab_asc_ratio"] = fact(
+                round(_med[("on", "asc")] / _med[("off", "asc")], 3),
+                "派生：候选 ÷ 对照（asc 中位）", "派生（rust-sort-ab.log）",
+                "asc 端到端比值（<0.867 = ≥1.15× 门槛）⇒ 实测 2.0× ADOPT", replay=False)
+        if ("on", "desc") in _med and ("off", "desc") in _med and _med[("off", "desc")]:
+            facts["w64_rustsort_ab_desc_ratio"] = fact(
+                round(_med[("on", "desc")] / _med[("off", "desc")], 3),
+                "派生：候选 ÷ 对照（desc 中位）", "派生（rust-sort-ab.log）",
+                "desc 端到端比值（同门槛）", replay=False)
+
+    # 候选产物身份证（IllegalPerformance 线专属站，**非 8761 现役**——现役 sha 仍是 w64_wasm_sha）
+    _cand_wasm = "/mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm"
+    if os.path.exists(_cand_wasm):
+        import hashlib as _hl
+        facts["w64_rustsort_cand_sha"] = fact(
+            _hl.sha256(open(_cand_wasm, "rb").read()).hexdigest(),
+            "sha256sum /mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm",
+            "artifacts-w64-rust-on/octave.wasm（site-illegalperf w64 槽同源）",
+            "rust-sort 候选产物 sha；发运与否 = 产品决定", replay=False)
+
     _e6 = os.path.join(os.path.dirname(SITE), "w64-logs", "emcc6-probe.log")
     if os.path.exists(_e6):
         import re as _re2
@@ -1286,6 +1330,8 @@ def measure(argv):
         "upstream_submodule_count", "octave_pin", "emcc6_probe_geomean",
         "rust_fill_spike_ratio", "rust_sort_spike_base_ms", "rust_sort_spike_cand_ms",
         "rust_sort_spike_ratio",
+        "w64_rustsort_ab_asc_ms", "w64_rustsort_base_ab_ms", "w64_rustsort_ab_asc_ratio",
+        "w64_rustsort_ab_desc_ratio", "w64_rustsort_cand_sha",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

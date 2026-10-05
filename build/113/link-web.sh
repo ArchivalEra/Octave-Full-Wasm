@@ -578,12 +578,31 @@ MALLOC_FLAGS=()
 if [ -n "${MALLOC:-}" ]; then MALLOC_FLAGS+=("-sMALLOC=$MALLOC"); fi
 if [ "${MALLOC:-}" = mimalloc ]; then MALLOC_FLAGS+=("-Wl,--export-if-defined=mi_version"); fi
 
+# ★ 工单 63（2026-10-05）：**rust-sort 插件旋钮**（relink.sh 模式表给 RUST_SORT；仅
+#   wasm32 车道 product/threads）。旋钮开 ⇒ 链入 librustsort.a（build/113/build-rustsort.sh
+#   产物，rustc wasm32 staticlib）+ `-u` 强引用（无它：弱引用不拉归档成员 ⇒ 静默不生效；
+#   EXTRA_LDFLAGS 的 -u,dlsode_ 同款先例）+ 探针导出（--export-if-defined：未链入 ⇒ 静默忽略）。
+#   缝在 Array-base.cc（fork f4bf15b，弱符号判空回退 octave_sort）——取下补丁 = 本旋钮关。
+#   判据在产物侧：write-build-manifest.py 从导出段量 measured.rust_sort。
+RUST_FLAGS=()
+if [ "${RUST_SORT:-0}" = 1 ]; then
+  # 库按车道选：wasm64（memory64，rustc 无 wasm64-emscripten target ⇒
+  # nightly build-std 编 wasm64-unknown-unknown）vs wasm32（rustc 直编）。
+  case "${BUILD_MODE:-}" in
+    w64|w64-base) RUST_LIB=/src/deps/rustsort-w64/librustsort.a ;;
+    *)            RUST_LIB=/src/deps/rustsort/librustsort.a ;;
+  esac
+  RUST_FLAGS+=("-Wl,-u,octave_rust_sort_f64" "$RUST_LIB"
+               "-Wl,--export-if-defined=octave_rust_sort_f64")
+fi
+
 em++ --bind \
   "${DIAG[@]}" \
   "${SFLAGS[@]}" \
   ${GL_ES_FLAGS[@]+"${GL_ES_FLAGS[@]}"} \
   ${EXTRA_LDFLAGS:-} \
   ${MALLOC_FLAGS[@]+"${MALLOC_FLAGS[@]}"} \
+  ${RUST_FLAGS[@]+"${RUST_FLAGS[@]}"} \
   ${GL_INC_FLAGS[@]+"${GL_INC_FLAGS[@]}"} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   ${JSPI_FLAGS[@]+"${JSPI_FLAGS[@]}"} \

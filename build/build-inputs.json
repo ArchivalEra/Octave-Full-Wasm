@@ -1,46 +1,100 @@
 {
-  "_why": "**构建输入的不变式**（Einfacht #6 ② 原则「输入要有便宜的落点」的本仓实例；工单 53）。产物出生前，它的配方就应该是可查的事实——这些检查只读仓库文件、不构建、不碰容器，因此能进 pre-commit，由 build/113/witness-build-inputs.py 每提交真跑。发现项来自真实事故：① `-flto` 漂移进 link-web.sh 的 EXC_FLAGS（工单 41/52，页面 dlopen 崩）；② w64 车道少了 `-sMEMORY64=1`（混编 wasm32 对象，wasm-ld 拒链）。",
-  "checks": [
-    {
-      "path": "build/113/link-web.sh",
-      "must_contain": ["-fwasm-exceptions"],
-      "must_not_contain": ["-flto"],
-      "why": "EXC_FLAGS 必须用 -fwasm-exceptions（与整棵树一致）；**不许出现 -flto**——它是被证伪的杠杆（metadce 剥 dlopen 才用的 .oct 符号；HISTORY §5.78 的 dlopen 回归真因）。"
-    },
-    {
-      "path": "build/113/build-w64-lane.sh",
-      "must_contain": ["-sMEMORY64=1"],
-      "why": "w64 车道的影子必须注入 -sMEMORY64=1——漏了它 OpenBLAS 会编成 wasm32，链接期 wasm-ld 报 'wasm32 object file can't be linked in wasm64 mode'（工单 52 实测）。"
-    },
-    {
-      "path": "build/113/build-e2-lane.sh",
-      "must_contain": ["-sMEMORY64=1"],
-      "why": "E2 车道脚本必须把 lane 旗标带进 make 的 CC=（LANE_FLAGS 含 -sMEMORY64=1）——不带就是 wasm32 库（同工单 52）。"
-    },
-    {
-      "path": "build/113/link-web.sh",
-      "must_contain": ["ALLOW_TABLE_GROWTH=1"],
-      "why": "dlopen（.oct side module）需要可增长的函数表；去掉它 = `.oct` 装载失败（工单 38 的 dldfcn 面就是压这条）。"
-    },
-    {
-      "path": "build/113/build-e2-lane.sh",
-      "must_contain": ["E2_RELAXED_FMA", "patch-openblas-relaxed-fma.py"],
-      "why": "FMA 内核的接线必须还在（工单 52 的收益靠它）——旋钮与补丁名任一被删 = 收益静默消失、产物仍 verdict=ok。"
-    },
-    {
-      "path": "build/113/patch-openblas-relaxed-fma.py",
-      "must_contain": ["wasm_f64x2_relaxed_madd"],
-      "why": "FMA 补丁必须真的产出 relaxed_madd 调用（不是空壳补丁）——防「补丁文件在、但改写逻辑被清空」。"
-    },
-    {
-      "path": "build/113/relink.sh",
-      "must_contain": ["MALLOC=mimalloc"],
-      "why": "工单 59：w64 车道的分配器旋钮注册在模式表里——这行被删 = mimalloc 静默掉回 dlmalloc，收益消失而构建全绿（§5.46 的形状）。"
-    },
-    {
-      "path": "build/113/link-web.sh",
-      "must_contain": ["--export-if-defined=mi_version"],
-      "why": "工单 59：mimalloc 的产物侧探针导出——没有它 measured.malloc 量不出分配器，declared.malloc 的核验整个失效。"
-    }
-  ]
+ "_why": "**构建输入的不变式**（Einfacht #6 ② 原则「输入要有便宜的落点」的本仓实例；工单 53）。产物出生前，它的配方就应该是可查的事实——这些检查只读仓库文件、不构建、不碰容器，因此能进 pre-commit，由 build/113/witness-build-inputs.py 每提交真跑。发现项来自真实事故：① `-flto` 漂移进 link-web.sh 的 EXC_FLAGS（工单 41/52，页面 dlopen 崩）；② w64 车道少了 `-sMEMORY64=1`（混编 wasm32 对象，wasm-ld 拒链）。",
+ "checks": [
+  {
+   "path": "build/113/link-web.sh",
+   "must_contain": [
+    "-fwasm-exceptions"
+   ],
+   "must_not_contain": [
+    "-flto"
+   ],
+   "why": "EXC_FLAGS 必须用 -fwasm-exceptions（与整棵树一致）；**不许出现 -flto**——它是被证伪的杠杆（metadce 剥 dlopen 才用的 .oct 符号；HISTORY §5.78 的 dlopen 回归真因）。"
+  },
+  {
+   "path": "build/113/build-w64-lane.sh",
+   "must_contain": [
+    "-sMEMORY64=1"
+   ],
+   "why": "w64 车道的影子必须注入 -sMEMORY64=1——漏了它 OpenBLAS 会编成 wasm32，链接期 wasm-ld 报 'wasm32 object file can't be linked in wasm64 mode'（工单 52 实测）。"
+  },
+  {
+   "path": "build/113/build-e2-lane.sh",
+   "must_contain": [
+    "-sMEMORY64=1"
+   ],
+   "why": "E2 车道脚本必须把 lane 旗标带进 make 的 CC=（LANE_FLAGS 含 -sMEMORY64=1）——不带就是 wasm32 库（同工单 52）。"
+  },
+  {
+   "path": "build/113/link-web.sh",
+   "must_contain": [
+    "ALLOW_TABLE_GROWTH=1"
+   ],
+   "why": "dlopen（.oct side module）需要可增长的函数表；去掉它 = `.oct` 装载失败（工单 38 的 dldfcn 面就是压这条）。"
+  },
+  {
+   "path": "build/113/build-e2-lane.sh",
+   "must_contain": [
+    "E2_RELAXED_FMA",
+    "patch-openblas-relaxed-fma.py"
+   ],
+   "why": "FMA 内核的接线必须还在（工单 52 的收益靠它）——旋钮与补丁名任一被删 = 收益静默消失、产物仍 verdict=ok。"
+  },
+  {
+   "path": "build/113/patch-openblas-relaxed-fma.py",
+   "must_contain": [
+    "wasm_f64x2_relaxed_madd"
+   ],
+   "why": "FMA 补丁必须真的产出 relaxed_madd 调用（不是空壳补丁）——防「补丁文件在、但改写逻辑被清空」。"
+  },
+  {
+   "path": "build/113/relink.sh",
+   "must_contain": [
+    "MALLOC=mimalloc"
+   ],
+   "why": "工单 59：w64 车道的分配器旋钮注册在模式表里——这行被删 = mimalloc 静默掉回 dlmalloc，收益消失而构建全绿（§5.46 的形状）。"
+  },
+  {
+   "path": "build/113/link-web.sh",
+   "must_contain": [
+    "--export-if-defined=mi_version"
+   ],
+   "why": "工单 59：mimalloc 的产物侧探针导出——没有它 measured.malloc 量不出分配器，declared.malloc 的核验整个失效。"
+  },
+  {
+   "path": "build/113/build-rustsort.sh",
+   "must_contain": [
+    "--target wasm32-unknown-emscripten",
+    "-C panic=abort",
+    "--crate-type staticlib",
+    "octave_rust_sort_f64"
+   ],
+   "why": "G5 rust 工具链不变式（工单 63）：wasm32 先行（rustc 无 wasm64 std，wasm64 是 tier-3）；panic=abort（跨缝边界不许 unwind）；staticlib（链入主模块）；符号名必须与 Array-base.cc 缝的弱符号一致（fork f4bf15b）。"
+  },
+  {
+   "path": "build/113/link-web.sh",
+   "must_contain": [
+    "-Wl,-u,octave_rust_sort_f64"
+   ],
+   "why": "rust-sort 旋钮必须带 -u 强引用：弱引用**不拉归档成员**（lld 归档语义）——没有它，librustsort.a 链了也静默不生效（构建绿、功能缺席）。同 EXTRA_LDFLAGS 的 -u,dlsode_ 先例。"
+  },
+  {
+   "path": "build/113/rust/.cargo/config.toml",
+   "must_contain": [
+    "wasm64-unknown-unknown",
+    "build-std = [\"core\", \"alloc\"]",
+    "+atomics,+bulk-memory,+mutable-globals"
+   ],
+   "why": "G5-w64 rust 工具链不变式（工单 63 + 外部评审 2026-10-05）：wasm64 走 unknown-unknown + build-std（rustc 无 wasm64-emscripten target）；atomics/bulk-memory/mutable-globals 必须显式——wasm-ld 的 --shared-memory 检查看对象声明特性，预编译 core 不带 atomics。"
+  },
+  {
+   "path": "build/113/build-rustsort-w64.sh",
+   "must_contain": [
+    "octave_rust_sort_f64",
+    "eh_personality",
+    "cargo +nightly build --release"
+   ],
+   "why": "wasm64 库构建的 fail-closed 判据必须在：符号与缝一致（正向）+ 无 unwind/personality（反向）——链接绿不等于符号在（ERROR_ON_UNDEFINED_SYMBOLS=0 会吞 -u）。"
+  }
+ ]
 }

@@ -1,0 +1,11 @@
+# rust-sort 车道构建配置（工单 63 候选③；评审结论 ①A/③C 落实）。
+# build-std 是 cargo 的不稳定选项（rustc 直编不认）；wasm64 用 unknown-unknown
+# target + build-std 出 core/alloc。target-feature 必须带 atomics/bulk-memory/
+# mutable-globals——wasm-ld 的 --shared-memory 检查看的是对象声明的特性，
+# 不是实际使用（预编译 core 不带 atomics ⇒ 必须经 build-std 重编）。
+[unstable]
+build-std = ["core", "alloc"]
+
+[build]
+target = "wasm64-unknown-unknown"
+rustflags = ["-Ctarget-feature=+atomics,+bulk-memory,+mutable-globals"]

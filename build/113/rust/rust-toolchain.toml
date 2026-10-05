@@ -1,0 +1,5 @@
+# 评审结论 ⑦：E1–E7 全绿后把 channel 钉到具体日期（nightly-YYYY-MM-DD）。
+# 当前用浮动 nightly（2026-10-01 = 1.101.0-nightly）。
+[toolchain]
+channel = "nightly"
+components = ["rust-src"]

@@ -261,6 +261,15 @@ EOF
   #   同一变量只出现一行（上面 MEMORY64 的教训：两行 MALLOC 靠"后导出覆盖"是会翻车的形状）。
   case "$m" in w64) echo "MALLOC=mimalloc" ;; *) echo "MALLOC=" ;; esac
 
+  # ★ 工单 63（2026-10-05）：**rust-sort 插件旋钮**（候选③ spike ADOPT 4×；缝 =
+  #   Array-base.cc 弱符号 octave_rust_sort_f64，fork f4bf15b）。wasm32 车道
+  #   （product/threads）可开：链 librustsort.a（build/113/build-rustsort.sh 产物；
+  #   rustc 无 wasm64 std ⇒ w64 硬关）。取下补丁 = 旋钮置空——弱符号为空走
+  #   octave_sort 原路，树对象零改动。默认 0 = 未发运；发运时翻表（同 mimalloc）。
+  #   产物侧判据（§5.46）：RUST_SORT=1 ⇒ link-web.sh 追加
+  #   -Wl,--export-if-defined=octave_rust_sort_f64 ⇒ 导出段量出 measured.rust_sort。
+  case "$m" in product|threads|w64) echo "RUST_SORT=${RUST_SORT:-0}" ;; *) echo "RUST_SORT=" ;; esac
+
   # ★ 仓库架构批 B4：上游树路径**透传**（provision/等价性验证用）。表从环境读——
   #   操作员设 OCT_TREE=... 时透传给 link-web.sh；不设则空 = 脚本默认路径。
   #   与 E2_OPENBLAS 同族：操作员输入由表读取，不许在表外手设。
@@ -271,9 +280,14 @@ EOF
 mode_declared() {
   case "$1" in
     product)
-      cat <<'EOF'
+      # ★ 工单 63：rust_sort 声明从模式表推出（单一真值来源，同 malloc——explain 的
+      #   调用路径上表变量没 export，只能从表读，别从环境读）。
+      _rust_decl=""
+      [ "$(mode_table "$1" | sed -n 's/^RUST_SORT=//p')" = 1 ] \
+        && _rust_decl=', "rust_sort": "f64-stable"'
+      cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false,
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false${_rust_decl},
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -291,9 +305,13 @@ EOF
       # （BLAS 溯源从"必须含 -threads"改成"必须指向 E2 目录"）。
       _e2=""
       [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
+      # ★ 工单 63：rust_sort 声明从模式表推出（同 malloc/product）。
+      _rust_decl=""
+      [ "$(mode_table "$1" | sed -n 's/^RUST_SORT=//p')" = 1 ] \
+        && _rust_decl=', "rust_sort": "f64-stable"'
       cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true${_e2},
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true${_e2}${_rust_decl},
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -309,9 +327,13 @@ EOF
       _malloc_decl=""
       case "$m" in w64) [ "$(mode_table "$1" | sed -n 's/^MALLOC=//p')" = mimalloc ] \
         && _malloc_decl=', "malloc": "mimalloc"' ;; esac
+      # ★ 工单 63：rust_sort 声明从模式表推出（w64 亦 env 透传，nightly build-std 库）。
+      _rust_decl=""
+      [ "$(mode_table "$1" | sed -n 's/^RUST_SORT=//p')" = 1 ] \
+        && _rust_decl=', "rust_sort": "f64-stable"'
       cat <<EOF
 {"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true${_e2}${_malloc_decl},
+ "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true, "wasm64": true${_e2}${_malloc_decl}${_rust_decl},
  "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
@@ -908,6 +930,26 @@ cmd_selftest() {
     echo "fail | 没给 E2_OPENBLAS 却声明了 e2_openblas"; bad=1
   else
     echo "PASS | ★ 不给 E2_OPENBLAS ⇒ 不声明 e2_openblas（反向断言）"
+  fi
+  # ⑭ ★ 工单 63：rust-sort 旋钮 —— exports product 默认 RUST_SORT=0（未发运态），
+  #    env RUST_SORT=1 透传 1；w64 硬空（rustc 无 wasm64 std）。declared 跟表走。
+  n=$((n + 1))
+  rp="$(bash "$0" exports product 2>/dev/null | grep -c '^RUST_SORT=0$' || true)"
+  r1="$(RUST_SORT=1 bash "$0" exports product 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
+  rw="$(RUST_SORT=1 bash "$0" exports w64 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
+  rb="$(bash "$0" exports w64-base 2>/dev/null | grep -c '^RUST_SORT=$' || true)"
+  if [ "${rp:-0}" -eq 1 ] && [ "${r1:-0}" -eq 1 ] && [ "${rw:-0}" -eq 1 ] && [ "${rb:-0}" -eq 1 ]; then
+    echo "PASS | ★ 工单 63：RUST_SORT env 透传（product/w64）；w64-base 硬空"
+  else
+    echo "fail | rust-sort 旋钮没进模式表（product=$rp env=$r1 w64=$rw w64-base=$rb）"; bad=1
+  fi
+  n=$((n + 1))
+  rd1="$(RUST_SORT=1 bash "$0" explain product 2>/dev/null | grep -c '"rust_sort": "f64-stable"' || true)"
+  rd0="$(bash "$0" explain product 2>/dev/null | grep -c '"rust_sort"' || true)"
+  if [ "${rd1:-0}" -ge 1 ] && [ "${rd0:-0}" -eq 0 ]; then
+    echo "PASS | ★ 工单 63：RUST_SORT=1 ⇒ declared 含 rust_sort；默认 ⇒ 不声明（反向断言）"
+  else
+    echo "fail | rust_sort declared 跟表走失败（on=$rd1 off=$rd0）"; bad=1
   fi
   # ⑬ ★ 工单 59：分配器旋钮必须**从模式表推出** —— exports w64 有 MALLOC=mimalloc，
   #    其余模式空（同一变量一行）；且 declared 的 malloc 标签跟表走（w64 有、product 无）。
