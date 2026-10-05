@@ -4057,3 +4057,29 @@ wasm64-emscripten target ⇒ 走 **nightly build-std（core+alloc）+ wasm64-unk
   ③ 台帐写盘不许接 `head`（SIGPIPE 截断，已重算无损）。
 - **缝空间最终盘点**：部件轴（BLAS/分配器/sort）已全部打空；libm 被 IEEE 红线实质封口；
   fill/fft 带宽绑定；**唯一残缝 = xpow 驱动层（有界，候选④）**。除此之外**无已知上升空间**。
+
+
+### 5.92 候选④封闭（xpow 驱动层）+ G6 仪器打样：**排除**（2026-10-05，branch `IllegalPerformance`）
+
+verifier 指出 §5.91 的「无上升空间」被弱化成「无未审计上升空间」——唯一残余（xpow 的
+Octave C++ 驱动层，`hotpath_xpow_driver_pct`=39.5%）是**可由 agent 执行而未做**的待办。
+本批补做：**G6 延迟断言仪器打样 + 候选④ spike 判决**。
+
+- **仪器**：`test/fixtures/xpow-spike/`（`xpowspike.cpp` 模型化 elem_xpow 的驱动循环
+  = 每元素 `octave_quit()`（noinline + volatile 读）+ 逐元素索引；Rust 侧紧循环调**同一
+  libm pow**；`xpowmain.cpp` 同模块内交错计时 + G6 延迟测量）。库 = nightly build-std
+  wasm64（与正典 rust-sort 同路线）。复跑 `bash test/fixtures/xpow-spike/run-spike.sh`。
+- **判决（三次复跑一致）**：
+  - 端到端 `cand/base` = **0.951 / 0.988 / 1.002** ⇒ ~噪声内，**无加速**；
+  - **关键证据**：`driver_only` 探针（无 pow，纯 octave_quit + 索引）= **35.5–39.1ms**
+    vs `base` = 1704–1803ms ⇒ **驱动层只占 2.1–2.2%**（`xpow_driver_spike_pct`=2.1）。
+    即候选④能省的**绝对天花板 ~2%**，远低于 1.15× 门槛。
+  - **⇒ 候选④排除**。§5.91 的 39.5% 是 profiler 把内联 libm 的样本记在 C++ 调用帧上
+    （数学函数的归因假象），**不是可回收的驱动成本**——这是本批最重要的纠正。
+- **G6 仪器（已建成，可复跑）**：`xpow_cand_batched(..., quit_flag, every)` 每 `every` 元素
+  查一次 quit，返回看到标志时的索引 = 延迟上界（实测 every∈{1,64,256,1024,4096} 逐一为
+  E-1，符合契约）。将来任何块级化内核（候选④或后续）==**先过 G6**== 才能谈 ADOPT。
+- **缝空间最终结论**：部件轴（BLAS/分配器/sort）全打空；libm 被 IEEE 逐位红线封口；
+  fill/fft 带宽绑定；**xpow 驱动层经实测封闭（≤2%）**。
+  ⇒ **IllegalPerformance 线无已知上升空间**（本句现在有复跑件：`xpow-spike.log` +
+  `run-spike.sh`；反例=若 driver_only/base 将来 >15%）。

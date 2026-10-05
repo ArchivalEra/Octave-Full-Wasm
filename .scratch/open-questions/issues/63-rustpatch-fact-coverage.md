@@ -115,3 +115,17 @@ G6 延迟断言仍缺（候选④前置）。
 - 下一步：发运（模式表默认值翻 1 + lane_expect + promote = **产品决定**）；
   候选④ elem_xpow 前置 G6 延迟断言；可替换件空间审计（libm 被 IEEE 逐位红线
   + 无 SLEEF wasm 后端实质封口；fill 带宽绑定）。
+
+
+## 候选④（xpow 驱动层）：**排除** + G6 仪器建成（2026-10-05 收口）
+
+- G6 覆盖矩阵里标「新建」的两件（**G6 延迟断言**、**候选④裁决**）本批落地：
+  仪器 = `test/fixtures/xpow-spike/`（复跑 `bash test/fixtures/xpow-spike/run-spike.sh`）。
+- **G6 仪器**：`xpow_cand_batched(..., quit_flag, every)` 每 `every` 元素查一次 quit，
+  返回看到标志时的索引 = 延迟上界；实测 every∈{1,64,256,1024,4096} → E-1（契约成立）。
+  今后任何块级化内核 == 先过 G6 == 才谈 ADOPT。
+- **候选④判决：排除**。端到端 cand/base = 0.951/0.988/1.002（噪声内）；**driver_only
+  探针 = 2.1%**（`xpow_driver_spike_pct`）—— 驱动层（octave_quit + 逐元素索引）的绝对
+  天花板仅 ~2% ≪ 1.15× 门槛。**§5.91 的 39.5% 是 profiler 把内联 libm 记在 C++ 帧上的
+  归因假象**，非可回收成本。
+- ⇒ **IllegalPerformance 无已知上升空间**（复跑件：`w64-logs/xpow-spike.log`）。

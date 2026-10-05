@@ -831,6 +831,28 @@ def measure(argv):
                 "派生：候选 ÷ 对照（desc 中位）", "派生（rust-sort-ab.log）",
                 "desc 端到端比值（同门槛）", replay=False)
 
+    # ★ xpow 驱动层 spike（候选④，2026-10-05）：模型化 Octave elem_xpow 驱动循环
+    #   （octave_quit + 逐元素索引）vs Rust 紧循环，两者调同一 libm pow；driver_only
+    #   探针量「驱动层的绝对天花板」。判据：driver_only/base < 15%（加速门槛 1.15×）。
+    _xs = os.path.join(os.path.dirname(SITE), "w64-logs", "xpow-spike.log")
+    if os.path.exists(_xs):
+        import re as _rx
+        _xt = open(_xs, encoding="utf-8", errors="replace").read()
+        _md = _rx.search(r"driver_only=([0-9.]+)ms", _xt)
+        _mb = _rx.search(r"base=([0-9.]+)ms", _xt)
+        _mr = _rx.search(r"ratio=([0-9.]+)", _xt)
+        if _md and _mb and float(_mb.group(1)) > 0:
+            facts["xpow_driver_spike_pct"] = fact(
+                round(float(_md.group(1)) * 100.0 / float(_mb.group(1)), 1),
+                "bash test/fixtures/xpow-spike/run-spike.sh（读 w64-logs/xpow-spike.log）",
+                "w64-logs/xpow-spike.log",
+                "elem_xpow 驱动层（octave_quit + 逐元素索引）占 base 的百分比 = 候选④的"
+                "绝对天花板；实测 ~2% ≪ 15%（1.15× 门槛）⇒ 候选④排除", replay=False)
+        if _mr:
+            facts["xpow_driver_spike_ratio"] = fact(float(_mr.group(1)),
+                "同上（cand/base）", "w64-logs/xpow-spike.log",
+                "Rust 紧循环 vs Octave 形状驱动的比值（含同一 libm pow）", replay=False)
+
     # ★ 三热点封口审计（工单 63 收口，2026-10-05）：现役口径符号站采样
     #   （hotpath-stations/w64-sym-current，--diag；trusted/unnamed 由 hotpath 校准闸保证）。
     _hp = os.path.join(os.path.dirname(SITE), "w64-logs", "hotpath-final3.log")
@@ -1365,6 +1387,7 @@ def measure(argv):
         "w64_rustsort_ab_asc_ms", "w64_rustsort_base_ab_ms", "w64_rustsort_ab_asc_ratio",
         "w64_rustsort_ab_desc_ratio", "w64_rustsort_cand_sha",
         "hotpath_xpow_libm_pct", "hotpath_xpow_driver_pct", "hotpath_fft_blktrans_pct",
+        "xpow_driver_spike_pct", "xpow_driver_spike_ratio",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

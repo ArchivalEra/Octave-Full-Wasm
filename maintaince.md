@@ -37,8 +37,8 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
    （nightly build-std wasm64 库；`w64_rustsort_ab_*` 台账键；全量 PROBES=1 1358/0
    等效；端到端逐位抽查双站一致；工单 63），**发运 = 产品决定**。专属站 =
    site-illegalperf/-baseline（装配入口 build/113/site-illegalperf.sh）。
-   剩余部件轴：libm（IEEE 逐位红线 + 无 SLEEF wasm 后端 ⇒ 实质封口）、
-   fill（带宽绑定，已否决）。候选④ elem_xpow 前置 G6 延迟断言。
+   **缝空间已封口**：libm（IEEE 逐位红线）、fill/fft（带宽绑定）、**候选④ xpow 驱动层
+   （实测 driver_only 仅 2.1% ⇒ 排除，G6 仪器已建）** ⇒ 无已知上升空间。
 2. **上游更新线**：SOP 已通（工单 62 结案——供给树 rebuild 恢复可复现）。**emcc 6.0.10
    探针判决：编译器红利 ≈ 0（geomean 1.001），旗标矩阵全绿——升级不立项**，重启时机 =
    Octave/emsdk 新版发布 → fork merge → 重编 → 验收（`emcc6_probe_geomean` 台账键哨兵）。

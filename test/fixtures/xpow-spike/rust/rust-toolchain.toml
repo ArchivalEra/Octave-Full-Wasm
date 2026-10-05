@@ -1,0 +1,5 @@
+# 工具链钉版（评审结论 ⑦）：E1–E7 全绿当日 = nightly 1.101.0-nightly
+#（commit-date 2026-10-01）。升级 = 换日期 + 重跑 E1–E2 + G2 门。
+[toolchain]
+channel = "nightly-2026-10-01"
+components = ["rust-src"]

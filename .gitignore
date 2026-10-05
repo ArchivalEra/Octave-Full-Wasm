@@ -114,6 +114,10 @@
 !test/fixtures/*
 !test/fixtures/libm-spike/*
 !test/fixtures/emcc6-probe/*
+!test/fixtures/xpow-spike/*
+!test/fixtures/xpow-spike/rust/*
+!test/fixtures/xpow-spike/rust/src/*
+!test/fixtures/xpow-spike/rust/.cargo/*
 !bridge/p5canvas.js
 !bridge/octave-worker.js
 !bridge/octave-core.js
