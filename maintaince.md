@@ -36,19 +36,18 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
    （Rust driftsort 4× 于 timsort，语义差分 22 域逐位一致）**——下一步 = 树补丁打样
    （Array-base.cc 宏体 `if constexpr (T==double)` 分派 + 增量 relink + 全量验收）。
    事实覆盖矩阵与判决 = 工单 63。候选② fill 已否决（带宽绑定）。
-2. **工单 62（ABI 分叉悬案）**：全量 clean rebuild 露出 55 条 Fortran→BLAS signature
-   mismatch（发运谱系 1 条）——增量谱系不可复现。结算件 = `CCACHE_DISABLE=1` 供给树对照
-   重编。**结案前上游升级 SOP 不通**。
-3. **上游更新线**：SOP 已备（`NOTES-upstream.md`）。**emcc 6.0.10 探针判决：编译器红利
-   ≈ 0（geomean 1.001），旗标矩阵全绿——升级不立项**，重启时机 = 工单 62 结案后顺路
-   （`emcc6_probe_geomean` 台账键哨兵）。Octave/emsdk 新版发布 → fork merge → 重编 → 验收。
-4. **部署与 UI 线**（人的动作）：票 38 页面资产上站（`promote-pages.sh`）、票 12 真机手测
+2. **上游更新线**：SOP 已通（工单 62 结案——供给树 rebuild 恢复可复现）。**emcc 6.0.10
+   探针判决：编译器红利 ≈ 0（geomean 1.001），旗标矩阵全绿——升级不立项**，重启时机 =
+   Octave/emsdk 新版发布 → fork merge → 重编 → 验收（`emcc6_probe_geomean` 台账键哨兵）。
+3. **部署与 UI 线**（人的动作）：票 38 页面资产上站（`promote-pages.sh`）、票 12 真机手测
    （等生产部署）、E6 图形线（embed 页 GL 纹理边界）。
-5. **Einfacht 反哺（暗线，持续推进）**：三插件已并（#11 check_pins/check_locks、
+4. **Einfacht 反哺（暗线，持续推进）**：三插件已并（#11 check_pins/check_locks、
    #12 check_ab）；**可执行闸门脚本必须显式 `__main__` 入口**（#12 并后抓到的缺口）。
    提 issue/PR 前先做现有档位对照表；覆盖不到或配置繁琐 ⇒ 自行迭代再提 PR。
-6. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
-   libm 标量替换（wasm 无标量 FMA）、fill 热点（带宽绑定）、faer/PGO/LTO/链接旗标/NT>8——
+5. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
+   libm 标量替换（wasm 无标量 FMA）、fill 热点（带宽绑定）、faer/PGO/LTO/链接旗标/NT>8、
+   工单 62 ABI 分叉（根因 = f77-fcn.h 未收编手改，已收编 fork `a5a7208`；供给树
+   rebuild 可复现：1 条容忍 mismatch + wasm-opt 绿）——
    全部有数字判决，见 HISTORY 与 NOTES。
 
 ## 开工与提交的顺序

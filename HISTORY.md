@@ -3975,3 +3975,32 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
 - **Einfacht 反哺**：#9 的教训前置——先对照档位（#7 文本 / #10 活性都不覆盖），两个新插件
   **check_pins**（派生树 pin 一致性）+ **check_locks**（锁定源清单）以 PR #11 提交
   （发现式收编 10→12 闸门；本仓 witness-upstream-pin 为其消费实例）。
+
+### 5.89 工单 62 结案：ccache 假说翻案——真根因 = f77-fcn.h 未收编手改（2026-10-05，branch `IllegalPerformance`）
+
+结算件两轮重编（供给树 `/src/work/upstream/octave-11.3.0`，全程 `CCACHE_DISABLE=1`，
+产物落 `w64-equivN-out` 实验目录，8761 一字未动）：
+
+- **equiv2（对照）**：configure + make clean + 全量 2535 个编译单元 + 38MB 链接 =
+  **6 分 31 秒**（容器无 CPU 上限，实测 2045% ≈ 20.5/24 核满跑）。**53 条
+  `function signature mismatch`**（B5 55 条，核心集合逐条相同——cgemm_/cgemv_/cherk_/
+  dhgeqz_… 全部带 char* 隐藏长度参数的 c/z 复数族），wasm-opt 拒收 ⇒
+  **工单 62 第一假说（ccache 跨时代污染）被推翻**（R-014）。
+- **根因**：`liboctave/util/f77-fcn.h` 的 `F77_CHAR_ARG_LEN_TYPE`——现役树有一处
+  **仓库零记录的手改**（wasm64/LP64 ⇒ `int`），fork 分支没有；两树源码全集 diff 仅此
+  一个文件。机制：octave C++ 调用方按此宏传 Fortran 隐藏长度——供给树按 `long`(i64)
+  传，而 /usr/local-w64 的 f2c ABI（`ftnlen=int` i32，Sep-28 建造的 refblas/lapack
+  归档）按 i32 ⇒ 53 条分叉。现役树手改后与归档一致（发运谱系仅 1 条被容忍）。
+- **修法（按工单处方"补进 fork 分支"）**：`upstream/octave` `wasm/11.3.0` 提交
+  **`a5a7208`**（+4 行守卫式，与现役树该段逐字节同）→ push → `provision-upstream.sh
+  --only octave` 重供给（印章 a5a7208/dirty=0）→ `witness-upstream-pin` ok。
+- **equiv3（确认）**：mismatch **1 条（zdotu_，wasm-opt 容忍）**、wasm-opt 零报错、
+  `verdict=ok`（11 项声明全有实测背书）、`octave.wasm` sha `088aa6c31774fa8b…`。
+  **供给树 rebuild 恢复可复现 ⇒ 上游升级 SOP 解锁**（emcc6 仍不立项）。
+- 过程插曲（如实记）：第一次给供给树打补丁用了容器内 python 手改——被用户叫停
+  （"打个补丁这么难就说明你已经脱离正确补丁路线了"），回滚（sha 验证原件恢复）后改走
+  fork 提交 → 重供给 → 见证的正规缝。教训 = **供给树是 pin 管辖物，改动只有 fork
+  commit 一条路**；幂等判据要锚定到唯一模式（第一版子串判据误命中文件里另一处
+  条件分支的同名 int 定义，静默"已应用"）。
+- 复跑：`CCACHE_DISABLE=1 OCT=<供给树> OCT_TREE=<供给树> relink.sh rebuild w64
+  --out <实验目录> --yes-rebuild`；日志 `w64-logs/relink-upstream-equiv{2,3}.log`。

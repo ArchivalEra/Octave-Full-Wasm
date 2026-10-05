@@ -105,6 +105,13 @@
    "why": "实测证伪（2026-10-01，工单 30 收尾后用户要求直接测）：四个档的 wasm 内存上限**都是 2 GiB**（base/w64-base 的内存段 max=2.00 GiB；threads/w64 的胶水 `maximum:32768` 页 = 2 GiB），逐块分配实测的**存活上限**四档同为 **1.49 GiB**。此前把引擎级探针 `w64_mem_5g_bytes`（直接 `new WebAssembly.Memory({initial:80000n,address:'i64'})` 拿 5 GiB）当成了产物的能力 —— **引擎能 ≠ 产物配了**（与工单 28/29 那条『verdict=ok 不覆盖运行期路径』同类）。",
    "evidence": "test/browser/probe-heap-ceiling.mjs（`W64_BIG_HEAP=no`；base/threads/w64 三档块序列都是 0.75→1.49 GiB），日志 w64-logs/heap-ceiling.log；胶水与内存段的读法见工单 31 的『现状』节",
    "fixed_in": "工单 31（.scratch/open-questions/issues/31-w64-heap-cap-and-speed.md）+ HANDOFF §0 / DEPLOY.md / README 的 w64 条目改写"
+  },
+  {
+   "id": "R-014",
+   "text": "55 条 signature mismatch 的根因是 ccache 缓存污染",
+   "why": "工单 62 的第一假说，被 equiv2 对照实验推翻：CCACHE_DISABLE=1 无缓存干净重编同样 53 条（B5 55 条，核心集合逐条相同）。真根因 = f77-fcn.h 的 F77_CHAR_ARG_LEN_TYPE 未收编手改（供给树按 long(i64) 传 Fortran 隐藏长度，与 /usr/local-w64 的 i32 f2c ABI 归档分叉）。",
+   "evidence": "CCACHE_DISABLE=1 供给树重编：w64-logs/relink-upstream-equiv2.log（53 条）；fork 修复后 equiv3.log（1 条 zdotu_，wasm-opt 绿）",
+   "fixed_in": ".scratch/open-questions/issues/62-full-rebuild-abi-divergence.md 的 ## Answer；HISTORY §5.89"
   }
  ]
 }
