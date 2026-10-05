@@ -2,16 +2,16 @@
  "schema": 1,
  "tool": {
   "name": "link-web.sh",
-  "script_sha256": "7f2fbb7baa3d301239942361e0977c0a3838295f57cd98fac953f55932c960a7",
+  "script_sha256": "99752b3fb7d1ccd3e89818ac9a86824789a6eb538e7add47420df8f73cbbf7e8",
   "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 5.0.7 (263db4cffa6f9fc2ec514a70abac81362ea41849)",
   "manifest_writer": {
    "name": "write-build-manifest.py",
-   "script_sha256": "754f3df8337d65a4a88eb3a192d8f8f680ea61659380853c8c783244d76702ef"
+   "script_sha256": "e44a20c3fab9c24c08a2e9a40045ce415be64796da59c2404df441da4decbcbc"
   }
  },
  "build": {
-  "when": "2026-10-04T05:59:19+0000",
-  "out": "/src/websrc/w64-mimalloc-out",
+  "when": "2026-10-05T06:51:51+0000",
+  "out": "/src/websrc/w64-out",
   "mode": "w64"
  },
  "declared": {
@@ -26,6 +26,7 @@
   "wasm64": true,
   "e2_openblas": true,
   "malloc": "mimalloc",
+  "rust_sort": "f64-stable",
   "fonts": [
    "FreeSans.otf",
    "FreeSansBold.otf",
@@ -38,8 +39,9 @@
   ]
  },
  "measured": {
-  "exported_functions": 751,
+  "exported_functions": 752,
   "malloc": "mimalloc",
+  "rust_sort": "f64-stable",
   "simd": {
    "v128": 6582,
    "impl": "llvm-objdump"
@@ -71,12 +73,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "01fb52fc3b5dde30a81c550619bfacc752c27bb1cdef29d3b827424749f48e73",
-    "bytes": 30984954
+    "sha256": "f6fec91fc7a0f4b8b678c0d98c2453992dca4e91fcf82cb154e444770ba4a4c0",
+    "bytes": 31003790
    },
    "octave.js": {
-    "sha256": "bef38b7c133ff1f2a1f23cf704a3f8175c3686f36f518bdf5eb24386c509270e",
-    "bytes": 514932
+    "sha256": "42dc9f797c30d2f2e66abaacd0d00a58696ba768505b6fba680bbd6dfc97fdb8",
+    "bytes": 515017
    },
    "octave.data": {
     "sha256": "024c17d0dbde837fafce6ab5a1068c9986c66b0c2fec1c202f110a8de1ed5163",
@@ -87,7 +89,7 @@
  "inputs": {
   "link_web_sh": {
    "path": "/src/bin/link-web.sh",
-   "sha256": "7f2fbb7baa3d301239942361e0977c0a3838295f57cd98fac953f55932c960a7"
+   "sha256": "99752b3fb7d1ccd3e89818ac9a86824789a6eb538e7add47420df8f73cbbf7e8"
   },
   "blas": {
    "resolved_dir": "/src/work/e2-openblas-lib-w64-rsimd",
@@ -117,8 +119,8 @@
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-04T05:59:19+0000",
+  "when": "2026-10-05T06:51:51+0000",
   "by": "check-build-manifest.py",
-  "script_sha256": "2db0a8fed1dcea2a21f34e7935c85351cdaaf18313148ee91d44f1974c5f8c82"
+  "script_sha256": "777f2e99912d27175080a3611de8069ce3d24cc6596c8a33b4561049a0d81c24"
  }
 }

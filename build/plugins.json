@@ -64,7 +64,7 @@
     "build-inputs.json：G5 rust 工具链行 + -u 强引用行（witness-build-inputs 每提交真跑）",
     "G2 差分门 + G2b 变异自证 = test/fixtures/rustsort-spike/run-spike.sh（正典源 build/113/rust/sort.rs，22 域逐位一致 + 4/4 变异）"
    ],
-   "since": "2026-10-05（工单 63 候选③；w64 端到端 ADOPT 2.0×，发运未定）"
+   "since": "2026-10-05（工单 63 候选③；w64 端到端 2.2× ⇒ **已发运**）"
   }
  ],
  "lane_expect": {
@@ -74,7 +74,8 @@
   },
   "w64": {
    "e2_openblas": true,
-   "malloc": "mimalloc"
+   "malloc": "mimalloc",
+   "rust_sort": "f64-stable"
   },
   "w64-base": {}
  }

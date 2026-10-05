@@ -268,7 +268,9 @@ EOF
   #   octave_sort 原路，树对象零改动。默认 0 = 未发运；发运时翻表（同 mimalloc）。
   #   产物侧判据（§5.46）：RUST_SORT=1 ⇒ link-web.sh 追加
   #   -Wl,--export-if-defined=octave_rust_sort_f64 ⇒ 导出段量出 measured.rust_sort。
-  case "$m" in product|threads|w64) echo "RUST_SORT=${RUST_SORT:-0}" ;; *) echo "RUST_SORT=" ;; esac
+  #   ★ 2026-10-05 发运：w64 默认翻 1（产品决定）——每批 w64 重链自带 rust_sort，
+  #   product/threads 仍默认 0（wasm32-final 冻结，不再做 wasm32 车道活）。
+  case "$m" in w64) echo "RUST_SORT=${RUST_SORT:-1}" ;; product|threads) echo "RUST_SORT=${RUST_SORT:-0}" ;; *) echo "RUST_SORT=" ;; esac
 
   # ★ 仓库架构批 B4：上游树路径**透传**（provision/等价性验证用）。表从环境读——
   #   操作员设 OCT_TREE=... 时透传给 link-web.sh；不设则空 = 脚本默认路径。
@@ -936,10 +938,10 @@ cmd_selftest() {
   n=$((n + 1))
   rp="$(bash "$0" exports product 2>/dev/null | grep -c '^RUST_SORT=0$' || true)"
   r1="$(RUST_SORT=1 bash "$0" exports product 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
-  rw="$(RUST_SORT=1 bash "$0" exports w64 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
+  rw="$(bash "$0" exports w64 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
   rb="$(bash "$0" exports w64-base 2>/dev/null | grep -c '^RUST_SORT=$' || true)"
   if [ "${rp:-0}" -eq 1 ] && [ "${r1:-0}" -eq 1 ] && [ "${rw:-0}" -eq 1 ] && [ "${rb:-0}" -eq 1 ]; then
-    echo "PASS | ★ 工单 63：RUST_SORT env 透传（product/w64）；w64-base 硬空"
+    echo "PASS | ★ 工单 63：RUST_SORT w64 默认 1（发运）；product 默认 0；w64-base 硬空"
   else
     echo "fail | rust-sort 旋钮没进模式表（product=$rp env=$r1 w64=$rw w64-base=$rb）"; bad=1
   fi
