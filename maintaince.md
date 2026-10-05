@@ -11,6 +11,8 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 浏览器验收套件、带复跑命令的事实台账、每道先证明自己会红的闸门群——
 上游全量 fork/submodule 接入。可交付物 = 四格站点（base/threads/w64/w64-base）+
 嵌入接口层（UI 方开工包）。
+活跃开发前端 = **IllegalPerformance 分支**（Rust 补丁线——本仓唯一允许改 Octave 树
+补丁的线，用户拍板解除且不回主线）。
 
 ## 地图（真值在哪里）
 

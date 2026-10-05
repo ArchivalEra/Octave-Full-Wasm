@@ -738,7 +738,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `docs/embed-api.md` (10543 bytes)
 - `docs/manual-test-checklist.md` (4475 bytes)
 - `doctor.json` (1587 bytes)
-- `maintaince.md` (4494 bytes)
+- `maintaince.md` (4655 bytes)
 - `site/VERSION` (14 bytes)
 - `site/assets-loader.js` (19869 bytes)
 - `site/assets/data/built-in-docstrings` (656052 bytes)
