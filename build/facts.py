@@ -831,6 +831,22 @@ def measure(argv):
                 "派生：候选 ÷ 对照（desc 中位）", "派生（rust-sort-ab.log）",
                 "desc 端到端比值（同门槛）", replay=False)
 
+    # ★ locale 确定性契约（issue #4 方案 A，2026-10-05）：报错文本英文 + 数字 C locale，
+    #   **四档都要过**（核心解释器决定 ⇒ 跨车道/跨分支的不变量）。
+    _ll = os.path.join(os.path.dirname(SITE), "w64-logs", "locale-all-lanes.log")
+    if os.path.exists(_ll):
+        _lt = open(_ll, encoding="utf-8", errors="replace").read()
+        _n = _lt.count("8 PASS / 0 FAIL")
+        facts["locale_contract_lanes"] = fact(
+            _n,
+            "for l in w64 base threads w64-base; do sh test/browser/run.sh "
+            "test/browser/probe-locale.mjs \"http://127.0.0.1:8761/?lane=$l\"; done "
+            "（读 w64-logs/locale-all-lanes.log 的 '8 PASS / 0 FAIL' 计数）",
+            "w64-logs/locale-all-lanes.log",
+            "locale 确定性契约通过的车道数（应=4）。契约 = 报错英文 + 数字 C locale "
+            "(sprintf('%.3f',3.14159)=='3.142')；机制 = 无 NLS .mo + interpreter.cc 强制 "
+            "LC_NUMERIC/LC_TIME='C'。issue #4 方案 A 的可测形态", replay=False)
+
     # ★ xpow 驱动层 spike（候选④，2026-10-05）：模型化 Octave elem_xpow 驱动循环
     #   （octave_quit + 逐元素索引）vs Rust 紧循环，两者调同一 libm pow；driver_only
     #   探针量「驱动层的绝对天花板」。判据：driver_only/base < 15%（加速门槛 1.15×）。
@@ -1387,7 +1403,7 @@ def measure(argv):
         "w64_rustsort_ab_asc_ms", "w64_rustsort_base_ab_ms", "w64_rustsort_ab_asc_ratio",
         "w64_rustsort_ab_desc_ratio", "w64_rustsort_cand_sha",
         "hotpath_xpow_libm_pct", "hotpath_xpow_driver_pct", "hotpath_fft_blktrans_pct",
-        "xpow_driver_spike_pct", "xpow_driver_spike_ratio",
+        "xpow_driver_spike_pct", "xpow_driver_spike_ratio", "locale_contract_lanes",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

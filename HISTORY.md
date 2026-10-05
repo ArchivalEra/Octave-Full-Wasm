@@ -4107,3 +4107,24 @@ Octave 启动）≈10s，占单套墙钟的八成**——真正跑断言的只�
   ——`bench-core` 216s、`probe-jspi` 123s 是最大两块，且**必须串行** ⇒ accept 并行的
   收益到 16 分为止；再快只剩"动 bench/probe"，风险不值当（计时有效性 > 省几分钟）。
 - 复跑：`SWEEP_JOBS=4 PROBES=1 sh build/sweep.sh http://127.0.0.1:8761/`（`SWEEP_JOBS=1` 回串行）。
+
+
+### 5.94 issue #4（报错语言本地化 RFC）：方案 A 已成立 → 上"每档必过"的 locale 契约探针（2026-10-05）
+
+用户："看看 issue，这个我认为是所有分支都需要的功能。" 定位 = 本仓 **issue #4**（唯一未评估的
+功能 RFC，且自我定位在 wasm64-NEXT 一个分支——用户要它覆盖所有分支）。
+
+- **实测取证（四车道）**：语法错 `error: syntax error` + 插入符行、运行时错
+  `error: '__no_such_var_xyz__' undefined near line 1, column 1` —— **纯 ASCII 英文**；
+  `sprintf('%.3f',3.14159)`→`3.142`、`sprintf('%e',1234.5)`→`1.234500e+03` —— **C locale**。
+  **base/threads/w64/w64-base 四档各 8 PASS / 0 FAIL**（`locale_contract_lanes`=4）。
+- **机制**：① 不构建 NLS `.mo` ⇒ gettext 回退英文 msgid；② `interpreter.cc` 把
+  `LC_NUMERIC`/`LC_TIME` 显式钉 `"C"`（Matlab 兼容）。⇒ 与宿主 locale 无关。
+- **交付 = 把"隐式"变成"可测契约"**：新探针 `test/browser/probe-locale.mjs`（5 类断言
+  L1–L5，含**反证**：非 ASCII 判据有分辨力，防匹配器失明）；进全量回归（`probe-*`）+
+  事实键 `locale_contract_lanes`。**任何车道漂移（误编非英文 .mo / locale 泄漏）会被抓**。
+  ⚠️ 探针自身两坑（已修）：报错走 emscripten `printErr`→**console** 通道（钩 Module.printErr
+  不可靠）取 `page.on('console')`；`eval_string` 回 **rc 不是值** ⇒ 取值走虚拟 FS 写读。
+- **引擎侧回应**（issue #4 评论）：方案 A **已成立**（附四档实测）；方案 B（gettext 打包 +
+  locale 接口）**可立项但不免费**——每语言 +几 MB、musl 需 locale 定义、**数值永远钉 `C`**
+  （否则 csv/jsonencode/dlmread 崩），建议按需加载、不进首包；结构化错误元数据 **单独立项**。
