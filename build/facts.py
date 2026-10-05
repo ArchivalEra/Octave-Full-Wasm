@@ -831,6 +831,31 @@ def measure(argv):
                 "派生：候选 ÷ 对照（desc 中位）", "派生（rust-sort-ab.log）",
                 "desc 端到端比值（同门槛）", replay=False)
 
+    # ★ IllegalPerformance vs wasm64-NEXT 最终对比（2026-10-05）：两端 UI 逐字节同，
+    #   唯一变量 = w64 载荷（rust_sort 开/关）。sort 2e6 是唯一实质差异（2.3×）。
+    _vs = os.path.join(os.path.dirname(SITE), "w64-logs", "bench-IP-vs-NEXT.log")
+    if os.path.exists(_vs):
+        import re as _revs
+        _vt = open(_vs, encoding="utf-8", errors="replace").read()
+        _blocks = _vt.split("=== round")   # 每块 = "N IP\n<SPEED_JSON>...\n=== round M NEXT..."
+
+        def _med(side, case):
+            vals = []
+            for b in _blocks:
+                hm = _revs.match(r"\d+ (IP|NEXT)", b.strip())   # 头行形如 "1 IP ===\n<json>"
+                if not hm or hm.group(1) != side:
+                    continue
+                m = _revs.search(r'"%s":\{"median":([0-9.]+)' % case, b)
+                if m:
+                    vals.append(float(m.group(1)))
+            vals.sort()
+            return vals[len(vals) // 2] if vals else None
+        _sip = _med("IP", "sort 2e6"); _snx = _med("NEXT", "sort 2e6")
+        if _sip and _snx:
+            facts["ip_vs_next_sort_ip_ms"] = fact(_sip, "sh test/browser/run.sh test/browser/bench-lanes.mjs <8761> w64（读 w64-logs/bench-IP-vs-NEXT.log）", "w64-logs/bench-IP-vs-NEXT.log", "IllegalPerformance(8761) sort 2e6 中位", replay=False)
+            facts["ip_vs_next_sort_next_ms"] = fact(_snx, "同（<8869>）", "w64-logs/bench-IP-vs-NEXT.log", "wasm64-NEXT(8869) sort 2e6 中位", replay=False)
+            facts["ip_vs_next_sort_ratio"] = fact(round(_sip/_snx, 3), "派生：IP ÷ NEXT", "派生", "sort 2e6 比值（<1 = IP 快）", replay=False)
+
     # ★ locale 确定性契约（issue #4 方案 A，2026-10-05）：报错文本英文 + 数字 C locale，
     #   **四档都要过**（核心解释器决定 ⇒ 跨车道/跨分支的不变量）。
     _ll = os.path.join(os.path.dirname(SITE), "w64-logs", "locale-all-lanes.log")
@@ -1404,6 +1429,7 @@ def measure(argv):
         "w64_rustsort_ab_desc_ratio", "w64_rustsort_cand_sha",
         "hotpath_xpow_libm_pct", "hotpath_xpow_driver_pct", "hotpath_fft_blktrans_pct",
         "xpow_driver_spike_pct", "xpow_driver_spike_ratio", "locale_contract_lanes",
+        "ip_vs_next_sort_ip_ms", "ip_vs_next_sort_next_ms", "ip_vs_next_sort_ratio",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

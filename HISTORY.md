@@ -4128,3 +4128,32 @@ Octave 启动）≈10s，占单套墙钟的八成**——真正跑断言的只�
 - **引擎侧回应**（issue #4 评论）：方案 A **已成立**（附四档实测）；方案 B（gettext 打包 +
   locale 接口）**可立项但不免费**——每语言 +几 MB、musl 需 locale 定义、**数值永远钉 `C`**
   （否则 csv/jsonencode/dlmread 崩），建议按需加载、不进首包；结构化错误元数据 **单独立项**。
+
+
+### 5.95 issue #4 结案 + IllegalPerformance vs wasm64-NEXT 最终对比（2026-10-05）
+
+**issue #4 关闭**：方案 A（统一英文）采纳、已上"每档必过"契约探针（§5.94）；方案 B
+（gettext 打包）不立项（数值永远钉 C、按需加载不进首包）；结构化错误元数据单列。
+
+**最终对比**（用户："最后一次对比两线性能，UI 接口一样就各做一个网页"）：
+
+- **UI 接口层逐字节相同**：两站 216 个非-w64 文件 `cmp` 全同（index/lane/lanes/queue/
+  p5canvas/octave-worker/octave-core/assets-loader/VERSION）——**唯一差异 = w64 载荷**
+  （rust_sort 开/关，均为现役口径：rsimd+mimalloc+wasm64 8G）。
+- **性能（bench-lanes，交错 3 轮，n=3/n=3）**：
+
+| 负载 | IP(rust) | NEXT(base) | IP/NEXT |
+|---|---|---|---|
+| dot 1e7 | 0.010 | 0.009 | 1.11（噪声）|
+| matmul 500/1000 | 0.003 / 0.023 | 0.003 / 0.023 | 1.00 |
+| lu 800/1500 | 0.013 / 0.061 | 0.012 / 0.058 | 1.05–1.08（噪声）|
+| svd 400 | 0.154 | 0.153 | 1.01 |
+| sum 1e7 | 0.008 | 0.008 | 1.00 |
+| **sort 2e6** | **0.105** | **0.237** | **0.44（2.3×）** |
+| loop 1e6 | 0.593 | 0.571 | 1.04 |
+
+- **结论**：两条线**除排序（rust-sort）外逐轴等价**；IP 唯一实质优势 = `sort` **2.3×**
+  （`ip_vs_next_sort_ratio`=0.443）。这正是 IllegalPerformance 的定义性差异。
+- **两站**：IP=8761（w64 sha f6fec91f，rust_sort=f64-stable）；NEXT=8869（w64 sha
+  38f57563，rust_sort=None）；均 COI、BOOT OK。UI 层同源 ⇒ 可各做一个网页，差异只在
+  引擎那条 w64 载荷。
