@@ -470,7 +470,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/rust/.cargo/config.toml` (606 bytes)
 - `build/113/rust/Cargo.lock` (151 bytes)
 - `build/113/rust/Cargo.toml` (183 bytes)
-- `build/113/rust/rust-toolchain.toml` (217 bytes)
+- `build/113/rust/rust-toolchain.toml` (238 bytes)
 - `build/113/rust/src/lib.rs` (3310 bytes)
 - `build/113/site-illegalperf.sh` (3927 bytes)
 - `build/113/sort-ab.sh` (1693 bytes)
