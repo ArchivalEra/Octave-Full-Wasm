@@ -4083,3 +4083,27 @@ Octave C++ 驱动层，`hotpath_xpow_driver_pct`=39.5%）是**可由 agent 执�
   fill/fft 带宽绑定；**xpow 驱动层经实测封闭（≤2%）**。
   ⇒ **IllegalPerformance 线无已知上升空间**（本句现在有复跑件：`xpow-spike.log` +
   `run-spike.sh`；反例=若 driver_only/base 将来 >15%）。
+
+
+### 5.93 验收扫描并行化：全量 24→16 分钟 + 修 `_run.mjs` 并发覆写洞（2026-10-05）
+
+用户吐槽"每次跑全部测试太慢"。查账：`build/sweep.sh` 是**纯串行**（每套 `& … wait`），
+77 套 × 均值 18.5s ≈ 24 分钟，而**每套一次冷启动（chromium + 30MB wasm + 9.7MB data +
+Octave 启动）≈10s，占单套墙钟的八成**——真正跑断言的只有 2–13s。
+
+- **并行化（`build/sweep.sh`）**：只把 **`accept-*` 并行**（默认 4 路，`SWEEP_JOBS` 调），
+  `probe-*`/`bench-*` **永远串行**——理由两条：bench 要**计时隔离**（本机单轮方差 ±30%），
+  probe 里有的**自起固定端口**（并发撞端口）。accept-* 是"连给定 URL 跑断言"、不自起
+  服务，彼此独立。加**流式输出**（每批完成即打印该批，不再全跑完才 bulk 出）。
+- **前提修复（`test/browser/run.sh`）**：临时副本从**固定 `_run.mjs`** 改成**每次调用唯一**
+  `_run.<pid>.mjs`（trap 清理）——旧固定名让两个 run.sh 并发时**互相覆写**（HISTORY §5.14
+  的"假失败"真身），是并行的**硬前提**，也是一处纯 bug 修复（清掉了 15:28 的旧残留）。不用
+  `exec`：要 `trap` 删副本。
+- **实测**：子集 `accept-113-*` 串行 25s → 并行 11s（2.3×），逐套结果**逐字节一致**；
+  **全量 `PROBES=1`：串行 77 套 / 1358 PASS / 0 FAIL ≈24min → 并行 76 套 / 1358 PASS /
+  0 FAIL / 981s（16 分）**。76 vs 77 = `probe-sort-bitexact` 已按 exceptions 正确跳过
+  （它是双站对比工具，非单站判定套件，本批登记 manifest），**PASS 总数不变 ⇒ 等价**。
+- **瓶颈如实记**：总套件耗时 1396s 里，**串行尾部（probe/bench）678s = 墙钟 69%**
+  ——`bench-core` 216s、`probe-jspi` 123s 是最大两块，且**必须串行** ⇒ accept 并行的
+  收益到 16 分为止；再快只剩"动 bench/probe"，风险不值当（计时有效性 > 省几分钟）。
+- 复跑：`SWEEP_JOBS=4 PROBES=1 sh build/sweep.sh http://127.0.0.1:8761/`（`SWEEP_JOBS=1` 回串行）。
