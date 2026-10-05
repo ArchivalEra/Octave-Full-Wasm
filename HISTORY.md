@@ -4004,3 +4004,56 @@ Zed/GPUI 编不进 wasm（劝退）；纯解释器 0.67× 只能重写解释器�
   条件分支的同名 int 定义，静默"已应用"）。
 - 复跑：`CCACHE_DISABLE=1 OCT=<供给树> OCT_TREE=<供给树> relink.sh rebuild w64
   --out <实验目录> --yes-rebuild`；日志 `w64-logs/relink-upstream-equiv{2,3}.log`。
+
+
+### 5.90 工单 63 候选③：rust-sort 源缝插件 w64 落地 ADOPT（2026-10-05，branch `IllegalPerformance`）
+
+用户裁定 IllegalPerformance = wasm64-NEXT 的延伸、8G 大堆必须用上 ⇒ 靶子直上 w64。
+外部评审（需求书 `/mnt/hdd/octave-wasm-build/rust-wasm64-requirements.md`）判定：rustc 无
+wasm64-emscripten target ⇒ 走 **nightly build-std（core+alloc）+ wasm64-unknown-unknown +
+显式 `+atomics,+bulk-memory,+mutable-globals`**。
+
+- **E0–E5 全绿**：E1 cargo build-std 11s 过（rustc 直编不认 `-Z build-std`）；E2 库体检
+  （未定义恰好 = 宿主 libc 系；无 unwind/probestack；胶水 = panic_handler→abort +
+  global_allocator 转发）；E3 混链 shared-memory 成功且端到端真跑；**E4 弱符号判空可靠
+  （`ghost=0`）⇒ 缝保持链接期旋钮**（取下 = relink 不带库，树对象零改动）；E5 严格链接绿。
+- **缝**：`Array-base.cc` stride==1 的 double 分派（弱符号 `octave_rust_sort_f64`，fork
+  `f4bf15b`）+ `RUST_SORT` 旋钮（库按车道二选一：wasm64 → build-std 库，wasm32 → rustc
+  直编库）。正典源 = `build/113/rust/src/lib.rs`（no_std，双路同源；G2 门消费同一份）。
+  工具链钉版 `nightly-2026-10-01`（评审 ⑦）。
+- **w64 候选**（rust_sort+mimalloc+e2-openblas-rsimd+wasm64 全口径）verdict=ok、mismatch 1
+  条容忍；全量 **PROBES=1 = 77 套 / 1358 PASS / 0 FAIL**；端到端逐位抽查双站一致（IEEE
+  红线）；**对撞现役 8761（n=4/4 交错）：sort 2e6 = 0.109 vs 0.243 = 0.45（2.2×）**，
+  其余全轴平价（零回归）。专属站 = `site-illegalperf`(8868)/`-baseline`(8869)
+  （`build/113/site-illegalperf.sh` 装配 + 谱系标记）。
+- **修正（对撞暴露）**：候选初版链错 OpenBLAS 归档（`e2-openblas-lib-w64` 非 `-rsimd`）⇒
+  BLAS 慢 2.3×，按现役身份证 `inputs.blas.resolved_dir` 溯源修正。**教训：车道 E2 正典值
+  以现役身份证为准。** svd 的 1.19 假回归 = 与 cargo 钉版重建时间窗重叠的测量污染（r3/r4
+  收敛，如实记）。
+- **wasm32 两件候选已删**（wasm32-final 冻结，不再做 wasm32 车道活；G2 门仍跑 wasm32——
+  那是语义仪器不是车道）。
+- 提交 `8e886f3`（落地）+ `b9de56c`（E2 修正），双推 + 镜像。台账键 `w64_rustsort_ab_*`、
+  `w64_rustsort_cand_sha`。
+
+### 5.91 IllegalPerformance 热点封口审计：三件收口 + 缝空间盘点（2026-10-05）
+
+用户令：1 小时把最后三件收口、确认无上升空间。三条负载在**现役口径符号站**
+（`hotpath-stations/w64-sym-current`，`--diag`）采样（trusted=True、unnamed 0%）：
+
+| 负载 | 归因（top） | 判定 |
+|---|---|---|
+| `sqrt(x)+x.^0.7` | libm 链 **48.9%**（exp 24.9+pow 12.7+log 11.3）+ Octave 驱动 **39.5%**（do_rc_map 19.8+elem_xpow 19.7）| **libm 边界（IEEE 钉死）+ 有界驱动缝** |
+| `for k, fft(x)` | `blk_trans` **19.1%**（8×8 分块转置）+ 分配 ~20% | **带宽绑定**（纯置换，已是最优分块） |
+| `for k, reshape+C=A(:)` | 无热点（分配 + profiler 伪影 + idle 为主） | **无热点** |
+
+- **loaded 结构结论**：`x.^y` 的头部 49% 是 musl 超越函数（IEEE 754 逐位红线 ⇒ 不可换，
+  且无 SLEEF wasm 后端）；`blk_trans` 是数据搬移带宽下限（同 fill 家族）；reshape/colon 无热点。
+- **残余已知项（诚实记，非"打空"）**：xpow 的 **Octave C++ 驱动 ~20–40%** 是一条**有界**的可缝
+  轴（elem_xpow 的逐元素 `octave_quit()` + `operator()` 索引 + do_rc_map 复数重启），Rust 内核
+  可去掉循环开销，但**仍要调同一套 libm** ⇒ 天花板 ≈ 1.3–1.5×，且需 G6 延迟断言守 `octave_quit`
+  语义。**未建**（超出本轮 1h；列为候选④的规格）。
+- **三条仪器修复（本轮顺带）**：① dlsync 补丁匹配器写死压缩胶水形态（带花括号）⇒ `--diag`
+  符号站判 rc=4，改成核心调用形态（两胶水通用）；② `site-illegalperf.sh` 补身份证随行；
+  ③ 台帐写盘不许接 `head`（SIGPIPE 截断，已重算无损）。
+- **缝空间最终盘点**：部件轴（BLAS/分配器/sort）已全部打空；libm 被 IEEE 红线实质封口；
+  fill/fft 带宽绑定；**唯一残缝 = xpow 驱动层（有界，候选④）**。除此之外**无已知上升空间**。

@@ -831,6 +831,38 @@ def measure(argv):
                 "派生：候选 ÷ 对照（desc 中位）", "派生（rust-sort-ab.log）",
                 "desc 端到端比值（同门槛）", replay=False)
 
+    # ★ 三热点封口审计（工单 63 收口，2026-10-05）：现役口径符号站采样
+    #   （hotpath-stations/w64-sym-current，--diag；trusted/unnamed 由 hotpath 校准闸保证）。
+    _hp = os.path.join(os.path.dirname(SITE), "w64-logs", "hotpath-final3.log")
+    if os.path.exists(_hp):
+        _txt = open(_hp, encoding="utf-8", errors="replace").read()
+        _sections = _txt.split("## snippet:")
+        def _top_pct(sect, name):
+            import re as _r
+            m = _r.search(r"([0-9.]+)%.*?\b" + _r.escape(name) + r"\b", sect)
+            return float(m.group(1)) if m else None
+        for _s in _sections:
+            if "x.^0.7" in _s:
+                lm = sum(x for x in (_top_pct(_s, "exp_inline"), _top_pct(_s, "pow"),
+                                     _top_pct(_s, "log_inline")) if x)
+                dv = sum(x for x in (_top_pct(_s, "do_rc_map"), _top_pct(_s, "elem_xpow")) if x)
+                facts["hotpath_xpow_libm_pct"] = fact(round(lm, 1),
+                    "python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6+0.1; tic; for k=1:20, "
+                    "y=sqrt(x)+x.^0.7; end' --lane w64（读 w64-logs/hotpath-final3.log）",
+                    "w64-logs/hotpath-final3.log",
+                    "x.^y 热点里 libm 超越函数（exp+pow+log）合计自占比——IEEE 钉死不可换", replay=False)
+                facts["hotpath_xpow_driver_pct"] = fact(round(dv, 1),
+                    "同上（elem_xpow + do_rc_map）", "w64-logs/hotpath-final3.log",
+                    "x.^y 热点里 Octave C++ 驱动（elem_xpow 逐元素 + do_rc_map 复数重启）合计——"
+                    "唯一残余可缝轴（有界，候选④；需 G6 延迟断言）", replay=False)
+            if "fft(x)" in _s:
+                bt = _top_pct(_s, "blk_trans")
+                if bt is not None:
+                    facts["hotpath_fft_blktrans_pct"] = fact(bt,
+                        "python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6; tic; for k=1:10, "
+                        "y=fft(x); end' --lane w64", "w64-logs/hotpath-final3.log",
+                        "fft 热点里 blk_trans（8×8 分块转置）自占比——纯数据置换=带宽绑定", replay=False)
+
     # 候选产物身份证（IllegalPerformance 线专属站，**非 8761 现役**——现役 sha 仍是 w64_wasm_sha）
     _cand_wasm = "/mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm"
     if os.path.exists(_cand_wasm):
@@ -1332,6 +1364,7 @@ def measure(argv):
         "rust_sort_spike_ratio",
         "w64_rustsort_ab_asc_ms", "w64_rustsort_base_ab_ms", "w64_rustsort_ab_asc_ratio",
         "w64_rustsort_ab_desc_ratio", "w64_rustsort_cand_sha",
+        "hotpath_xpow_libm_pct", "hotpath_xpow_driver_pct", "hotpath_fft_blktrans_pct",
         "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
         "threads_shared_memory", "threads_pthread_glue", "threads_v128",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",

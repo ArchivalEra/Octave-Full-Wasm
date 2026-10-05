@@ -39,8 +39,14 @@ import os
 import re
 import sys
 
-CALL = "{__emscripten_proxy_dlsync(pthread_ptr)}"
-FIXED = "{__emscripten_proxy_dlsync(BigInt(pthread_ptr))}"
+# ★ 2026-10-05：匹配**核心调用**（不带外层花括号/分号）——压缩胶水（minify）是
+#   `{__emscripten_proxy_dlsync(pthread_ptr)}`（花括号并置、无分号），而非压缩
+#   （`--diag`/调试胶水）是独立语句 `__emscripten_proxy_dlsync(pthread_ptr);`。
+#   写死带花括号的形态 ⇒ `--diag` 符号站的胶水判 rc=4（形状不认识）⇒ hotpath 仪器
+#   被挡（实测 2026-10-05）。核心形态对两种胶水都命中，且 `_async` 变体（`dlsync_async(`）
+#   前缀不同、不会误伤。
+CALL = "__emscripten_proxy_dlsync(pthread_ptr)"
+FIXED = "__emscripten_proxy_dlsync(BigInt(pthread_ptr))"
 FUNC = "__emscripten_dlsync_threads"     # 判 3 与 4 的锚：有没有这个 dlsync 调用点所在函数
 MARK = "dlsync-bigint"
 
