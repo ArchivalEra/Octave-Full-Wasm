@@ -65,8 +65,12 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 
 **换线规则（共享容器 o113 的代价，必须遵守）**：容器里的**树、构建脚本、印章**都跟着
 分支走——切分支后必须 ① `git submodule update upstream/octave` ② `sh build/provision-upstream.sh
---only octave` ③ `docker cp` 该分支的 `relink.sh`/`link-web.sh` 进容器。三步少一步 =
-在别的线的状态上构建（本轮实测：NEXT 重编误用 IP 翻表脚本 ⇒ 产物混入 rust_sort）。
+--only octave` ③ `docker cp` 该分支的 `relink.sh`/`link-web.sh` 进容器 ④ **闸门与推送的
+站点口径**：`OCTAVE_WASM_BASE` 指向**本线**的站点（IP 线 = 默认 `…/site`；NEXT 线 =
+`…/next-base/site` → site-illegalperf-baseline 符链；master 线 = 仓库 `site/`，即
+`OCTAVE_WASM_BASE=$PWD`）——plugin-check/check-facts/witness 读的都是它，不指本线 =
+在别的线的部署上跑闸门（实测三次：NEXT 拣选红、master 提交红、NEXT 重编产物混入
+rust_sort）。四步少一步 = 在别的线的状态上构建或验收。
 
 **fork 更新 SOP（每条线相同）**：上游发版 → `upstream/octave` fork 分支 merge 上游 tag
 → 该线 bump pin（NEXT = 无缝 lineage；IP = 缝随分支携带）→ provision → rebuild → 全量

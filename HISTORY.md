@@ -4272,3 +4272,29 @@ IP 不许成为强制主线，main 保留不删（CI 部署触发器）。
   witness/plugin-check 绿、8761 f6fec91f 未动。
 - **换线规则**（写入 maintaince）：切分支 = submodule update + 重供给 + docker cp 该线
   脚本——三步少一步 = 在别的线的状态上构建。
+
+
+### 5.99 发运落地 + master 建线 + isui 抹除 + 反哺 #13（2026-10-07，接 §5.98 的执行记录）
+
+- **rust-sort 发运**：用户批准 ⇒ 模式表 w64 默认 `RUST_SORT=1` → 容器重链 `w64-out` =
+  `f6fec91f` → `w64-artifacts/` 与台账 `w64_wasm_sha` 同步 → `promote-w64-lane.sh` 推
+  8761（进件守卫/自检过）→ 三层 sha 绿 + BOOT OK → **全量 PROBES=1 77 套 / 1358 PASS /
+  0 FAIL** → 8768 与仓库 site/ 同步 → 三处一致。提交 `7d8aaad`。
+- **E2 口径修正**：对撞第一轮暴露候选 BLAS 慢 2.3× ⇒ 身份证溯源 = 候选链了
+  `e2-openblas-lib-w64`（非 `-rsimd`）⇒ 重链修正（`b9de56c`）。教训：**车道 E2 正典值
+  以现役身份证 `inputs.blas.resolved_dir` 为准**。
+- **master 建线**：用户裁定三线独立（IP 不当强制主线）⇒ main 纯 FF 合并 wasm64-NEXT +
+  CI 触发改 `[master]` + 改名 master（GitHub 默认分支自动跟随）→ `598bd57` 三处一致
+  （origin/mirror/master）。mirror/main 已分叉（历史归档）不动，mirror 侧以
+  `wasm64-NEXT:master` 建新支。
+- **isui 抹除**：用户令抹除本仓全部 isui 相关 ⇒ 删 `deploy-heart.yml` 工作流 +
+  `.gitignore` CI 段（master `929fc63` / IP `9d89fd0`）；三份 README 注记「无 CI 自动
+  部署」。线上 isui.ren 为外部托管不受影响；HISTORY 为 append-only 历史不抹（本节即
+  记录）。
+- **反哺 Einfacht #13**（`b246a99`）：三线架构落地时三次"闸门验错世界"事故
+  （plugin-check 登记表 vs 部署站点错位 ×2、NEXT 重编被别的线构建脚本污染）+
+  codebase-design 透镜 ⇒ 提案**声明式验证对象（reflection world）**：world 清单
+  （每线 site/artifacts/container/fork_pin_ref + active）+ 闸门统一 interface +
+  换线脚本写出声明被核对。留档 `docs/agents/upstream-issues.md`。
+- **换线第 4 步入档（maintaince）**：闸门与推送的站点口径 `OCTAVE_WASM_BASE` 必须指向
+  本线（IP=默认 site；NEXT=next-base；master=仓库 site/）——本轮三次闸门红全是它。

@@ -934,7 +934,7 @@ def measure(argv):
             _hl.sha256(open(_cand_wasm, "rb").read()).hexdigest(),
             "sha256sum /mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm",
             "artifacts-w64-rust-on/octave.wasm（site-illegalperf w64 槽同源）",
-            "rust-sort 候选产物 sha；发运与否 = 产品决定", replay=False)
+            "rust-sort 候选产物 sha；2026-10-07 已发运（用户批准，8761 w64 档同 sha）", replay=False)
 
     _e6 = os.path.join(os.path.dirname(SITE), "w64-logs", "emcc6-probe.log")
     if os.path.exists(_e6):
