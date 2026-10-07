@@ -109,7 +109,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 |---|---|---|
 | `wasm32-final` | — (frozen) | wasm32 archive line |
 | `wasm64-NEXT` | `a5a7208` (patches + f77 fix, **no rust seam**) | moderate wasm64 line — verified: fresh rebuild from its fork pin reproduces its shipped artifact byte-for-byte |
-| `IllegalPerformance` | `f4bf15b` (+ rust-sort seam) | aggressive wasm64 line — **this is what ships today** |
+| `IllegalPerformance` | `f4bf15b` (+ rust-sort seam) | aggressive wasm64 line — **shipped 2026-10-07** (8761 w64 = `f6fec91f`, IEEE-evaluated, sort 2.16× vs this line's base) |
 
 All three eat upstream Octave updates through the same fork pipeline
 (`upstream/octave` branch `wasm/11.3.0`); each line pins its own fork commit.
@@ -218,8 +218,8 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (351118 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (9041 bytes)
-- `README.zh.md` (8165 bytes)
+- `README.de.md` (9122 bytes)
+- `README.zh.md` (8235 bytes)
 - `STATE.md` (33366 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
