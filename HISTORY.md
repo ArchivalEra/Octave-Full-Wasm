@@ -4157,3 +4157,37 @@ Octave 启动）≈10s，占单套墙钟的八成**——真正跑断言的只�
 - **两站**：IP=8761（w64 sha f6fec91f，rust_sort=f64-stable）；NEXT=8869（w64 sha
   38f57563，rust_sort=None）；均 COI、BOOT OK。UI 层同源 ⇒ 可各做一个网页，差异只在
   引擎那条 w64 载荷。
+
+
+### 5.96 五方大对比：原生极限 / wasm32-final / wasm64-NEXT / IllegalPerformance（2026-10-07）
+
+用户令："最后的大比较，octave 原生极限 vs wasm32-final vs wasm64-NEXT vs IllegalPerformance vs
+MATLAB（如果有 linux 版）"。环境隔两天重启 ⇒ doctor 抓到 8761 死（502）+ 容器停，拉起后
+**全部重测**（原生预热 5 轮中位；wasm 3 轮中位；单位秒）。MATLAB：本机未安装，如实标注不测。
+
+| 负载 | 原生 ref-BLAS | 原生极限(OpenBLAS 24T) | wasm32-final | wasm64-NEXT | **IllegalPerformance** |
+|---|---|---|---|---|---|
+| dot 1e7 | .0082 | **.0048** | .0080 | .0100 | .0110 |
+| matmul 500 | .0257 | **.0029** | .0220 | .0040 | .0050 |
+| matmul 1000 | .1971 | **.0089** | .1600 | .0230 | .0240 |
+| lu 800 | .0415 | **.0147** | .0340 | .0140 | .0150 |
+| lu 1500 | .2598 | **.0636** | .2180 | .0620 | .0720 |
+| svd 400 | .1650 | .2243 | .1740 | .1550 | **.1870** |
+| sum 1e7 | .0086 | **.0076** | .0080 | .0080 | .0090 |
+| sort 2e6 | .2111 | .2020 | .2280 | .2400 | **.1110** |
+| loop 1e6 | .4934 | .5226 | .6220 | .5780 | .5890 |
+
+**读法**：
+- **BLAS 系（matmul/lu/dot）**：原生 OpenBLAS 24 线程是天花板（.0089 matmul1k），w64 两档
+  追到 **2.6× 内**（.0230/.0240）——浏览器 sandbox 内多线程 OpenBLAS 打到这个程度；
+  **wasm64 两档比 wasm32-final 快 5.7×（matmul1k）**——memory64 + rsimd-FMA 的部件红利。
+- **sort 2e6**：**IllegalPerformance 是全场唯一破 0.2s 的（.1110）**——原生/OpenBLAS
+  （.20–.21）与 wasm64-NEXT（.24）全被 musl qsort 压着，rust-sort 是**全线唯一超过原生
+  同实现的点**（对原生 musl 系 sort 也 1.9×）。
+- **svd 400**：wasm64-NEXT（.1550）**反超全部原生口径**（ref .1650 / OpenBLAS .2243）——
+  OpenBLAS 的 dgesdd 路径在 24 线程下反而吃亏（小矩阵线程开销）。
+- **loop 1e6（纯解释器）**：原生 .49–.52 vs wasm .58–.62（**慢 ~20%**）——解释器轴的
+  结构差距，非部件可解（§5.91）。
+- **MATLAB**：本机未安装 ⇒ 不测（不臆造）。
+
+复跑：`octave-cli /tmp/bench_native2.m`（原生）+ `w64-logs/bigcompare-final.log`（全量留档）。
