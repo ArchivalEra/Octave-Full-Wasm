@@ -53,7 +53,26 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
    rebuild 可复现：1 条容忍 mismatch + wasm-opt 绿）——
    全部有数字判决，见 HISTORY 与 NOTES。
 
-## 开工与提交的顺序
+## 分支模型（三线独立，2026-10-07 定稿）
+
+三条**独立可持续维护**的产线，每条都能独立吃 fork 更新、构建、验收、发运：
+
+| 分支 | fork pin（upstream/octave） | 定位 |
+|---|---|---|
+| `wasm32-final` | —（冻结） | wasm32 归档线；不做新活，需要时按 NEXT 同法接 fork |
+| `wasm64-NEXT` | `a5a7208`（平台补丁+f77 修复，**无 rust 缝**） | **中庸 wasm64 线**：8869 对照站；已验证"从 fork pin 全新重编 = 与现役产物逐字节同"（01fb52fc） |
+| `IllegalPerformance` | `f4bf15b`（+ rust-sort 源缝） | **激进 wasm64 线**：8761 现役（rust-sort 2.2×、IEEE 已评估） |
+
+**换线规则（共享容器 o113 的代价，必须遵守）**：容器里的**树、构建脚本、印章**都跟着
+分支走——切分支后必须 ① `git submodule update upstream/octave` ② `sh build/provision-upstream.sh
+--only octave` ③ `docker cp` 该分支的 `relink.sh`/`link-web.sh` 进容器。三步少一步 =
+在别的线的状态上构建（本轮实测：NEXT 重编误用 IP 翻表脚本 ⇒ 产物混入 rust_sort）。
+
+**fork 更新 SOP（每条线相同）**：上游发版 → `upstream/octave` fork 分支 merge 上游 tag
+→ 该线 bump pin（NEXT = 无缝 lineage；IP = 缝随分支携带）→ provision → rebuild → 全量
+→ 发运。IP 上新增的内核缝 = fork 上的独立提交，其他线**不继承**（各线 pin 各自的 fork 点）。
+
+## 开工与提交的顺序## 开工与提交的顺序
 
 1. 开工前（要跑套件 / 基准）：`sudo -E $(which python3) build/lib/doctor.py` ——
    `DOWN: <哪条>` 就修环境，别带病开跑。

@@ -4247,3 +4247,28 @@ SIN/POW/DIV ✓）。**唯一差异 = BLASDIFF**（dgemm vs 分步未折叠参�
 
 复跑：`test/fixtures/ieee754/battery.m` + `/tmp/ieeerun.mjs`（四档）；留档
 `w64-logs/ieee-4lanes.log`、`ieee-native-openblas.txt`、`ieee-native-ref.txt`。
+
+
+### 5.98 三线独立架构定稿：wasm64-NEXT 接入 fork 管线并复现现役产物（2026-10-07）
+
+用户裁定：**wasm32 / wasm64-NEXT / IllegalPerformance 是三个独立各自可持续维护的分支**，
+IP 不许成为强制主线，main 保留不删（CI 部署触发器）。
+
+- **拓扑事实**：main 与 wasm64-NEXT 都是 IP 的祖先（merge-base=各自尖端）⇒ 任何"合并"
+  都是纯 FF；用户否决了 FF main（=把 IP 强加给所有线），改为**给 NEXT 接 fork 管线**。
+- **做法**：NEXT 已有 fork 管线本体（B4 批在分叉点之前）⇒ 顺序 cherry-pick
+  `cf69fa2..be9017c`（10 提交：emcc6 探针/工单63 覆盖矩阵/fill·sort spike/工单62 结案）
+  到 NEXT——**不含** rust-sort 落地（8e886f3+ 是 IP 专属）⇒ NEXT 的 fork pin = **a5a7208**
+  （平台补丁+f77 修复，无缝）。共享站点的闸门口径 = `OCTAVE_WASM_BASE=…/next-base`
+  （site → site-illegalperf-baseline 符链）。
+- **过程抓到两个真问题**：① 共享容器的脚本跟分支走——NEXT 重编误用容器里 IP 翻表的
+  relink.sh ⇒ 产物混入 rust_sort（中庸线不可接受）⇒ cp NEXT 自己的脚本重链；
+  ② provision 后的树是**未 configure** 的 ⇒ `link` 读不到 octfontsdir（exit 2）⇒
+  换线后必须跑 **rebuild**（configure+make+link），不是 link。
+- **判决（最强证据）**：NEXT 从 fork pin a5a7208 全新重编 → sha **01fb52fc** ==
+  **其现役部署产物逐字节相同**（8761 曾发运的 wasm64-NEXT w64 档）⇒ f77 手改 == fork
+  提交（树等价）、构建确定性、**NEXT 独立吃 fork 更新全部成立**。
+- 提交推送：`wasm64-NEXT` = bc3865f（origin+mirror）；IP 侧恢复 f4bf15b 供给、
+  witness/plugin-check 绿、8761 f6fec91f 未动。
+- **换线规则**（写入 maintaince）：切分支 = submodule update + 重供给 + docker cp 该线
+  脚本——三步少一步 = 在别的线的状态上构建。
