@@ -4200,3 +4200,50 @@ MATLAB（如果有 linux 版）"。环境隔两天重启 ⇒ doctor 抓到 8761 
 - **vs wasm32-final**：总体 **1.86×**（BLAS 系 **2.71×**；matmul 1000 单项 6.7×）；sort 2.05×。
 - **vs wasm64-NEXT**：总体 **0.99×**（平价）——**sort 2.16× 是唯一实质优势**。⚠ 本轮 IP/NEXT 顺序测有漂移（BLAS 逐项 0.80–0.96），交错对撞（§5.95）同轴 = 1.00 平价；BLAS 读交错版。
 - **一句话**：IllegalPerformance ≈ **原生默认的 2 倍、wasm32-final 的 1.9 倍、与原生 OpenBLAS 极限差 1.25×（BLAS）/反超（sort/svd）、与 wasm64-NEXT 平价但 sort 快 2.2×**。
+
+
+### 5.97 IEEE 754 投产评估：wasm32-final 与 IllegalPerformance 双双可投产（2026-10-07）
+
+用户令："最后做一次 IEEE754 评估，确认 wasm32 和 IllegalPerformance 线能否投产。"
+铁律背景："达不到 IEEE 标准的计算结果是不被允许的。"
+
+**仪器**：`test/fixtures/ieee754/battery.m`（24 字段电池：舍入 half-even / eps 边界 /
+溢出·下溢·次正规 / ±0 与 NaN 位模式 / 特殊值布尔 8 项 / relaxed_madd 发散度 / BLAS-vs-分步
+ulp 差 / 固定种子确定性转储）。跑 **6 个配置**：w64、threads、base、w64-base（8761 现役四档）
++ native ref-BLAS + native OpenBLAS 24T。
+
+**结果：24 字段中 23 个在全部 6 配置间逐位一致**（ROUNDF=`0 2 2 4 4` half-even ✓、
+EPS17=`1.0000000000000002` ✓、SUBNORM=`1.1125369292536007e-308` ✓、HEXZP=`8000…` ✓、
+HEXNAN=`7ff8…` ✓、HEXTHIRD=`3fd5555555555555` ✓、B1–B8 全对 ✓、RAND42 随机序列 ✓、
+SIN/POW/DIV ✓）。**唯一差异 = BLASDIFF**（dgemm vs 分步未折叠参考）：
+
+| 配置 | 差异元素/10000 | 最大相对差 |
+|---|---|---|
+| native ref-BLAS | 0 | — |
+| **native OpenBLAS 24T** | **3522** | **4.99e-16** |
+| wasm32 threads (E2) | 8312 | 1.46e-15 |
+| **w64 (E2 rsimd)** | **7979** | **1.46e-15** |
+| base / w64-base (refblas) | 0 | — |
+
+**判决**：
+1. **基本语义**：舍入（half-even）、±0、NaN 位模式、Inf/除零、次正规、eps 边界——
+   wasm 与原生**逐位一致**，无任何偏差。✅
+2. **rand/sin/pow/除法**：wasm(musl libm) vs 原生(glibc libm) 抽样**逐位一致**（含
+   MT19937 种子序列跨平台一致）。✅
+3. **优化 BLAS 的 ulp 级差异**（~80% 元素、≤6.6 ulp）：**任何**优化 BLAS 都有（分块/
+   向量化/FMA 改变求和顺序）——native OpenBLAS 同样有（3522/4.99e-16），**非 wasm 特有、
+   非 relaxed_madd 特有**。每个加/乘都正确舍入，只是顺序不同 ⇒ IEEE 允许。✅
+4. **relaxed_madd 定性**：wasm64 的 81 条在 OpenBLAS rsimd 内核里（逐元素路径实测
+   FMA1=0 未触发）。WebAssembly 规范允许 fused/unfused 两种求值，**两种都是 IEEE 754
+   合规结果**（fused = fusedMultiplyAdd 正确舍入；unfused = 两次正确舍入）⇒ 不违反铁律。
+   **唯一投产披露项**：w64 的 BLAS 结果**跨浏览器引擎可能有末位差异**（relaxed 指令的
+   引擎选择自由）——与原生 OpenBLAS 跨 CPU 架构（Haswell vs Zen 内核路径）完全同类。
+5. **rust-sort**：纯比较操作（IEEE 比较语义，零算术改动），已与 C++ timsort 逐位验证
+   （§5.90）⇒ 无数值语义面。
+
+**⇒ 投产判决：wasm32-final ✅ 可投产；IllegalPerformance（w64）✅ 可投产**。
+披露项一条：w64 BLAS 跨浏览器末位可变（IEEE 合规、类同原生 OpenBLAS 跨 CPU）；若未来
+要求跨浏览器逐位可复现，选项 = 重编 rsimd 归档去 relaxed_madd（性能回退，工单另立）。
+
+复跑：`test/fixtures/ieee754/battery.m` + `/tmp/ieeerun.mjs`（四档）；留档
+`w64-logs/ieee-4lanes.log`、`ieee-native-openblas.txt`、`ieee-native-ref.txt`。
