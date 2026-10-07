@@ -86,6 +86,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 # 打开 http://127.0.0.1:8761/   （COI 头是硬要求 —— 见 issue #2）
 ```
 
+本仓**不含 CI 自动部署**——部署为手工操作，按 [DEPLOY.md](DEPLOY.md)。
 部署硬要求 + 验收程序：[DEPLOY.md](DEPLOY.md) 与
 [issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2)。UI 接入：
 [Embed API](docs/embed-api.md) 与 [issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1)。

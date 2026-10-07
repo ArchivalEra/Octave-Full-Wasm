@@ -104,6 +104,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 # öffne http://127.0.0.1:8761/   (COI-Header sind Pflicht — siehe Issue #2)
 ```
 
+Dieses Repository enthält **keine CI-Auto-Deploy** — Deployment ist manuell, siehe [DEPLOY.md](DEPLOY.md).
 Harte Deploy-Anforderungen + Abnahmeprogramm: [DEPLOY.md](DEPLOY.md) und
 [Issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
 UI-Anbindung: [Embed-API](docs/embed-api.md) und

@@ -89,6 +89,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 # open http://127.0.0.1:8761/   (COI headers are mandatory — see issue #2)
 ```
 
+This repository ships **no CI auto-deploy** — deployment is manual, per [DEPLOY.md](DEPLOY.md).
 Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 [issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2). UI integration:
 [Embed API](docs/embed-api.md) + [issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1).
@@ -136,8 +137,7 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `.githooks/update-readme.py` (2270 bytes)
 - `.githooks/update-state.py` (5884 bytes)
 - `.githooks/witness-upstream-pin.py` (6939 bytes)
-- `.github/workflows/deploy-heart.yml` (7557 bytes)
-- `.gitignore` (6013 bytes)
+- `.gitignore` (5654 bytes)
 - `.gitmodules` (1934 bytes)
 - `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
 - `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
@@ -217,8 +217,8 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (349000 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (8796 bytes)
-- `README.zh.md` (7952 bytes)
+- `README.de.md` (8906 bytes)
+- `README.zh.md` (8044 bytes)
 - `STATE.md` (32746 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
