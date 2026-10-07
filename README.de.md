@@ -135,6 +135,7 @@ neu provisionieren + `relink.sh`/`link-web.sh` dieser Linie deployen
 - `build/113/` — Spur-Bauprone + Tore; `test/browser/` — 77-Suiten-Abnahme
   (`SWEEP_JOBS=4` parallelisierbar)
 - `.scratch/open-questions/issues/` — lokaler Ticket-Tracker
+- `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien)
 
 Die Liste der verfolgten Dateien (Pfad + Bytes) pflegt der Hook im
 [AUTO:FILES-Block von README.md](README.md).

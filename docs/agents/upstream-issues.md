@@ -176,3 +176,28 @@ default / unknown / 缺文件）、`check-build-manifest.py` 的 malloc 双向�
 - **建议形状**：声明式 doctor（spec 数据：http/docker/port-free 三种 kind + why 必填），
   挂**开工/跑套件前**（不挂 pre-commit——查的是会死的东西，频率错）；两类断言：
   必须活着 + 必须空着；stdout 裸值 `ok` / `DOWN: <哪条>`；每条带超时（探针失败模式与被探测物解耦）。
+
+
+---
+
+# 反哺 #13（2026-10-07）：**多线仓库里验证闸门读的是「恰好部署的那个世界」—— 缺一个声明式验证对象（reflection world）**
+
+> 上游 issue：<https://github.com/ArchivalEra/Einfacht/issues/13>
+> 透镜 = codebase-design（深模块的 interface 藏了 ambient input；缝存在但是四条平行半缝）。
+
+**三次真实事故（同日，公开仓可复跑）**：① cherry-pick 到 `wasm64-NEXT` 后 `plugin-check` 红
+——NEXT 登记表 vs IP 部署站点错位；② master 提交同形状；③ NEXT 重编产物混入 rust_sort
+——共享容器跑了别的线的 relink.sh/link-web.sh。同族小事故：`hotpath read_facts` 取"最新
+日志"把 `hotpath_top` 静默指到 profiler 噪声。
+
+**缺口**：闸门是深模块（run→ok/DRIFT），但 interface 藏了"我在验证哪个世界"——解析方式
+四种并存（`OCTAVE_SITE` / `OCTAVE_WASM_BASE` / `W64_ARTIFACTS` / 硬编码容器名 + 最新日志），
+换线时没有任何东西强迫闸门与"本线世界"对齐。
+
+**建议形状**：声明式验证对象（world.json，数据不是代码）——每条线声明 site/artifacts/
+container/fork_pin_ref + `active` 字段；闸门从 world 清单解析验证对象（替代四个 ambient
+旋钮）；换线脚本跑完**写出** world 声明，闸门核对声明 vs 环境（容器印章/站点 sha/脚本
+sha 三对账）；零值守卫 + --selftest 三类。
+
+**诚实边界**：单线仓不受益；跨引擎可复现性（relaxed_madd）是正交议题不混；"哪条线算
+当前"是人的决定（active 字段），机器只核对声明一致。

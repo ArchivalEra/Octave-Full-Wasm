@@ -101,6 +101,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 - `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
 - `build/113/` — lane build recipes + gates; `test/browser/` — 77-suite acceptance harness (`SWEEP_JOBS=4` parallel)
 - `.scratch/open-questions/issues/` — local ticket tracker
+- `docs/agents/upstream-issues.md` — issues filed back upstream to [Einfacht](https://github.com/ArchivalEra/Einfacht) (archived copies)
 
 ## Branches (three independently maintainable lines)
 
@@ -217,8 +218,8 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (349000 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (8906 bytes)
-- `README.zh.md` (8044 bytes)
+- `README.de.md` (9041 bytes)
+- `README.zh.md` (8165 bytes)
 - `STATE.md` (32746 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
@@ -648,7 +649,7 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `docs/agents/issue-tracker.md` (3217 bytes)
 - `docs/agents/memory.md` (3844 bytes)
 - `docs/agents/triage-labels.md` (1606 bytes)
-- `docs/agents/upstream-issues.md` (11242 bytes)
+- `docs/agents/upstream-issues.md` (12882 bytes)
 - `docs/charts/perf-5way.svg` (7540 bytes)
 - `docs/charts/perf-data.json` (1029 bytes)
 - `docs/charts/perf-speedup-IP.svg` (6490 bytes)

@@ -110,6 +110,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 - `maintaince.md` —— 方向地图；`docs/embed-api.md` —— 嵌入契约；`DEPLOY.md` —— 部署
 - `build/113/` —— 车道构建配方 + 闸门；`test/browser/` —— 77 套验收 harness（`SWEEP_JOBS=4` 可并行）
 - `.scratch/open-questions/issues/` —— 本地工单 tracker
+- `docs/agents/upstream-issues.md` — 反哺上游 [Einfacht](https://github.com/ArchivalEra/Einfacht) 的 issue 留档
 
 仓库跟踪文件清单（路径 + 字节数）由钩子维护在 [README.md 的 AUTO:FILES 区块](README.md)。
 
