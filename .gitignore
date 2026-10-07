@@ -145,10 +145,6 @@
 !site/
 !site/**
 
-# ── CI：把 site/ 部署到 isui.ren/Octave（heart@deploy）─────────────────────
-# 逐文件点名。`.github/` 此前从未入库：pages-deploy.yml 被开头的 `*` ignore 掉
-# 且从未 git add，而 check-whitelist.py 只看 git ls-files，所以从没报出来过。
-!.github/workflows/deploy-heart.yml
 
 # ── agent 工作流（2026-09-27）──────────────────────────────────────────────
 # `docs/agents/`：tracker 选型 / 三色标签 / 域文档消费规则（技能读这三份）。
