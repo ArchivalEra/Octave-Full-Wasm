@@ -12,3 +12,13 @@ python3 "$HOOK_DIR/update-readme.py" --check
 python3 "$HOOK_DIR/update-state.py" --check
 python3 "$HOOK_DIR/check-state.py"
 python3 "$HOOK_DIR/check-consistency.py"
+# ★ 三语 README 推送集判据（Einfacht）：本次推送改了任一份 README ⇒ 三份必须同批。
+#   pre-push 从 stdin 收 "local_ref local_sha remote_ref remote_sha"；新分支远端全零。
+_read_stdin=$(cat)
+_local=$(echo "$_read_stdin" | awk 'NR==1{print $2}')
+_remote=$(echo "$_read_stdin" | awk 'NR==1{print $4}')
+case "$_remote" in
+  0000*) _base=$(git hash-object -t tree /dev/null) ;;
+  *)     _base=$_remote ;;
+esac
+git diff --name-only "$_base" "$_local" | python3 "$HOOK_DIR/check_readme_sync.py" --changed -

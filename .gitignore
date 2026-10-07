@@ -18,6 +18,11 @@
 !.githooks/check-state.py
 !.githooks/update-state.py
 !.githooks/state_facts.py
+!.githooks/gate.py
+!.githooks/check_readme_sync.py
+!README.zh.md
+!README.de.md
+!docs/charts/*
 !build/upstream-lock.json
 !build/provision-upstream.sh
 !build/upstream-pins.json
@@ -76,6 +81,7 @@
 !bridge/index.html
 !build/assets.py
 !build/render-docstrings.py
+!build/gen-perf-charts.py
 !build/render_docstring_batch.m
 !build/prerender-m-docstrings.py
 !build/check_m.py
@@ -114,6 +120,11 @@
 !test/fixtures/*
 !test/fixtures/libm-spike/*
 !test/fixtures/emcc6-probe/*
+!test/fixtures/ieee754/*
+!test/fixtures/xpow-spike/*
+!test/fixtures/xpow-spike/rust/*
+!test/fixtures/xpow-spike/rust/src/*
+!test/fixtures/xpow-spike/rust/.cargo/*
 !test/fixtures/xpow-spike/*
 !test/fixtures/xpow-spike/rust/*
 !test/fixtures/xpow-spike/rust/src/*

@@ -1,220 +1,107 @@
 # Octave-Full-Wasm
 
-目标：**浏览器里跑满功能 Octave**（当前基线 **11.3.0**）——把官方发行版缺的宿主组件
-换成浏览器原生 API，并把 C 库长尾尽量补全：全量核心脚本、Forge 包、
-SuiteSparse / ARPACK / FFTW / QHull / GLPK / HDF5、图像与音频 I/O、同步网络、
-plot 桥 + `print -dsvg`。
+[English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
 
-起点是 `rwl/octave-wasm`（BSD）的 7.2 骨架；**第四轮已换基线到 vanilla
-Octave 11.3.0 + emsdk 5.0.7**（计划见 `HISTORY.md` §9，实况与坑见 §10）。
-构建产物（wasm/data/js）体积大，走 Release 分发，不进 git。
+GNU Octave 11.3.0 compiled to WebAssembly — a full numerical computing environment
+(interpreter, BLAS/LAPACK, plotting, ~500 packages) running **entirely in your browser**:
+pure client-side compute, **no server-side execution**.
 
-## 为什么是网页版
+**Current production lane: `w64` (WebAssembly memory64 + threads + relaxed-FMA OpenBLAS
++ mimalloc + a Rust `sort` kernel)**, shipped behind the same web UI as every other lane.
+All numerical results are IEEE 754 binary64 — audited explicitly (below).
 
-省磁盘空间只是它最不重要的一个意义。真正区分度在于：
+---
 
-1. **零安装零配置**——桌面 Octave 的使用链是：下载→安装→摸清路径→装包→配
-   gnuplot/图形，每一步劝退一批人；网页版是**一个链接**。对"考前冲刺"场景，
-   安装成本直接等于放弃率。
-2. **手机能用**——桌面版永远做不到。通勤/课间用手机跑一段矩阵、看一眼图。
-3. **可分享、可复现、版本钉死**——URL 即环境；Octave 11.3.0 + 具体 BLAS/包版本
-   全打包，所有人算出的数字一致。桌面版是"在我机器上能跑"。
-4. **示例可以内嵌成"活的"**——教材解析里的例子不再需要"自己复制到 Octave 试"，
-   点一下就跑，输出长在讲解旁边。文字/符号气泡/可执行代码是**同一个产物**。
-   plot 桥（Octave 算→SVG 上屏）正是靠这个接缝才成立。
-5. **沙箱与确定性**——用户代码跑在隔离 wasm 里：碰不到文件系统、发不了进程
-   （`system()` 清晰报错）。做自动评测/作业批改不必起 Octave 服务器。
-6. **分发边际成本为零**——纯静态资源上 CDN，算力在用户浏览器；用户数从 1 涨到
-   1 万，服务端成本不变。
-7. **教学上"受限"反而可能是优点**——能精确定义哪些可用、哪些明确报错；受控子集
-   比"什么都能装、装完就崩"更适合初学者。
+## Performance (measured 2026-10-07, medians of 5 native / 3 wasm interleaved runs)
 
-一句话：桌面版是「**一台装着 Octave 的电脑**」，网页版是「**一个能算、能画、
-能被链接和嵌入的 Octave**」。前者拼功能完整性，后者拼**分发与集成**。
-代价也要认清：慢（wasm 单线程、无 JIT）、无工具箱生态、无 GUI 工具链、内存受限——
-它不是取代桌面版，是**另一个产品**。
+![five-way performance comparison](docs/charts/perf-5way.svg)
 
-## 架构
+| workload (s) | native ref-BLAS | native OpenBLAS ×24 | wasm32-final | wasm64-NEXT | **IllegalPerformance** |
+|---|---|---|---|---|---|
+| dot 1e7 | 0.0082 | **0.0048** | 0.0080 | 0.0100 | 0.0110 |
+| matmul 500 | 0.0257 | **0.0029** | 0.0220 | 0.0040 | 0.0050 |
+| matmul 1000 | 0.1971 | **0.0089** | 0.1600 | 0.0230 | 0.0240 |
+| lu 800 | 0.0415 | **0.0147** | 0.0340 | 0.0140 | 0.0150 |
+| lu 1500 | 0.2598 | **0.0636** | 0.2180 | 0.0620 | 0.0720 |
+| svd 400 | 0.1650 | 0.2243 | 0.1740 | **0.1550** | 0.1870 |
+| sum 1e7 | 0.0086 | **0.0076** | 0.0080 | 0.0080 | 0.0090 |
+| **sort 2e6** | 0.2111 | 0.2020 | 0.2280 | 0.2400 | **0.1110** |
+| loop 1e6 | **0.4934** | 0.5226 | 0.6220 | 0.5780 | 0.5890 |
 
-```text
-Octave 11.3.0 wasm（build/113/configure-113-full.sh + link-web.sh；-O2 编译）
-├── 全量核心 .m（plot/ode/signal/special-matrix/…，两段式 addpath）
-├── vendor/forge：forge statistics 纯 .m（normpdf/tcdf/ttest 依赖…）
-├── 真 .oct 动态装载：主模块 -s MAIN_MODULE=1，模块编成 wasm side module
-│   运行时 dlopen —— 与桌面版插件模型一致，加模块不必重链那 36MB 主 wasm。
-│   连 dldfcn（convhulln/gzip/glpk/fftw/audioread/…）也走这条路。
-├── 资产懒加载车道：站点 assets/ 下按需 fetch → 写 wasm FS → addpath
-│   （Forge 包、SUNDIALS、图像、音频、网络、plot 桥覆写全在这里）
-├── plot 桥 v2：Octave 算 → spec → SVG（2D + 3D，含 subplot/figure(n)/axis）
-└── print -dsvg：纯 .m SVG 生成器（不依赖 gnuplot，也不需 Asyncify）
+![IllegalPerformance speedup vs each baseline](docs/charts/perf-speedup-IP.svg)
+
+**IllegalPerformance in ratios** (baseline time ÷ IP time; geometric mean over all 9):
+
+- **1.96× vs native Octave** (default reference BLAS; BLAS-only axes **3.16×**)
+- **1.86× vs wasm32-final** (the frozen wasm32 line; matmul 1000 alone **6.7×**)
+- **0.99× vs wasm64-NEXT** — parity everywhere except its defining win, **sort 2.16×**
+- **0.80× vs native OpenBLAS ×24** — the native multithreaded ceiling is still 1.25×
+  ahead on pure BLAS, but IllegalPerformance **wins sort (1.82×) and svd (1.20×)**
+
+## IEEE 754 production evaluation
+
+A 24-field battery (`test/fixtures/ieee754/battery.m`) was run on **6 configurations**
+(4 wasm lanes + native ref-BLAS + native OpenBLAS ×24):
+
+- **23/24 fields bit-identical everywhere**: round-half-to-even, ±0 bit patterns,
+  canonical NaN, Inf/division, subnormals, eps boundaries, seeded `rand` (MT19937
+  identical native↔wasm), `sin`/`pow`/division (musl vs glibc sampled bit-identical).
+- The only difference = **dgemm summation order vs a step-by-step unfused reference**
+  (max 6.6 ulp) — present in **native OpenBLAS too** (3522 of 10000 elements, 4.99e-16).
+  Every add/multiply is correctly rounded; only the order differs → IEEE-conformant.
+- `relaxed_madd` (81 sites, OpenBLAS rsimd kernels): WebAssembly permits fused *or*
+  unfused evaluation — **both are IEEE 754-conformant results**. Disclosure: w64 BLAS
+  results may vary in the last ulp **across browser engines** (same class as native
+  OpenBLAS across CPU microarchitectures). Element-wise math is unaffected (0 divergence).
+
+**Verdict: wasm32-final and the IllegalPerformance line are cleared for production.**
+Repro: `test/fixtures/ieee754/battery.m`, logs in `w64-logs/ieee-*.log`.
+
+## What shipped on the IllegalPerformance line
+
+- **rust-sort** — a Rust (driftsort) kernel for `sort`, wired as a *source seam* with a
+  weak symbol + link-time knob (`RUST_SORT`); removal = relink without the library,
+  zero tree-object change. Differential gate: 22 domains bit-identical + 4/4 mutants
+  caught; **sort 2e6 = 2.16× vs wasm64-NEXT, 1.82× vs native OpenBLAS**.
+- **G6 latency instrument** — batched quit-check latency bound for any block-level
+  kernel (candidate ④ xpow-driver measured ≤2.1% and **rejected** by it).
+- Closure audit: libm (IEEE-locked), fill/fft (bandwidth-bound), xpow driver (≤2.1%) —
+  **no known headroom left** (reproducers in `w64-logs/`).
+
+## Architecture
+
+Four deployment **lanes** of the same interpreter, auto-picked per browser capability
+(`lanes.js`): `base` (wasm32 single-thread) → `threads` (wasm32 + pthread) →
+`w64` (memory64 + threads + FMA + mimalloc + rust-sort) / `w64-base`. Serving without
+COI headers silently drops you to `base` — see the [deployment ticket](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
+
+Swappable components (BLAS, allocator, Rust kernels) are **plugins with a contract**:
+mode-table knob → declared label → artifact probe → two-way gate (`plugin-check.py`) →
+fact-ledger entry. Octave updates land via the **fork/submodule pipeline**:
+`upstream/octave` (branch `wasm/11.3.0`) is our fork — merge upstream, rebuild, run the
+lane SOP (`build/113/NOTES-upstream.md`); the pin/witness gates (`witness-upstream-pin.py`)
+assert the container tree == fork pin on every commit.
+
+## Run it
+
+```sh
+python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
+# open http://127.0.0.1:8761/   (COI headers are mandatory — see issue #2)
 ```
 
-构建命令里 `-s MAIN_MODULE=1` 与 `-fPIC` 是一对：主链带 MAIN_MODULE 时，
-Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recompile with -fPIC`。
-**11.3.0 车道的重配/重链是 `build/113/configure-113-full.sh` + `build/113/link-web.sh`**
-（依赖写成一张表，`SKIP=<库名>` 可按库集合二分；7.2 时代的 `build/reconf-pic.sh`
-保留作历史记录）。配方与坑见 `build/CLIBS.md`。
+Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
+[issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2). UI integration:
+[Embed API](docs/embed-api.md) + [issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1).
 
-## 状态（2026-09-24 实测）
+## Repository map
 
-**基线 = Octave 11.3.0（带真渲染器 + FreeType 文字 + fontconfig 字体匹配 + `MAIN_MODULE=2`）**。`http://127.0.0.1:8761/`
-服务的就是**最近一次通过浏览器实测**的构建（**wasm sha256 见 `STATE.md` 文末 `AUTO:STATE`**，
-别在这里抄 —— 默认 toolkit = `webgl`）。
-**全量回归的套件数与项数以 `STATE.md` 文末的 `AUTO:STATE` 区块为准** —— 那几件数字由
-`.githooks/update-handoff.py` 从部署件与最近一次全绿回归重算，本文不再抄一份（抄一份必烂）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
-（见 `build/GAPS.md` 的需求书与 `HISTORY.md` §5 / §10 的结论表）。
+- `STATE.md` — live status; `build/FACTS.json` — measured-numbers ledger (130 keys, each with a re-run command)
+- `HISTORY.md` — append-only per-batch record (§5.77–§5.97 carry the evidence above)
+- `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
+- `build/113/` — lane build recipes + gates; `test/browser/` — 77-suite acceptance harness (`SWEEP_JOBS=4` parallel)
+- `.scratch/open-questions/issues/` — local ticket tracker
 
-| 项 | 结果 |
-|---|---|
-| 线代/微积分/优化/ODE45/多项式 | ✅ 全对（与本机同版 11.3.0 **逐位一致**） |
-| 统计分布 + ttest/regress + fft 后备 | ✅ 全对 |
-| R1 SUNDIALS → `ode15s`/`ode15i` | ✅ 真 `__ode15__.oct`（SUNDIALS 静态码全在模块内，主 wasm 零改动） |
-| R2 Forge 包（statistics/optim/signal/control/…） | ✅ 懒加载，真数值验证 |
-| R3 HDF5 → `save/load -hdf5` | ✅ 往返/压缩/`whos -file` 全通 |
-| R4 图像 → `imread`/`imwrite`/`imfinfo` | ✅ PNG/BMP/TGA 像素级无损 |
-| R5 网络 → `urlread`/`urlwrite`/`webread`/`websave` | ✅ **真同步**（同步 XHR，无需 Asyncify） |
-| R6 压缩归档（6 个函数无 shell 化） | ✅ 二进制字节级往返 |
-| R7 CXSparse | ✅ 已开（SPQR 不是缺口，`spqr` 3.6.0 就被 `qr` 取代） |
-| R8 WebAudio → `audioplayer` | ✅ 18 个符号纯 `.m` 实现，真实 AudioContext 调度 |
-| R9 图形导出 → `print -dsvg` | ✅ 2D + 3D 都能出，不依赖 gnuplot |
-| R10 编译级别 | ✅ 11.3.0 车道走 `-O2`；R10 计时护栏（1e6 循环 <1.5s）通过 |
-| plot 桥 | ✅ v2：2D（含 subplot/figure(n)/axis）+ 3D（plot3/mesh/surf/contour）+ 中文标签 |
-| **图形句柄（T2）** | ✅ `web` toolkit：`figure/gcf/gca/get/set/title/close` 全可用（资产车道） |
-| **真渲染（2026-09-23）** | ✅ **默认 toolkit = `webgl`**（gl4es → WebGL2/GPU）：开箱 `plot(...); drawnow` 出真图、`getframe` 真像素；`accept-p5-graphics` **65/65** |
-| 官方 `.oct` 装载 | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
-| 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
-| `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
-| SLICOT（control 编译件） | ✅ 可用（根因：CHARACTER 隐藏长度 ABI + 主模块不导出 LAPACK/BLAS；`accept-slicot` 25/25） |
-| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260924`（**含真渲染 + 持久化 + 两个字体家族**），首包 gzip ≈**10.26MB**（准确值见 `HANDOFF.md` 的 `AUTO:STATE`） |
-| 验收 | ✅ **全绿**（8761；**套件数与项数见 `HANDOFF.md` 的 `AUTO:STATE`**，含需求级 `accept-requirements`、图形线 `accept-p5-graphics` **65 项**、无 shell 报错 `accept-shellerr` 14 项） |
-
-
-### 已知偏差（如实）
-- ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
-  构建期用**真 makeinfo 预渲染** `built-in-docstrings`（与 Octave 自己的
-  `mk-doc-cache.pl` 同一技术），运行时零新代码。`help sin`/`help sqrt`/`help disp` 可用。
-  （**2026-09-23 更新**：`help ode45` 这类 `.m` 的 docstring 也修好了 —— 构建期预渲染 + 去标记，
-  见 HISTORY §5.13；`accept-t9-helpm` 18/18。**该缺口已彻底消除。**）
-- `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
-- **无 shell 的入口一律"清晰报错"**（2026-09-24 起，覆写层 `build/webshims/`）：
-  `[st,out]=system(...)`/`unix(...)` 一向如此；`st = system(...)`、`system(...)`（无输出参数）、
-  `popen(...)` 这三条**以前静默返回 -1 / 静默通过**，现在同样抛清晰错误（HISTORY §5.30，`accept-shellerr` 14 项）。
-  ⇒ 这不只是措辞：**任何调 `system()` 的 `.m` 现在会明确失败，而不是悄悄拿到 -1 继续跑**。
-- **"等用户动作"一族一律"清晰报错"**（2026-09-24 起，同一覆写层）：`ginput`/`keyboard`/
-  `uisetfont`/`uiwait`/`waitfor` **以前会挂死页面**（8 s 无响应，比报错更糟），现在报错并点明
-  替代办法（`input()` 走 `window.prompt` 可用；字体直接 `set(h,"fontname",…)`）。
-  连带 `waitforbuttonpress`/`gtext`（内部调 `ginput`）。钉子 `accept-interactive` 15 项。
-  ⇒ 真实现要等 JSPI 车道（`build/113/PLAN-jspi.md` 的 G3/G5），届时**删掉那几个覆写文件**。
-- **`waitbar` 可用**（2026-09-24 修）：以前整族坏在桥的 `figure` 上（`integerhandle=off` 形态），
-  现在建图/更新/取帧都正常（HISTORY §5.35）。
-- ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（HISTORY §5.15）：
-  `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全可用且数值正确
-  （`step` 与解析解 `1-e^-t` 误差 1.1e-16）。
-- ~~`voronoi` 单输出形式（要画图）不可用~~ → **2026-09-24 已修**（桥支持 `plot(hax,…)`，HISTORY §5.30）；两输出形式照旧。
-- **`print` 的矢量输出只有 plot 桥那一条路**（`-dsvg` 由桥自己的 `__svg_render__.m` 出）。
-  Octave **核心**的 `print` 管线（`__opengl_print__.m`）要 **gl2ps + shell 管道 + (gs|svgconvert)**：
-  gl2ps **2026-09-23 已补上**（`build/113/build-gl2ps.sh` + `configure-113-full.sh` 的
-  `WITH_GL2PS=1`），但**"没有 shell"是本构建的有意设计**（`system`/`unix`/`popen` 清晰报错）
-  ⇒ `print -dsvg` 仍报 `failed to open pipe "| cat > …"`，`-dpdf/-dps/-deps` 另需 gs。
-  **所以别把桥的数据管线当冗余砍掉**（详见 `HISTORY.md` §5.20、`build/113/NOTES-webgl.md` §4.5.9–4.5.11）。
-
-## 下一步（第三轮：浏览器环境语义）
-
-R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 API 怎么换成浏览器原生"**
-（完整计划见 `HISTORY.md` §5.5）：
-
-**T1** `help`（构建期 makeinfo 预渲染）、**T2** graphics 句柄半真化（薄 `web` toolkit）、
-**T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`、
-**T6** `audiodevinfo` + `doc`（+ 页面输出落点）、**T7** `audiorecorder`、
-**T8** `uigetfile`（浏览器文件选择器）、**T10** Asyncify 实验（结论：不可采用）
-—— ✅ **八项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
-`accept-fileops` 20、`accept-pkg` 16、`accept-input` 9、`accept-t6-audio-doc` 33、
-`accept-t7-recorder` 40、`accept-t8-uigetfile` 19）。
-
-**覆盖率已收口**：拿**同版桌面 Octave 11.3.0** 的 `__list_functions__`（927 个可调用名字）
-逐个在浏览器里 `exist()` 对照 → **926/926 可用**；唯一不在的是 Debian 打包产物
-`debian_missing_handler`（不属 Octave）。详见 `build/113/NOTES-coverage-100.md`。
-
-**非图形待办已清零**（2026-09-23/24）：`help` 覆盖 `.m` docstring 已完成（构建期预渲染，见
-`HISTORY.md` §5.13）；**T9/G1 `MAIN_MODULE=2` + 保活清单也做成了** —— `octave.wasm` 从
-36.86MB 降到 **29.46MB**（含 FreeType + fontconfig），主模块导出名 44,987 → **703**，`.oct` 仍走资产车道懒加载。
-配方与 7 个坑见 `build/CLIBS.md`「批次 C · `MAIN_MODULE=2`」。
-
-依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
-（外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
-以及 A1 的核心建议——**不复活 gnuplot 后端，改写薄 toolkit 复用现有桥**）。
-
-> **图形线 —— 2026-09-23 收口：只剩 `webgl` 一条后端，且已是 8761 的默认**：
-> Octave **自己的 `opengl_renderer`**（一字不改）真渲出像素（`getframe` 真 cdata、
-> 页面 `<img>` 贴真 PNG、15 种图解码后全部非空白）。
->
-> | 后端 | 做法 | `octave.wasm` | 状态 |
-> |---|---|---|---|
-> | `webgl` | **gl4es** 把 GL 1.x 翻译到 GLES2 ⇒ **WebGL2（GPU）** | 36.86MB raw / 8.43MB gz | ✅ **默认**（`accept-p5-graphics` 64 PASS / 0 FAIL） |
-> | `osmesa` | Mesa **软件光栅化**（CPU，渲进内存） | 45,580,621（+11.3MB） | ⛔ **已退役**（脚本/配方在 git 历史的 `graphics-osmesa*` 分支） |
->
-> 卡了两轮的根因只有一行：toolkit 的编译单元**缺 `#include "config.h"`** ⇒
-> `octave::opengl_functions` 被编成空类（虚表 2 槽），而 `gl-render.o` 要取第 77 槽 ⇒ 越界 trap。
-> plot 桥的镜像层让桥**同时**建出真图形对象（默认 toolkit 是 `webgl` ⇒ 这条链默认就开着）。
->
-> **plot 桥两刀提速**：① `surf` 从"每单元格一条 series"改成"**每条行带一条**"
-> （`peaks(40)`：1521 → 39 条）⇒ 桥的 `surf(peaks(40))` **1686 → 480 ms**；
-> ② 镜像层从"每次摘 path"改成**一次性句柄缓存 + 深度转发** ⇒ 一次镜像
-> **146 → 1.5 ms（~97×）**、一张图的温开销 **395 → 94 ms（4.2×）**。
-> （顺带更正：之前把"端到端 2.1s"归因成 path 手术是**错的**，真凶是**首帧冷启动 ~0.6s**。）
->
-> **已上线 8761**（换装脚本 `build/promote-webgl.sh`）：首包 gzip 9.62MB → 9.91MB。
-> **没有 WebGL2 的设备也能看见图**（2026-09-23 起）：浏览器拿不到 GL 上下文时（旧设备、
-> GPU 被 blocklist、`--disable-webgl`）桥把自己渲的 **SVG** 交给页面显示
-> —— 此前是『命令成功、页面静默空白』。见 `HISTORY.md` §5.22 / `NOTES-webgl.md` §4.7。
-> **文字渲染 + 字体匹配都有**（2026-09-24）：构建开 FreeType（批次 D）+ **fontconfig（R3）**，
-> 预载 Octave **自带**的 4 个 FreeSans 面 ⇒ 刻度/标题/图例都出字，且
-> `fontname`/`fontweight`/`fontangle` **真的改像素**、`listfonts()` 返回 `FreeSans`。
-> **仍如实记**：只有这 4 个面，填别的家族名（如 `Courier`）会落回 FreeSans；
-> 证据 `test/browser/probe-fontname.mjs`（13 项，含像素级判别）。
-> 证据：`test/browser/probe-text-render.mjs`（加 `title/xlabel` 后 `getframe` 非白像素 +2130，
-> 无 FreeType 时是 +0）。一手记录：`build/CLIBS.md`「批次 D」、`NOTES-webgl.md` §4.8。
-> 一手记录：**`build/113/NOTES-webgl.md`**（§4.5.12 / §4.5.13 / §4.6）、
-> `build/113/GRAPHICS-BRANCH.md`、`HISTORY.md` §5.20 / §5.21。
-
-## 第四轮：已换基线到 **Octave 11.3.0**（2026-09-22 落地）
-
-计划见 `HISTORY.md` §9，**实况、坑与结论见 §10**，外部事实依据 `build/BASELINE-11.3.md`。
-要点：
-
-- **收益**：11.x 的卷积快 10%–150×、`randi` 4.5×、logical 求和最高 6×；MATLAB 兼容
-  有一整节（稀疏/对角 broadcasting、一大批函数的 `"all"`/`vecdim`/`nanflag`、
-  `qr` 单输出只返回 R…）。且**与本机参照版 Octave 同版**，验收可逐位对照。
-- **代价比原估小得多**：原以为 19 个 patch 要全部重推，**实测 16/19 直接可用**
-  （1 个已进上游该删、2 个局部重做，共 4 个文件）。
-- **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
-  Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
-- **多线程 / 64 位（B6 + wasm64；2026-10-01 起站点是「四档」）**：站点里带**四份产物**
-  （根目录 = `base` 基础档，`threads/` = wasm32 线程档（单线程 OpenBLAS），`w64/` = memory64+线程+**线程版 OpenBLAS -O3**（四档里最快的交付形态 —— 台账 `w64_ob_matmul500_speedup`；**wasm 上限 8GB、实测存活 7.45 GiB**，perf-max 票 03；wasm32 线冻结于 `wasm32-final` 分支），
-  `w64-base/` = memory64 单线程回退），页面按**同步**判据自动选档：宿主发了
-  `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
-  且引擎支持 memory64 ⇒ `w64`；没有 memory64 ⇒ `threads`；没有 COI ⇒ `w64-base` / `base`
-  （任何静态托管的底线，这条红线没动）。站点**真的**部署了哪几档由生成的 `lanes.js` 声明
-  （与能力判据取交集，防 404）。本地带头服务：`python3 build/serve-coi.py --dir <站点> --port 8761`。
-  现状边界：**数学还没并行化**（`threads/` 那份是 OpenBLAS 的 `USE_THREAD=0` 单线程形态 ——
-  收益来自内核而非线程；`USE_THREAD=1` 的 6.7× 技术判据已过、发运决定待定）、
-  **worker 宿主自动落基础档**；详见 `DEPLOY.md` 的「四档」一节、
-  `build/113/NOTES-threads.md` 与 `build/113/NOTES-wasm64.md`。
-- **结果**：三道闸门（能编能跑数值对 / `.oct` side module 可用 / **免 COI**）**全部通过**；
-  8761 已切到 11.3.0，7.2 快照留在 `/mnt/hdd/octave-wasm-build/site-72bak/`。
-  9 个长尾库（glpk/qhull/fftw3+3f/sndfile/qrupdate/hdf5/arpack/SuiteSparse）全部重开。
-- **换基线时补的三处内容缺口**：`dldprobe.oct` 的源码入仓、`lanetest` 资产、
-  `m/forge` 的 20 个预装 `.m`（否则 `normpdf` 从"开箱即有"退化成"要先加载包"）。
-- **图形**（2026-09-23 已更新，见上一条引用框）：**默认 toolkit = `webgl`**（gl4es → WebGL2/GPU），
-  开箱 `plot(...); drawnow` 就出真图、`getframe` 真像素；plot 桥 + `print -dsvg` 仍是
-  **唯一的矢量输出**路径（核心那条要 shell 管道 + gs，本构建没有 shell 是有意的）。
-  （历史：OSMesa 软件光栅化线曾在 8763 上打通步骤①②③，后被 gl4es 取代并**退役**。）
-  见 `build/113/GRAPHICS-BRANCH.md`、`build/113/NOTES-webgl.md`。
-
-> **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
-> `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
-
-## 目录
+## Repository contents
 
 <!-- AUTO:FILES -->
 - `.githooks/check-consistency.py` (17258 bytes)
@@ -226,16 +113,18 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/check-state.py` (13270 bytes)
 - `.githooks/check-wants.py` (10926 bytes)
 - `.githooks/check-whitelist.py` (3216 bytes)
+- `.githooks/check_readme_sync.py` (9891 bytes)
+- `.githooks/gate.py` (3446 bytes)
 - `.githooks/handoff-context.py` (3072 bytes)
 - `.githooks/install.sh` (388 bytes)
-- `.githooks/pre-commit` (2320 bytes)
-- `.githooks/pre-push` (749 bytes)
+- `.githooks/pre-commit` (2556 bytes)
+- `.githooks/pre-push` (1289 bytes)
 - `.githooks/state_facts.py` (11010 bytes)
 - `.githooks/update-readme.py` (2270 bytes)
 - `.githooks/update-state.py` (5884 bytes)
 - `.githooks/witness-upstream-pin.py` (6939 bytes)
 - `.github/workflows/deploy-heart.yml` (7557 bytes)
-- `.gitignore` (5730 bytes)
+- `.gitignore` (6013 bytes)
 - `.gitmodules` (1934 bytes)
 - `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
 - `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
@@ -315,6 +204,8 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (347012 bytes)
 - `LICENSE` (34523 bytes)
+- `README.de.md` (8014 bytes)
+- `README.zh.md` (7217 bytes)
 - `STATE.md` (32746 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
@@ -532,8 +423,9 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/forge-preload/tinv.m` (5467 bytes)
 - `build/forge-preload/tpdf.m` (4730 bytes)
 - `build/forge-preload/ttest.m` (3147 bytes)
-- `build/gates-selftest.sh` (5071 bytes)
+- `build/gates-selftest.sh` (5113 bytes)
 - `build/gen-lanes.sh` (3992 bytes)
+- `build/gen-perf-charts.py` (5422 bytes)
 - `build/glue-selftest.m` (4444 bytes)
 - `build/glue-selftest.sh` (1953 bytes)
 - `build/instruments.json` (1696 bytes)
@@ -744,6 +636,9 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `docs/agents/memory.md` (3844 bytes)
 - `docs/agents/triage-labels.md` (1606 bytes)
 - `docs/agents/upstream-issues.md` (11242 bytes)
+- `docs/charts/perf-5way.svg` (7540 bytes)
+- `docs/charts/perf-data.json` (1029 bytes)
+- `docs/charts/perf-speedup-IP.svg` (6490 bytes)
 - `docs/embed-api.md` (10543 bytes)
 - `docs/manual-test-checklist.md` (4475 bytes)
 - `doctor.json` (1587 bytes)
@@ -1083,6 +978,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `test/fixtures/emcc6-probe/run-probe.sh` (1779 bytes)
 - `test/fixtures/hotpath-known-hot-stripped.wasm` (825 bytes)
 - `test/fixtures/hotpath-known-hot.wasm` (1762 bytes)
+- `test/fixtures/ieee754/battery.m` (2261 bytes)
 - `test/fixtures/libm-spike/bench.c` (1961 bytes)
 - `test/fixtures/libm-spike/driver.mjs` (4411 bytes)
 - `test/fixtures/libm-spike/shim.c` (494 bytes)
@@ -1155,33 +1051,31 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `vendor/forge/tinv.m` (5467 bytes)
 - `vendor/forge/tpdf.m` (4730 bytes)
 <!-- /AUTO -->
+## Hooks
 
+This repo uses a whitelist `.gitignore` (deny by default, allow per path) + git hooks:
 
+- `pre-commit`: recalculates the README AUTO block, checks the whitelist, runs the fact/
+  consistency/plugin/instrument gates and the **trilingual README sync gate**
+  (`check_readme_sync.py`, vendored from [Einfacht](https://github.com/ArchivalEra/Einfacht)):
+  all three language READMEs must exist, be non-empty, and cross-link.
+- `pre-push`: README freshness + the **push-set mode** of the trilingual gate — any push
+  touching one language README must update all three in the same batch.
+- Install: `bash .githooks/install.sh` (sets `core.hooksPath`).
 
-## 钩子
+## License
 
-本仓用白名单 `.gitignore`（默认拒绝，逐项放行）+ git hooks：
+**AGPL-3.0-or-later** (full text: [`LICENSE`](LICENSE)). The distributed wasm binary
+statically links GPLv3 Octave, GPLv2+ FFTW, LGPL libsndfile and several BSD/permissive
+components — this mix has **no choice outside AGPL-3.0**.
 
-- `pre-commit`：重算 README 的 AUTO 区块并 `git add`，再校验白名单覆盖。
-- `pre-push`：校验 README 是新鲜的，不新鲜直接拒推（先提交再推）。
-- 安装：`bash .githooks/install.sh`（设 `core.hooksPath`）。
+This program is free software: you can redistribute it and/or modify it under the terms
+of the GNU Affero General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version. The program is
+distributed in the hope that it will be useful, but **without any warranty**; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-## 许可
-
-**AGPL-3.0-or-later**（全文见 [`LICENSE`](LICENSE)）。本仓对外分发的是一个 wasm
-二进制，它静态链接了 GPLv3 的 Octave、GPLv2+ 的 FFTW、LGPL 的 libsndfile，
-以及 BSD/permissive 的若干件——这种混合**没有 AGPL-3.0 以外的选择**。
-
-本程序是自由软件：你可以按自由软件基金会发布的 GNU Affero 通用公共许可证
-（第 3 版，或你选择的任何更新版本）的条款再分发和/或修改它。本程序分发时
-希望它有用，但**不提供任何担保**，也不提供适销性或特定用途适用性的默示担保。
-
-按 AGPL-3.0 第 13 条（网络交互条款），通过计算机网络使用本程序的用户有权
-获得对应源码：**本仓即该源码**，构建可在 `obuild` 容器内完整复现
-（配方见 `build/CLIBS.md` 与 `HANDOFF.md`）。
-
-逐组件的许可与版权声明见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)：
-Octave 与 C 库长尾的版本/许可逐条列在那边，`build/` 的构建骨架源自
-rwl/octave-wasm（BSD-3-Clause，见 build/NOTES.md）；vendored `.m` 的来源见
-`vendor/MANIFEST.md`，其文件头均保留原许可声明；本仓自研文件带
-`SPDX-License-Identifier: AGPL-3.0-or-later` 头。
+Per AGPL-3.0 §13, users interacting with it over a network are entitled to the
+corresponding source: **this repository is that source**; the build reproduces fully in
+the `o113` container (recipes in `build/CLIBS.md`). Per-component licenses and
+copyrights: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

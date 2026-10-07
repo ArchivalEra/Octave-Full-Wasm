@@ -24,6 +24,7 @@ cd "$REPO"
 LIST="$(mktemp)"
 cat >"$LIST" <<'EOF'
 .githooks/check-whitelist.py --selftest
+.githooks/check_readme_sync.py --selftest
 .githooks/check-wants.py --selftest
 .githooks/check-state.py --selftest
 .githooks/check-consistency.py --selftest

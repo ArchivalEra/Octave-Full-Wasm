@@ -31,6 +31,9 @@ python3 "$HOOK_DIR/../build/113/plugin-check.py"
 #   + 量法登记（build/instruments.json：被证伪的量法不许留在台账 cmd 里）。
 #   登记含被证伪的排序基准量法（工单 63：min-of-3 不重随机化 ⇒ 430ms→4.7ms 假象）。
 FACTS_INSTRUMENT_DAYS=30 FACTS_INSTRUMENTS=build/instruments.json python3 "$HOOK_DIR/check-instruments.py"
+# ★ 三语 README 同步闸门（Einfacht zreflect/check_readme_sync 移植，2026-10-07）：
+#   结构模式 —— README.md / README.zh.md / README.de.md 必须存在、非空、互链。
+python3 "$HOOK_DIR/check_readme_sync.py"
 # ★ F1（2026-09-26）：**闸门自证** —— 闸门不能证明自己会红，就不许提交。
 #   放在最后是有意的：前六道是"查仓库"，这一道是"查检查器本身"。
 sh "$HOOK_DIR/../build/gates-selftest.sh"
