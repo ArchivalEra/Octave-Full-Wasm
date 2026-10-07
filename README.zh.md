@@ -90,6 +90,18 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 [issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2)。UI 接入：
 [Embed API](docs/embed-api.md) 与 [issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1)。
 
+## 分支（三条独立可持续维护的线）
+
+| 分支 | fork pin（`upstream/octave`） | 定位 |
+|---|---|---|
+| `wasm32-final` | —（冻结） | wasm32 归档线 |
+| `wasm64-NEXT` | `a5a7208`（平台补丁+f77 修复，**无 rust 缝**） | 中庸 wasm64 线——已验证：从 fork pin 全新重编 = 与现役产物逐字节同 |
+| `IllegalPerformance` | `f4bf15b`（+ rust-sort 源缝） | 激进 wasm64 线——**今日发运的就是它** |
+
+三条线经**同一条 fork 管线**吃上游 Octave 更新（`upstream/octave` 分支
+`wasm/11.3.0`）；各线 pin 各自的 fork 提交。共享构建容器里换线 = submodule update +
+重供给 + 部署该线的 `relink.sh`/`link-web.sh`（见 `maintaince.md`）。
+
 ## 仓库地图
 
 - `STATE.md` —— 活状态；`build/FACTS.json` —— 实测数字台账（130 键，每键带复跑命令）

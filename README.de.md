@@ -109,6 +109,20 @@ Harte Deploy-Anforderungen + Abnahmeprogramm: [DEPLOY.md](DEPLOY.md) und
 UI-Anbindung: [Embed-API](docs/embed-api.md) und
 [Issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1).
 
+## Zweige (drei unabhängig wartbare Linien)
+
+| Zweig | Fork-Pin (`upstream/octave`) | Rolle |
+|---|---|---|
+| `wasm32-final` | — (eingefroren) | wasm32-Archivlinie |
+| `wasm64-NEXT` | `a5a7208` (Patches + f77-Fix, **keine Rust-Naht**) | gemäßigte wasm64-Linie — verifiziert: Neuaufbau vom Fork-Pin reproduziert das deployed Artefakt byteidentisch |
+| `IllegalPerformance` | `f4bf15b` (+ rust-sort-Naht) | aggressive wasm64-Linie — **heute ausgeliefert** |
+
+Alle drei essen Upstream-Octave-Updates über dieselbe Fork-Pipeline
+(`upstream/octave` Branch `wasm/11.3.0`); jede Linie pinnt ihren eigenen
+Fork-Commit. Linienwechsel im gemeinsamen Build-Container = submodule update +
+neu provisionieren + `relink.sh`/`link-web.sh` dieser Linie deployen
+(siehe `maintaince.md`).
+
 ## Repository-Karte
 
 - `STATE.md` — Live-Status; `build/FACTS.json` — Messwert-Ledger (130 Schlüssel,

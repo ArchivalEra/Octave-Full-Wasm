@@ -101,6 +101,19 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 - `build/113/` — lane build recipes + gates; `test/browser/` — 77-suite acceptance harness (`SWEEP_JOBS=4` parallel)
 - `.scratch/open-questions/issues/` — local ticket tracker
 
+## Branches (three independently maintainable lines)
+
+| branch | fork pin (`upstream/octave`) | role |
+|---|---|---|
+| `wasm32-final` | — (frozen) | wasm32 archive line |
+| `wasm64-NEXT` | `a5a7208` (patches + f77 fix, **no rust seam**) | moderate wasm64 line — verified: fresh rebuild from its fork pin reproduces its shipped artifact byte-for-byte |
+| `IllegalPerformance` | `f4bf15b` (+ rust-sort seam) | aggressive wasm64 line — **this is what ships today** |
+
+All three eat upstream Octave updates through the same fork pipeline
+(`upstream/octave` branch `wasm/11.3.0`); each line pins its own fork commit.
+Switching lines in the shared build container = submodule update + re-provision +
+deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
+
 ## Repository contents
 
 <!-- AUTO:FILES -->
@@ -204,8 +217,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (349000 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (8014 bytes)
-- `README.zh.md` (7217 bytes)
+- `README.de.md` (8796 bytes)
+- `README.zh.md` (7952 bytes)
 - `STATE.md` (32746 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
