@@ -4191,3 +4191,12 @@ MATLAB（如果有 linux 版）"。环境隔两天重启 ⇒ doctor 抓到 8761 
 - **MATLAB**：本机未安装 ⇒ 不测（不臆造）。
 
 复跑：`octave-cli /tmp/bench_native2.m`（原生）+ `w64-logs/bigcompare-final.log`（全量留档）。
+
+
+**实际比值补遗（同日，IP 是对方的几倍；基线 ÷ IP，>1 = IP 更快）**：
+
+- **vs 原生默认（ref-BLAS）**：总体几何平均 **1.96×**（BLAS 系 **3.16×**；matmul 1000 单项 **8.2×**）；sort 1.9×；dot/loop IP 略慢（0.75–0.84×）。
+- **vs 原生极限（OpenBLAS 24T）**：总体 **0.80×**（原生极限总体快 1.25×，BLAS 系 0.61×）——**但 sort IP 反快 1.82×、svd 反快 1.20×**。
+- **vs wasm32-final**：总体 **1.86×**（BLAS 系 **2.71×**；matmul 1000 单项 6.7×）；sort 2.05×。
+- **vs wasm64-NEXT**：总体 **0.99×**（平价）——**sort 2.16× 是唯一实质优势**。⚠ 本轮 IP/NEXT 顺序测有漂移（BLAS 逐项 0.80–0.96），交错对撞（§5.95）同轴 = 1.00 平价；BLAS 读交错版。
+- **一句话**：IllegalPerformance ≈ **原生默认的 2 倍、wasm32-final 的 1.9 倍、与原生 OpenBLAS 极限差 1.25×（BLAS）/反超（sort/svd）、与 wasm64-NEXT 平价但 sort 快 2.2×**。
