@@ -407,21 +407,27 @@
       //   「figure: function called with too many outputs」，而裸 `plot` 正常。
       // 根因（实测钉死，见 test/browser/probe-issue5-*.mjs）：
       //   **外部宿主**（如 Octave-UI 的 SafePlotSinkPolyfill）在每次运行前往 FS 写若干
-      //   **0 输出**的桩函数（`function figure (varargin)`，无 `h =`）。而核心
-      //   `plot/util/gcf.m:57` 写的是 `h = figure ()` —— Octave 的**输出个数检查发生在
-      //   函数体之前** ⇒ 进函数体前就抛错。凡经 `gca→gcf→figure` 的句柄路径全崩；
-      //   裸 `plot` 因为宿主也换了它、不走 figure，反而幸存。
+      //   **影子桩函数**覆盖引擎自己的图形实现（`figure` → 0 输出 no-op；`plot` →
+      //   把数据抄进 `__octave_web_plot__` 后返回假句柄 1；`drawnow` → no-op）。
+      //   后果分两层：
+      //   · `figure` 桩声明 0 输出 ⇒ 核心 `plot/util/gcf.m:57` 的 `h = figure ()` 在
+      //     **函数体之前**就抛「too many outputs」（输出个数检查发生在函数体前）；
+      //   · `plot`/`drawnow` 桩把**引擎整条图形栈**架空 —— 真图形对象建不出来、
+      //     toolkit 永远不被 flush ⇒ 标题/刻度/网格全都没有像素（宿主只能显示它自己抄到的
+      //     那点 x/y 数据 ⇒ 用户看到"有曲线、无文字无网格"）。
       // 两条解析规则（都在本机实测过）：
-      //   ① **调用者目录优先** —— `gcf.m` 调 `figure()` 先在 `plot/util/` 里找 ⇒ 宿主
-      //      覆盖核心 `plot/util/figure.m` 就直接命中桩（改 path 顺序救不了）；
-      //   ② **path 顺序**（`.`=cwd 永远第一）—— 用户直接敲 `figure()` 时，宿主写在
-      //      cwd 根 / home 的同名桩会盖住 plotbridge 与核心实现。
-      // 做法（**最小、只读、可证伪**）：开机**快照**受保护文件；每次用户 eval 前扫一遍，
-      //   ① 核心文件**签名退化**（原带输出、现 0 输出）⇒ 还原快照；
-      //   ② cwd 根 / home 的**已知同名桩**（开机不存在、现出现且 0 输出）⇒ 删除；
+      //   ① **调用者目录优先** —— `gcf.m` 调 `figure()` 先在 `plot/util/` 里找 ⇒ 覆盖
+      //      核心 `plot/util/figure.m` 直接命中桩（改 path 顺序救不了）；
+      //   ② **path 顺序**（`.`=cwd 永远第一）—— 写在 cwd 根 / home 的同名桩会盖住
+      //      plotbridge 与核心实现。
+      // 做法（**抗覆盖**，2026-10-09 第二版）：开机**快照**受保护文件；每次用户 eval 前：
+      //   ① 核心文件**与快照不一致 ⇒ 还原**（不只是"0 输出"那种退化——宿主只要动过就还原，
+      //      因为引擎的图形栈是**唯一权威**：宿主想要数据通道请走 Embed API，别改核心 m 文件）；
+      //   ② cwd 根 / home 的**已知同名桩**（开机不存在）⇒ 出现即删；
       //   任一处改动 ⇒ `rehash`。
-      //   ⚠️ 只在"退化"时动手 ⇒ **干净站点上它是纯 no-op**（反向断言见 accept-gfx-isolation）。
+      //   ⚠️ 干净站点上它与"没有这个东西"等价（快照 == 现况、影子不存在）。
       //   ⚠️ 不碰 UI 仓库、不碰 Octave 树 ⇒ 三线照常吃上游更新。
+      //   ⚠️ 判定成本：14 次 readFile 的**字符串比较**（无正则、无 eval），只在用户 eval 前跑。
       var _gfxCore = [
         '/usr/src/octave/m/plot/util/figure.m',
         '/usr/src/octave/m/plot/util/gcf.m',
@@ -432,30 +438,36 @@
         '/usr/src/octave/m/plot/util/hold.m',
         '/usr/src/octave/m/plot/draw/plot.m',
         '/usr/src/octave/m/plot/draw/bar.m',
+        '/usr/src/octave/m/plot/draw/drawnow.m',
         '/usr/src/octave/m/plot/appearance/title.m',
         '/usr/src/octave/m/plot/appearance/xlabel.m',
         '/usr/src/octave/m/plot/appearance/ylabel.m',
         '/usr/src/octave/m/plot/appearance/legend.m',
         '/usr/src/octave/m/plot/appearance/axis.m',
       ];
-      // 宿主往"path 最前面"写的同名桩（`. `=cwd、home）—— 出现即删（开机时它们不存在）
+      // 宿主往"path 最前面"写的同名桩（`. `=cwd、home）—— **开机时它们不存在** ⇒ 出现即删。
       var _gfxShadows = [
-        '/figure.m', '/plot.m', '/gcf.m', '/gca.m',
+        '/figure.m', '/plot.m', '/gcf.m', '/gca.m', '/drawnow.m',
         '/home/web_user/figure.m', '/home/web_user/plot.m',
-        '/home/web_user/gcf.m', '/home/web_user/gca.m',
+        '/home/web_user/gcf.m', '/home/web_user/gca.m', '/home/web_user/drawnow.m',
       ];
-      function _hasOutput(text) {
-        // 第一个 `function` 行里，`(` 之前有 `=` ⇒ 该函数声明了输出；不是函数文件 ⇒ null。
-        var m = text.match(/^[ \t]*function[ \t]+([^\n]*)/m);
-        if (!m) return null;
-        return m[1].indexOf('=') >= 0;
-      }
-      var _gfxSnap = {};                          // 核心 path → 开机内容（必有）
+      var _gfxSnap = {};                          // 核心 path → 开机内容（null = 本产物没有）
+      // ★ **开机不存在的受保护 m 文件也是感染面**（2026-10-09 实测抓到的关键一条）：
+      //   `drawnow` 在本构建里是 **C++ 内建**，m 树里**没有** `plot/draw/drawnow.m`
+      //   ⇒ 宿主的 no-op 桩**创建**了它、且凭 path 顺序**盖住内建** ⇒ `drawnow` 变成空操作
+      //   ⇒ toolkit 永远不被 flush ⇒ **图一个像素都不出**（命令却全绿）。
+      //   所以对这类"本产物本没有"的文件，判据是**存在即污染**：出现就删。
+      var _gfxAbsent = {};                        // 核心 path → 开机是否确认不存在（true = 存在即删）
       function _snapshotGfx() {
         for (var i = 0; i < _gfxCore.length; i++) {
           var p = _gfxCore[i];
-          try { _gfxSnap[p] = Module.FS.readFile(p, { encoding: 'utf8' }); }
-          catch (e) { _gfxSnap[p] = null; }       // 本产物没有这个文件 ⇒ 不参与保护
+          try {
+            _gfxSnap[p] = Module.FS.readFile(p, { encoding: 'utf8' });
+            _gfxAbsent[p] = false;
+          } catch (e) {
+            _gfxSnap[p] = null;                   // 开机没有 ⇒ 不按"内容比对"保护
+            _gfxAbsent[p] = true;                 // 但要盯着"谁把它创建出来"
+          }
         }
       }
       var _gfxRepaired = [];                      // 诊断/断言用：修过哪些 path
@@ -463,10 +475,19 @@
         var changed = false;
         for (var i = 0; i < _gfxCore.length; i++) {
           var p = _gfxCore[i], snap = _gfxSnap[p];
-          if (!snap || _hasOutput(snap) !== true) continue;    // 快照本就没输出 ⇒ 不保护
+          if (_gfxAbsent[p]) {                    // 开机没有 ⇒ 出现即删（见上面的 drawnow 教训）
+            try { Module.FS.readFile(p); } catch (e) { continue; }   // 仍不存在 ⇒ 好
+            try {
+              Module.FS.unlink(p);
+              if (_gfxRepaired.indexOf(p) < 0) _gfxRepaired.push(p);
+              changed = true;
+            } catch (e) {}
+            continue;
+          }
+          if (snap === null || snap === undefined) continue;
           var cur;
-          try { cur = Module.FS.readFile(p, { encoding: 'utf8' }); } catch (e) { continue; }
-          if (cur !== snap && _hasOutput(cur) === false) {     // 签名退化 ⇒ 还原
+          try { cur = Module.FS.readFile(p, { encoding: 'utf8' }); } catch (e) { cur = null; }
+          if (cur !== snap) {                     // 被改过 / 被删 ⇒ 还原（抗覆盖）
             try {
               Module.FS.writeFile(p, snap);
               if (_gfxRepaired.indexOf(p) < 0) _gfxRepaired.push(p);
@@ -475,15 +496,13 @@
           }
         }
         for (var j = 0; j < _gfxShadows.length; j++) {
-          var s = _gfxShadows[j], txt = null;
-          try { txt = Module.FS.readFile(s, { encoding: 'utf8' }); } catch (e) { continue; }
-          if (_hasOutput(txt) === false) {                     // 0 输出的同名桩 ⇒ 删
-            try {
-              Module.FS.unlink(s);
-              if (_gfxRepaired.indexOf(s) < 0) _gfxRepaired.push(s);
-              changed = true;
-            } catch (e) {}
-          }
+          var s = _gfxShadows[j];
+          try { Module.FS.readFile(s); } catch (e) { continue; }   // 不存在 ⇒ 好
+          try {
+            Module.FS.unlink(s);                  // 开机不存在 ⇒ 谁写的谁负责，删掉
+            if (_gfxRepaired.indexOf(s) < 0) _gfxRepaired.push(s);
+            changed = true;
+          } catch (e) {}
         }
         if (changed) { try { _rawEvalString.call(Module, 'rehash;'); } catch (e) {} }
         return changed;

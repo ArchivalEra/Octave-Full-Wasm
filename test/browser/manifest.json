@@ -103,6 +103,10 @@
   "probe-umfpack-trap": {
    "manual": true,
    "why": "报告型探针：只打印 `=== LU-OK` / `=== LU-TRAP` 供工单 04 的两面复现器判读，**不产 PASS/FAIL 汇总行**（判定在 build/113/repro-umfpack-trap.sh）"
+  },
+  "probe-sort-bitexact": {
+   "manual": true,
+   "why": "**双站对比**抽查工具（候选/对照各跑一次、比 %.17g 输出逐字节）——不是单站判定套件，无 PASS/FAIL 汇总行；它产 `=== bitexact <URL> lane=… …B ===` 供人读两份 JSON 比对。用法：`sh test/browser/run.sh test/browser/probe-sort-bitexact.mjs <URL> <OUT.json>`（两站各跑一次）。"
   }
  },
  "inputs": {

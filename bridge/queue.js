@@ -31,7 +31,20 @@
 
   function fs() {
     // 唯一一份守卫：五个桥以前各写一遍同样的东西（连报错文案都不一样）
-    const M = window.Module;
+    // ⚠️ embed 路径下页面全局没有 `Module`（MODULARIZE，模块在 `window.__octaveHosts[i].mod`）
+    //    ⇒ 只读 window.Module 会让这些队列桥在嵌入形态里**永久失效**（issue #5 余留①，
+    //    2026-10-09 实测：p5canvas/queue 一族五个桥同病）。判定同 p5canvas 的 moduleOf()。
+    let M = null;
+    try { if (window.Module && window.Module.FS) M = window.Module; } catch (e) { /* 找注册表 */ }
+    if (!M) {
+      const hosts = window.__octaveHosts || [];
+      for (let i = 0; i < hosts.length && !M; i++) {
+        if (hosts[i] && hosts[i].ready && hosts[i].mod && hosts[i].mod.FS) M = hosts[i].mod;
+      }
+      for (let i = 0; i < hosts.length && !M; i++) {
+        if (hosts[i] && hosts[i].mod && hosts[i].mod.FS) M = hosts[i].mod;
+      }
+    }
     if (!M || !M.FS) throw new Error('OctaveQueue: Module.FS 还没就绪');
     return M.FS;
   }

@@ -26,6 +26,12 @@ function h = surf (varargin)
   h = [];
 
 
+  ## 剥掉"首参是目标 axes 句柄"那一层（核心内部会这么调：`hist` 走
+  ## `bar (hax, x, freq, "hist", …)`）。镜像那一步仍用**原样**实参（核心自己认得句柄形态）。
+  ## ⚠️ 见 `__pb_strip_axes__.m`：桥只跟踪**当前 axes**；首参是别的 axes ⇒ 明确报错（不静默曲解）。
+  orig = varargin;
+  varargin = __pb_strip_axes__ ("surf", varargin);
+
   s = __pstate__ ();
   if (! s.hold)
     s = __pb_clear_series__ (s);
@@ -36,5 +42,5 @@ function h = surf (varargin)
   __pstate__ (s);
   h = [];
 
-  h = __pb_mirror__ ("surf", varargin{:});
+  h = __pb_mirror__ ("surf", orig{:});
 endfunction
