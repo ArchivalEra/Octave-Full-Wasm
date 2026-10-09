@@ -98,7 +98,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 - `STATE.md` — live status; `build/FACTS.json` — measured-numbers ledger (each key carries a re-run command)
 - `zreflect/` — the fact system (**Einfacht refactor adopted 2026-10-09**: gate platform / discovered gate registry / knob registry / world gate); `zreflect/measure_octave.py` is this repo's data layer, `reflect-hooks/Einfacht.env` the knob carrier
-- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.100)
+- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.101)
 - `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
 - `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel)
 - `.scratch/open-questions/issues/` — local ticket tracker
