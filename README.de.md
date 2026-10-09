@@ -140,6 +140,11 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   `DEPLOY.md` — Deployment
 - `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness
   (`SWEEP_JOBS=4` parallelisierbar)
+- Grafik (seit 2026-10-09 **Engine-autoritativ**): `bridge/octave-core.js`
+  schützt den Kern-`m/plot`-Baum vor Host-Schatten-Stubs (Snapshot + Restore +
+  Löschen von Neuanlagen), `p5canvas.js`/`queue.js` lösen das Modul über
+  `window.__octaveHosts` auf — so erreichen Figuren im Embed-Modus das DOM;
+  Abnahme = `accept-gfx-isolation` + `accept-gfx-render`
 - `.scratch/open-questions/issues/` — lokaler Ticket-Tracker
 - `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien)
 

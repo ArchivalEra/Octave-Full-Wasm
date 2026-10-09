@@ -112,6 +112,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 - `HISTORY.md` —— 逐批 append-only 记录（上文全部证据在 §5.77–§5.103）
 - `maintaince.md` —— 方向地图；`docs/embed-api.md` —— 嵌入契约；`DEPLOY.md` —— 部署
 - `build/113/` —— 车道构建配方 + 闸门；`test/browser/` —— 验收 harness（`SWEEP_JOBS=4` 可并行）
+- 图形（2026-10-09 起**引擎权威**）：`bridge/octave-core.js` 保护核心 `m/plot` 树不受宿主影子桩污染（快照 + 还原 + 删新建），`p5canvas.js`/`queue.js` 经 `window.__octaveHosts` 解析模块 ⇒ embed 形态下图能上屏；验收 = `accept-gfx-isolation` + `accept-gfx-render`
 - `.scratch/open-questions/issues/` —— 本地工单 tracker
 - `docs/agents/upstream-issues.md` — 反哺上游 [Einfacht](https://github.com/ArchivalEra/Einfacht) 的 issue 留档
 
