@@ -155,7 +155,7 @@
 
 用户点名的形态（"当然是 w64+thread 啊"）**已经建出来、跑起来、并已发运**：
 发运入口 `W64_OUT=/src/websrc/w64-ob-out5 sh build/promote-w64-lane.sh <8761站点>`（只换 `w64/` 一档），
-产物 sha = 台账 `w64_wasm_sha`（`ddec34a0…`）；8761 开机 1.3 s、四档磁盘/HTTP SHA 逐档核过、
+产物 sha = 台账 `w64_wasm_sha`；8761 开机 1.3 s、四档磁盘/HTTP SHA 逐档核过、
 四格选档 33/0；全量回归全绿（accept 口径见台账 `accept_suites` / `accept_pass`；
 PROBES=1 完整扫描含探针全过，`sweep-logs/20261002-094142`，见 §1c）。
 
@@ -381,7 +381,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20261002-094142` · **43 套 / 1,084 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 28 套 / 267 PASS、基准 3 套（按契约无汇总行）） | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20261002` · tar.zst 91,217,289 B · `300e2d30fa42c80e…` | 包内 wasm （**与部署件同 sha** ✓） |
-| 仓库 | 分支 `wasm64`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
+| 最近一次**全绿**回归 | `20261005-155430` · **6 套 / 107 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 交付包 | `octave-full-wasm-site-20261005` · tar.zst 91,292,261 B · `548ba554359c58c8…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 仓库 | 分支 `wasm32-final`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
