@@ -442,7 +442,7 @@
    "name": "plotbridge",
    "kind": "js",
    "url": "assets/m/plotbridge.js",
-   "sha256": "79cfabbb574e18707969486a6ca9cf76959302be0eba24cf65ba47868ab39270",
+   "sha256": "dee963bb0d72b25d56f017f6874575b225c401246ad113e17007e1f1e3855ac2",
    "deps": [],
    "note": "R9：plot 翻译桥（纯 .m SVG/状态机）；main.cc 的 phase2 会把 /usr/src/octave/m/plotbridge 加进 path"
   },
