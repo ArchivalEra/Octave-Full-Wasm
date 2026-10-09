@@ -138,6 +138,9 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   Belege)
 - `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
   `DEPLOY.md` — Deployment
+- `build/113/NOTES-forge-ondemand.md` — Design (nicht implementiert): das
+  **Octave-Forge-On-Demand-Pull**-Pluginsystem (Client-Regal + Laufzeit-Installation,
+  verzahnt mit der Fork/Lock-Pipeline)
 - `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness
   (`SWEEP_JOBS=4` parallelisierbar; letzter grüner Lauf = `accept_suites` /
   `accept_pass` im Ledger)

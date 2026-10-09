@@ -100,6 +100,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 - `zreflect/` — the fact system (**Einfacht refactor adopted 2026-10-09**: gate platform / discovered gate registry / knob registry / world gate); `zreflect/measure_octave.py` is this repo's data layer, `reflect-hooks/Einfacht.env` the knob carrier
 - `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.104)
 - `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
+- `build/113/NOTES-forge-ondemand.md` — design (not yet implemented): the **Octave-Forge on-demand pull** plugin system (client-side package shelf + runtime install, tied to the fork/lock pipeline)
 - `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel; latest all-green sweep = `accept_suites` / `accept_pass` in the ledger)
 - graphics (engine-authoritative since 2026-10-09): `bridge/octave-core.js` protects the core `m/plot` tree from host shadow stubs (snapshot + restore + delete-created), `p5canvas.js`/`queue.js` resolve the module via `window.__octaveHosts` so figures reach the DOM in embed mode; acceptance = `accept-gfx-isolation` + `accept-gfx-render`
 - `.scratch/open-questions/issues/` — local ticket tracker
@@ -201,6 +202,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.scratch/open-questions/issues/61-component-plugin-system.md` (4101 bytes)
 - `.scratch/open-questions/issues/62-full-rebuild-abi-divergence.md` (3963 bytes)
 - `.scratch/open-questions/issues/63-rustpatch-fact-coverage.md` (10360 bytes)
+- `.scratch/open-questions/issues/64-forge-ondemand.md` (4997 bytes)
 - `.scratch/perf-max/issues/01-openblas-levers.md` (4724 bytes)
 - `.scratch/perf-max/issues/02-native-baseline.md` (2545 bytes)
 - `.scratch/perf-max/issues/03-w64-big-heap.md` (2680 bytes)
@@ -217,8 +219,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (365673 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (10165 bytes)
-- `README.zh.md` (9062 bytes)
+- `README.de.md` (10366 bytes)
+- `README.zh.md` (9244 bytes)
 - `STATE.md` (28097 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
@@ -248,6 +250,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
+- `build/113/NOTES-forge-ondemand.md` (16404 bytes)
 - `build/113/NOTES-hotpath.md` (8092 bytes)
 - `build/113/NOTES-jspi.md` (28469 bytes)
 - `build/113/NOTES-libm.md` (2974 bytes)
