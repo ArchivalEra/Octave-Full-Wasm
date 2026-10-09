@@ -5,7 +5,7 @@
 
 **Blocked by:** None（A/B 实验在跑）
 
-**Status:** resolved（2026-10-01，根因确认并修掉；链路验证见"结论"）
+**Status:** resolved （2026-10-01，根因确认并修掉；链路验证见"结论"）
 
 **Settling:** `bash relink.sh rebuild w64 --out <目录> --yes-rebuild` ⇒ 末尾 `verdict=ok`
 **且**产物能过 wasm-opt 校验：

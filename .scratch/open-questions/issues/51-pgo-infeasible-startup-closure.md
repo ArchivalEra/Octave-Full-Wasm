@@ -5,11 +5,11 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：**PGO 不可行（工具链缺 profile 运行时，链接器硬错误为证）**；
+**Status:** resolved （2026-10-03：**PGO 不可行（工具链缺 profile 运行时，链接器硬错误为证）**；
 LTO 维持票 06 否决；懒加载方向量化后**不立项**——收益首屏 -20% 对上"主→side 静态调用面"
 大手术成本）
 
-**Settling:** 复现 PGO 判定（三步，均在容器 o113）：
+**Settling:** 复现 PGO 判定（三步，均在容器 o113）： —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 ```sh
 emcc -O2 -fprofile-instr-generate -sEXIT_RUNTIME=1 pgo-probe.c -o x.js   # 链接通过
 LLVM_PROFILE_FILE=/tmp/t.profraw node x.js                               # 干净退出但无 profraw

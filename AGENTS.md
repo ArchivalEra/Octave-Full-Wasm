@@ -106,24 +106,36 @@
 → **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**
 
-## 提交前（六道闸门 + 闸门自证）
+## 提交前（事实系统 = Einfacht 平台 + 本仓专属闸门）
+> **2026-10-09：事实系统已采纳完全重构后的 Einfacht**（`zreflect/` 机制层 + `reflect-hooks/`
+> 钩子 + `gates-selftest.sh` 发现式自证台）。本仓的**数据层**在 `zreflect/measure_octave.py`
+> （数据 vs 机制分离：换仓库只换那一个文件，机制原样可升级）。旋钮的唯一可复现来源 =
+> `reflect-hooks/Einfacht.env`。钩子已指向 `reflect-hooks`（`git config core.hooksPath`）。
+> 下面手工复跑的就是钩子跑的那几道：
 ```bash
-python3 .githooks/update-readme.py --check   # README 的 AUTO:FILES 要新鲜
-python3 .githooks/update-state.py            # STATE 的 AUTO:STATE 机器块
-python3 .githooks/check-state.py             # 活状态断言不得与产物矛盾（只查 STATE.md）
-python3 .githooks/check-consistency.py       # 挂载点/启动清单/车道路径一致
-python3 .githooks/check-wants.py             # 断言可证伪性（裸数字匹配/截断后匹配）
-python3 .githooks/check-whitelist.py         # 白名单覆盖
-python3 build/113/plugin-check.py            # 部件插件登记闸门（工单 61）：登记表↔产物 declared 双向
-sh build/gates-selftest.sh                   # ★ 闸门自证：每个闸门必须能证明自己"会红"
+# 平台层（发现式名录，别手写清单）：机器块 + 13 道闸门 + 自证
+python3 zreflect/facts.py --render-doc STATE.md   # 重渲染事实块 + 闸门名录块（--check 验新鲜）
+for g in zreflect/check_*.py; do python3 "$g" || exit 1; done
+sh gates-selftest.sh                              # ★ 平台闸门自证（含跨仓库可配置性反向断言）
+# 本仓专属层（平台无对应件）：AUTO 区块 + 活状态断言 + 一致性 + 可证伪 + 白名单 + 就绪 + pin 见证
+python3 .githooks/update-readme.py --check        # README 的 AUTO:FILES 要新鲜
+python3 .githooks/update-state.py --check         # STATE 的 AUTO:STATE 机器块
+python3 .githooks/check-state.py                  # 活状态断言不得与产物矛盾（只查 STATE.md）
+python3 .githooks/check-consistency.py            # 挂载点/启动清单/车道路径一致
+python3 .githooks/check-wants.py                  # 断言可证伪性（裸数字匹配/截断后匹配）
+python3 .githooks/check-whitelist.py              # 白名单覆盖
+python3 .githooks/check-readiness-pattern.py      # 就绪反模式（工单 40/42）
+python3 .githooks/witness-upstream-pin.py         # 上游 pin 见证（容器树 == submodule pin）
+python3 build/113/plugin-check.py                 # 部件插件登记闸门（工单 61）：登记表↔产物 declared 双向
+sh build/gates-selftest.sh                        # ★ 本仓专属闸门自证（40 个，含构建侧）
 ```
-**★ 闸门自证（F1，2026-09-26）**：前六道查仓库，这第七道查**检查器本身**。
+**★ 闸门自证（F1，2026-09-26）**：前几道查仓库，自证那道查**检查器本身**。
 本仓实测过：~20 个检查器里只有 1 个能证明自己会红，而"收集-断言"式闸门在输入消失时
 **静默变绿**（三处站点同时缺 `VERSION` ⇒ parity 报"完全一致"；`declared == {}` ⇒ `verdict:"ok"`；
 `glue-selftest` `0/0` 算全过）。⇒ 现在**每个闸门必须带 `--selftest`**，且三类用例齐备：
-**正常不报 / 该报的必须报 / 空输入必须报**。平台本体：`build/lib/gate.py`（零值守卫
-`require_nonempty()` + 根注入 `GATE_REPO` + `selftest()`）。新增闸门**必须**在
-`build/gates-selftest.sh` 的名单里登记 —— 名单外的闸门就是没人盯着的闸门。
+**正常不报 / 该报的必须报 / 空输入必须报**。平台本体：`zreflect/gate.py`（rc 契约 +
+零值守卫 + 发现式名录）。新增平台闸门 = 落一个 `GATE = gate.meta(…)` 声明行，名录自动长出来；
+新增本仓专属闸门**必须**在 `build/gates-selftest.sh` 的名单里登记 —— 名单外的闸门就是没人盯着的闸门。
 ⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件 ⇒ 被 `.gitignore` 忽略且从未
 `git add` 的文件它看不见（曾因此漏掉 4 个承重文件）。新增目录后主动看一眼
 `git status --short --ignored <目录>`。

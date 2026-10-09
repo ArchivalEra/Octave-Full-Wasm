@@ -5,7 +5,7 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-01）
+**Status:** resolved （2026-10-01）
 
 **Settling:** `sh build/gates-selftest.sh` ⇒ 相关闸门自证全绿：
 `relink` 16/0、`patch-openblas-symbol-prefix` 9/0、`patch-openblas-emscripten` 9/0、

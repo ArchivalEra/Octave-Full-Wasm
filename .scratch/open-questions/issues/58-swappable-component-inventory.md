@@ -6,10 +6,10 @@ mimalloc"的追问）。
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：盘点完 15 个库组件轴；**下一个部件 = libm**（重活）；
+**Status:** resolved （2026-10-03：盘点完 15 个库组件轴；**下一个部件 = libm**（重活）；
 其余热点是 **Octave 自身源码**，不是部件）
 
-**Settling:** `python3 build/113/hotpath-scan-libs.py`（库组件扫描批，15 轴）；
+**Settling:** `python3 build/113/hotpath-scan-libs.py`（库组件扫描批，15 轴）—— rc=0 ⇒ 15 轴全部盘点完（清单成立）；rc≠0 ⇒ 有轴扫不到，先修扫描器。
 原始数据 `hotpath-logs/libs-<ts>/scan.json`。
 
 ## Answer（盘点结果）

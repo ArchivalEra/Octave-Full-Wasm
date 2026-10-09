@@ -7,9 +7,9 @@ Rust / 06 链接旗标 / 51 PGO）均负。唯一未试的正规军杠杆 = **re
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：FMA 内核落地 + 实测 +13%/+10% + 数值全绿 + 已发运 8761）
+**Status:** resolved （2026-10-03：FMA 内核落地 + 实测 +13%/+10% + 数值全绿 + 已发运 8761）
 
-**Settling:** `E2_RELAXED_FMA=1 E2_CC_EXTRA="-mrelaxed-simd" bash build-e2-lane.sh src patch
+**Settling:** `E2_RELAXED_FMA=1 E2_CC_EXTRA="-mrelaxed-simd" bash build-e2-lane.sh src patch —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 build pack` + relink；字节级判据 `python3 -c "print(open('octave.wasm','rb').read()
 .count(bytes([0xFD,0x87,0x02])))"`（`fd 87 02` = f64x2.relaxed_madd）应 > 40（现役 1）；
 性能：交错 3 轮 `bench-lanes` matmul1000 应 < 0.026。

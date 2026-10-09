@@ -11,14 +11,14 @@
 （不配的仓库完全不受影响；发现式名录照样收编它，自证照样证明
 它能红）。启用（各取所需）：
 
-  · `FACTS_INSTRUMENT_DAYS=天` —— **恒常检测**：台账条目的
+  · `REFLECT_INSTRUMENT_DAYS=天` —— **恒常检测**：台账条目的
     `first_seen`（`measure()` 自动维护：值不变沿用旧日期、换值
     取今天，`ledger.fact()` 盖章）距今超过阈值 ⇒ 报「人工确认：
     这条 cmd 是在量，还是恒返回同一个数？」。不配 = 该规则
     明说未启用（读不到 / 不可解析的 first_seen 也报 —— 读不到
     就明说，不许猜）。
 
-  · `FACTS_INSTRUMENTS=instruments.json` —— **量法登记位**
+  · `REFLECT_INSTRUMENTS=instruments.json` —— **量法登记位**
     （schema: `{"methods": [{text, why, fixed_in}]}`）：被证伪的
     **量法**像 `retractions.json` 管「被推翻的断言」那样有登记位；
     台账任何 `cmd` 含被证伪片段 ⇒ 报（坏量法不许留在台账里）。
@@ -36,22 +36,13 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "lib"))
-from gate import root, selftest                            # noqa: E402
-import json                                                  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gate import fatal, finish, load_spec, main_selftest_or, meta, off  # noqa: E402
+from gate import repo, selftest                            # noqa: E402
+from ledger import facts_of, load                         # noqa: E402
 
-
-def facts_of(ledger):
-    f = ledger.get("facts") if isinstance(ledger, dict) else None
-    return f if isinstance(f, dict) else {}
-
-
-def load(path):
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
-
-INSTRUMENTS_RAW = os.environ.get("FACTS_INSTRUMENTS", "").strip()
-DAYS_RAW = os.environ.get("FACTS_INSTRUMENT_DAYS", "").strip()
+INSTRUMENTS_RAW = os.environ.get("REFLECT_INSTRUMENTS", "").strip()
+DAYS_RAW = os.environ.get("REFLECT_INSTRUMENT_DAYS", "").strip()
 
 
 def _days():
@@ -118,45 +109,34 @@ def run(argv=None):
     name = INSTRUMENTS_RAW
     days = _days()
     if DAYS_RAW and days is None:
-        print("FATAL: FACTS_INSTRUMENT_DAYS=%r 不可解析成天数 —— 修配置"
-              "（或撤掉该旋钮）" % DAYS_RAW, file=sys.stderr)
-        return 2
+        return fatal("REFLECT_INSTRUMENT_DAYS=%r 不可解析成天数 —— 修配置"
+                     "（或撤掉该旋钮）" % DAYS_RAW)
     if not name and days is None:
-        print("仪器生命周期闸门：FACTS_INSTRUMENT_DAYS 与 FACTS_INSTRUMENTS"
-              " 均未配置 ⇒ 本闸门未启用（可插拔模块；要启用："
-              "FACTS_INSTRUMENT_DAYS=天 开恒常检测；FACTS_INSTRUMENTS="
-              "instruments.json 登记被证伪量法）", file=sys.stderr)
-        return 0
-    led_path = os.environ.get("FACTS_LEDGER") or os.path.join(root(), "build", "FACTS.json")
+        return off("仪器生命周期闸门：REFLECT_INSTRUMENT_DAYS 与 REFLECT_INSTRUMENTS"
+                   " 均未配置 ⇒ 本闸门未启用（可插拔模块；要启用："
+                   "REFLECT_INSTRUMENT_DAYS=天 开恒常检测；REFLECT_INSTRUMENTS="
+                   "instruments.json 登记被证伪量法）")
+    led_path = repo(os.environ.get("REFLECT_FACTS", "FACTS.json"))
     if not os.path.exists(led_path):
-        print("FATAL: 台账不在：%s —— 先跑 facts.py" % led_path, file=sys.stderr)
-        return 2
+        return fatal("台账不在：%s —— 先跑 facts.py" % led_path)
     methods = []
     if name:
-        reg_path = name if os.path.isabs(name) else os.path.join(root(), name)
+        reg_path = repo(name)
         if not os.path.exists(reg_path):
-            print("FATAL: FACTS_INSTRUMENTS=%s 已配置但登记位不在 —— 先登记"
-                  "（或撤掉该旋钮）" % name, file=sys.stderr)
-            return 2
-        try:
-            methods = load(reg_path).get("methods") or []
-        except ValueError as e:
-            print("FATAL: 登记位 %s 不是合法 JSON：%s" % (reg_path, e),
-                  file=sys.stderr)
-            return 2
+            return fatal("REFLECT_INSTRUMENTS=%s 已配置但登记位不在 —— 先登记"
+                         "（或撤掉该旋钮）" % name)
+        reg, err = load_spec(reg_path)
+        if err:
+            return fatal(err)
+        methods = reg.get("methods") or []
     probs = problems(load(led_path), methods=methods, days=days)
-    if probs:
-        print("仪器生命周期闸门：%d 个问题" % len(probs), file=sys.stderr)
-        for p in probs:
-            print("  · " + p, file=sys.stderr)
-        return 1
     parts = []
     if days is not None:
         parts.append("恒常检测 %.0f 天阈值" % days)
     if name:
         parts.append("量法登记 %s（%d 条）" % (name, len(methods)))
-    print("仪器生命周期闸门：OK（%s）" % (" + ".join(parts) or "空登记"))
-    return 0
+    return finish("仪器生命周期闸门", probs,
+                  "仪器生命周期闸门：OK（%s）" % (" + ".join(parts) or "空登记"))
 
 
 def _cases():
@@ -201,6 +181,10 @@ def _cases():
     ]
 
 
+GATE = meta("仪器生命周期闸门", "恒常检测（first_seen）+ 被证伪量法登记",
+            knobs=("REFLECT_INSTRUMENTS", "REFLECT_INSTRUMENT_DAYS", "REFLECT_FACTS"))
+
 if __name__ == "__main__":
-    sys.exit(selftest("仪器生命周期闸门（可插拔：恒常检测 + 量法登记）", _cases())
-             if "--selftest" in sys.argv else run(sys.argv[1:]))
+    sys.exit(main_selftest_or(sys.argv[1:],
+                              "仪器生命周期闸门（可插拔：恒常检测 + 量法登记）",
+                              _cases(), run))

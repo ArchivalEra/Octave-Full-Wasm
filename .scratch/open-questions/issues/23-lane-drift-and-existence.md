@@ -11,7 +11,7 @@
 
 **Status:** resolved
 
-**Settling:** 让选档器**存在性感知**（"能力上最优 **且** 站点真有这一档"才选它），然后：
+**Settling:** 让选档器**存在性感知**（"能力上最优 **且** 站点真有这一档"才选它），然后： —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 - 把新 `lane.js` + 新 `octave-core.js` 同步到 8761/8768（用 `build/promote-pages.sh`）后，
   `SITE_DIR=<站点> PROBES=1 sh build/sweep.sh <URL> probe-lane` ⇒ 8761 上仍 **17 PASS / 0 FAIL**
   （带头选 `threads`、不带头落 `base`）—— **不许**选 `w64`（那档不在）；

@@ -8,7 +8,7 @@ musl 标量超越函数（各负载里 `exp_inline` 24% / `log_inline` 10% / sin
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-04 **负判决**：spike A 两轮一致 geomean 0.991（sin/exp/log/pow 全部噪声内），精度与 musl 逐位一致；机制根因 = **wasm 无标量 FMA**（relaxed_madd 是 v128 专用，覆盖对象实测 0 条），musl 标量已在 ~2.7ns/调用（≈10 周期）的地板上，1.5× 门槛不可达。**链接期 libm 替换轴否决**；批量向量化路线（v128 madd）需要改调用点/整树重向量化，在插件契约之外。详见 build/113/NOTES-libm.md）
+**Status:** resolved （2026-10-04 **负判决**：spike A 两轮一致 geomean 0.991（sin/exp/log/pow 全部噪声内），精度与 musl 逐位一致；机制根因 = **wasm 无标量 FMA**（relaxed_madd 是 v128 专用，覆盖对象实测 0 条），musl 标量已在 ~2.7ns/调用（≈10 周期）的地板上，1.5× 门槛不可达。**链接期 libm 替换轴否决**；批量向量化路线（v128 madd）需要改调用点/整树重向量化，在插件契约之外。详见 build/113/NOTES-libm.md）
 
 **Settling:** 不存在 —— 本工单的第一交付物（`build/113/bench-libm-spike.sh`：
 候选标量实现（SLEEF 纯标量 u10 / musl-express 等）对 musl 现役，单向量 sin/exp/log/pow

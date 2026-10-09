@@ -17,8 +17,13 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 ## 地图（真值在哪里）
 
 - **现在是什么**（活状态）：`STATE.md` —— 正文只写现状、数字一律引用台账键；
-  末尾机器块由 `build/facts.py --render-doc STATE.md` 渲染，每提交重算。
+  末尾两个机器块（事实 `AUTO:FACTS` + 闸门名录 `AUTO:GATES`）由
+  `python3 zreflect/facts.py --render-doc STATE.md` 渲染，每提交重算。
 - **测出来的数字**（唯一产地）：`build/FACTS.json`（源）+ `STATE.md` 的 AUTO 块（渲染）。
+- **事实系统**：**机制** = `zreflect/`（vendored 上游 **Einfacht** 重构版：gate 平台 /
+  发现式名录 / 旋钮登记 / world 闸门 / 复跑 / 陈旧 / 悬案 / 三语 README）；
+  **本仓数据层** = `zreflect/measure_octave.py`（数据 vs 机制分离）；
+  旋钮的唯一可复现来源 = `reflect-hooks/Einfacht.env`；钩子挂 `reflect-hooks`。
 - **给 agent 的硬规矩**：`AGENTS.md`（路径铁律 / 三条不可违背 / 验收底线 / 批次收尾）。
 - **历史与事故**：`HISTORY.md`（append-only，`§5.x`）。
 - **悬案**：`.scratch/open-questions/issues/NN-*.md`（每条挂可执行结算件）。

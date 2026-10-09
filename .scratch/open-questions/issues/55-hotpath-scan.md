@@ -6,10 +6,10 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：扫描 11 负载；**首个非平台税发现已由结案实验 ① 证实** ——
+**Status:** resolved （2026-10-03：扫描 11 负载；**首个非平台税发现已由结案实验 ① 证实** ——
 `w64-base` 单线程对照：pthread 锁 **16% → 0%**、alloc+锁 41% → 20.7%；墙钟线程档慢 35%）
 
-**Settling:** `python3 build/113/hotpath-scan.py --port <p>`（工作站在
+**Settling:** `python3 build/113/hotpath-scan.py --port <p>`（工作站在 —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 `hotpath-stations/w64-sym`）；**结案实验 ①** = 同负载在 `w64-base`（单线程，无 pthread）上扫
 ⇒ alloc+锁 ≈0 且墙钟更快 ⇒ 推断成立；**结案实验 ②** = w64 换 `-sMALLOC=emmalloc` 重启扫描。
 

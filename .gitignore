@@ -154,6 +154,15 @@
 !.githooks/check-facts-replay.py
 !.githooks/check-readiness-pattern.py
 !.githooks/check-instruments.py
+
+# ── Einfacht 事实系统（重构版采纳，2026-10-09）─────────────────────────────────
+# 机制层（vendored 上游 ArchivalEra/Einfacht）+ 本仓数据层。
+!zreflect/
+!zreflect/*
+!reflect-hooks/
+!reflect-hooks/*
+!gates-selftest.sh
+!doctor.json
 !build/webgraphics/*
 !build/webdoc/*
 !build/assets-meta.json

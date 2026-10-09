@@ -7,10 +7,10 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：**faer 车道负判决** —— 单线程内核输 1.6×，理想 8 线程缩放
+**Status:** resolved （2026-10-03：**faer 车道负判决** —— 单线程内核输 1.6×，理想 8 线程缩放
 后仍全面落后现役 OpenBLAS-wasm64；Rust 车道结案）
 
-**Settling:** crate 在仓 `build/113/faer-bench/`（Cargo.toml + src/lib.rs，faer 0.22.6，纯
+**Settling:** crate 在仓 `build/113/faer-bench/`（Cargo.toml + src/lib.rs，faer 0.22.6，纯 —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 cdylib 无 bindgen）。复现三步：
 ```sh
 # ① 装 rust（一次性，仓库外）：RUSTUP_HOME=/mnt/hdd/crossbuild-tools/rust/rustup \

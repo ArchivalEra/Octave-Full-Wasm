@@ -7,7 +7,7 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：仪器建成 + 端到端实测 + 接进事实系统；首个答案
+**Status:** resolved （2026-10-03：仪器建成 + 端到端实测 + 接进事实系统；首个答案
 `dgemm_kernel 89.1%`）
 
 **Settling:** `python3 build/113/hotpath.py --selftest` ⇒ 7 PASS / 0 fail；

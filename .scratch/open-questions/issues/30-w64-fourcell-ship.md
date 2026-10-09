@@ -7,9 +7,9 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-01）
+**Status:** resolved （2026-10-01）
 
-**Settling:** 走标准批次收尾全套，判据逐条：
+**Settling:** 走标准批次收尾全套，判据逐条： —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 1. 8768 验绿（先把四格发到实验车道并跑 `PROBES=1` 全量）；
 2. promote → **8761 开机自检**（带头 ⇒ `__octaveLanes` 含 `w64` 且选中 `w64`）；
 3. **SHA 三层**（磁盘/HTTP/页面层）——注意 `base`/`threads` 两档 sha **必须不变**（`1ed3e528`/`e570905e`），

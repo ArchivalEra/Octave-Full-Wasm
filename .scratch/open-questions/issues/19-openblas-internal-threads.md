@@ -9,7 +9,7 @@
 
 **Status:** resolved
 
-**Settling:** 两值可分辨 —— 修好后
+**Settling:** 两值可分辨 —— 修好后 —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 `CELLS=C,A PROBE_... sh test/browser/run.sh test/browser/probe-e2-threads.mjs <threaded产物站点>`：
 格 C（只 dlopen）**返回**（干净报 "must be square"）⇒ A（裸跑）也返回 ⇒ rc=0 ⇒ 修好；
 格 C 仍挂 ⇒ 未修（当前实测形状）。**反向断言**：现役 `USE_THREAD=0` 站点上格 C 必须**本来就返回**

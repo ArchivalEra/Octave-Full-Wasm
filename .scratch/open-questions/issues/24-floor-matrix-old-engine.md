@@ -9,7 +9,7 @@
 
 **Status:** resolved
 
-**Settling:** `FLOOR_ENGINES=old-chromium sh test/browser/run.sh test/browser/probe-browser-floor.mjs <站点>`
+**Settling:** `FLOOR_ENGINES=old-chromium sh test/browser/run.sh test/browser/probe-browser-floor.mjs <站点>` —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 —— 旧引擎（<137）上：① 页面仍 **ready**、② `eval('2+2')` 成立、③ **D9 门必须关**
 （`__web_suspend_ok__`==0，因为 JSPI API 缺席）、④ lane 与 COI 一致；
 两条反证（不存在的页面必须 404 / 不产结果）也要在。

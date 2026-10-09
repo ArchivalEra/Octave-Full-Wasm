@@ -5,7 +5,7 @@ configure 第①步就死（`configure: error: linking to Fortran libraries from
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-01，本批修掉，带自证）
+**Status:** resolved （2026-10-01，本批修掉，带自证）
 
 **Settling:** `bash build/113/relink.sh --selftest` ⇒ 13 PASS / 0 fail（新增的两条：
 「rebuild w64 从模式表取车道依赖」+「`explain w64` 的 E2 钩子」）。

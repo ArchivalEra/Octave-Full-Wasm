@@ -7,10 +7,10 @@ catch/超时都救不了，embed 门面（`octave-embed.js` 的 try/catch→rc=-
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：守卫进 wasm + 探针 probe-preready-guard 5/0 + 无守卫反面对照
+**Status:** resolved （2026-10-03：守卫进 wasm + 探针 probe-preready-guard 5/0 + 无守卫反面对照
 红 + 已发运 8761，sha = 台账 `w64_wasm_sha`）
 
-**Settling:** `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh
+**Settling:** test/browser/probe-preready-guard.mjs —— HARNESS=<harness> 跑：rc=0 ⇒ 结算件成立、结论见 Answer；rc≠0 ⇒ 先修结算件。
 test/browser/probe-preready-guard.mjs <URL>` ⇒ `=== 5 PASS / 0 FAIL ===` ⇒ 守卫生效；
 ⑤ 格（quit 后 eval_string 应抛 "not ready"）报 `null function` ⇒ 无守卫（旧产物）。
 

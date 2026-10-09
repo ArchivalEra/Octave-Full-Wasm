@@ -12,7 +12,7 @@
 
 **Status:** resolved
 
-**Settling:** `SITE_DIR=/mnt/hdd/octave-wasm-build/site-w64 sh test/browser/run.sh test/browser/probe-lane.mjs`
+**Settling:** test/browser/probe-lane.mjs —— SITE_DIR=<站点> 跑：rc=0 ⇒ 选档结算件成立、结论见 Answer；rc≠0 ⇒ 先修结算件。
 （两轴版 COI × memory64 ⇒ 四格各一格；rc=0 ⇒ 四格选档全对；rc=7 ⇒ 任一格选错）
 
 **Type:** task

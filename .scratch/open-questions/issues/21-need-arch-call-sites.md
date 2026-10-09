@@ -10,7 +10,7 @@ arpack、qrupdate、suitesparse×8）。**只有 glpk 那条路径实测验证�
 
 **Status:** resolved
 
-**Settling:** 在容器里跑
+**Settling:** 在容器里跑 —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 `DEPS=/src/work/arch-audit-deps WORK=/src/work/arch-audit-work LANE_FLAGS="-pthread -sMEMORY64=1" bash /src/bin/build-libs.sh all`
 —— rc=0 且每个库都打出 `✅ …`（= 每处 `need_arch` 都真的执行了）；然后**逐库反向**：
 把其中任意一个 `.a` 换成 wasm32 的（例：`cp` 一份现役 wasm32 的 `libsndfile.a` 进去）再跑该库

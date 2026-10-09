@@ -8,11 +8,11 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：**mimalloc 成立** —— 同旗标交错 3 轮：墙钟 **1016→740 ms
+**Status:** resolved （2026-10-03：**mimalloc 成立** —— 同旗标交错 3 轮：墙钟 **1016→740 ms
 （−27%）**、pthread 锁 **10.3%→0%**、体积仅 +0.2%、数值 79/0 + dldfcn 71/0 全绿。
 发运是产品决定）
 
-**Settling:** 用 `relink.sh` 在 w64 上加 `-sMALLOC=emmalloc`（或 mimalloc）重链 → hotpath 复扫
+**Settling:** 用 `relink.sh` 在 w64 上加 `-sMALLOC=emmalloc`（或 mimalloc）重链 → hotpath 复扫 —— 墙钟降且 mutex 占比≈0 ⇒ 采纳；否则 ⇒ 分配器不是这块税的出口。
 同一批分配负载（`func-handle`/`loop`/`struct-array`）：
 `__pthread_mutex_*` 合计 **≈0** 且 `dlmalloc`/`dlfree` 占比下降且**墙钟降** ⇒ 采纳候选；
 否则如实记为"分配器不是这块税的出口"。

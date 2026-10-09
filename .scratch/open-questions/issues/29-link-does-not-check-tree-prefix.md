@@ -12,7 +12,7 @@
 
 **Status:** resolved
 
-**Settling:** `link <模式>` 在链之前读树的实际前缀（`grep '^prefix' Makefile` 或 `config.status`
+**Settling:** `link <模式>` 在链之前读树的实际前缀（`grep '^prefix' Makefile` 或 `config.status` —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 里那一条），与模式应有前缀（product→`/src/work/octave-install`、threads→`-threads`、w64→`-w64`）
 **比对**：不一致 ⇒ **点名 FATAL** 并打出"先 `rebuild <模式>` 重配"的下一步。
 **反向断言**：把树重配成 threads 前缀后跑 `link product` ⇒ 必须 FATAL（当前是静默产出坏产物）；

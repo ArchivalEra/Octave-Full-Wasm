@@ -14,9 +14,9 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-02 夜间批：死锁=调用方反模式×建池窗口竞态；调用方已修，NT=8 解锁）
+**Status:** resolved （2026-10-02 夜间批：死锁=调用方反模式×建池窗口竞态；调用方已修，NT=8 解锁）
 
-**Settling:** `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs
+**Settling:** test/browser/bench-lanes.mjs —— HARNESS=<harness> 跑：rc=0 ⇒ 结算件成立、结论见 Answer；rc≠0 ⇒ 先修结算件。
 <NT=8 实验站>/ w64` —— 出 `SPEED_JSON` ⇒ 死锁已解；零输出超时 ⇒ 仍死锁。
 （NT=8 产物与实验站都在：容器 `/src/websrc/w64-ob-nt8-out`、`w64-nt8-artifacts/`；复现链见
 `w64-logs/relink-w64-nt8*.log`。）

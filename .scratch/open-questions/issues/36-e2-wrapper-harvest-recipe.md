@@ -6,9 +6,9 @@
 
 **Blocked by:** None（工单 32/34/35 已修；树与补丁现在都对了）
 
-**Status:** resolved（按配方重跑成功：开机 1.3 s、四格 33/0、matmul 6.6×）
+**Status:** resolved （按配方重跑成功：开机 1.3 s、四格 33/0、matmul 6.6×）
 
-**Settling:** 按下面"正确配方"重跑后：`relink.sh link w64`（带 `E2_OPENBLAS`）⇒ `verdict=ok`
+**Settling:** build/113/relink.sh —— 带 `E2_OPENBLAS` 重链：verdict=ok ⇒ 配方可复现；verdict≠ok ⇒ 配方仍缺件。
 **且** `sh build/check-boot.sh http://127.0.0.1:<实验站点>/` ⇒ 开机过（**这一条才是判据**）。
 
 **Type:** research

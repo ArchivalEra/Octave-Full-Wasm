@@ -13,9 +13,9 @@ pre-commit），要么**永不复查**。于是"产物没变、但产出它的�
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-02：机制落地 + 首个实例 + 上游 issue 已提）
+**Status:** resolved （2026-10-02：机制落地 + 首个实例 + 上游 issue 已提）
 
-**Settling:** `python3 build/facts.py --selftest && python3 .githooks/check-facts-replay.py --selftest`
+**Settling:** `python3 build/facts.py --selftest && python3 .githooks/check-facts-replay.py --selftest` —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 —— 全 PASS（含见证档三条反向断言）⇒ 机制生效；任一 fail ⇒ 没落地。
 首个实例的实跑见证：`python3 build/113/witness-build-provenance.py w64` ⇒ `match`
 （漂移时 `DRIFT: …`）。

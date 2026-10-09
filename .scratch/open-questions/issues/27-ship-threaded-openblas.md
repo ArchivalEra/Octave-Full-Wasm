@@ -7,9 +7,9 @@ matmul 500² 中位数 0.006 s ⇒ ≈6.7× 收益保留）。本单 = 把这条
 
 **Blocked by:** None（19 的机制与补丁都已就绪）
 
-**Status:** resolved（2026-10-02 用户拍板：**不发运** —— wasm32 线冻结于 `wasm32-final` 分支，主线专注 w64 极限版）
+**Status:** resolved （2026-10-02 用户拍板：**不发运** —— wasm32 线冻结于 `wasm32-final` 分支，主线专注 w64 极限版）
 
-**Settling:** ①脚本形态已交付：`bash build/113/build-e2-lane.sh patch` 幂等接线（两条分支实测，见下）；
+**Settling:** ①脚本形态已交付：`bash build/113/build-e2-lane.sh patch` 幂等接线（两条分支实测，见下）； —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 ②`sh build/sweep.sh <新线程档产物站点>/` ⇒ rc=0 且全绿（**含 `accept-113-oct`**：
 它正是当年在 `USE_THREAD=1` 上超时 600s 的那条）；且 `bench-core` 的
 `矩阵乘 500x500` 中位数 ≤ 0.008 s（收益未丢）。

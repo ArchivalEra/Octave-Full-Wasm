@@ -7,10 +7,10 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：4 套已修 + 闸门 `.githooks/check-readiness-pattern.py` 落地，
+**Status:** resolved （2026-10-03：4 套已修 + 闸门 `.githooks/check-readiness-pattern.py` 落地，
 自证 6/0，已登记 `gates-selftest.sh` 名单 —— 33/33）
 
-**Settling:** `python3 .githooks/check-readiness-pattern.py --selftest` —— 6 PASS（含"该报的
+**Settling:** `python3 .githooks/check-readiness-pattern.py --selftest` —— 6 PASS（含"该报的 —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 必须报"与两条零值守卫）⇒ 闸门活着；实跑 `python3 .githooks/check-readiness-pattern.py`
 ⇒ `就绪反模式：94 个 .mjs 里 0 个`。反推：把任一套件的 `__octaveReady` 删掉重跑 ⇒ 必须红。
 

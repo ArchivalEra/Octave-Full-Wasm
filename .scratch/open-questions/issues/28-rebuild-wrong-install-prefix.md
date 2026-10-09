@@ -9,7 +9,7 @@
 
 **Status:** resolved
 
-**Settling:** `bash build/113/relink.sh rebuild threads --out <目录> --yes-rebuild`（修正后）
+**Settling:** `bash build/113/relink.sh rebuild threads --out <目录> --yes-rebuild`（修正后） —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 ⇒ 产物 `octave.js` 里 `grep -o '/src/work/octave-install[a-z0-9_-]*/share/octave/11.3.0' | sort -u`
 **必须只有 `…-threads` 一条**（不许出现裸的 `/src/work/octave-install/`）；
 且把该产物装进站点后 `sh build/sweep.sh <站点>/ accept-help` ⇒ **全绿**（当前是 5 PASS / 7 FAIL）。

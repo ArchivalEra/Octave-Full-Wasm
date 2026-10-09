@@ -7,7 +7,7 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：声明式清单 + 见证 + 事实键落地；真仓证伪测试通过）
+**Status:** resolved （2026-10-03：声明式清单 + 见证 + 事实键落地；真仓证伪测试通过）
 
 **Settling:** `python3 build/113/witness-build-inputs.py` ⇒ `ok`（或 `DRIFT: …`）；
 证伪测试：往 `build/113/link-web.sh` 的 `EXC_FLAGS` 塞 `-flto` ⇒ 必须 `DRIFT`（已实测）；

@@ -10,7 +10,7 @@
 
 **Status:** resolved
 
-**Settling:** 存在一条**受管辖**的入口，两值可分辨 ——
+**Settling:** 存在一条**受管辖**的入口，两值可分辨 —— —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 `sh build/promote-pages.sh --dry-run` 打印"只同步页面资产（清单见脚本）且**不碰**三大件"；
 真跑后 `sh build/promote-pages.sh --verify` ⇒ rc=0 且逐文件打印 `仓库/8761/8768/repo-site`
 四处的 sha 一致；**反向断言**：若有人改了三大件里任何一个，`--verify` 必须**红**

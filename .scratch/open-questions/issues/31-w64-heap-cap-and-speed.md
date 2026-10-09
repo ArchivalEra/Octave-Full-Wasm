@@ -5,9 +5,9 @@
 
 **Blocked by:** None（第一半已做；第二半要一次 w64 车道重链）
 
-**Status:** resolved（2026-10-02：第二半已建成实测 —— MAXIMUM_MEMORY=8GB、存活 7.45 GiB、W64_BIG_HEAP=yes、数值回归全绿；**promote 走 perf-max 票 08 的人工确认点**）
+**Status:** resolved （2026-10-02：第二半已建成实测 —— MAXIMUM_MEMORY=8GB、存活 7.45 GiB、W64_BIG_HEAP=yes、数值回归全绿；**promote 走 perf-max 票 08 的人工确认点**）
 
-**Settling:** `sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/`
+**Settling:** `sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/` —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 ⇒ 该探针结尾的 `W64_BIG_HEAP=yes`（当且仅当 `w64` 档量到 ≥4 GiB 存活上限）。
 **反向断言（现状即反证）**：在未抬上限的产物上它必须 `no` —— 今天实测就是 `no`（1.49 GiB）。
 速度那一半：`test/browser/bench-lanes.mjs` 四档各跑一遍（本单的"现状"表就是它的输出）。

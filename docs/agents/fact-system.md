@@ -4,6 +4,12 @@
 > 改了一处其余 5 处继续对外宣称旧值；一句已被实测推翻的断言在更正后仍留在同一文件里。
 > 这套系统的全部目的只有一个：**让"现在如此"必须能被一条命令证明，且被推翻时能被自动抓到。**
 > 你不用背任何一条规矩——它们都有闸门盯着，违反会被拦。你只需要知道**拦住你的时候该怎么办**。
+>
+> ★ **2026-10-09：已采纳完全重构后的 Einfacht**。**机制**在 `zreflect/`（vendored 上游：
+> gate 平台 / 发现式名录 / 旋钮登记 / world / 复跑 / 陈旧 / 悬案 / 三语 README），
+> **本仓数据层**在 `zreflect/measure_octave.py`（数据 vs 机制分离）。旋钮唯一可复现来源 =
+> `reflect-hooks/Einfacht.env`。旧路径 `.githooks/check-facts*.py` 等已退役（平台取代）。
+> `build/facts.py` 保留为**兼容壳**（转调 `zreflect/facts.py`）。
 
 ---
 
@@ -12,16 +18,16 @@
 ### ① 你想写一个数字（比如"导出 734 个"）
 
 **别写数字，写键名。** 测出来的数字**只在一个地方生产**：`build/FACTS.json`，
-渲染进 `HANDOFF.md` 文末的 `AUTO:FACTS` 块。正文引用它的写法是键名（例如
-`build/FACTS.json` 的 `exported_functions`）。`HANDOFF.md` 里**手抄数字**会被闸门拦
-（`.githooks/check-facts.py` 的"裸数字"规则）。
+渲染进 `STATE.md` 的 `AUTO:FACTS` 块（机器块由 `zreflect/facts.py --render-doc` 维护）。
+正文引用它的写法是键名（例如 `build/FACTS.json` 的 `exported_functions`）。
+活状态文档里**手抄数字**会被闸门拦（`zreflect/check_facts.py` 的"裸数字"规则）。
 
 - 每条事实自带 **`cmd`（复跑命令）与 `source`（出处）** —— 那才是这条数字的证明。
-- 看某个键的值与复跑方式：`python3 build/facts.py show <键名>`。
+- 看某个键的值与复跑方式：`python3 zreflect/facts.py show <键名>`（兼容壳：`python3 zreflect/facts.py show <键名>`）。
 
 ### ② 你重测了数字，然后被 FATAL 了 —— **那是设计行为，不是故障**
 
-`python3 build/facts.py` 重测全部事实并写回。它有**两道守卫**，都会 FATAL：
+`python3 zreflect/facts.py` 重测全部事实并写回。它有**两道守卫**，都会 FATAL：
 
 | 守卫 | 什么时候拦 | 你该做什么 |
 |---|---|---|
@@ -41,7 +47,7 @@
 - **推断**：写进 `build/113/NOTES-*.md`，**并注明哪个实验能结案它**。
   写不出结案实验的推断 = 猜想，**不许**留在活状态。
 - **被推翻**：登记进 `build/lib/retractions.json`（那里已有 10+ 条前车之鉴）。
-  `.githooks/check-retractions.py` 会在它**重新出现**时报错。
+  `zreflect/check_retractions.py` 会在它**重新出现**时报错。
 
 判据怎么写：**`—— rc=0 ⇒ 结论A；rc=7 ⇒ 结论B`** 这种**两种可区分结论**的形状。
 只描述做法、不描述判据的句子证伪不了任何事。
@@ -60,11 +66,11 @@
 ```bash
 python3 .githooks/update-readme.py        # 先刷新（**再** git add —— 顺序错了 pre-push 会判陈旧）
 python3 .githooks/update-handoff.py       # HANDOFF 的 AUTO:STATE 机器块
-python3 build/facts.py --render-doc HANDOFF.md   # 台账 → 事实块（改了数字就要刷）
+python3 zreflect/facts.py --render-doc STATE.md   # 台账 → 事实块（改了数字就要刷）
 sh build/gates-selftest.sh                # ★ 每个闸门先证明自己"会红"
 python3 .githooks/check-handoff.py && python3 .githooks/check-consistency.py \
   && python3 .githooks/check-wants.py && python3 .githooks/check-whitelist.py \
-  && python3 .githooks/check-retractions.py && python3 .githooks/check-facts.py
+  && python3 zreflect/check_retractions.py && python3 zreflect/check_facts.py
 git add -A && git commit …                # pre-commit 会把上面全部再跑一遍
 ```
 
@@ -85,7 +91,7 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
 
 ## §4 现状：哪些数字已经有键、哪些还没有
 
-- **有键的**（`python3 build/facts.py show` 能看）：现役 wasm32 双档的全部数字——
+- **有键的**（`python3 zreflect/facts.py show` 能看）：现役 wasm32 双档的全部数字——
   基础档（`wasm_sha` / `wasm_v128` / `exported_functions` / `accept_suites` / `accept_pass` …）、
   线程档（`threads_*` 那组）、E2 两组（`e2_single_*` / `e2_threaded_*`）、
   探针（`probe_lane_pass` / `probe_lane_fail`）、`env_vars`。
@@ -93,7 +99,7 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
   `w64_shared_memory` / `w64_exported_functions` / `w64_v128` / `w64_i64_insns` /
   `w64_oct_files` / `w64_oct_wasm64` / `w64_wasm_sha` / `w64_wasm_bytes`。
   它们的**生产者**是 `build/113/build-w64-lane.sh` 的 `facts` 阶段（写两份日志）+ 宿主侧
-  `docker cp` 产物到 `w64-artifacts/`；`python3 build/facts.py show w64_wasm64` 能查。
+  `docker cp` 产物到 `w64-artifacts/`；`python3 zreflect/facts.py show w64_wasm64` 能查。
   ⇒ **Q3 那几个内存上限还没上键**（它们来自一次浏览器实测，不是产物），仍是散文。
 - ⚠️ **教训（值得照着做）**：上键之前，w64 的数字只活在 `NOTES-wasm64.md` 与工单 Answer 的
   散文里 —— 而那份产物**后来又被重编过一次**，散文里的数字（734 / 4,189,800 / 44）
@@ -109,7 +115,7 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
 
 | 块 | 谁生成 | 装什么 |
 |---|---|---|
-| `HANDOFF.md` 的 `AUTO:FACTS` | `build/facts.py --render-doc` | 测出来的数字（唯一产地） |
+| `STATE.md` 的 `AUTO:FACTS` | `zreflect/facts.py --render-doc` | 测出来的数字（唯一产地） |
 | `HANDOFF.md` 的 `AUTO:STATE` | `.githooks/update-handoff.py` | 部署件 sha/体积、最近一次全绿回归 |
 | `README.md` 的 `AUTO:FILES` | `.githooks/update-readme.py` | 文件清单 |
 
@@ -132,13 +138,13 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
 
 ## 复跑契约（Einfacht #4 ④⑤ 移植，2026-10-02）
 
-- 台账每条事实默认 `replay=True`：`.githooks/check-facts-replay.py` 会**逐字执行** cmd 并要求
+- 台账每条事实默认 `replay=True`：`zreflect/check_facts_replay.py` 会**逐字执行** cmd 并要求
   stdout（去首尾空白）== 值。写不出这种 cmd 的（重活：浏览器/容器/构建/基准；派生/散文式），
-  在 `build/facts.py` 的 `_no_replay` 名单里**显式** `replay=False` —— 有名单、有明说，不静默。
+  在 `zreflect/measure_octave.py` 的 `_no_replay` 名单里**显式** `replay=False` —— 有名单、有明说，不静默。
 - **每跑必变的量**（随机填充、时间戳类）：存**一次实测采样** + 在 note 里写明它怎么变
   （消费侧 stable 逐字判 / 不稳定档结构判），**不许裸存** —— 裸存 = 永远红 = 噪音 = 整闸被关。
   值会变 ≠ 不能进台账，得先声明它怎么变。
-- 跨语言消费方（CI、编译型语言的测试进程）读值一律走 `python3 build/facts.py --get KEY`
+- 跨语言消费方（CI、编译型语言的测试进程）读值一律走 `python3 zreflect/facts.py --get KEY`
   （只打印值本身），**不要自己解析 FACTS.json**。
 
 ### 第三档：`witness` —— 贵事实的便宜见证（2026-10-02，工单 42）
@@ -148,7 +154,7 @@ pre-commit），要么**永不复查**。`-flto` 事故（HISTORY §5.78）正�
 但产出它的工具变了"（容器 `link-web.sh` 被塞进 `-flto`）一路走到全量浏览器回归才炸。
 
 ⇒ `fact(..., witness=<便宜命令>, witness_expect=<期望 stdout>)`：**与 `replay` 正交**，
-贵事实照样挂见证、**每提交必跑**；`check-facts-replay.py` 逐字执行它并要求 stdout 逐字相等。
+贵事实照样挂见证、**每提交必跑**；`zreflect/check_facts_replay.py` 逐字执行它并要求 stdout 逐字相等。
 见证的是**来源/上下文**，不是值本身。形状契约：两参**同时给或同时不给**。
 首个实例：`build/113/witness-build-provenance.py <车道>`（"部署件由仓库现役 link-web.sh
 构建"），台账键 `w64_build_tool_match`。
@@ -164,10 +170,10 @@ emsdk 5.0.7 上**恒为 0**（该 objdump 对这条指令打印 `<unknown>`）�
 
 ⇒ `fact(..., calibrate=<样本命令>, calibrate_expect=<样本已知输出>)`：声称"产物里有没有 X"
 的 cmd 配一个**已知含 X 的样本**。与 `replay`/`witness` 正交、**每提交真跑**，
-`check-facts-replay.py` 不符即报"**仪器失真**"（先用已知正样本证明仪器看得见，再计数）。
+`zreflect/check_facts_replay.py` 不符即报"**仪器失真**"（先用已知正样本证明仪器看得见，再计数）。
 首个实例：`w64_relaxed_madd`（校准样本 `test/fixtures/relaxed_madd_min.wasm`，字节计数 `fd 87 02`）。
 
-**配套：仪器生命周期闸门** `.githooks/check-instruments.py`（可插拔）：
+**配套：仪器生命周期闸门** `zreflect/check_instruments.py`（可插拔）：
 - `FACTS_INSTRUMENT_DAYS=天` —— **恒常检测**：台账键 `first_seen` 超阈值 ⇒ 报
   "人工确认：这条 cmd 是在量，还是恒返回同一个数？"
 - `FACTS_INSTRUMENTS=build/instruments.json` —— **量法登记位**：被证伪的**量法**像

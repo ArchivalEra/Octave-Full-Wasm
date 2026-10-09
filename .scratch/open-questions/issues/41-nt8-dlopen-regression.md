@@ -87,10 +87,10 @@ HARNESS=/mnt/hdd/octave-wasm-build/harness   sh test/browser/run.sh test/browser
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-02 深夜：**真因 = 容器 `link-web.sh` 漂移（`-flto`）**，
+**Status:** resolved （2026-10-02 深夜：**真因 = 容器 `link-web.sh` 漂移（`-flto`）**，
 非线程数；洁净脚本重链后 dldfcn 71/0，NT=8 已重发运 8761）
 
-**Settling:** 已结案 —— 见下「结案」节。判别件 = `site-w64-lto/w64`（`-flto`）跑 dldfcn
+**Settling:** 已结案 —— 见下「结案」节。判别件 = `site-w64-lto/w64`（`-flto`）跑 dldfcn —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 必红（44/27）；洁净重链的 NT8（`f2269106…`）必绿（71/0）。两条都能复跑，结论互斥可辨。
 
 ## 结案（2026-10-02 深夜）

@@ -7,9 +7,9 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-02：随 Einfacht #4 移植一并落地）
+**Status:** resolved （2026-10-02：随 Einfacht #4 移植一并落地）
 
-**Settling:** `sh build/gates-selftest.sh` 全绿**且**新闸门 `check-facts-replay.py` 的
+**Settling:** `sh build/gates-selftest.sh` 全绿**且**新闸门 `check-facts-replay.py` 的 —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 `--selftest` 至少含三类用例（裸值相符不报 / stdout 含值但不相等必须报 / 全豁免必须报）；
 反向断言：把某条可复跑事实的 `cmd` 改坏（如 `sha256sum /nonexistent`）⇒ 本闸门必须红。
 

@@ -7,9 +7,9 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：全 9 题对表完毕，三行反超原生天花板、两行小输 —— 见 Answer）
+**Status:** resolved （2026-10-03：全 9 题对表完毕，三行反超原生天花板、两行小输 —— 见 Answer）
 
-**Settling:** `sh build/113/bench-native.sh`（写 `w64-logs/native-baseline.json`）+
+**Settling:** `sh build/113/bench-native.sh`（写 `w64-logs/native-baseline.json`）+ —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs
 http://127.0.0.1:8761/ w64` —— 两侧 JSON 合成结算表（本单 Answer 的表）；数值与台账
 `native_*` / `w64_ob_*` / `w64_vs_netlib_*` 键一致 ⇒ 结算成立。

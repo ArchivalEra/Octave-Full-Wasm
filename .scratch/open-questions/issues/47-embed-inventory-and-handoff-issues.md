@@ -5,11 +5,11 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：逐接口 14/14 PASS + 修掉一个真缺陷（on.error 死订阅）+
+**Status:** resolved （2026-10-03：逐接口 14/14 PASS + 修掉一个真缺陷（on.error 死订阅）+
 两张 issue 已提 [#1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1) UI 开工包 /
 [#2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2) 部署工单）
 
-**Settling:** `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh
+**Settling:** test/browser/probe-embed-inventory.mjs —— HARNESS=<harness> 跑：rc=0 ⇒ 结算件成立、结论见 Answer；rc≠0 ⇒ 先修结算件。
 test/browser/probe-embed-inventory.mjs <部署了 embed-demo 的站点>` ⇒ 14/14 PASS；同站
 `accept-embed-api` 13/0、`accept-embed-multi` 13/0。实验站 8865 留档可复跑。
 

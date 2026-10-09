@@ -15,7 +15,7 @@ FATAL: dlsync BigInt 补丁没打上 ⇒ 运行期 dlopen 会崩
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：bug 定位 + 修法定了 + 证伪方式定了；**未随手改**——它弱化
+**Status:** resolved （2026-10-03：bug 定位 + 修法定了 + 证伪方式定了；**未随手改**——它弱化
 一处 fail-closed，需按下面那步谨慎做）
 
 **Settling:** 修后 `python3 -c "import hotpath; print(hotpath.symbols('w64-base')['names'])"` ⇒

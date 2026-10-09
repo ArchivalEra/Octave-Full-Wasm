@@ -20,7 +20,9 @@
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：**NT=12/16 均不快于 NT=8** —— 交错 3×3 实测定论，
+**Settling:** test/browser/bench-lanes.mjs —— 交错复跑 w64-logs/il-nt{12,8} 配对中位数：NT=12/16 ≤ NT=8 ⇒ 曲线峰在 8（保持不动）；任一格显著快于 NT=8 ⇒ 重开补测。
+
+**Status:** resolved （2026-10-03：**NT=12/16 均不快于 NT=8** —— 交错 3×3 实测定论，
 曲线峰在 8；两产物 dldfcn 71/0 可行但不采纳）
 
 ## Answer

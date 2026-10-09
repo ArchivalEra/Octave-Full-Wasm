@@ -6,10 +6,10 @@ TypeScript"；并追问"DOM 重绘一下比计算性能消耗都大，要不这�
 
 **Blocked by:** None
 
-**Status:** resolved（2026-10-03：TS 重写完成、三套 embed 验收全绿、输出插入 −99%；
+**Status:** resolved （2026-10-03：TS 重写完成、三套 embed 验收全绿、输出插入 −99%；
 结论 = **DOM 不是瓶颈、更不该挪进 wasm**，合并刷新 + 可替换 Sink 是对解）
 
-**Settling:** 重写后跑 `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh
+**Settling:** 重写后跑 `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh —— rc=0 ⇒ 结算件成立、结论见该单 Answer；rc≠0 ⇒ 先修结算件（门没红＝没结案）。
 test/browser/{accept-embed-api,accept-embed-multi,probe-embed-inventory}.mjs http://127.0.0.1:8865/`
 —— 三套应全绿（13/0、13/0、14/0）；`sh build/build-embed-ts.sh` 应可重编。
 
