@@ -139,7 +139,8 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
 - `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
   `DEPLOY.md` — Deployment
 - `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness
-  (`SWEEP_JOBS=4` parallelisierbar)
+  (`SWEEP_JOBS=4` parallelisierbar; letzter grüner Lauf = `accept_suites` /
+  `accept_pass` im Ledger)
 - Grafik (seit 2026-10-09 **Engine-autoritativ**): `bridge/octave-core.js`
   schützt den Kern-`m/plot`-Baum vor Host-Schatten-Stubs (Snapshot + Restore +
   Löschen von Neuanlagen), `p5canvas.js`/`queue.js` lösen das Modul über
