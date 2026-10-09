@@ -67,3 +67,20 @@ figure 路径，反而幸存。
 - 附带修了 embed 路径的第二层缺陷：`octave-page.js` 的 `assets` 工厂在 isDefault 时
   复用文件级别名，而它惰性绑 `global.Module`（embed 不设 ⇒ `Module.FS 尚未就绪` ⇒
   plotbridge/webgraphics/pkgfix 整链装不上）。判据已改为 `G.Module === mod`。
+
+---
+
+## 更正与 A/B 证据（2026-10-09，引擎侧追加）
+
+⚠️ 上文"引擎守卫会兜住"要说准确：**兜住的前提是引擎胶水到位**（即取到带守卫的
+`bridge/octave-core.js`）。完全相同 UI 拓扑上的 A/B 实测（同一 UI dist + 同一 serve.py，
+只换 core）：
+
+| 站点 | `octave-core.js` | 注入 UI 的 figure 桩后跑 title/gcf/grid/bar |
+|---|---|---|
+| 8879 | pre-fix（无守卫） | **0 PASS / 4 FAIL**（`figure: function called with too many outputs`） |
+| 8878 | post-fix（带守卫） | **4 PASS / 0 FAIL** |
+
+⇒ 修复**不是**"引擎自动兜底"，而是"取到带修复的 core 之后才成立"。所以本单保留 open，
+直到 UI 仓重新 vendor 并部署。引擎侧已把 `scripts/sync-bridge.sh` 的默认取件源
+（`/mnt/hdd/octave-wasm-build/site-illegalperf`）刷新为带修复版本。

@@ -4380,3 +4380,20 @@ IP 不许成为强制主线，main 保留不删（CI 部署触发器）。
   IP 站点（含 `rust_sort` declared）跑出**假红**——本次提交时就踩到一次。
 - **提交**：master `b82de77`（origin + mirror）；容器已恢复 IP 线供给（`f4bf15b`，
   witness + plugin-check 双双复绿）。
+
+### 5.102 issue #5 收尾：UI 取件链刷新 + A/B 复核 + 上游单关闭（2026-10-09）
+
+- **UI 单保留 open（用户裁定）**：Octave-UI#1 是 UI 侧的行动项。
+- **审计发现取件链断点**：UI 的 `scripts/sync-bridge.sh` 默认源 =
+  `/mnt/hdd/octave-wasm-build/site-illegalperf`，而该目录的页面资产仍是 10-05 旧件
+  （`octave-core.js` 无守卫）⇒ **UI 即使重新 vendor 也拿不到修复**。
+  ⇒ 用受管辖入口 `build/113/site-illegalperf.sh --candidate w64-artifacts` 重装配
+  （w64 槽 wasm sha 不变 f6fec91f；页面资产换成带守卫版本）。
+- **A/B 复核（同一 UI 拓扑、同一 serve.py，只换 core）**：pre-fix = **0/4 FAIL**
+  （title/gcf/grid/bar 全报 too many outputs）；post-fix = **4/4 PASS**。
+  ⇒ 措辞更正：**不是"引擎自动兜底"，是"取到带修复的 core 才成立"**——已在上游单更正，
+  并记档 `docs/agents/ui-issue-graphics-crash.md`。
+- **UI 取件链端到端复绿**：`site-illegalperf → UI public/bridge → 页面` 全链 8878 上
+  `accept-gfx-isolation` 6/6。
+- **上游四处反哺单全部关闭**：本仓 #1–#5（开工包/部署单/WebGPU RFC/本地化/图形崩溃）
+  + Einfacht #10（doctor）/ #13（world 闸门）——均已落地或已交付，逐条带结案说明关闭。

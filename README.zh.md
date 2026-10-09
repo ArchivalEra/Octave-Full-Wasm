@@ -109,7 +109,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 
 - `STATE.md` —— 活状态；`build/FACTS.json` —— 实测数字台账（每键带复跑命令）
 - `zreflect/` —— 事实系统（**2026-10-09 采纳 Einfacht 重构版**：闸门平台 / 发现式名录 / 旋钮登记 / world 闸门）；`zreflect/measure_octave.py` 是本仓数据层，`reflect-hooks/Einfacht.env` 是旋钮载体
-- `HISTORY.md` —— 逐批 append-only 记录（上文全部证据在 §5.77–§5.101）
+- `HISTORY.md` —— 逐批 append-only 记录（上文全部证据在 §5.77–§5.102）
 - `maintaince.md` —— 方向地图；`docs/embed-api.md` —— 嵌入契约；`DEPLOY.md` —— 部署
 - `build/113/` —— 车道构建配方 + 闸门；`test/browser/` —— 验收 harness（`SWEEP_JOBS=4` 可并行）
 - `.scratch/open-questions/issues/` —— 本地工单 tracker

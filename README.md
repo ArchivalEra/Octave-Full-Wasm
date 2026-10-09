@@ -98,7 +98,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 - `STATE.md` — live status; `build/FACTS.json` — measured-numbers ledger (each key carries a re-run command)
 - `zreflect/` — the fact system (**Einfacht refactor adopted 2026-10-09**: gate platform / discovered gate registry / knob registry / world gate); `zreflect/measure_octave.py` is this repo's data layer, `reflect-hooks/Einfacht.env` the knob carrier
-- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.101)
+- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.102)
 - `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
 - `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel)
 - `.scratch/open-questions/issues/` — local ticket tracker
@@ -214,7 +214,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (19904 bytes)
 - `CONTEXT.md` (10585 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (358239 bytes)
+- `HISTORY.md` (359575 bytes)
 - `LICENSE` (34523 bytes)
 - `README.de.md` (9615 bytes)
 - `README.zh.md` (8591 bytes)
@@ -647,7 +647,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `docs/agents/issue-tracker.md` (3217 bytes)
 - `docs/agents/memory.md` (3919 bytes)
 - `docs/agents/triage-labels.md` (1606 bytes)
-- `docs/agents/ui-issue-graphics-crash.md` (3459 bytes)
+- `docs/agents/ui-issue-graphics-crash.md` (4327 bytes)
 - `docs/agents/upstream-issues.md` (12882 bytes)
 - `docs/charts/perf-5way.svg` (7540 bytes)
 - `docs/charts/perf-data.json` (1029 bytes)
