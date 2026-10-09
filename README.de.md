@@ -147,7 +147,7 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   `window.__octaveHosts` auf — so erreichen Figuren im Embed-Modus das DOM;
   Abnahme = `accept-gfx-isolation` + `accept-gfx-render`
 - `.scratch/open-questions/issues/` — lokaler Ticket-Tracker
-- `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien)
+- `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien); `docs/agents/ui-issue-interface-change.md` — Mitteilung von Schnittstellen-/Verhaltensänderungen an das UI-Repo
 
 Die Liste der verfolgten Dateien (Pfad + Bytes) pflegt der Hook im
 [AUTO:FILES-Block von README.md](README.md).

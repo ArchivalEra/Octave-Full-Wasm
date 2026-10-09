@@ -39,3 +39,28 @@
 ```bash
 sh test/browser/run.sh test/browser/accept-gfx-render.mjs <URL> ui   # 期望 14 PASS / 0 FAIL
 ```
+
+## 补充实测（2026-10-09 晚）：UI 现在拿的是**第一轮**修复，本轮还没到
+
+在 UI 仓的**当前 `dist`** 上实测（`accept-gfx-render.mjs <URL> ui`）：
+
+| 断言 | UI 当前结果 |
+|---|---|
+| A1–A5 plot/plot+title+grid/bar/surf/stem **上屏** | ❌ 全 fail（无图） |
+| B1–B3 `hist` 三形态 | ❌ `horizontal dimensions mismatch … __pb_add__ ← bar` |
+| C1 `legend` | ❌ `no valid object to label` |
+| D1 `figure()` 真句柄 | ✅ |
+| D2 `plot()` 真句柄 | ❌ `h=1`、`ok=0`（仍是影子桩的假 1） |
+
+**1 PASS / 13 FAIL** —— 与上游 issue 复测者的原话症状一致。
+差别在两轮修复：
+
+| UI dist 现在有 | 本轮新加（UI 还没有） |
+|---|---|
+| `gfxGuard`（第一轮：只抓 `figure` 的 0 输出退化） | `_gfxAbsent`（`drawnow` 是被创建的 m 文件 ⇒ 盖住 C++ 内建 ⇒ 零像素） |
+| — | 守卫抗覆盖（抓 `h = plot` 返回假 1 的新版桩） |
+| — | `moduleOf()`（embed 下 `window.Module` 缺席 ⇒ 图贴不上屏） |
+| — | 16 shim 补 `__pb_strip_axes__`（**`hist` 崩的真根因**） |
+
+⇒ 再同步一次 bridge + plotbridge 资产即可 14/14（引擎侧同版本拓扑已验证）。
+⚠️ 提醒过 UI：`.gz` 伴侣与 `assets/m/plotbridge.js`（`hist` 修复在 m 资产里，不在 JS 里）。

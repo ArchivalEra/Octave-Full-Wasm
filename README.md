@@ -103,7 +103,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 - `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel; latest all-green sweep = `accept_suites` / `accept_pass` in the ledger)
 - graphics (engine-authoritative since 2026-10-09): `bridge/octave-core.js` protects the core `m/plot` tree from host shadow stubs (snapshot + restore + delete-created), `p5canvas.js`/`queue.js` resolve the module via `window.__octaveHosts` so figures reach the DOM in embed mode; acceptance = `accept-gfx-isolation` + `accept-gfx-render`
 - `.scratch/open-questions/issues/` — local ticket tracker
-- `docs/agents/upstream-issues.md` — issues filed back upstream to [Einfacht](https://github.com/ArchivalEra/Einfacht) (archived copies)
+- `docs/agents/upstream-issues.md` — issues filed back upstream to [Einfacht](https://github.com/ArchivalEra/Einfacht) (archived copies); `docs/agents/ui-issue-interface-change.md` — the interface/behaviour notice filed to the UI repo
 
 ## Branches (three independently maintainable lines)
 
@@ -217,8 +217,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (365673 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (10049 bytes)
-- `README.zh.md` (8968 bytes)
+- `README.de.md` (10165 bytes)
+- `README.zh.md` (9062 bytes)
 - `STATE.md` (28097 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
@@ -649,7 +649,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `docs/agents/memory.md` (3919 bytes)
 - `docs/agents/triage-labels.md` (1606 bytes)
 - `docs/agents/ui-issue-graphics-crash.md` (4327 bytes)
-- `docs/agents/ui-issue-interface-change.md` (2485 bytes)
+- `docs/agents/ui-issue-interface-change.md` (3810 bytes)
 - `docs/agents/upstream-issues.md` (12882 bytes)
 - `docs/charts/perf-5way.svg` (7540 bytes)
 - `docs/charts/perf-data.json` (1029 bytes)
