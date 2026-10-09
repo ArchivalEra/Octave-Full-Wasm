@@ -101,7 +101,9 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 
 三条线经**同一条 fork 管线**吃上游 Octave 更新（`upstream/octave` 分支
 `wasm/11.3.0`）；各线 pin 各自的 fork 提交。共享构建容器里换线 = submodule update +
-重供给 + 部署该线的 `relink.sh`/`link-web.sh`（见 `maintaince.md`）。
+重供给 + 部署该线的 `relink.sh`/`link-web.sh` + `OCTAVE_WASM_BASE` 指该线站点 +
+`core.hooksPath` 指该线的钩子（IP 线 = `reflect-hooks/`，另两线 = `.githooks/`）
+（见 `maintaince.md`）。
 
 ## 仓库地图
 

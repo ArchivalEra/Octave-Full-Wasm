@@ -121,8 +121,10 @@ UI-Anbindung: [Embed-API](docs/embed-api.md) und
 Alle drei essen Upstream-Octave-Updates über dieselbe Fork-Pipeline
 (`upstream/octave` Branch `wasm/11.3.0`); jede Linie pinnt ihren eigenen
 Fork-Commit. Linienwechsel im gemeinsamen Build-Container = submodule update +
-neu provisionieren + `relink.sh`/`link-web.sh` dieser Linie deployen
-(siehe `maintaince.md`).
+neu provisionieren + `relink.sh`/`link-web.sh` dieser Linie deployen +
+`OCTAVE_WASM_BASE` auf die Site dieser Linie zeigen lassen + `core.hooksPath` auf die
+Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
+`reflect-hooks/`, auf den anderen beiden in `.githooks/`) — siehe `maintaince.md`.
 
 ## Repository-Karte
 

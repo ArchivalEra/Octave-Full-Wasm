@@ -115,7 +115,9 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 All three eat upstream Octave updates through the same fork pipeline
 (`upstream/octave` branch `wasm/11.3.0`); each line pins its own fork commit.
 Switching lines in the shared build container = submodule update + re-provision +
-deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
+deploy that line's `relink.sh`/`link-web.sh` + point `OCTAVE_WASM_BASE` at that line's
+site + set `core.hooksPath` to that line's hooks (the fact system lives in `reflect-hooks/`
+on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintaince.md`.
 
 ## Repository contents
 
@@ -214,8 +216,8 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (356596 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (9393 bytes)
-- `README.zh.md` (8457 bytes)
+- `README.de.md` (9615 bytes)
+- `README.zh.md` (8591 bytes)
 - `STATE.md` (28097 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
