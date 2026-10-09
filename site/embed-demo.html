@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!-- Octave-Full-Wasm — **嵌入 API 上手页**（工单 38；接口表 = docs/embed-api.md）
+     Copyright (C) 2026 ArchivalEra · SPDX-License-Identifier: AGPL-3.0-or-later
+
+     这是给前端开发者的**接口活文档**：每个接口一个按钮，输出面板就地显示结果。
+     页面接线 = 标准四步（与 index.html 同款）：
+       ① 静态资产：assets-loader/queue/p5canvas/webaudio/webaudiorec/webfilepick/webnet
+       ② octave-core.js（内核）+ octave-embed.js（本 API 层）
+       ③ lanes.js（选档清单）+ octave.js（MODULARIZE 工厂，页面按 lane 自动选档后加载）
+       ④ OctaveEmbed.create() → 拿 octave 对象
+     用法：站点根目录放本页 + bridge/*.js，浏览器开 /embed-demo.html。 -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Octave Embed API · 上手页</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; background: #111; color: #ddd; }
+  button { margin: 2px; padding: 6px 10px; background: #2a2a2a; color: #ddd; border: 1px solid #555; border-radius: 4px; }
+  button:disabled { opacity: .4; }
+  #panel { background: #000; border: 1px solid #444; min-height: 3em; padding: .5em; white-space: pre-wrap; font-family: monospace; }
+  img, canvas { max-width: 100%; background: #fff; }
+  h3 { margin: .6rem 0 .2rem; color: #9cf; }
+  code { color: #cfc; }
+</style>
+<script type="text/javascript" src="assets-loader.js"></script>
+<script type="text/javascript" src="queue.js"></script>
+<script type="text/javascript" src="p5canvas.js"></script>
+<script type="text/javascript" src="webaudio.js"></script>
+<script type="text/javascript" src="webaudiorec.js"></script>
+<script type="text/javascript" src="webfilepick.js"></script>
+<script type="text/javascript" src="webnet.js"></script>
+<script type="text/javascript" src="octave-core.js"></script>
+<script type="text/javascript" src="octave-page.js"></script>
+<script type="text/javascript" src="octave-embed.js"></script>
+<script type="text/javascript" src="lanes.js"></script>
+<script type="text/javascript" src="lane.js"></script>
+<script type="text/javascript">
+  // 按档加载 octave.js（index.html 同款：lane.js 同步定档 ⇒ 解析期写入选中档的胶水）
+  window.__octaveLanePlan = octaveLaneFiles(octaveLaneState.lane);
+  document.write('<script type="text/javascript" src="'
+                 + window.__octaveLanePlan.js + '"><\/script>');
+</script>
+</head>
+<body>
+<h2>Octave Embed API · 上手页</h2>
+<p>页脚状态：<code id="st">booting…</code>　选档：<code id="lane">?</code></p>
+
+<h3>基础（§2 命令）</h3>
+<button data-api="eval">eval 语句</button>
+<button data-api="evalJSON">evalJSON 表达式 → 值</button>
+<button data-api="workspace">workspace() 工作区</button>
+<button data-api="pwd">pwd() / cd()</button>
+<button data-api="help">help('plot')</button>
+<button data-api="interrupt">interrupt()</button>
+
+<h3>输出与图（§1 事件）</h3>
+<button data-api="plot">eval 画图（figures 上屏）</button>
+<button data-api="export">figures.export() → PNG</button>
+<button data-api="outputsub">on.output 订阅（近 3 秒输出打点）</button>
+
+<h3>文件（fs）</h3>
+<button data-api="fswrite">fs.write/read</button>
+<button data-api="fsdownload">fs.download('demo.txt')</button>
+
+<h3>输入</h3>
+<button data-api="input">eval input() —— 先 octave.input('42') 预填</button>
+
+<pre id="panel"></pre>
+<pre id="output"></pre>   <!-- ⚠ 不要预置 #p5figure：p5canvas 出图时动态建（静态空壳会让 GL 纹理创建拿到零尺寸容器） -->
+
+<script>
+  var panel = document.getElementById('panel');
+  function show(tag, v) {
+    panel.textContent += '[' + tag + '] ' + (typeof v === 'string' ? v : JSON.stringify(v)) + '\n';
+  }
+
+  OctaveEmbed.create({}).then(function (o) {
+    window.octave = o;
+    document.getElementById('st').textContent = o.state;
+    document.getElementById('lane').textContent = (window.__octaveLanes || []).join(',') + ' ⇒ ' + (window.__octaveLane ? (window.__octaveLane.lane || window.__octaveLane) : '?');
+    o.on.state(function (s) { document.getElementById('st').textContent = s; });
+    o.on.figure(function (el) { show('figure', el ? '新图上屏' : '清空'); });
+    show('ready', 'octave 对象就绪：' + o.id);
+    document.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+  }, function (e) { show('boot 失败', String(e)); });
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button');
+    if (!b || !window.octave) return;
+    var o = window.octave, api = b.dataset.api, p;
+    if (api === 'eval') p = o.eval("disp('hello from Octave'); A = magic(4);").then(function (r) { show('eval', r); });
+    else if (api === 'evalJSON') p = o.evalJSON("svd(magic(4))(1)").then(function (r) { show('evalJSON', r); });
+    else if (api === 'workspace') p = o.workspace().then(function (v) { show('workspace', v); });
+    else if (api === 'pwd') p = o.pwd().then(function (v) { return o.cd('/tmp').then(function (r) { return o.pwd(); }); }).then(function (v) { show('pwd/cd', v); });
+    else if (api === 'help') p = o.help('plot').then(function (r) { show('help', r.ok ? '（help 文本在输出区）' : r); });
+    else if (api === 'interrupt') show('interrupt', o.interrupt() ? '中断旗标已置位（到安全点生效）' : '中断原语不可用');
+    else if (api === 'plot') p = o.eval("x=linspace(0,2*pi,200); plot(x,sin(x)); title('embed demo');").then(function (r) { show('plot', r); });
+    else if (api === 'export') show('export', (o.figures.export() || '（还没有图）').slice(0, 64) + '…');
+    else if (api === 'outputsub') (function () { var n = 0; o.on.output(function (t) { n += t.length; }); setTimeout(function () { show('outputsub', '3 秒内累计输出 ' + n + ' 字符'); }, 3000); o.eval("disp('sub-a'); disp('sub-b');"); })();
+    else if (api === 'fswrite') (function () { o.fs.write('/tmp/embed-demo.txt', 'hello embed\n'); show('fs', o.fs.read('/tmp/embed-demo.txt')); })();
+    else if (api === 'fsdownload') o.fs.download('/tmp/embed-demo.txt');
+    else if (api === 'input') (function () { o.input('42'); o.eval("v = input('给个数: '); disp(['你给了 ', num2str(v)]);"); })();
+    if (p && p.then) p.catch(function (e) { show('API 异常', String(e)); });
+  });
+  document.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+</script>
+</body>
+</html>

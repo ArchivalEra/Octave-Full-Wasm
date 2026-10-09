@@ -402,6 +402,113 @@
       //    免得动到 77 个套件依赖的启动时序。
       Module.execute_interp();
 
+      // ── 图形核心 m 树保护（issue #5，2026-10-09）──────────────────────────────
+      // 现象：`title/xlabel/grid/legend/axis/hold/subplot/bar` 全报
+      //   「figure: function called with too many outputs」，而裸 `plot` 正常。
+      // 根因（实测钉死，见 test/browser/probe-issue5-*.mjs）：
+      //   **外部宿主**（如 Octave-UI 的 SafePlotSinkPolyfill）在每次运行前往 FS 写若干
+      //   **0 输出**的桩函数（`function figure (varargin)`，无 `h =`）。而核心
+      //   `plot/util/gcf.m:57` 写的是 `h = figure ()` —— Octave 的**输出个数检查发生在
+      //   函数体之前** ⇒ 进函数体前就抛错。凡经 `gca→gcf→figure` 的句柄路径全崩；
+      //   裸 `plot` 因为宿主也换了它、不走 figure，反而幸存。
+      // 两条解析规则（都在本机实测过）：
+      //   ① **调用者目录优先** —— `gcf.m` 调 `figure()` 先在 `plot/util/` 里找 ⇒ 宿主
+      //      覆盖核心 `plot/util/figure.m` 就直接命中桩（改 path 顺序救不了）；
+      //   ② **path 顺序**（`.`=cwd 永远第一）—— 用户直接敲 `figure()` 时，宿主写在
+      //      cwd 根 / home 的同名桩会盖住 plotbridge 与核心实现。
+      // 做法（**最小、只读、可证伪**）：开机**快照**受保护文件；每次用户 eval 前扫一遍，
+      //   ① 核心文件**签名退化**（原带输出、现 0 输出）⇒ 还原快照；
+      //   ② cwd 根 / home 的**已知同名桩**（开机不存在、现出现且 0 输出）⇒ 删除；
+      //   任一处改动 ⇒ `rehash`。
+      //   ⚠️ 只在"退化"时动手 ⇒ **干净站点上它是纯 no-op**（反向断言见 accept-gfx-isolation）。
+      //   ⚠️ 不碰 UI 仓库、不碰 Octave 树 ⇒ 三线照常吃上游更新。
+      var _gfxCore = [
+        '/usr/src/octave/m/plot/util/figure.m',
+        '/usr/src/octave/m/plot/util/gcf.m',
+        '/usr/src/octave/m/plot/util/gca.m',
+        '/usr/src/octave/m/plot/util/axes.m',
+        '/usr/src/octave/m/plot/util/newplot.m',
+        '/usr/src/octave/m/plot/util/subplot.m',
+        '/usr/src/octave/m/plot/util/hold.m',
+        '/usr/src/octave/m/plot/draw/plot.m',
+        '/usr/src/octave/m/plot/draw/bar.m',
+        '/usr/src/octave/m/plot/appearance/title.m',
+        '/usr/src/octave/m/plot/appearance/xlabel.m',
+        '/usr/src/octave/m/plot/appearance/ylabel.m',
+        '/usr/src/octave/m/plot/appearance/legend.m',
+        '/usr/src/octave/m/plot/appearance/axis.m',
+      ];
+      // 宿主往"path 最前面"写的同名桩（`. `=cwd、home）—— 出现即删（开机时它们不存在）
+      var _gfxShadows = [
+        '/figure.m', '/plot.m', '/gcf.m', '/gca.m',
+        '/home/web_user/figure.m', '/home/web_user/plot.m',
+        '/home/web_user/gcf.m', '/home/web_user/gca.m',
+      ];
+      function _hasOutput(text) {
+        // 第一个 `function` 行里，`(` 之前有 `=` ⇒ 该函数声明了输出；不是函数文件 ⇒ null。
+        var m = text.match(/^[ \t]*function[ \t]+([^\n]*)/m);
+        if (!m) return null;
+        return m[1].indexOf('=') >= 0;
+      }
+      var _gfxSnap = {};                          // 核心 path → 开机内容（必有）
+      function _snapshotGfx() {
+        for (var i = 0; i < _gfxCore.length; i++) {
+          var p = _gfxCore[i];
+          try { _gfxSnap[p] = Module.FS.readFile(p, { encoding: 'utf8' }); }
+          catch (e) { _gfxSnap[p] = null; }       // 本产物没有这个文件 ⇒ 不参与保护
+        }
+      }
+      var _gfxRepaired = [];                      // 诊断/断言用：修过哪些 path
+      function _repairGfx() {
+        var changed = false;
+        for (var i = 0; i < _gfxCore.length; i++) {
+          var p = _gfxCore[i], snap = _gfxSnap[p];
+          if (!snap || _hasOutput(snap) !== true) continue;    // 快照本就没输出 ⇒ 不保护
+          var cur;
+          try { cur = Module.FS.readFile(p, { encoding: 'utf8' }); } catch (e) { continue; }
+          if (cur !== snap && _hasOutput(cur) === false) {     // 签名退化 ⇒ 还原
+            try {
+              Module.FS.writeFile(p, snap);
+              if (_gfxRepaired.indexOf(p) < 0) _gfxRepaired.push(p);
+              changed = true;
+            } catch (e) { /* 还原失败不致命：下一次 eval 会再试 */ }
+          }
+        }
+        for (var j = 0; j < _gfxShadows.length; j++) {
+          var s = _gfxShadows[j], txt = null;
+          try { txt = Module.FS.readFile(s, { encoding: 'utf8' }); } catch (e) { continue; }
+          if (_hasOutput(txt) === false) {                     // 0 输出的同名桩 ⇒ 删
+            try {
+              Module.FS.unlink(s);
+              if (_gfxRepaired.indexOf(s) < 0) _gfxRepaired.push(s);
+              changed = true;
+            } catch (e) {}
+          }
+        }
+        if (changed) { try { _rawEvalString.call(Module, 'rehash;'); } catch (e) {} }
+        return changed;
+      }
+      _snapshotGfx();
+      // 包一层 eval_string：**用户求值前**先修一次（宿主在上一轮末尾写的桩，这一轮开头清掉）。
+      // ⚠️ 内部调用（本内核自己调 eval_string）也走这层 —— 无害（无桩时是 no-op）。
+      // ⚠️ `_rawEvalString` 必须在 `_repairGfx` 之前捕获（rehash 走原始函数，避免递归）。
+      var _rawEvalString = Module.eval_string;
+      if (typeof _rawEvalString === 'function') {
+        Module.eval_string = function () {
+          try { _repairGfx(); } catch (e) { /* 守卫不许弄坏求值本身 */ }
+          return _rawEvalString.apply(this, arguments);
+        };
+      }
+      // worker 路径走 eval_async：同样在它前面修一次。
+      if (typeof Module.eval_async === 'function') {
+        var _rawEvalAsync = Module.eval_async;
+        Module.eval_async = function () {
+          try { _repairGfx(); } catch (e) {}
+          return _rawEvalAsync.apply(this, arguments);
+        };
+      }
+      st.gfxGuard = function () { return { repaired: _gfxRepaired.slice() }; };
+
       // 资产车道：读清单但不预先加载任何东西（能力资产用到哪个才 fetch 哪个）。
       // 控制台里：await OctaveAssets.load('ode15s') / OctaveAssets.list()
       var Assets = host.assets(Module, baseOf(), function () { return st.ready; });
