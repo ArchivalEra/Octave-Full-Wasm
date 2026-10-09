@@ -189,9 +189,19 @@ function createOctaveHost(opts) {
             doc: document,
             assets: function (mod, b, isReady) {
                 // 默认实例复用 assets-loader.js 文件级那份（否则测试读的与 boot 链用的不是同一份状态）。
-                if (isDefault && G.OctaveAssets)
+                // ⚠️ 但文件级别名是 `createOctaveAssets(null, …)` —— **惰性绑 `global.Module`**。
+                //    页面宿主会设它（index.html: `window.Module = createOctaveHost(…)`），而 **embed 路径不设**
+                //    （MODULARIZE，模块只活在 `__octaveHosts[i].mod`）⇒ 别名一用就抛「Module.FS 尚未就绪」
+                //    ⇒ plotbridge/webgraphics/pkgfix 整链装不上（issue #5 第二层；实测 addpath 报
+                //    `plotbridge: No such file or directory`）。判据 = **全局 Module 是否就是本模块**
+                //    （`G.Module === mod`，与赋值时序无关）：是 ⇒ 老行为；否 ⇒ 建一份绑到本实例 mod 的，
+                //    并更新别名（保证"测试读的与 boot 链用的"仍是同一份状态）。
+                if (isDefault && G.OctaveAssets && G.Module === mod)
                     return G.OctaveAssets;
-                return G.createOctaveAssets(mod, b, isReady);
+                var loader = G.createOctaveAssets(mod, b, isReady);
+                if (isDefault)
+                    G.OctaveAssets = loader;
+                return loader;
             },
             onReady: function () { inst.ready = true; if (isDefault) {
                 G.__octaveReady = true;
