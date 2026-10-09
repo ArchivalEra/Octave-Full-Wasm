@@ -4451,3 +4451,22 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 **发运**：8761 + 8768 + 仓库 `site/`（页面资产批 `promote-pages` 四处一致、三大件未动；
 **三份分档清单** `manifest{,.threads,.w64}.json` 的 plotbridge sha 同步重算 —— 只改基础清单
 会让线程/w64 档拿旧 .m 包，那是本仓点过名的坑）。
+
+### 5.104 引擎图形权威化的 **UI 告知**（2026-10-09，接 §5.103）
+
+- **判定**：本轮修静默失败族时，确实产生了 **UI 可观察的变化**（虽然 Embed API 签名未变）
+  ⇒ 按用户点令"有接口变化就给 UI 仓提 issue"⇒ 提 **Octave-UI #2**（留档
+  `docs/agents/ui-issue-interface-change.md`）。
+- **两条变化 + 一个坑（全部实测）**：① 宿主影子桩被引擎守卫清掉 ⇒ UI 的
+  `__octave_web_plot__` 数据通道失效（`exist`=0、`__get_plot_data__().count`=0、
+  `which('plot')`=引擎实现）⇒ 他们的 plot 卡片不再渲染；② 引擎渲染的图开始插入 DOM
+  （`#p5figure` + 560×420 `<img>`，因 UI 页没有 `#output` 而挂在 **BODY**）；
+  ③ **裸 `plot` 不 flush**（8761 实测：无 drawnow = 0 张图，补一次 = 1 张）——
+  组合效果 = UI 现在跑 `plot(1:10)` 什么都看不到。
+- **不擅自迎合**：挂载点是跨仓约定 ⇒ 引擎侧不单方面加新约定，issue 里给两个提案
+  （`window.__octaveP5Mount` 选择器 / UI 页加 `<div id="output">`）等 UI 拍板。
+- **给 UI 的路**：① 执行器末尾补 `drawnow`（一行，先做这个）；② 用已落地的
+  `figures.geometry()` 走几何通道自渲染；③ PNG + 可配挂载点。另建议整体退役
+  `SafePlotSinkPolyfill`（`install()` 已成空操作）。
+- **API 面自证**：`bridge/octave-embed.js` 本轮零提交（最后改动 = 工单 50 的
+  `figures.geometry`），`docs/embed-api.md` 未动 ⇒ "接口没变、行为变了"这句可复跑核对。

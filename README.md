@@ -98,7 +98,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 - `STATE.md` — live status; `build/FACTS.json` — measured-numbers ledger (each key carries a re-run command)
 - `zreflect/` — the fact system (**Einfacht refactor adopted 2026-10-09**: gate platform / discovered gate registry / knob registry / world gate); `zreflect/measure_octave.py` is this repo's data layer, `reflect-hooks/Einfacht.env` the knob carrier
-- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.103)
+- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.104)
 - `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
 - `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel; latest all-green sweep = `accept_suites` / `accept_pass` in the ledger)
 - graphics (engine-authoritative since 2026-10-09): `bridge/octave-core.js` protects the core `m/plot` tree from host shadow stubs (snapshot + restore + delete-created), `p5canvas.js`/`queue.js` resolve the module via `window.__octaveHosts` so figures reach the DOM in embed mode; acceptance = `accept-gfx-isolation` + `accept-gfx-render`
@@ -215,7 +215,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (19904 bytes)
 - `CONTEXT.md` (10585 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (364091 bytes)
+- `HISTORY.md` (365673 bytes)
 - `LICENSE` (34523 bytes)
 - `README.de.md` (10049 bytes)
 - `README.zh.md` (8968 bytes)
@@ -649,6 +649,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `docs/agents/memory.md` (3919 bytes)
 - `docs/agents/triage-labels.md` (1606 bytes)
 - `docs/agents/ui-issue-graphics-crash.md` (4327 bytes)
+- `docs/agents/ui-issue-interface-change.md` (2485 bytes)
 - `docs/agents/upstream-issues.md` (12882 bytes)
 - `docs/charts/perf-5way.svg` (7540 bytes)
 - `docs/charts/perf-data.json` (1029 bytes)
