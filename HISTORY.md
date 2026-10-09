@@ -4397,3 +4397,57 @@ IP 不许成为强制主线，main 保留不删（CI 部署触发器）。
   `accept-gfx-isolation` 6/6。
 - **上游四处反哺单全部关闭**：本仓 #1–#5（开工包/部署单/WebGPU RFC/本地化/图形崩溃）
   + Einfacht #10（doctor）/ #13（world 闸门）——均已落地或已交付，逐条带结案说明关闭。
+
+### 5.103 issue #5 第二轮的 5 项余留：**静默失败族**（2026-10-09，接 §5.100/§5.102）
+
+> 上游 issue 复测评论（同日）：主崩溃链已修好，但报 **5 项余留**，其中 2 项是"命令全绿、
+> 屏幕上什么都没有"。逐条复现后定位到 **4 个真根因**（2 个在引擎 JS 侧、1 个在守卫、
+> 1 个在桥的 m 侧），1 项是误报。**静默失败比报错更危险**——所以它们各自配了
+> "上屏"断言（DOM 里有图才算过），不是"函数返回了"。
+
+**复现（两套拓扑）**：干净四格站（）与 **UI 拓扑**（UI dist + 我方 bridge + UI 的
+serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**真图形句柄**（负值伪随机，
+是 Octave 的"句柄不是小整数"设计），不是未初始化内存 —— 但**图确实一个像素都没出**。
+
+**根因与修法（四条）**：
+
+1. **`p5canvas.js` / `queue.js` 在 embed 模式下读 `window.Module`**（余留 2/3 的直接原因）。
+   embed 是 MODULARIZE，模块只活在 `window.__octaveHosts[i].mod`，页面全局没有 `Module`
+   ⇒ `readBytes()` 抛「OctaveP5: Module.FS 尚未就绪」⇒ **引擎渲出的 PNG 永远贴不上屏**
+   （UI 侧自己的 SVG 覆盖层看起来"有图"，它一旦画不了就整片空白）。
+   ⇒ 加 `moduleOf()`：页面全局 `Module` > 注册表里第一个 ready 的实例 > 第一个有 FS 的实例；
+   `queue.js` 的 `fs()` 同款（四个队列桥都经它，一处修全好）。
+2. **守卫漏了一类感染面**：`drawnow` 在本构建里是 **C++ 内建**，m 树里**没有**
+   `plot/draw/drawnow.m` ⇒ 宿主的 no-op 桩**创建**了它、凭 path 顺序**盖住内建** ⇒
+   toolkit 永远不被 flush ⇒ **图一个像素都不出**，而命令全绿。
+   守卫的"快照比对"对"开机不存在的文件"是 no-op ⇒ 漏。
+   ⇒ 加 `_gfxAbsent` 判据：**开机不存在的受保护路径，出现即删**。
+   同时把守卫升级成**抗覆盖**（核心文件只要与快照不一致就还原，不再只看"0 输出"这一种退化）——
+   UI 新版桩已改成 `function h = plot` 并返回假句柄 `1`，旧判据抓不到它。
+3. **`hist` 崩的根因 = 桥的 `bar` 没剥句柄（16 个 shim 同病）**（余留 4）。
+   核心 `hist.m:259` 写的是 `bar (hax, x, freq, "hist", …)` —— **首参是 axes 句柄**；
+   桥的 `bar.m` 直接把它当数据 ⇒ `__pb_add__` 报
+   `horizontal dimensions mismatch (1x1 vs Nx1)`。`plot.m` 早就用 `__pb_strip_axes__` 处理过
+   这个形态，**其余 16 个 shim 都没有**（同族缺陷：`area/bar/barh/errorbar/loglog/mesh/pie/
+   plot3/scatter/scatter3/semilogx/semilogy/stairs/stem/surf/contour`）。
+   ⇒ 16 个文件各加两行（剥句柄 + 镜像仍用**原样**实参 `orig`），与 `plot.m` 对齐。
+   `hist` 三形态全过；`bar`/`stem`/`surf`/… 的**句柄首参**形态也随之修好。
+4. **误报一条**：`plot(1:10,'o-')`（单数据 + 规格）在本构建里**本来就正常**
+   （与 `plot(1:10)` 同样出图）—— 评论那次观测到"无图"是**上面根因 1/2 的连带**
+   （图根本没上屏），不是参数解析错。本套件里有对照断言钉住这一点。
+
+**新增验收套件 `test/browser/accept-gfx-render.mjs`（14 断言，两种模式）**：
+- **A** 引擎渲染通道：`plot` / `plot+title+xlabel+grid` / `bar` / `surf` / `stem` 各自
+  **必须贴出一张图**（`<img>` blob 或幅面 >200px 的 SVG）；⚠️ 判据用**轮询**
+  （GL 首次初始化数秒，固定 sleep 会把首例判成假红 —— 第一版就这么错了一次）
+- **B** `hist` 三形态（nbins / 默认 / edges）**不报错且上屏**
+- **C** `legend` 不再抛 `no valid object to label`
+- **D**（反向断言）`figure()`/`plot()` 返回**真图形句柄**（`ishghandle`=1）——
+  宿主影子桩返回的假 `1` 过不了这一条
+- 两种模式都跑：`clean`（干净站）与 `ui`（先装 **UI 现行版**影子桩：`h=plot`/no-op
+  `drawnow`/helper）—— **两种模式各 14/14**。
+- 另：`accept-gfx-isolation`（6/6）不回归；`glue-selftest` 91/91（桥的宿主侧 `%!test`）。
+
+**发运**：8761 + 8768 + 仓库 `site/`（页面资产批 `promote-pages` 四处一致、三大件未动；
+**三份分档清单** `manifest{,.threads,.w64}.json` 的 plotbridge sha 同步重算 —— 只改基础清单
+会让线程/w64 档拿旧 .m 包，那是本仓点过名的坑）。

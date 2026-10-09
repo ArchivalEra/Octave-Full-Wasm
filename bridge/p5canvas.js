@@ -23,6 +23,28 @@
   const CONTAINER_ID = 'p5figure';
   const last = { path: null, bytes: 0, error: null, count: 0 };
 
+  // ── 取"本页的解释器模块"（issue #5 余留①，2026-10-09）──────────────────────
+  // ⚠️ 只读 `window.Module` 在 **embed 路径下必失**：embed 用 MODULARIZE，
+  //    模块只活在注册表 `window.__octaveHosts[i].mod` 上，页面全局没有 `Module`
+  //    ⇒ 这里抛「Module.FS 尚未就绪」⇒ **引擎渲出来的图永远贴不上屏**
+  //    （宿主自己的 SVG 覆盖层看起来"有图"，一旦宿主那条路也画不了就整片空白）。
+  // 判定顺序：① 页面全局 `Module`（老页面宿主逐字节不变）；
+  //          ② 注册表里**第一个 ready** 的实例（embed；默认实例即宿主那一份）；
+  //          ③ 注册表里第一个有 FS 的实例（还没 ready 时也别立刻放弃）。
+  function moduleOf() {
+    try {
+      if (window.Module && window.Module.FS) return window.Module;
+    } catch (e) { /* 继续找注册表 */ }
+    const hosts = window.__octaveHosts || [];
+    for (let i = 0; i < hosts.length; i++) {
+      if (hosts[i] && hosts[i].ready && hosts[i].mod && hosts[i].mod.FS) return hosts[i].mod;
+    }
+    for (let i = 0; i < hosts.length; i++) {
+      if (hosts[i] && hosts[i].mod && hosts[i].mod.FS) return hosts[i].mod;
+    }
+    return null;
+  }
+
   function container() {
     let el = document.getElementById(CONTAINER_ID);
     if (!el) {
@@ -37,7 +59,7 @@
   }
 
   function readBytes(path) {
-    const M = window.Module;
+    const M = moduleOf();
     if (!M || !M.FS) throw new Error('OctaveP5: Module.FS 尚未就绪');
     return M.FS.readFile(path);   // Uint8Array
   }
@@ -99,7 +121,7 @@
     try { return new TextDecoder().decode(fs.readFile(path)); } catch (e) { return null; }
   }
   function pollFallback() {
-    const M = window.Module;
+    const M = moduleOf();
     const fs = M && M.FS;
     if (!fs || !fs.readFile) return;
     const nogl = readText(fs, NOGL) !== null;
@@ -117,7 +139,7 @@
   setInterval(pollFallback, 250);
 
   function evalString(s) {
-    const M = window.Module;
+    const M = moduleOf();
     if (!M || !M.eval_string) throw new Error('OctaveP5: Module.eval_string 尚未就绪');
     const rc = M.eval_string(s);
     return { rc, err: M.last_error_message() };

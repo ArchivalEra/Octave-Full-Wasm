@@ -34,6 +34,10 @@ function h = errorbar (varargin)
   ## P5：镜像要用**原始**实参 —— 下面会把 varargin 改写（剥末尾 spec）
   orig = varargin;
 
+  ## 剥掉"首参是目标 axes 句柄"那一层（核心内部会这么调；镜像用 orig = 原样实参）。
+  ## ⚠️ 见 `__pb_strip_axes__.m`：桥只跟踪**当前 axes**；别的 axes 首参 ⇒ 明确报错。
+  varargin = __pb_strip_axes__ ("errorbar", varargin);
+
   s = __pstate__ ();
   if (! s.hold)
     s = __pb_clear_series__ (s);

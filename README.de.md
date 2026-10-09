@@ -134,7 +134,7 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   Gate-Plattform / entdecktes Gate-Register / Knopf-Register / World-Gate);
   `zreflect/measure_octave.py` ist die Datenschicht dieses Repos,
   `reflect-hooks/Einfacht.env` der Knopf-Träger
-- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.102 tragen die obigen
+- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.103 tragen die obigen
   Belege)
 - `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
   `DEPLOY.md` — Deployment
