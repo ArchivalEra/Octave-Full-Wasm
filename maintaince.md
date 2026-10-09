@@ -75,7 +75,11 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 `…/next-base/site` → site-illegalperf-baseline 符链；master 线 = 仓库 `site/`，即
 `OCTAVE_WASM_BASE=$PWD`）——plugin-check/check-facts/witness 读的都是它，不指本线 =
 在别的线的部署上跑闸门（实测三次：NEXT 拣选红、master 提交红、NEXT 重编产物混入
-rust_sort）。四步少一步 = 在别的线的状态上构建或验收。
+rust_sort）。⑤ **钩子目录**：`core.hooksPath` 是**仓库全局**的，而 IP 线（Einfacht 重构后）
+用 `reflect-hooks/`、master 与 wasm32-final 仍用 `.githooks/` ⇒ 切到后两线必须
+`git config core.hooksPath .githooks`，切回 IP 线改回 `reflect-hooks`（否则拿**别的线**的
+钩子跑本线的提交/推送——实测一次：master 推送被 IP 的 reflect-hooks 三语闸门误拦）。
+五步少一步 = 在别的线的状态上构建、验收或跑钩子。
 
 **fork 更新 SOP（每条线相同）**：上游发版 → `upstream/octave` fork 分支 merge 上游 tag
 → 该线 bump pin（NEXT = 无缝 lineage；IP = 缝随分支携带）→ provision → rebuild → 全量

@@ -654,7 +654,7 @@ deploy that line's `relink.sh`/`link-web.sh` (see `maintaince.md`).
 - `docs/manual-test-checklist.md` (4475 bytes)
 - `doctor.json` (1587 bytes)
 - `gates-selftest.sh` (10721 bytes)
-- `maintaince.md` (7163 bytes)
+- `maintaince.md` (7587 bytes)
 - `reflect-hooks/Einfacht.env` (1122 bytes)
 - `reflect-hooks/Einfacht.env.example` (1606 bytes)
 - `reflect-hooks/einfacht-env.sh` (4231 bytes)
