@@ -4361,3 +4361,22 @@ IP 不许成为强制主线，main 保留不删（CI 部署触发器）。
 - **UI 侧只提不改**：issue 正文留档 `docs/agents/ui-issue-graphics-crash.md`，已提
   <https://github.com/ArchivalEra/Octave-UI/issues/1>（要求：重新 vendor 我方 bridge +
   建议 figure 桩声明输出或删除）。
+
+### 5.101 审计发现并修复 master 线的 submodule pin 夹带漂移（2026-10-09，接 §5.100）
+
+- **发现经过**（三线收尾审计时）：核对三线 gitlink 发现 `master` 的 `upstream/octave`
+  指向 `f4bf15b`（**rust-sort 缝**），而它自己的活状态声明是"中庸 wasm64、**无 rust 缝**、
+  pin `a5a7208`"（STATE 台账键 `octave_pin` 也写 a5a7208）⇒ 声明与事实矛盾。
+- **根因**：`929fc63`（"抹除 isui.ren"批，2026-10-07）用 `git add -A` 把**当时的 IP 工作区
+  submodule 状态**一起提交进了 master —— 典型"夹带"（该批的意图只有删工作流 + README/.gitignore）。
+  两条闸门都能证伪它：`witness-upstream-pin`（容器树 stamp vs gitlink）与
+  `check-facts-replay`（`octave_pin` 的 cmd 逐字复跑）。
+- **修法**（master 线，走正规换线循环）：`git -C upstream/octave checkout a5a7208`
+  → `bash build/provision-upstream.sh --only octave`（容器 stamp 对齐）
+  → 提交 gitlink。**witness 复跑 = ok（2 个 pin 全部一致）**。
+- **教训（写进 maintaince 换线规则的同族）**：`git add -A` 会把**共享工作区**里别的线的
+  submodule 状态一起带上；提交前用 `git diff --cached --stat` 核一眼有没有 `upstream/*`
+  夹带。另外：本线闸门必须配本线的 `OCTAVE_WASM_BASE`（第 ④ 步），否则 plugin-check 会拿
+  IP 站点（含 `rust_sort` declared）跑出**假红**——本次提交时就踩到一次。
+- **提交**：master `b82de77`（origin + mirror）；容器已恢复 IP 线供给（`f4bf15b`，
+  witness + plugin-check 双双复绿）。

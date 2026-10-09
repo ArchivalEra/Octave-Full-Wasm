@@ -214,7 +214,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (19904 bytes)
 - `CONTEXT.md` (10585 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (356596 bytes)
+- `HISTORY.md` (358239 bytes)
 - `LICENSE` (34523 bytes)
 - `README.de.md` (9615 bytes)
 - `README.zh.md` (8591 bytes)
