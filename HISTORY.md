@@ -4298,3 +4298,66 @@ IP 不许成为强制主线，main 保留不删（CI 部署触发器）。
   换线脚本写出声明被核对。留档 `docs/agents/upstream-issues.md`。
 - **换线第 4 步入档（maintaince）**：闸门与推送的站点口径 `OCTAVE_WASM_BASE` 必须指向
   本线（IP=默认 site；NEXT=next-base；master=仓库 site/）——本轮三次闸门红全是它。
+
+### 5.100 事实系统采纳重构版 Einfacht + issue #5 图形崩溃修复（2026-10-09）
+
+> 用户两条硬约束：① **重中之重 = 拉取完全重构后的 Einfacht**；② **UI 侧代码只准提 issue、
+> 不准动**。全部工作按这两条做。
+
+**A. 事实系统升级：采纳重构版 Einfacht（Phase 1–5）**
+
+- 背景：本仓事实系统仍是旧 `.githooks/` 布局（自有 `Gate` 类 + 单体 `build/facts.py` 1467 行），
+  而上游 Einfacht 已重构为 `zreflect/` 平台（gate rc 契约 / registry 发现式名录 / knobs 登记 /
+  guard 决策-执行分离 / world 闸门）+ `reflect-hooks/`。
+- **机制层 vendor**：`cp -r Einfacht/{zreflect,reflect-hooks,gates-selftest.sh}` → 本仓根。
+- **数据层移植**（数据 vs 机制分离）：从 `build/facts.py` 抽出采集段（`measure()` 主体 1022 行）
+  → `zreflect/measure_octave.py`；`zreflect/facts.py` 的 `measure_example()` 转调它。
+  **133 条事实逐键一致**（零掉条、零改口，实测对账）。
+- **兼容壳**：`build/facts.py` 降为转调 `zreflect/facts.py` 的薄壳（老命令/文档照旧可用）；
+  单一真相源，杜绝两份生成器走散。
+- **旋钮载体**：`reflect-hooks/Einfacht.env`（`REFLECT_FACTS=build/FACTS.json` 等本仓口径）；
+  `hooksPath` 指 `reflect-hooks`。
+- **合流钩子**：平台 13 闸门 + 本仓 6 专属闸门（check-state/consistency/wants/whitelist/
+  readiness-pattern/witness-upstream-pin）+ `plugin-check.py` + 两套自证台（平台 + 构建侧 40 闸门）。
+- **退役 5 道被平台取代的旧 checker**（check-facts/-replay/-instruments/-retractions/
+  readme_sync）—— 平台完全覆盖，留两份即走散。
+- **悬案工单规范化**：新 `check_questions` 比旧约定严（Status 首词必须精确角色词；
+  Settling 首行必须给两种可区分结论）⇒ 33 张单 Status 加空格、27+ 张 Settling 补判据、
+  6 张补结算件路径 —— **改数据、不关闸门**（纪律）。
+- **踩到的坑（已修，入档）**：① 跨仓库可配置性自证把 `REFLECT_INSTRUMENTS/_DAYS` 全局配
+  ⇒ 夹具里路径解析失败、误报"名字写死在代码里" ⇒ 改**内联传**（前缀只作用该子进程）；
+  ② 数据层 `measure()` 在夹具里量的是本仓产物 ⇒ 空表 ⇒ 三道闸门必红 ⇒ 加**通用 measure
+  回退**（判据 = GATE_ROOT 是不是本仓）。
+- **验证**：平台 13 闸门自证全绿 + 跨仓库可配置性反向断言全红 + `doctor=ok` +
+  pre-commit 端到端 exit 0。提交 `20e45c0`（`einfacht-refactor` → FF 合并 IllegalPerformance）。
+
+**B. issue #5：三线图形装饰命令全面崩溃**
+
+- **现象**（上游 Octave-UI issue #5 报告）：`title/xlabel/ylabel/grid/legend/axis/hold/subplot/bar`
+  全报 `figure: function called with too many outputs`；裸 `plot` 正常。
+- **根因**（实测钉死，`test/browser/probe-issue5-repro.mjs`）：Octave-UI 的
+  `SafePlotSinkPolyfill` 每次运行前往引擎 FS 写 12 个文件（4 函数 × 3 路径），其中
+  `figure` 桩是**零输出**（`function figure (varargin)`，无 `h =`）；核心 `plot/util/gcf.m:57`
+  写 `h = figure ()` —— Octave **输出个数检查在函数体之前** ⇒ 进函数体前抛错 ⇒ 凡经
+  `gca→gcf→figure` 的句柄路径全崩；裸 `plot` 因宿主也换了它、不走 figure 而幸存。
+- **两条解析规则**（本机实测）：① **调用者目录优先**（`gcf.m` 调 `figure()` 先在 `plot/util/`
+  找 ⇒ 覆盖核心 `figure.m` 直接命中桩，**改 path 顺序救不了**）；② **path 顺序**（`.`=cwd
+  永远第一 ⇒ cwd 根/home 同名桩盖住 plotbridge 与核心实现）。
+- **修法**（`bridge/octave-core.js`，引擎侧，**不动 UI 仓库、不动 Octave 树** ⇒ 三线照常吃上游更新）：
+  开机快照 14 个图形核心 m 文件 + 8 个 cwd/home 同名桩路径；每次用户 eval 前
+  （`eval_string`/`eval_async` 包装）扫一遍：核心文件**签名退化**（原带输出、现 0 输出）⇒
+  还原快照；cwd/home 的 0 输出同名桩 ⇒ 删除；任一处改动 ⇒ `rehash`。
+  只在"退化"时动手 ⇒ **干净站点纯 no-op**。
+- **第二层缺陷**（`bridge/octave-page.{ts,js}`）：embed 路径下 isDefault 复用文件级
+  `OctaveAssets` 别名，而它惰性绑 `global.Module`（embed 不设 ⇒ 「Module.FS 尚未就绪」⇒
+  plotbridge/webgraphics/pkgfix 整链装不上）。判据改为 `G.Module === mod`，否则建绑本实例的一份。
+- **验证**：`test/browser/accept-gfx-isolation.mjs` 6/6（干净 13/13 不回归 + 注入桩后 13/13 +
+  守卫自证 + 合法写入不受影响的反向断言）；**四格全绿**（base/threads/w64/w64-base 各 6/6）；
+  真实 UI 拓扑（UI dist + 我方 bridge + UI serve.py）6/6。
+- **三线同步**：IP `f3a4851` / master `f6ec52a` / wasm32-final `87b6c8b`（冻结线只搬 core 守卫
+  —— 无 octave-page 层）。
+- **发运**：页面资产批 `promote-pages`（8761 + 8768 + 仓库镜像，三大件未动）→ 8761 boot OK
+  → 8761 上 6/6 → 仓库 `site/` rsync → `check-site-parity --strict` 三处完全一致。提交 `3a80fe3`。
+- **UI 侧只提不改**：issue 正文留档 `docs/agents/ui-issue-graphics-crash.md`，已提
+  <https://github.com/ArchivalEra/Octave-UI/issues/1>（要求：重新 vendor 我方 bridge +
+  建议 figure 桩声明输出或删除）。
