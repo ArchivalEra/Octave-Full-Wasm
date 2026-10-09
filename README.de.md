@@ -126,13 +126,17 @@ neu provisionieren + `relink.sh`/`link-web.sh` dieser Linie deployen
 
 ## Repository-Karte
 
-- `STATE.md` — Live-Status; `build/FACTS.json` — Messwert-Ledger (130 Schlüssel,
-  jeder mit Wiederholbefehl)
-- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.97 tragen die obigen
+- `STATE.md` — Live-Status; `build/FACTS.json` — Messwert-Ledger (jeder Schlüssel
+  mit Wiederholbefehl)
+- `zreflect/` — das Faktensystem (**Einfacht-Refaktorierung adoptiert 2026-10-09**:
+  Gate-Plattform / entdecktes Gate-Register / Knopf-Register / World-Gate);
+  `zreflect/measure_octave.py` ist die Datenschicht dieses Repos,
+  `reflect-hooks/Einfacht.env` der Knopf-Träger
+- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.100 tragen die obigen
   Belege)
 - `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
   `DEPLOY.md` — Deployment
-- `build/113/` — Spur-Bauprone + Tore; `test/browser/` — 77-Suiten-Abnahme
+- `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness
   (`SWEEP_JOBS=4` parallelisierbar)
 - `.scratch/open-questions/issues/` — lokaler Ticket-Tracker
 - `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien)
