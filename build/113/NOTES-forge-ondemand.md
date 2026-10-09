@@ -159,14 +159,50 @@ OctaveAssets.install(name, {onProgress}) // Promise<{name, version, installed:[�
 - **建议**：**v1 只上纯 `.m`**（立刻兑现"按需=0 字节"的最大块），含编译件的包**留 v2**，
   且 v1 的 catalog 就给它们留 `kinds: ["m","oct"]` 字段（**形状先定，实现后到**）。
 
-### 分叉 B：**解包在哪做**（tarball 还是预解包）？
+### 分叉 B：**解包在哪做** —— ✅ **已定（实测，2026-10-09）：不在 JS 里解，用 wasm 内建的 gunzip+untar**
 
-- **B1 tarball + 浏览器解 gzip**：客户端下 `.tar.gz`，用 `DecompressionStream('gzip')`（浏览器原生，
-  实测 node 有；Chromium/Firefox/Safari 现代版均有）+ 一个 ~100 行的 tar 解析器。
-  ⇒ **货架体积最小**（1.3 MB/包 vs 未压 5 MB+），最像 `pkg install`。
-- **B2 构建期预解包成 per-file 资源**：客户端逐个 fetch（HTTP 压缩）⇒ **简单**（复用 `kind:'js'` 老路），
-  但**多很多请求** + 站点里存"散装文件"。**这正是现在 `bundle-pkg` 的形状**（打成单 JS）。
-- **建议 B1**（体积与"像官方"都最好；tar 解析器只需支持常规条目，可带 `--selftest`）。
+用户点令：评估浏览器内建 tar 解析器的现有资产，有现成的就用。⇒ 查证结果：**有，而且是官方路径**。
+
+- `build/webio.cc` 里是**真的**实现（编在主 wasm 内，C++）：`__web_gunzip__`（zlib `gzopen`）、
+  `__web_untar__`（ustar 解析）、`__web_unzip__`（raw inflate）、`__web_tar__`（ustar 创建）；
+  由 `build/webshell/{gunzip,untar,unzip,tar}.m` 映射成官方名字 —— **`pkg install` 内部调的就是它们**。
+- **浏览器实测**（真实 forge tarball `signal-1.4.6.tar.gz`，447403 B）：`gunzip` → 1 文件；
+  `untar` → **211 个文件**；顶层正确解出 `signal-1.4.6/`。
+  ⇒ **零 JS tar 解析器**（`assets-loader.js` 文件头早有此判断：免掉在 JS 里实现 tar 解析）。
+- ⚠️ 前提：`webio` + `webshell` 资产要**先装载**（懒加载资产；未装时 `untar`/`__web_*__` 直接 undefined）。
+  ⇒ installer 第一步 = `load(['webio','webshell'])`（复用现成 `load`）。
+
+**由此得到更优形态（比"客户端复现 bundle-pkg"更结实，正中用户"不烂尾"要求）**：
+既然 `gunzip`+`untar` 在引擎里、`pkg install` 可被驱动（实测可跑），**客户端 installer 尽量委托核心 pkg install**：
+
+```
+fetch tarball（同源）→ sha256 校验 → 写 MEMFS → eval_string("pkg install <tarball>")
+```
+
+- 纯 `.m` 包：核心 `pkg install` 全包（解包 + `inst/` 上提 + PKG_ADD + 数据库登记）——**零复现**，最像官方。
+- 含 `.oct` 的包：核心 `pkg install` 会去编 `src/`（浏览器无 mkoctfile）⇒ **必须走我方预编 + 直写**
+  （§4 的复现路径）⇒ 这也是 §6A 建议把它留 v2 的原因。
+
+> **旧 B1/B2 作废**（JS tar 解析 / 构建期预解包都不需要）。本发现让 v1 实现面**变小**、结实度**变高**。
+
+#### T0 spike 结果（2026-10-09，**已跑**）：委托核心 `pkg install` **不成立** ⇒ 走"直写"
+
+在浏览器里实测（装载 webio+webshell 后）：
+
+| 步骤 | 结果 |
+|---|---|
+| `gunzip` 真 tarball | ✅ 1 文件 |
+| `untar` 真 tarball（signal-1.4.6） | ✅ **211 文件**，顶层 `signal-1.4.6/` |
+| 核心 `pkg('prefix',…)` + `pkg('install', <tarball>)` | ❌ `dirlist(3): out of bound 2`（web `pkg` shim 的路径手术 × 核心 install 的目录假设冲突） |
+| `pkg('list')` | 0 条；`pkg('load',…)` → `package … is not installed` |
+
+**结论（写死进设计）**：
+- **解包层用引擎**（`gunzip`+`untar`）——已证可用；**不写 JS 解析器**。
+- **安装/登记层不复用核心 `pkg install`**（在本构建下坏）——由 loader **直写**：
+  按 `pkg install` 的真实布局（§4：`inst/` 上提 + PKG_ADD + 元数据）落盘，
+  再让 **`pkgfix` 重扫磁盘**生成核心 pkg 数据库（这条已经是现役机制，`pkg.m` shim 会调 `__pkgfix_sync_db__`）。
+- ⇒ **§4 的"复现 bundle-pkg"不是可选项，是 v1 的主路**；§8.1 的对拍断言是硬需求。
+- （可选 v2：修 `pkg.m` shim 让核心 `pkg install` 可用，从而消掉"复现"——但那是另一笔账，v1 不背。）
 
 ### 分叉 C：**catalog 的生成入口**命名与落地
 
@@ -232,6 +268,8 @@ grep -n "loadOne\|preloadIfHuge\|SHA" bridge/assets-loader.js | head
 
 ## §10 待办（立单拆解，**等 §6 分叉拍板后开工**）
 
+- [ ] **T0（spike，先做）** 用真实纯 .m 包在浏览器里跑通 `pkg install <tarball>`（先 load webio+webshell）；
+      结论决定『委托核心』能覆盖多少（纯 .m）与哪里必须直写（编译件）。
 - [ ] **T1** `build/forge-catalog.py`：读上游 index + 本地缓存 → 站点 `assets/forge-catalog.json`
       （含 §5 的 pin/witness 字段）
 - [ ] **T2** 站点装配：tarball 落 `assets/forge/`（**同源**）+ `assets.py` 入口（§6C）
