@@ -179,14 +179,14 @@ farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含
 |---|---|---|
 | 1 | `--shared-memory is disallowed by main.o` | **PATH 上车道影子**（`relink.sh:524` 记过） |
 | 2 | Fortran 隐藏长度 i64/i32 混编（`wasm-opt: call param types must match`） | **`export F2C_PREFIX`**（`relink.sh:700` 记过：emf77 在 **make** 阶段被调） |
-| 3 | 保活集报 55 条缺 | **`KEEP_LIST` 用现役那份**（别重生成：现役 1304 = `keep.txt ∪ w64扫描`，**可逐字节复现**，已验证） |
+| 3 | 保活集报 55 条缺 | **`KEEP_LIST` 用现役那份**（别重生成：现役 1304 = `keep.txt ∪ w64扫描`，**可逐字节复现**，已验证）。⚠️ **此条只对"同版本重链"成立** —— 跨工具链升级必须重生成（§7.5 实测翻案），否则 clang 24 的 EH 新名字不在表里 ⇒ DCE 把整条 unwinder 删掉 |
 | 4 | 4 个 JS 库符号报缺 | **`LIB_FUNCS`**（现役值：`emscripten_run_script,__assert_fail,abort,exit`） |
 | 5 | 50 个 SLICOT LAPACK 符号报缺 | **`EXTRA_LDFLAGS` 的 `-L/src/deps-w64/lapack-simd/lib`**（SIMD 版 LAPACK；与编译器升级正交，直接复用现役那份） |
 | 6 | 差分级仍报 55 条 | **`BASELINE_WASM`** —— 判据是**与基线差分**（"基线导得出、新构建导不出"才报），漏传 ⇒ 退化成"逐条报缺"，把基线也没有的符号也报出来 |
 
 ⇒ **修到第 6 条后：差异从 55 条收敛到 1 条。**
 
-### 7.3 ★ 唯一的真实差异（**升级必须处理的一条**）
+### 7.3 ★ 首个真实差异（**后来发现不是"唯一"** —— 见 §7.5 翻案）
 
 `_Unwind_CallPersonality` —— 4 个 `.oct` 导入它（`__ode15__` / `__init_gnuplot__` /
 `__bfgsmin` / `__disna_optim__`），而 6.0.12 的主模块**不再导出**它。
@@ -212,6 +212,47 @@ farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含
 试过 `EXPORT_IF_DEFINED="_Unwind_CallPersonality"` ⇒ 产物字节**一个都没变**。
 原因：该符号在**我们的链接里未定义**，而 `--export-if-defined` 对"未定义"是**静默忽略**的。
 ⇒ 唯一正确修法是 §7.3 的"重编 `.oct`"（或把符号包装成主模块导出，那是额外工程量）。
+
+### 7.5 ★★ §7.2-③ 与 §7.3 的结论**都不完整**（2026-10-10 深夜，实测翻案）
+
+**§7.3 只查了 `_Unwind_CallPersonality` 一个名字，于是漏掉了真相**：重编 `.oct` **不是让
+EH personality 符号消失，而是把它换成了 clang 24 的**新名字**。
+
+用**完整 44 个 `.oct` 集**（core 16 + pkg 28，§8.1 那一批重编出来的）跑判据，实测：
+
+| | 导入的 EH personality 符号 |
+|---|---|
+| 现役 `.oct`（5.0.7 / clang 23） | `_Unwind_CallPersonality` ×11 |
+| 6.0.12 `.oct`（clang 24） | **`__gxx_wasm_personality_v0` ×11 + `_Unwind_GetWasmLPadContext` ×11** |
+
+即 §7.3 那句"6.0.12 编的 `.oct` 导入该符号数 = 0"**只对旧名字成立** —— 名字换了，
+缺口还在。**这正是"断言太窄"的经典形状**：单名匹配的断言在"符号被改名"时静默变绿。
+
+**而主模块一侧**：试点产物 `out-6012-final` 这两个新名字**一个都没导出**（`719` 个导出里
+没有；`wasm-dis` 全模块也搜不到 —— 不是"没导出"，是**根本没进模块**）。根因是
+**§7.2-③ 那条建议在"跨工具链升级"下是错的**：
+
+- §7.2-③ 说"KEEP_LIST 用现役那份（别重生成）" —— 那条**只对同版本重链成立**
+  （同版本下 keep 集逐字节可复现，实测 1304 条）。
+- **跨版本升级时**：keep-list 是从 `.oct` 的导入段扫出来的（`gen-keep-list.sh`），
+  而新 `.oct` 导入的是**新名字** ⇒ 旧 keep-list 里没有它们 ⇒ `MAIN_MODULE=2` 的 DCE
+  把整条 unwinder **删掉** ⇒ 运行期第一次抛异常/析构就 `resolved is not a function`。
+- 这正是 §7.4 那个"静默忽略"的**放大版**：`--export-if-defined=_Unwind_CallPersonality`
+  被忽略（旧名在新树里未定义），而新名**根本没被请求**（keep-list 里没有）。
+
+**修法（已验证）**：升级后**必须用新一代 `.oct` 集重生成 keep-list**：
+```sh
+sh /src/bin/gen-keep-list.sh <新 core 目录> <新 pkg 目录> > <scan.txt>
+cat /src/libwork/keep.txt <scan.txt> | LC_ALL=C sort -u > <新 keep.txt>
+# 实测：1304 → 1329 条；两个新名字各 +1（keep.txt 那份是"所有车道共用的基础集"）
+```
+**决定性实验**（省一次瞎猜）：拿试点那条链接命令，只**追加**
+`-Wl,--export-if-defined=__gxx_wasm_personality_v0 -Wl,--export-if-defined=_Unwind_GetWasmLPadContext`
+重链 ⇒ 导出数 `719 → 721`、体积 `+390 B`，两个名字**都出现**（`exported=True`）；
+再跑 M2 判据：**"新缺导出" 归零**，只剩 4 个 JS 库符号（**现役产物同样有**，非本批引入）。
+
+⇒ **升级 SOP 补一条硬要求**：**keep-list 与 `.oct` 集必须同代**。跨版本时
+"别重生成 keep-list"是**错的**（§7.2-③ 的条件没写出来）。已把这条写进 §8.3 的清单。
 
 ---
 
@@ -239,20 +280,55 @@ farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含
 | 独立站实测（boot + 数值四套） | ⬜ 未做（需先把站点装配起来） |
 | 与现役对拍（体积/sha/基准） | 🔶 体积已有：**28.1 MB vs 31.0 MB**（小 2.9 MB）；基准未测 |
 
-### 8.2 踩到的检查器 bug（**既存，与升级无关**，待修）
+**2026-10-10 深夜推进（本批续做，逐条对上面那张表）**：
+- ✅ **`__ode15__` 已重编**（用 6.0.12 的 **w64** sundials，`SUNDIALS_PREFIX=/src/deps-6012-w64/sundials`）——
+  旧失败原文是 `ida.c.o: wasm32 object file can't be linked in wasm64 mode`（试点把
+  `SUNDIALS_PREFIX` 留空 ⇒ 回落到 wasm32 的 `/src/deps-threads/sundials`）。
+  现在 core **16/16**，产物 184696 B、wasm64、自包含（SUNDIALS 入口 `defined` 在模块内）。
+- ✅ **完整 44 个 `.oct` 编齐**（core 16 + pkg 27 + slicot 调度 1）。补齐了两处车道缺口：
+  ① `libf2c-subset.a`（w64 车道脚本里那步在"手拼环境"下没跑）；② slicot 调度模块
+  （`__control_slicot_functions__.oct`，1.9 MB，静态链 PIC LAPACK）。
+- ✅ **`check-oct-imports.py` 的 IndexError 已修**（见 §8.2 —— 根因不是"待定位"，是
+  **limits 旗标当布尔用**）。
+- ⬜ **8761 仍未发运**（发运还差"用新一代 keep-list 重链"这一步，见 §7.5/§8.3）。
+- ⬜ 独立站实测仍**未做**。
 
-`build/113/check-oct-imports.py` 在对**现役 8761 产物**（`baseline-w64.wasm`）跑时也崩
-`IndexError: index out of range`（`leb()` 无边界检查，越界读）。
+### 8.2 检查器 bug **已定位并修复**（`check-oct-imports.py`，2026-10-10）
 
-**已排除的怀疑**：
-- 不是 export 段解析错位 —— 手工按规范解析 752 条导出**完全正确**（`leb(d, j+1)` 的写法是对的：`read_name` 返回的 j 指向 kind 字节）。
-- 不是新产物特有 —— **现役产物同样崩**。
-- 不是容器旧拷贝 —— 容器 `check-oct-imports.py` 与仓库 sha **一致**（`9dfd0745`）。
-- `exports_of()` / `imports_of()` **单独调用都正常**（752 导出 / 401 导入）。
+**§8.2 原判"待定位"是错的 —— 根因在 `imports_of()` 的 `skip_descriptor()`**：
 
-⇒ 崩点在 `main()` 后面的某段（`--baseline` 差分路径或 oct 扫描后的处理）；**待定位**。
-**影响**：M2 保活自检在触发该路径时会崩，**掩盖真实判据**（本次前几轮就是被它误导：
-把"检查器崩"当成"产物缺保活集"）。**这是本批暴露的第二处既存缺陷。**
+Wasm 的 limits 旗标是**位域**（bit0 = 有 max、bit1 = shared、bit2 = is64），而旧代码
+把整个字节当布尔：`return leb(d, j)[1] if fl else j`。**5.0.7 的 side module 旗标恒为
+`0x00`**（既无 max 也无 is64）⇒ 碰巧正确；**memory64 的 table 旗标是 `0x04`**（只置 is64、
+**无 max**）⇒ 旧写法把 `0x04` 当"有 max" ⇒ 多吃一个 LEB ⇒ 后面**整段导入错位** ⇒
+深处 `index out of range`。修法：判 `fl & 0x01`（bit0）。
+
+**定位手段**（可复跑）：`exports_of`/`imports_of` 单文件扫容器 396 个 wasm/.oct ⇒
+**只有 8 个 6.0.12 编的 `.oct` 崩**（5.0.7 的一个都不崩）—— 这把"待定位"直接钉到
+"新工具链的产物形态不同"。再 dump 导入段前几条，`kind=66`（非法）紧跟 table 导入，
+指向 limits 解析。
+
+**自证从 1 条补到 3 条**（三类用例齐）：新增"memory64 limits 位域 ⇒ 必须恰好解析出
+3 个导入"（修前必红）+ "空输入必须报"。修复后容器 396 文件**零崩**。
+
+**影响（连带）**：该崩此前**掩盖了 M2 保活判据** —— 修好后立刻跑出真判据（§7.5）。
+
+### 8.3 升级收尾清单（**改口径**：跨版本与同版本重链不同）
+
+§7.2 那张"手拼环境变量的六个坑"里，**第 ③ 条在跨工具链升级下是错的**（§7.5 实测）：
+"KEEP_LIST 用现役那份（别重生成）"只对**同版本重链**成立。跨版本升级必须：
+
+1. **重编三层**：farm（`WIPE_TREES=1`）→ Octave 树 → **完整 `.oct` 集**（core + pkg + slicot）。
+2. **★ 重生成 keep-list**（新一代 `.oct` 集 ⇒ 新符号名）：
+   `gen-keep-list.sh <新core> <新pkg>` ∪ 基础 `keep.txt`，`LC_ALL=C sort -u`。
+   **判据**：新 keep 集必须比旧的多出**至少**那几个 EH personality 新名
+   （本批：1304 → 1329；`__gxx_wasm_personality_v0` / `_Unwind_GetWasmLPadContext` 各 +1）。
+3. **重链主模块**，并跑 `check-oct-imports.py <新wasm> <新core> <新pkg> --baseline <现役>`
+   —— **"新缺导出"必须归零**（只剩现役也有的 4 个 JS 库符号）。
+4. **EH 名字是版本相关的**：断言**不许**只匹配 `_Unwind_CallPersonality` 一个名字
+   （clang 24 换成了 `__gxx_wasm_personality_v0` + `_Unwind_GetWasmLPadContext`）。
+   这是本批最贵的一课：**单名断言在符号被改名时静默变绿**。
+5. 数值四套 + 全量 `PROBES=1`（铁律）→ 独立站 → promote → 对拍。
 
 ---
 
