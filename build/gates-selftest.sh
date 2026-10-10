@@ -60,6 +60,7 @@ build/promote-pages.sh --selftest
 build/promote-w64-lane.sh --selftest
 build/gen-lanes.sh --selftest
 build/make-dist.sh --selftest
+build/113/provision-emsdk.sh --selftest
 EOF
 
 n=0; bad=0; badlist=""

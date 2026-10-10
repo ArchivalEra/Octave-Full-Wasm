@@ -88,3 +88,41 @@ python3 .githooks/witness-upstream-pin.py     # ⇒ ok / DRIFT / SKIP（读不�
   不可分辨）⇒ 无补丁分支，tag 直连。
 - QuantStack 19 件参考补丁存 `upstream-patches/octave-wasm-quantstack/`（谱系出处，
   非构建输入）。
+
+## 四·六、emsdk 6.0.12 供给 + 软链切换（2026-10-10）
+
+**背景**：`emsdk` **已在 pin 管线里**（`upstream-pins.json` 的 `kind:"toolchain"`，
+`witness-upstream-pin.py` 每提交断言「容器 emcc == expect_version」），
+**但只到"版本串断言"** —— 容器那份 1.8 GB SDK 是**手工解包装**的，`provision-upstream.sh`
+明确不管它 ⇒ **「紧随最新版」没有受管辖入口**（只能手敲 = 不可复现）。
+
+**新增 `build/113/provision-emsdk.sh`**（形状同 provision-upstream.sh 家族）：
+
+| 子命令 | 做什么 |
+|---|---|
+| `install <版本>` | 装到 `/opt/emsdk-<版本>`（**多版本并存**，不覆盖）；装完 fail-closed 核对读出的版本串 == 请求的版本 |
+| `use <版本>` | 切 `/emsdk` 软链；若 `/emsdk` 是真目录**先改名为备份**（不删） |
+| `status` | 打印 `/emsdk` 指向 / 容器 emcc / 已装版本 / pins 期望 |
+
+★ **为什么用软链而不是改脚本**：`/emsdk/...` **硬编码 36 处、散在 25 个 build 脚本**里
+（`grep -rn '/emsdk' build/**/*.sh | wc -l`）。让 `/emsdk` 保持稳定路径 ⇒ 切版本时
+**那 36 处一个都不用改**（否则就是"两处口径漂移"的老形状）。
+
+**实测（本批已做）**：
+
+| 项 | 结果 |
+|---|---|
+| `install 6.0.12` | ✅ 装到 `/opt/emsdk-6.0.12`（clang/LLD **24.0.0**，sysroot 就位） |
+| 6.0.12 编现役 `.oct` 源（w64，`-sSIDE_MODULE=1 -sMEMORY64=1 -pthread -fwasm-exceptions`） | ✅ 出 **5398 B** |
+| **该产物在现役（5.0.7 构建的）wasm64 Octave 上 dlopen + 调用** | ✅ `exist=3` / `det=5` / `det2=-2` |
+
+⇒ **结论 1**：`.oct` 侧可以**先走 6.x**，不必等整树/farm 重编 —— 这是可分段推进的第一个证据。
+
+**升级时要适配的一处（实测）**：`-sMEMORY64=1` 在 6.0.12 报
+`warning: MEMORY64 is deprecated (prefer the standard -m64 or --target=wasm64 flags)`。
+⇒ `build/113/*.sh` 里的 `-sMEMORY64=1` 迟早要换 `-m64`（本批未改：断言面不够，
+先记录；等真做全树升级时一并换）。
+
+**`expect_version` 是数据不是代码**：`upstream-pins.json` 里一个字段，切版本 = 改数据 +
+bump `upstream/emsdk` submodule pin（6.0.12 的 tag commit = `35ff8a6d15`）。
+**两条要同批改**，否则 witness 当场红（这正是它该干的事）。
