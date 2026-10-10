@@ -44,7 +44,7 @@ fi
 #   gates-selftest.sh 的跨仓库夹具只覆盖六个名字、不覆盖这两个 —— 全局配 ⇒ 夹具里
 #   GATE_REPO 是临时目录、路径解析失败 ⇒ 误报「名字写死在代码里」（2026-10-09 实测）。
 REFLECT_INSTRUMENTS=build/instruments.json REFLECT_INSTRUMENT_DAYS=30 \
-  REFLECT_LOCKS=build/upstream-lock.json \
+  REFLECT_LOCKS=build/upstream-lock.json REFLECT_PINS=build/pins.json \
   python3 zreflect/registry.py --run commit || exit 1
 
 # ── ③ 本仓专属闸门（平台无对应件；来源与理由见各自文件头）──────────────────────

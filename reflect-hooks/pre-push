@@ -21,7 +21,7 @@ python3 "$GH/update-state.py" --check
 python3 "$GH/update-readme.py" --check
 
 # ── ② 平台闸门：执行面唯一产地（上游 C1；与 pre-commit 同源，别再 glob）───────
-REFLECT_LOCKS=build/upstream-lock.json python3 zreflect/registry.py --run commit || exit 1
+REFLECT_LOCKS=build/upstream-lock.json REFLECT_PINS=build/pins.json python3 zreflect/registry.py --run commit || exit 1
 
 # ── ③ 本仓专属闸门（平台无对应件）─────────────────────────────────────────────
 python3 "$GH/check-state.py"

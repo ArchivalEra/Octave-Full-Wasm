@@ -305,3 +305,27 @@ farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含
 - `build/gates-selftest.sh`（本仓构建侧 39 个）：全绿。
 - `pre-commit` 端到端 **rc=0**。
 - 数据层：`measure_octave.py` 的 **139 键**原样保留（`measure_repo()` 分派验证过）。
+
+### 9.5 两份 pin 机制**已对账**（2026-10-10，C4 落地；§9.3 的待办做完）
+
+§9.3 记的"通用 pin 闸门 OFF"已解：新增 `build/pins.json`（**上游通用 schema**：
+`kind=tree` 靠 `stamp_read` 命令 + `worktree` HEAD 对读；`kind=version` 靠 `version_read`
+输出首行）—— 通用闸门**真跑**：`pin 闸门：OK（2 个 pin 全部一致）`。
+
+**三条反向断言实测过**（这是"新事实系统的实力"的直接证据）：
+| 反证 | 结果 |
+|---|---|
+| `expect_version` 改错（6.0.12→5.0.7） | ✅ 报 `版本漂移（期望 5.0.7，实测 emcc …）` rc=1 |
+| 供给树被手改（stamp 的 dirty=3） | ✅ 报 `派生节点带本地改动（dirty=3）` rc=1 |
+| 两份规格版本串不一致 | ✅ `crosscheck()` 报 `emsdk：版本串不一致 —— 通用 5.0.7 ≠ 本仓 6.0.12` |
+
+**并存而不打架（C4 对账器）**：`.githooks/witness-upstream-pin.py` 新增 `crosscheck()` ——
+两份规格的**同名 pin 版本串必须一致**，不一致就 `DRIFT` 并指点"改一份忘另一份？"。
+自证 **11/11**（新增 5 条：一致不报 / 不一致必报 / 只有一边有必报 / 都没有则零值守卫报 / 规格读不了必报）。
+
+**踩到并修掉的白名单缺口**（连带的真发现）：`build/pins.json` 被 `.gitignore` 忽略
+（本仓是白名单制）⇒ **新克隆上这条闸门会 FATAL**。已补 `!build/pins.json`。
+⇒ 这正是 `check-whitelist.py` 存在的理由（"新增文件必须同步放行"）。
+
+**执行面**：pre-commit / pre-push 都内联传 `REFLECT_PINS=build/pins.json`；
+采纳后 `ran 10 / off 3 / failed 0`（采纳前 ran 8 / off 5）。

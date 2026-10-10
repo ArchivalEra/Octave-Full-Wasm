@@ -1,0 +1,20 @@
+{
+  "_comment": "派生树/工具链 pin 规格 —— **喂 zreflect/check_pins.py（上游通用闸门）**；**2026-10-10 起真跑**（此前本仓没这份规格 ⇒ 通用闸门 OWN-OFF；采纳上游 C1–C5 的 off-可见 把它暴露出来了）。⚠️ 与本仓专属的 build/upstream-pins.json **schema 不同源**（那份喂 .githooks/witness-upstream-pin.py，kind=tree 靠容器 .upstream-pin stamp + submodule gitlink 语义）。两份并存的**一致性由 witness-upstream-pin.py 的 crosscheck() 对账**（C4：必须一致的要配对账器）—— 同名 pin 的版本串不同 ⇒ 报 DRIFT。升 emsdk 版本时**两份一起改**。",
+  "pins": [
+    {
+      "name": "octave",
+      "kind": "tree",
+      "worktree": "upstream/octave",
+      "stamp_read": "sudo -E docker exec o113 cat /src/work/upstream/octave-11.3.0/.upstream-pin",
+      "why": "Octave 树 = 主构建输入（rebuild/configure/link 全吃它）。断言：容器里那份供给树的 stamp commit == 宿主 worktree（submodule pin）的 HEAD，且 dirty=0（没人手改供给树）。供给 = build/provision-upstream.sh。"
+    },
+    {
+      "name": "emsdk",
+      "kind": "version",
+      "worktree": "upstream/emsdk",
+      "version_read": "sudo -E docker exec o113 emcc --version",
+      "expect_version": "6.0.12",
+      "why": "工具链是 portable SDK（1.8G，不流进容器 git 树）⇒ 只能钉版本串。断言容器 emcc 首行含 6.0.12。2026-10-10 从 5.0.7 升级；安装走 build/113/provision-emsdk.sh（/emsdk 软链切换，多版本并存）。升版本时必须与 build/upstream-pins.json 的 expect_version 同批改，否则两个闸门互相打架。"
+    }
+  ]
+}

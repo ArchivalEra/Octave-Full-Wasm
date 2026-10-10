@@ -26,6 +26,7 @@
 !build/upstream-lock.json
 !build/provision-upstream.sh
 !build/upstream-pins.json
+!build/pins.json
 !.githooks/witness-upstream-pin.py
 !upstream-patches/*
 !.gitmodules
