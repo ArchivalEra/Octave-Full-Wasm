@@ -116,3 +116,40 @@ python3 .githooks/witness-upstream-pin.py       # 必须 ok
 ```
 
 **只有当某条线真升级时**，才同批改 `expect_version` + bump submodule + 改回 6.x。
+
+---
+
+## §6 试点实跑数据（2026-10-10 补，全部实测）
+
+### 6.1 farm 逐个库耗时（6.0.12，隔离 prefix `/src/deps-6012`）
+
+| 库 | 结果 | 备注 |
+|---|---|---|
+| zlibbz2 | ✅ ~5 s | |
+| glpk | ✅ | `producers` 段 = `clang 24.0.0` ⇒ **确证是 6.0.12 编的**（版本核验手段见 §1 缺口1） |
+| fftw（double+single） | ✅ | |
+| qhull | ✅ 15 s | **切软链后才过**（PATH 姿势挂，见缺口 3） |
+| rapidjson | ✅ | |
+| sndfile | ✅ | |
+| hdf5 | ✅ | |
+| arpack | ✅ | 逐文件 `emf77` 编（Fortran） |
+| qrupdate | ✅ | 同上 |
+| suitesparse | ✅ | 8 个子库 |
+
+**全部 10 个目标 6.0.12 编过**（wasm32 口径）。
+
+### 6.2 试点踩到的两个**非升级问题**（记下来免得下次重踩）
+
+1. **`emf77` 不在默认 PATH 里**：它是**仓库自己的** Fortran 包装（`/src/bin/emf77`，
+   f2c + emcc），**不在 emsdk 里**。正常构建由**车道驱动**设好：
+   `export PATH=/src/bin:$PATH`（见 `build-w64-lane.sh:38`）。
+   我第一版试点漏了这行 ⇒ arpack/qrupdate 报 `emf77: command not found`。
+   **与 emcc 版本无关**，是"没按车道驱动的方式起构建"。
+2. **`LLVM ERROR: IO failure on output stream: Broken pipe`**：**无害**——是我把输出
+   管给 `| tail -N` 造成的（tail 读完即关管道，LLVM 写到已关闭的 stdout）。
+   不是构建失败；判据要看每库的 `✅` 行。
+
+### 6.3 修正 §2 的耗时估
+
+farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含重试；纯编约 2–4 min）。
+**冷编**（无 ccache）预计 **20–40 min**。Octave 树与 `.oct` 车道仍**未实测**。
