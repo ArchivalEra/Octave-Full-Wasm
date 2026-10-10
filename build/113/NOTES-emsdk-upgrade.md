@@ -253,3 +253,55 @@ farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含
 ⇒ 崩点在 `main()` 后面的某段（`--baseline` 差分路径或 oct 扫描后的处理）；**待定位**。
 **影响**：M2 保活自检在触发该路径时会崩，**掩盖真实判据**（本次前几轮就是被它误导：
 把"检查器崩"当成"产物缺保活集"）。**这是本批暴露的第二处既存缺陷。**
+
+---
+
+## §9 Einfacht 追平上游 C1–C5（2026-10-10，用户点令"他们真的用心重构了"）
+
+**原 vendored 版 = 上游 `ae2b82a`（Phase 5 收尾）；现 = `0a0ff91`**（8 个新提交）。
+升级法（**文件级**，不是整体覆盖）：从上游取 `zreflect/*.py` + `reflect-hooks/*` +
+`gates-selftest.sh`，**但保留本仓数据层 `zreflect/measure_octave.py`** 与 `facts.py` 的
+数据层接线（上游那份是占位实现，它自己注释写着"换掉它"）。
+
+### 9.1 三条新纪律（已写进 AGENTS.md）
+
+| 纪律 | 内容 | 本仓实测收益 |
+|---|---|---|
+| **C1 谓词=声明** | 执行面读 `registry --run <相位>`，**glob 退役**；频率是声明字段 `runs_at` | `doctor.py` 不再靠"没叫 check_"表达频率；"孤儿"概念消失 |
+| **C2 off ≠ 通过** | `off` 打机器标记，执行面聚合 `ran/off/failed` | **一采纳就现形**：本仓原本 `check_locks.py` **从来没跑过**（规格在 `build/` 下、闸门只认仓库根默认名）—— 旧版看不见，新版 `OFF:` 明说 |
+| **C4 必须一致的要配对账器** | `registry.problems()` 里四对 | 三语 README 配置表 ↔ 登记表、夹具改名集唯一产地等 |
+| **C5 模块声明自己** | `MODULE = module_meta(名, 一句, selftest=True/False)`；未声明的 `.py` ⇒ 报 | 本仓数据层 `measure_octave.py` 已加（`selftest=False`：它是数据） |
+
+### 9.2 采纳时暴露/修掉的三个真问题（**都是既存，不是升级引入**）
+
+1. **`check_locks.py` 从未跑过**：规格在 `build/upstream-lock.json`，闸门只认仓库根默认名且
+   **无旋钮** ⇒ 静默 OFF（旧机制下不可见）。修：给它加 `REFLECT_LOCKS` 旋钮（形状照
+   `check_pins.py` 的 `REFLECT_PINS`）+ 在 `knobs.py` 登记 + 补一条旋钮自证。
+   跑起来立刻报真缺口：7 条锁定件的字节**不在仓库里**（在持久盘 `/mnt/hdd/octave-wasm-build/`）
+   ⇒ 按闸门自己的 `optional` 语义**如实标注**（"本机缺席 ⇒ SKIP 明说，不是通过"），
+   现在 `OK（8 个锁定源全部一致）`。
+2. **`REFLECT_DOCTOR` 全局配 ⇒ 夹具假红**：夹具没有 `doctor.json` ⇒ 报"名字写死在代码里"。
+   这正是上游 C3 抓的形状。修：改内联传。同理 `REFLECT_LOCKS`（一样的原因，一样的内联修法）。
+3. **`env` 行尾注释会被并进值**（实测踩到）：`export X="v"  # 注释` 里的文字进了值 ⇒
+   闸门拿 `build/upstream-lock.json"   # 本仓…` 去找文件。sh 只在**单词开头**认 `#`。
+   ⇒ 注释只能单独成行（已写进 `Einfacht.env` 的注释里）。
+
+### 9.3 两份 pin 机制并存（**未合并，如实记录**）
+
+本仓有**两个** pin 闸门，schema 不同源、各管一层，别混：
+
+| 闸门 | schema | 管什么 | 状态 |
+|---|---|---|---|
+| `.githooks/witness-upstream-pin.py`（**本仓专属**） | `submodule_path` + `container_path` | **容器树 == submodule pin**（读容器里的 `.upstream-pin` stamp） | ✅ 跑（pre-commit ③） |
+| `zreflect/check_pins.py`（**上游通用**） | `worktree`（宿主 git 工作树） | 派生树 ↔ worktree HEAD | ⬜ **OFF**（本仓规格是前者 schema ⇒ 指错会 `KeyError: 'worktree'`） |
+
+⇒ **不让通用闸门跑**（配了就是互相打架）；要它真跑须另写一份 worktree-schema 规格。**待办。**
+
+### 9.4 采纳后状态
+
+- 平台闸门：**`ran 9 / off 4 / failed 0`**（采纳前是 `ran 2 / off 6 / failed 5` —— 那是 env 未加载的假象；
+  采纳后 off 各自**明说**原因，不再混进"全绿"）。
+- `gates-selftest.sh`：14 闸门 + 平台模块自证 + **跨仓可配置性 14/14**，全绿。
+- `build/gates-selftest.sh`（本仓构建侧 39 个）：全绿。
+- `pre-commit` 端到端 **rc=0**。
+- 数据层：`measure_octave.py` 的 **139 键**原样保留（`measure_repo()` 分派验证过）。

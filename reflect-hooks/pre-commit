@@ -35,15 +35,17 @@ if [ -f "$DOC" ]; then
   git add "$DOC"
 fi
 
-# ── ② 平台闸门：**发现式**名录（别手写清单 —— 漏登记一个 check_*.py 时 hook 自己还绿着）──
+# ── ② 平台闸门：**执行面唯一产地**（上游 C1，2026-10-10 采纳）──────────────────
+#    `registry --run commit` 跑所有 `runs_at="commit"` 的闸门，聚合 ran/off/failed。
+#    ⚠️ **别再 glob `check_*.py`**：glob 与声明（`GATE = gate.meta(…, runs_at=…)`）
+#    是两套谓词，会分叉（doctor 曾只能靠"不叫 check_"表达频率）。执行面只认声明。
+#    off 态被单列（上游 C2）：`ran N / off M / failed K` —— **off 不是通过**。
 # ⚠️ 仪器旋钮**内联传**（不是全局 export）：它们是「配了就必须存在」的旋钮，而
 #   gates-selftest.sh 的跨仓库夹具只覆盖六个名字、不覆盖这两个 —— 全局配 ⇒ 夹具里
 #   GATE_REPO 是临时目录、路径解析失败 ⇒ 误报「名字写死在代码里」（2026-10-09 实测）。
-#   前缀只作用于该子进程，不 export，故夹具干净。
-for g in zreflect/check_*.py; do
-  [ -f "$g" ] || continue
-  REFLECT_INSTRUMENTS=build/instruments.json REFLECT_INSTRUMENT_DAYS=30 python3 "$g" || exit 1
-done
+REFLECT_INSTRUMENTS=build/instruments.json REFLECT_INSTRUMENT_DAYS=30 \
+  REFLECT_LOCKS=build/upstream-lock.json \
+  python3 zreflect/registry.py --run commit || exit 1
 
 # ── ③ 本仓专属闸门（平台无对应件；来源与理由见各自文件头）──────────────────────
 python3 "$GH/check-state.py"            # 活状态断言不得与产物矛盾（只查 STATE.md）

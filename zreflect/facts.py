@@ -22,7 +22,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from gate import GATE_REPO, main_selftest_or, repo, selftest  # noqa: E402
+from gate import module_meta, GATE_REPO, main_selftest_or, repo, selftest  # noqa: E402
 from ledger import age_days, fact, facts_of, load, value_of  # noqa: E402
 from render import BLOCK_BEGIN, BLOCK_END, body_of, prose_of, render_block  # noqa: E402
 import guard                                             # noqa: E402
@@ -33,31 +33,18 @@ OUT = repo(LEDGER_NAME)
 DOC = os.environ.get("REFLECT_DOC", "STATE.md")
 
 
-# ══ 你的部分（本仓数据层）════════════════════════════════════════════════════
-# 机制在本目录（Einfacht 上游）；**本仓要量的东西**在 measure_octave.py
-# （数据 vs 机制分离：换仓库只换那一个文件，机制原样可升级）。
-#
-# ⚠️ 为什么还要留着上游那个"通用 measure"（数 py/md 文件）：
-#   `gates-selftest.sh` 的**跨仓库可配置性自证**会搭一个**临时夹具仓库**，
-#   把三个名字全换掉、在夹具里真跑 `facts.py` 生成台账。夹具里没有本仓的
-#   产物/站点 ⇒ 本仓的 measure 量出的是**空表**（甚至引用仓外绝对路径），
-#   于是 check_facts / check_facts_replay / check_stale 在夹具里必红 ——
-#   那会误报成"名字写死在代码里"（**正是这条自证要抓的**，但这里不是真因）。
-#   所以：**真仓用本仓 measure，夹具用通用 measure**（判据 = GATE_REPO 是不是本仓）。
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from measure_octave import measure as measure_octave          # noqa: E402
+# ══ 你的部分 ══════════════════════════════════════════════════════════════════
+def measure_example():
+    """**占位实现 —— 换掉它。** 系统只提供机制，你的输入只有你知道怎么量。
 
-_REAL_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-def _generic_measure():
-    """上游自带的通用 measure（数 py/md 文件）—— **GATE_REPO 相对**，夹具里也能跑。
-
-    照抄上游语义：cmd 用 `find .`（闸门在仓库根逐字执行），计数用
-    `os.walk(GATE_REPO)` —— 换名自证里量到的必须是**夹具**的行数。
+    这里量的东西和「事实」无关，只是为了让仓库开箱能跑。真要落地时，把每条
+    `fact(值, 复跑命令, 出处)` 换成你自己量出来的数；特别是那条复跑命令 ——
+    它必须**真的能跑**，否则这条事实就又变成了一句散文。
     """
     facts = {}
-    n_py = n_md = lines_py = 0
+    n_py = 0
+    n_md = 0
+    lines_py = 0
     for root, _dirs, files in os.walk(GATE_REPO):
         if "/.git" in root:
             continue
@@ -65,31 +52,63 @@ def _generic_measure():
             if f.endswith(".py"):
                 n_py += 1
                 try:
-                    lines_py += sum(1 for _ in open(os.path.join(root, f),
-                                                    encoding="utf-8", errors="replace"))
+                    lines_py += sum(1 for _ in open(os.path.join(root, f), encoding="utf-8",
+                                                    errors="replace"))
                 except OSError:
-                    pass
+                    pass                      # 数不出来的文件不计数 —— 宁缺勿假
             elif f.endswith(".md"):
                 n_md += 1
-    facts["py_files"] = fact(n_py, "find . -name '*.py' -not -path './.git/*' | wc -l", "repo")
+    facts["py_files"] = fact(n_py, "find . -name '*.py' -not -path './.git/*' | wc -l",
+                             "repo", "示例事实：换掉 measure_example()")
     facts["md_files"] = fact(n_md, "find . -name '*.md' -not -path './.git/*' | wc -l", "repo")
+    # 这条刻意大于 BARE_MIN（check_facts 的裸数字阈值 = 100），好在 STATE.md 里
+    # 演示「手抄这个数字会被闸门拦下」。太小的数字遍地都是，查了全是噪音 ⇒ 不查。
     facts["py_lines"] = fact(lines_py, "find . -name '*.py' -not -path './.git/*' "
                              "-exec cat {} + | wc -l", "repo",
                              "刻意 ≥100，用来示范裸数字判据")
+    # ⑥ 块排除模式（issue #4 ⑥）：md_lines 数**块以外**的行 —— 机器块
+    # 就渲染在这些文档里，数进去 ⇒ 渲染一遍值就过期 ⇒ 复跑恒定失败
+    # （而 check_facts 比的是「块↔台账」，两边一起陈旧 ⇒ 全绿）。
+    # awk 的 FNR==1{b=0} 是必需的：find -exec {} + 会把多个文件喂给
+    # 同一个 awk 进程，漏了按文件重置，第一个带块的文件之后全被跳过，
+    # 而输出仍然「像个行数」。起始标记与 render.py 的输出逐字一致。
     md_lines_cmd = ("find . -name '*.md' -not -path './.git/*'"
                     " -exec awk 'FNR==1{b=0} /<!-- AUTO:FACTS -->/{b=1} !b' {} + | wc -l")
+    # cwd=GATE_REPO：计数（os.walk(GATE_REPO)）与复跑（闸门在仓库根
+    # 逐字执行 cmd）都锚定 GATE_REPO —— 不传 cwd 时，在夹具里量到的是
+    # 调用方仓库的行数，换名自证会红（跨仓库可配置性自证抓到的回归）。
     facts["md_lines"] = fact(
         int(subprocess.run(md_lines_cmd, shell=True, capture_output=True,
-                           text=True, check=True, cwd=GATE_REPO).stdout.strip()),
-        md_lines_cmd, "repo", "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期")
+                             text=True, check=True,
+                             cwd=GATE_REPO).stdout.strip()),
+        md_lines_cmd, "repo",
+        "不含机器块：块就渲染在文档里，数进去会让渲染一遍值就过期")
+
+    # 例：**量不到就不写**。把 UPSTREAM_VERSION 设上才有这条事实。
+    v = os.environ.get("UPSTREAM_VERSION", "").strip()
+    if v:
+        facts["upstream_version"] = fact(v, "echo \"$UPSTREAM_VERSION\"", "env",
+                                         "量不到就不写 —— 宁缺勿假")
     return facts
 
 
-def measure_example():
-    """平台契约要求的入口：真仓走本仓 measure，夹具（换名自证）走通用 measure。"""
+# ── ★ 本仓数据层接线（数据 vs 机制分离；2026-10-09 采纳，2026-10-10 随上游 C1–C5 重接）──
+#   机制在本目录（vendored 上游 Einfacht）；**本仓要量的东西**在 measure_octave.py。
+#   上游的 measure_example 是**占位实现**（只数 py/md 文件，上游注释自己写着"换掉它"）
+#   ⇒ 本仓把它换成"真仓走本仓 measure、夹具走通用占位"的分派。
+#   ⚠️ 为什么必须分派：换名自证（gates-selftest 的跨仓库夹具）会把 GATE_REPO 指到临时目录，
+#      那里当然没有本仓的产物/站点 ⇒ 硬用 measure_octave 会量出空表并误报
+#      "名字写死在代码里"（那正是这条自证要抓的，但这里不是真因）。
+from measure_octave import measure as measure_octave          # noqa: E402
+
+_REAL_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def measure_repo():
+    """平台契约要求的入口：真仓走本仓 measure，夹具（换名自证）走通用占位。"""
     if os.path.abspath(GATE_REPO) == os.path.abspath(_REAL_REPO):
         return measure_octave()
-    return _generic_measure()
+    return measure_example()
 
 
 # ══ 以下不用改 ════════════════════════════════════════════════════════════════
@@ -101,12 +120,13 @@ def _machine_blocks(ledger):
         （手写的「N 道闸门」清单漂过：ab/locks/pins 并入当天清单就少了
         三道 —— 叙述从声明行派生，手写退役）。
 
-    返回 (blocks, 错误句)。名录收不齐（某道闸门没落声明行）⇒ 拒绝渲染。
+    返回 (blocks, 错误句)。名录对账不过（缺声明 / 孤儿 / 旗标错）⇒ 拒绝渲染
+    —— 判据只有一份产地：`registry.problems()`。
     """
     gs, missing = registry.gates()
-    if missing:
-        return None, ("以下闸门没有 GATE = gate.meta(…) 声明行 —— 名录不收"
-                      "无名之辈：%s" % ", ".join(missing))
+    probs = registry.problems(gs, missing)
+    if probs:
+        return None, "名录对账不过，拒绝渲染：\n  · " + "\n  · ".join(probs)
     return ((BLOCK_BEGIN, BLOCK_END, render_block(ledger)),
             (registry.GATES_BEGIN, registry.GATES_END,
              registry.render_gates(gs))), None
@@ -197,7 +217,7 @@ def measure(argv):
     那不叫守卫，那叫故障。所以本文件把 argv 显式传进来；守卫的**决策**在
     `zreflect/guard.py`（decide()，接线有自证），本函数只执行它。
     """
-    facts = measure_example()
+    facts = measure_repo()
 
     old = facts_of(load(OUT)) if os.path.exists(OUT) else {}
 
@@ -340,6 +360,9 @@ CASES = [
     ("★ --get：键不存在 ⇒ (False, 错误句)（空输入不是通过）",
      lambda: get_value({"facts": {"n": 1}}, "zzz")[0] is False),
 ]
+
+
+MODULE = module_meta("台账 CLI", "量一遍 / 渲染 / --get / 两道守卫", selftest=True)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,12 @@
 > 这套系统的全部目的只有一个：**让"现在如此"必须能被一条命令证明，且被推翻时能被自动抓到。**
 > 你不用背任何一条规矩——它们都有闸门盯着，违反会被拦。你只需要知道**拦住你的时候该怎么办**。
 >
+> ★ **2026-10-10：已追平上游 C1–C5**（原 vendored 版 = 上游 `ae2b82a`；现 = `0a0ff91`）。
+> 三条新纪律（详见 `AGENTS.md` 提交前节）：**谓词=声明不是文件名**（`registry --run <相位>`，
+> glob 退役）/ **off 与"跑过且通过"可区分**（`ran/off/failed` 三档，off 不是通过）/
+> **"必须一致"的要配对账器**（`registry.problems()` 里四对）。平台模块也要声明自己
+> （`MODULE = module_meta(…)`）—— 本仓数据层 `zreflect/measure_octave.py` 已加。
+>
 > ★ **2026-10-09：已采纳完全重构后的 Einfacht**。**机制**在 `zreflect/`（vendored 上游：
 > gate 平台 / 发现式名录 / 旋钮登记 / world / 复跑 / 陈旧 / 悬案 / 三语 README），
 > **本仓数据层**在 `zreflect/measure_octave.py`（数据 vs 机制分离）。旋钮唯一可复现来源 =

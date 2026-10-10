@@ -20,11 +20,8 @@ fi
 python3 "$GH/update-state.py" --check
 python3 "$GH/update-readme.py" --check
 
-# ── ② 平台闸门：发现式名录（别手写清单 —— 漏登记一个 check_*.py 时 hook 自己还绿着）──
-for g in zreflect/check_*.py; do
-  [ -f "$g" ] || continue
-  python3 "$g" || exit 1
-done
+# ── ② 平台闸门：执行面唯一产地（上游 C1；与 pre-commit 同源，别再 glob）───────
+REFLECT_LOCKS=build/upstream-lock.json python3 zreflect/registry.py --run commit || exit 1
 
 # ── ③ 本仓专属闸门（平台无对应件）─────────────────────────────────────────────
 python3 "$GH/check-state.py"

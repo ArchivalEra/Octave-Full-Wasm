@@ -7,7 +7,8 @@
    "url": "https://www.netlib.org/lapack/lapack-3.4.2.tgz",
    "file": "octave-wasm/third_party/lapack-3.4.2",
    "form": "目录",
-   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收 ｜ optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说",
+   "optional": true
   },
   {
    "name": "libf2c2",
@@ -15,7 +16,8 @@
    "url": "https://www.netlib.org/f2c/libf2c2.zip",
    "file": "octave-wasm/third_party/libf2c2-20130926",
    "form": "目录",
-   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收 ｜ optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说",
+   "optional": true
   },
   {
    "name": "f2c",
@@ -23,7 +25,8 @@
    "url": "https://www.netlib.org/f2c/",
    "file": "octave-wasm/third_party/f2c-20160102",
    "form": "目录",
-   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收 ｜ optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说",
+   "optional": true
   },
   {
    "name": "glu",
@@ -31,7 +34,9 @@
    "url": "https://cgit.freedesktop.org/mesa/glu 快照",
    "file": "third_party/glu-src.tar.xz",
    "form": "文件",
-   "sha256": "bd43fe12f374b1192eb15fe20e45ff456b9bc26ab57f0eee919f96ca0f8a330f"
+   "sha256": "bd43fe12f374b1192eb15fe20e45ff456b9bc26ab57f0eee919f96ca0f8a330f",
+   "optional": true,
+   "note": "optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说"
   },
   {
    "name": "gl2ps",
@@ -39,7 +44,9 @@
    "url": "http://www.geuz.org/gl2ps/（Debian 源）",
    "file": "third_party/gl2ps-1.4.2.orig.tar.xz",
    "form": "文件",
-   "sha256": "f5a390ea332e756f8d08d2058b54d3d48600dc9e31d28146b6b780270ea26f94"
+   "sha256": "f5a390ea332e756f8d08d2058b54d3d48600dc9e31d28146b6b780270ea26f94",
+   "optional": true,
+   "note": "optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说"
   },
   {
    "name": "qrupdate",
@@ -47,7 +54,8 @@
    "url": "https://sourceforge.net/projects/qrupdate/",
    "file": "third_party/qrupdate-1.1.2",
    "form": "目录",
-   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收"
+   "note": "目录形态（解包 tarball）；来源 URL 为重取入口，重取后以 build 脚本冒烟验收 ｜ optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说",
+   "optional": true
   },
   {
    "name": "glpk",
@@ -55,7 +63,17 @@
    "url": "https://ftp.gnu.org/gnu/glpk/glpk-5.0.tar.gz",
    "file": "third_party/glpk-5.0.tar.gz",
    "form": "文件",
-   "sha256": "4a1013eebb50f728fc601bdd833b0b2870333c3b3e5a816eeba921d95bec6f15"
+   "sha256": "4a1013eebb50f728fc601bdd833b0b2870333c3b3e5a816eeba921d95bec6f15",
+   "optional": true,
+   "note": "optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说"
+  },
+  {
+   "name": "einfacht",
+   "version": "0a0ff91",
+   "url": "https://github.com/ArchivalEra/Einfacht",
+   "file": "zreflect",
+   "form": "dir",
+   "note": "事实系统机制层（vendored 进 zreflect/；**本仓数据层** = zreflect/measure_octave.py，不随上游覆盖）。version = 上游 commit（2026-10-10 追平 C1–C5；此前 vendored 版 = ae2b82a）。升级法：从上游取 zreflect/*.py + reflect-hooks/* + gates-selftest.sh，**除 measure 数据层**；然后跑 sh gates-selftest.sh（它会抓出接线不齐，如 env 旋钮与夹具的冲突）。"
   }
  ]
 }

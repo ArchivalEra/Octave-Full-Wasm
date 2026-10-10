@@ -107,15 +107,27 @@
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**
 
 ## 提交前（事实系统 = Einfacht 平台 + 本仓专属闸门）
-> **2026-10-09：事实系统已采纳完全重构后的 Einfacht**（`zreflect/` 机制层 + `reflect-hooks/`
+> **2026-10-09 采纳重构版；2026-10-10 追平上游 C1–C5**（`zreflect/` 机制层 + `reflect-hooks/`
 > 钩子 + `gates-selftest.sh` 发现式自证台）。本仓的**数据层**在 `zreflect/measure_octave.py`
 > （数据 vs 机制分离：换仓库只换那一个文件，机制原样可升级）。旋钮的唯一可复现来源 =
 > `reflect-hooks/Einfacht.env`。钩子已指向 `reflect-hooks`（`git config core.hooksPath`）。
+> **C1–C5 带来的三条纪律**（照上游 `AGENTS.md`，本仓已采纳）：
+> · **谓词 = 声明，不是文件名**（C1）：执行面读 `registry --run <相位>`，**不再 glob
+>   `check_*.py`**。频率是声明字段 `runs_at="commit"|"start-of-work"`，不是命名意外
+>   （`doctor.py` 曾经只能靠"它没叫 check_"表达"不挂 pre-commit"）。名字不再承重 ⇒
+>   "孤儿"概念消失。平台模块也声明自己：`MODULE = module_meta(名, 一句话, selftest=True/False)`
+>   —— `selftest=True` ⇒ 必须真能 `--selftest` 且被 harness 实跑；没声明的 `.py` ⇒ registry 报。
+> · **off 与"跑过且通过"必须可区分**（C2）：`gate.off()` 打 `OFF:` 标记（rc 仍 0），
+>   执行面聚合 `ran / off / failed`。**"全绿"不许把"没跑"算进去** —— 本仓实测过
+>   `ran 8 / off 5` 这种"看着全绿其实只跑了一半"的形状。
+> · **"必须一致"的要配对账器**（C4）：声明旋钮 ⊆ 实读旋钮、登记表 ⊆ 三语 README 配置表、
+>   夹具改名集唯一产地（`registry.FIXTURE_RENAMES`）—— 各配可复跑对账，接进 `registry.problems()`。
+>   **没有对账器的"必须一致" = 迟早不一致。**
 > 下面手工复跑的就是钩子跑的那几道：
 ```bash
-# 平台层（发现式名录，别手写清单）：机器块 + 13 道闸门 + 自证
+# 平台层（**执行面唯一产地**，上游 C1 起；别 glob、别手写清单）：机器块 + 闸门 + 自证
 python3 zreflect/facts.py --render-doc STATE.md   # 重渲染事实块 + 闸门名录块（--check 验新鲜）
-for g in zreflect/check_*.py; do python3 "$g" || exit 1; done
+python3 zreflect/registry.py --run commit         # ★ 跑所有 runs_at="commit" 的闸门（ran/off/failed 三档）
 sh gates-selftest.sh                              # ★ 平台闸门自证（含跨仓库可配置性反向断言）
 # 本仓专属层（平台无对应件）：AUTO 区块 + 活状态断言 + 一致性 + 可证伪 + 白名单 + 就绪 + pin 见证
 python3 .githooks/update-readme.py --check        # README 的 AUTO:FILES 要新鲜

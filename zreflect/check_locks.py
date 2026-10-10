@@ -43,15 +43,24 @@ from gate import repo                                     # noqa: E402
 DEFAULT_SPEC = "upstream-lock.json"
 
 
-def resolve_spec(argv):
-    """规格名解析：--spec 显式 > 默认名。返回 (规格名, 是否显式指定)。
+def resolve_spec(argv, knob=""):
+    """规格名解析：`--spec` 显式 > REFLECT_LOCKS 旋钮 > 默认名。返回 (规格名, 是否显式指定)。
 
     显式指定而文件不在 ⇒ 调用方必须 FATAL（配置了却不存在的规格是
     「部署了 ≠ 在跑」家族）；默认名不在 ⇒ 未启用退 0。
+
+    ⚠️ 为什么加旋钮（**本仓 2026-10-10 采纳上游 C1–C5 时暴露的缺口**）：
+    本仓的锁定清单在 `build/upstream-lock.json`（不是仓库根的默认名），而本闸门原先
+    **只认默认名、无旋钮** ⇒ 它在本仓**从来没跑过**；旧版还看不出来（现在是 `OFF:`
+    明说）—— 正是上游 C2「off 与通过可区分」的价值，一采纳就现形。
+    与 `check_pins.py` 的 `REFLECT_PINS` 同款形状（同族闸门，旋钮别分叉）。
     """
     for i, a in enumerate(argv):
         if a == "--spec":
             return argv[i + 1], True
+    k = (knob or "").strip()
+    if k:
+        return k, True
     return DEFAULT_SPEC, False
 
 
@@ -103,7 +112,7 @@ def check(spec, hasher=_sha, root=None):
 
 
 def main(argv):
-    spec_path, explicit = resolve_spec(argv)
+    spec_path, explicit = resolve_spec(argv, os.environ.get("REFLECT_LOCKS", ""))
     path = spec_path if os.path.isabs(spec_path) else repo(spec_path)
     if not os.path.isfile(path):
         if explicit:
@@ -149,6 +158,10 @@ def _cases():
         ("规格名解析：--spec > 默认名（显式带回 True）",
          lambda: resolve_spec(["--spec", "x.json"]) == ("x.json", True)
          and resolve_spec([]) == ("upstream-lock.json", False)),
+        # ★ 旋钮（2026-10-10 加，本仓需要：锁定清单在 build/ 下）：显式优先于旋钮
+        ("旋钮：REFLECT_LOCKS 生效，且 --spec 优先",
+         lambda: resolve_spec([], "build/upstream-lock.json") == ("build/upstream-lock.json", True)
+         and resolve_spec(["--spec", "a.json"], "b.json") == ("a.json", True)),
         # ① 正常不报
         ("锁定一致/目录形态/optional 缺席 ⇒ 不报",
          lambda: check(spec, root=d)[0] == [] and check(spec, root=d)[1] != []),
@@ -165,7 +178,7 @@ def _cases():
 
 
 GATE = meta("锁定源闸门", "锁定源清单（URL + 文件 + sha256 的内容指纹）",
-            knobs=())
+            knobs=("REFLECT_LOCKS",))
 
 if __name__ == "__main__":
     sys.exit(main_selftest_or(sys.argv[1:], "check_locks（锁定源清单）", _cases, main))

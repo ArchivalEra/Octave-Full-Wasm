@@ -17,6 +17,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ledger import fact                                    # noqa: E402
+from gate import module_meta                               # noqa: E402
+
+# ★ C5（2026-10-10）：本仓数据层也必须在平台名册里声明自己，否则 registry 报 undeclared。
+#   selftest=False：它是**数据**（量什么、怎么量），机制的自证在 zreflect/ 上游那批。
+MODULE = module_meta("本仓数据层", "量本仓的产物/站点/回归（数据 vs 机制分离）", selftest=False)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = os.environ.get("OCTAVE_SITE", "/mnt/hdd/octave-wasm-build/site")
