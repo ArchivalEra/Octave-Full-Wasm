@@ -88,3 +88,135 @@ python3 .githooks/witness-upstream-pin.py     # ⇒ ok / DRIFT / SKIP（读不�
   不可分辨）⇒ 无补丁分支，tag 直连。
 - QuantStack 19 件参考补丁存 `upstream-patches/octave-wasm-quantstack/`（谱系出处，
   非构建输入）。
+
+## 四·六、emsdk 6.0.12 供给 + 软链切换（2026-10-10）
+
+**背景**：`emsdk` **已在 pin 管线里**（`upstream-pins.json` 的 `kind:"toolchain"`，
+`witness-upstream-pin.py` 每提交断言「容器 emcc == expect_version」），
+**但只到"版本串断言"** —— 容器那份 1.8 GB SDK 是**手工解包装**的，`provision-upstream.sh`
+明确不管它 ⇒ **「紧随最新版」没有受管辖入口**（只能手敲 = 不可复现）。
+
+**新增 `build/113/provision-emsdk.sh`**（形状同 provision-upstream.sh 家族）：
+
+| 子命令 | 做什么 |
+|---|---|
+| `install <版本>` | 装到 `/opt/emsdk-<版本>`（**多版本并存**，不覆盖）；装完 fail-closed 核对读出的版本串 == 请求的版本 |
+| `use <版本>` | 切 `/emsdk` 软链；若 `/emsdk` 是真目录**先改名为备份**（不删） |
+| `status` | 打印 `/emsdk` 指向 / 容器 emcc / 已装版本 / pins 期望 |
+
+★ **为什么用软链而不是改脚本**：`/emsdk/...` **硬编码 36 处、散在 25 个 build 脚本**里
+（`grep -rn '/emsdk' build/**/*.sh | wc -l`）。让 `/emsdk` 保持稳定路径 ⇒ 切版本时
+**那 36 处一个都不用改**（否则就是"两处口径漂移"的老形状）。
+
+**实测（本批已做）**：
+
+| 项 | 结果 |
+|---|---|
+| `install 6.0.12` | ✅ 装到 `/opt/emsdk-6.0.12`（clang/LLD **24.0.0**，sysroot 就位） |
+| 6.0.12 编现役 `.oct` 源（w64，`-sSIDE_MODULE=1 -sMEMORY64=1 -pthread -fwasm-exceptions`） | ✅ 出 **5398 B** |
+| **该产物在现役（5.0.7 构建的）wasm64 Octave 上 dlopen + 调用** | ✅ `exist=3` / `det=5` / `det2=-2` |
+
+⇒ **结论 1**：`.oct` 侧可以**先走 6.x**，不必等整树/farm 重编 —— 这是可分段推进的第一个证据。
+
+**升级时要适配的一处（实测）**：`-sMEMORY64=1` 在 6.0.12 报
+`warning: MEMORY64 is deprecated (prefer the standard -m64 or --target=wasm64 flags)`。
+⇒ `build/113/*.sh` 里的 `-sMEMORY64=1` 迟早要换 `-m64`（本批未改：断言面不够，
+先记录；等真做全树升级时一并换）。
+
+**`expect_version` 是数据不是代码**：`upstream-pins.json` 里一个字段，切版本 = 改数据 +
+bump `upstream/emsdk` submodule pin（6.0.12 的 tag commit = `35ff8a6d15`）。
+**两条要同批改**，否则 witness 当场红（这正是它该干的事）。
+
+## 四·七、emsdk 升级的**机械性缺口**（2026-10-10，试点实测发现）
+
+试点（6.0.12 编 zlib）跑通了，但过程中发现**两个会让升级"看起来成功、实则混版"的缺口**——
+它们是升级必须先补的，不是可选的清理项。
+
+### 缺口 1：源码树指纹**只记旗标、不记工具链版本** ⇒ 换 emcc 会静默复用旧树
+
+`build-libs.sh` 的 `clear_if_flags_changed()`（第 55 行）把 `LANE_FLAGS` 写进
+`$WORK/<dir>/.lane-flags`，指纹不符就清树重解包。机制本身是对的（glpk 悬案结案时加），
+**但指纹里没有 emcc 版本** ⇒ 从 5.0.7 切到 6.0.12 时：
+
+- 树已存在、`LANE_FLAGS` 没变 ⇒ **指纹相同 ⇒ 不清树** ⇒ `make` 按 mtime 判"全部最新"
+  ⇒ **零重编** ⇒ 产物仍是 5.0.7 编的，而你以为升级了。
+
+这与文档里记过的"旗标指纹"事故**同形**（"换旗标不清树 ⇒ 静默保持旧指针宽度"，NOTES-wasm64
+「glpk 悬案结案」）：**同一个坑，换了个变量（工具链版本）再踩一次**。
+
+**修法（本批未改，留作升级第一批）**：指纹串里并入 `emcc --version` 的版本串
+（或 `$(emcc --version | head -1)` 的行哈希）。改一行 `stamp_dir`/比对即可，
+但**必须同时配反向断言**：故意用两个版本编同一个库，断言第二次**真的**重编了
+（否则就是"赋值了但没被引用"那类静默失效）。
+
+### 缺口 2：`need_arch()` 里 `llvm-readobj` 的路径**硬编码 `/emsdk/upstream/bin`**
+
+第 69 行：`local ro="/emsdk/upstream/bin/llvm-readobj"`，取不到才退回 PATH 上的
+`llvm-readobj`。软链方案下这行**仍然可用**（`/emsdk` 始终有效），但：
+- 若哪天 `/emsdk` 指向的版本里没有这个路径（或切换中途），架构断言会静默退到
+  "PATH 上随便一个 llvm-readobj" ⇒ **可能用错版本的 readobj 去读 wasm64**（判别力下降）。
+- 这是"路径硬编码 36 处"的一个**承重**实例（其余 35 处只是找编译器，这处是**判据**）。
+
+### 试点实测数据（有正面结论）
+
+| 项 | 结果 |
+|---|---|
+| 6.0.12 编 `zlibbz2`（隔离 prefix `/src/deps-6012`） | ✅ 5 秒；`libz.a` **103336 B**（5.0.7 版 103546 B） |
+| 架构断言（`need_arch`） | ✅ `Format: WASM` / `Arch: wasm32` |
+| 逐库符号自检（`emnm` 验 `deflate`/`inflate`/`gzopen`） | ✅ 3/3 |
+| 6.0.12 编 `.oct`（w64 源，现役头树） | ✅ 5398 B |
+| 该 `.oct` 在 **5.0.7 构建的**现役 wasm64 Octave 上 dlopen + 调用 | ✅ `exist=3` / `det=5` / `det2=-2` |
+
+⇒ **两个正面结论**：① 6.0.12 编 zlib 这类 C 库**零改动**可用（`build-libs.sh` 一行没改）；
+② `.oct` 侧**跨版本兼容**（6.0.12 编的能装进 5.0.7 的宿主）⇒ 升级可**分段推进**，
+不必"三条线一次性全切"。
+
+### 缺口 1 的**验证手段**（已实测可用）
+
+怎么证明"这个 `.a` 到底是哪个 emcc 编的"？—— 读 **`producers` 自定义段**：
+
+```bash
+node -e 'const b=require("fs").readFileSync("libglpk.a"); 
+  console.log([...new Set((b.toString("latin1").match(/clang version [0-9.]+/)||[]))])'
+# 6.0.12 编的 → "clang version 24.0.0"（LLVM 24）
+# 5.0.7 编的  → clang 23.x
+```
+
+实测：`/src/deps-6012/glpk/lib/libglpk.a` 的 producers 段含 **`24.0.0`** ⇒ 确证是 6.0.12
+编的（不是复用旧树）。**这条断言应当成为"工具链指纹"缺口的反向测试**：升级后随机抽一个
+`.a` 读 producers，版本串必须是新版的 —— 否则就是"静默复用旧树"（缺口 1 的失败形态）。
+
+### 缺口 3（**试点抓到的最重要一条**）：PATH 换版本**不够** —— CMake 类库会"两个 emsdk 混用"
+
+**实测现象**（6.0.12 编 `build-libs.sh all`，前面 zlib/glpk/fftw 都过，到 **qhull 挂**）：
+
+```
+CMake Error at /emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake:96:
+  Process returned with error code 1.
+  emcc: error: ''$CFGDIR/upstream/bin/clang' -v -target wasm32-unknown-emscripten'
+  failed: [Errno 2] No such file or directory
+```
+
+**根因（机制，不是巧合）**：那次试点我的做法是**只把 6.0.12 放进 PATH 首位**（`/emsdk` 软链**没动**，
+仍指 5.0.7）。于是：
+
+- `emcmake`（PATH 里的 6.0.12 那份）按**自己所在目录**推出 toolchain 文件 —— 但
+  `build-libs.sh` 里 qhull 那支用的是**写死的** `/emsdk/upstream/emscripten/cmake/...`（5.0.7 的）；
+- 5.0.7 的 `Emscripten.cmake` 展开 `$CFGDIR` 用的是**当时的 EM_CONFIG**，而 EM_CONFIG 落在
+  `/emsdk`（5.0.7）⇒ **clang 路径与编译器版本错位** ⇒ cmake 的编译探测失败。
+
+⇒ **PATH 级切换对 CMake 类库不够**：`emcc`/`emcmake`/`EM_CONFIG`/`cmake toolchain 文件`
+**四者必须来自同一份 emsdk**。这正是 `/emsdk` **软链方案**（`provision-emsdk.sh use`）要
+解决的问题 —— 它让四者天然一致（全在 `/emsdk` 下）。**PATH 方案只适合纯 configure/make 的库**
+（zlib/glpk/fftw 过了就是证据）。
+
+**对升级流程的硬要求**（写进推广方案）：
+
+1. 升级**必须用 `provision-emsdk.sh use <版本>` 切软链**，不能只改 PATH。
+2. 切软链前**必须**先把现役树/产物隔离（`DEPS`/`WORK`/`PREFIX` 指向新目录），
+   否则 `need_arch`/别的脚本读到的 `/emsdk` 变了、而 ccache 里还是旧版对象 ⇒ 混版。
+3. **`EM_CONFIG` 必须跟着版本走**（软链方案下自动成立；手改 PATH 时必须显式设）。
+
+**这一条也解释了为什么"三条线一起切"是错的**：三条线共用一个容器、一个 `/emsdk`
+⇒ **软链是全局状态** ⇒ 同一时刻只能有一条线的构建在正确版本下跑。
+⇒ 升级只能**串行逐线**，且每条线切版本时，**其余两条线的产物必须已经落盘（不依赖容器现行状态）**。
