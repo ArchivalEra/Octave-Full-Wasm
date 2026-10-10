@@ -305,7 +305,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/check-dylink-signatures.py` (9002 bytes)
 - `build/113/check-forge-catalog.py` (15161 bytes)
 - `build/113/check-oct-host-symbols.mjs` (953 bytes)
-- `build/113/check-oct-imports.py` (12557 bytes)
+- `build/113/check-oct-imports.py` (16007 bytes)
 - `build/113/check-oct-lane.py` (16171 bytes)
 - `build/113/configure-113-full.sh` (19902 bytes)
 - `build/113/configure-113.sh` (12415 bytes)
