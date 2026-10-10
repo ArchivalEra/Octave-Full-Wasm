@@ -349,7 +349,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/build-w64-lane.sh` (10167 bytes)
 - `build/113/check-build-manifest.py` (22803 bytes)
 - `build/113/check-dylink-signatures.py` (9002 bytes)
-- `build/113/check-oct-imports.py` (12557 bytes)
+- `build/113/check-oct-imports.py` (16007 bytes)
 - `build/113/check-oct-lane.py` (16171 bytes)
 - `build/113/configure-113-full.sh` (19902 bytes)
 - `build/113/configure-113.sh` (12415 bytes)
