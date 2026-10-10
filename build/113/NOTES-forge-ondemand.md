@@ -149,15 +149,26 @@ OctaveAssets.install(name, {onProgress}) // Promise<{name, version, installed:[�
 
 ## §6 分叉点（**需要用户拍板**，故设计稿先停在这里）
 
-### 分叉 A：v1 纳不纳**含编译件（`.oct`）**的包？
+### 分叉 A：v1 纳不纳**编译件**？—— ✅ **实测精化后：这个问题基本消解了**
 
-- **纯 `.m` 包**（struct/nan/splines/geometry-m/matgeom/quaternion/tsa/miscellaneous/optim/statistics-m）：
-  客户端解包 + 落盘即可，**零构建** ⇒ **v1 完全可行**。
-- **含 `.oct`**（control/geometry 的编译件、signal、statistics 的 libsvm/fcnn…）：
-  需**宿主预编** `.oct`（`build-pkg-oct.sh`，wasm side module）+ 客户端 dlopen 拉取。
-  ⇒ **两段**：构建期编 `.oct`（宿主），运行期拉 `.oct`（客户端）。可行但工作量大。
-- **建议**：**v1 只上纯 `.m`**（立刻兑现"按需=0 字节"的最大块），含编译件的包**留 v2**，
-  且 v1 的 catalog 就给它们留 `kinds: ["m","oct"]` 字段（**形状先定，实现后到**）。
+**2026-10-09 对 10 个包逐个开箱实测**（`tools/forge-shelf.py --probe`，判别三态）：
+
+| kinds | 含义 | 包 |
+|---|---|---|
+| `m` | 纯 `.m` | matgeom, quaternion, splines |
+| `m+src` | `.m` **开箱可用**；`src/` 是**可选加速件源码**（不编也能用） | geometry, miscellaneous, nan, optim, statistics, struct, tsa |
+| `m+oct` | 随包带**预编译 `.oct`**（异架构 ⇒ 必须重编） | **（本货架 0 个）** |
+
+**关键实测事实**：这些源包里**预编译 `.oct` 数 = 0**（geometry/statistics/struct 逐个查过）。
+⇒ 旧判别（`src/` ⇒ 当"需编译"）是**误判**，会把 7 个开箱可用的包错划到 v2。
+⇒ **v1 范围 = 全部 10 个包**（`.m` 部分），零构建、零宿主预编。
+
+**真正的 v2 才是有 `oct` 形态的那些**：包**自带** `.oct`（异架构，得换）或要用 `src/` 加速件
+（宿主 `build-pkg-oct.sh` 预编 + 客户端 dlopen 拉取，两段式）。v1 的 catalog 保留 `kinds` 字段
+（形状先定，v2 实现后到）。
+
+> 教训（值得写进 NOTES）：**"有没有 src/"与"能不能直接用"是两件事**。
+> 判别必须看**包内实际带什么**，不能看目录名推。这正是 T0 spike 这类实测的价值。
 
 ### 分叉 B：**解包在哪做** —— ✅ **已定（实测，2026-10-09）：不在 JS 里解，用 wasm 内建的 gunzip+untar**
 

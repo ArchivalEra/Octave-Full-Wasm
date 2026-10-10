@@ -111,7 +111,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 - `zreflect/` —— 事实系统（**2026-10-09 采纳 Einfacht 重构版**：闸门平台 / 发现式名录 / 旋钮登记 / world 闸门）；`zreflect/measure_octave.py` 是本仓数据层，`reflect-hooks/Einfacht.env` 是旋钮载体
 - `HISTORY.md` —— 逐批 append-only 记录（上文全部证据在 §5.77–§5.104）
 - `maintaince.md` —— 方向地图；`docs/embed-api.md` —— 嵌入契约；`DEPLOY.md` —— 部署
-- `build/113/NOTES-forge-ondemand.md` —— 设计稿（未实现）：**Octave-Forge 按需拉取**插件系统（客户端货架 + 运行时安装，与 fork/lock 管线贴合）
+- **Octave-Forge 按需拉取**（v1 已跑通，2026-10-09）：`OctaveAssets.catalog()` 读站点货架、`OctaveAssets.install(name)` 在**被要求时才**下载+校验+安装（含依赖闭包）——**没用到的包 = 0 字节**。货架 = `shelf/` submodule（只含元数据，每包一文件）；站点目录 = `build/forge-catalog.py`；设计稿 = `build/113/NOTES-forge-ondemand.md`；验收 = `test/browser/accept-forge-ondemand.mjs`
 - `build/113/` —— 车道构建配方 + 闸门；`test/browser/` —— 验收 harness（`SWEEP_JOBS=4` 可并行；最近一次全绿轮 = 台账 `accept_suites` / `accept_pass`）
 - 图形（2026-10-09 起**引擎权威**）：`bridge/octave-core.js` 保护核心 `m/plot` 树不受宿主影子桩污染（快照 + 还原 + 删新建），`p5canvas.js`/`queue.js` 经 `window.__octaveHosts` 解析模块 ⇒ embed 形态下图能上屏；验收 = `accept-gfx-isolation` + `accept-gfx-render`
 - `.scratch/open-questions/issues/` —— 本地工单 tracker

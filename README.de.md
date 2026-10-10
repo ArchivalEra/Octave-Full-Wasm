@@ -138,7 +138,11 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   Belege)
 - `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
   `DEPLOY.md` — Deployment
-- `build/113/NOTES-forge-ondemand.md` — Design (nicht implementiert): das
+- **Octave-Forge On-Demand-Pull** (v1 läuft, 2026-10-09): `OctaveAssets.catalog()` liest ein Site-Regal,
+  `OctaveAssets.install(name)` lädt+prüft+installiert ein Paket (samt Abhängigkeitsabschluss) erst
+  **auf Anfrage** — **0 Bytes für nie genutzte Pakete**. Regal = `shelf/`-Submodule (nur Metadaten,
+  eine Datei pro Paket); Site-Katalog = `build/forge-catalog.py`;
+  Design = `build/113/NOTES-forge-ondemand.md` (nicht implementiert): das
   **Octave-Forge-On-Demand-Pull**-Pluginsystem (Client-Regal + Laufzeit-Installation,
   verzahnt mit der Fork/Lock-Pipeline)
 - `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness

@@ -218,5 +218,10 @@
    "__web_ginput_pop__",
    "__web_run_js__"
   ]
+ },
+ "forge": {
+  "note": "Forge **按需安装**助手（issue 64 / 设计稿 NOTES-forge-ondemand §3）：__forge_install__ 把已下载的包 tarball 用引擎内建 gunzip+untar 解包，并按 `pkg install` 的真实布局落盘（inst/ 上提 + 元数据落包根 + 拒异架构 .oct）。由 assets-loader 的 install() 经 eval_string 调用。",
+  "deps": [],
+  "addpath": "/usr/src/octave/m/forge"
  }
 }

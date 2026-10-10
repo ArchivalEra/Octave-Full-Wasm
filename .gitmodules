@@ -56,3 +56,6 @@
 	path = upstream/rapidjson
 	url = https://github.com/ArchivalEra/rapidjson.git
 	branch = wasm/1.1.0
+[submodule "shelf"]
+	path = shelf
+	url = https://github.com/ArchivalEra/Octave-Forge-Shelf.git

@@ -4470,3 +4470,46 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   `SafePlotSinkPolyfill`（`install()` 已成空操作）。
 - **API 面自证**：`bridge/octave-embed.js` 本轮零提交（最后改动 = 工单 50 的
   `figures.geometry`），`docs/embed-api.md` 未动 ⇒ "接口没变、行为变了"这句可复跑核对。
+
+### 5.105 Forge **按需拉取**插件系统：独立货架仓 + 客户端安装（2026-10-09）
+
+> 用户点令："建立一个插件系统，要跟 fork 管线紧密贴合，我们去 Octave-Forge 社区购物" +
+> "我想做成那种**客户端按需拉取**的东西……围绕按需下载来设计" +
+> "我们现在在 master 线试点，最好把这个做成一个**单独的仓库**？那样之后无限 git 仓库
+> 就能美美分发了，这才是真正复用 fork 管线的省事操作"。设计稿 = `build/113/NOTES-forge-ondemand.md`；
+> 工单 = `.scratch/open-questions/issues/64-forge-ondemand.md`。
+
+**① 独立货架仓 `Octave-Forge-Shelf`（新建，已推 GitHub）**
+- **只存档案事实**（每包一文件 `packages/<name>.json`，多版本数组），不存字节 ⇒ 仓 KB 级、加包 = 加一个文件。
+- 工具 `tools/forge-shelf.py`：`--list/--fetch/--verify/--probe/--emit/--add`，**自证 14 条**（三档齐备）。
+- 首版 10 包（全部与 Octave 11.3.0 兼容）：geometry 4.1.0 / matgeom 1.2.4 / miscellaneous 1.3.3 /
+  nan 3.7.2 / optim 1.6.3 / quaternion 2.4.2 / splines 1.3.5 / statistics 1.7.7(含1.7.3) / struct 1.0.18 / tsa 4.6.3。
+- **复用 fork 管线的关键**：本仓被主仓当 **submodule** 钉住 ⇒ "货架上有什么/哪个版本"由
+  **submodule commit** 承载，"字节是不是那份"由 **sha256** 承载 ⇒ **能力与包数解耦**，
+  主仓三件套（provision/witness/客户端）一行不用改就能吃下任意多包。
+
+**② 主仓侧接线 + 客户端安装（全部实测）**
+- `build/forge-catalog.py`（新，自证 10 条）：货架 → 站点 `assets/forge-catalog.json` + `assets/forge/*.tar.gz`。
+  版本按 **fork 的 Octave 版本**过滤（从 `upstream/octave/configure.ac` 的 `AC_INIT` **读**，不手写）；
+  字节从本地缓存拷 + **逐字节核 sha**；`verified` 为空的包**默认不上架**（用户裁定"只上验证过的"）。
+- `bridge/assets-loader.js` 加 **`catalog()` + `install()`**（设计稿 §3 的主接缝）：
+  依赖闭包 → 逐个 fetch + sha 校验 → **委托引擎内建解包** → 按 `pkg install` 布局落盘 → addpath → pkgfix 重扫。
+- `build/forge/__forge_install__.m`（新，宿主可单测）：解包（`gunzip`+`untar`，**不写 JS tar 解析器**）
+  + 布局复现（`inst/` 上提 + 元数据落包根 + **拒绝异架构 `.oct`**）。
+
+**③ 实测发现（三条都写进设计与代码注释）**
+- **引擎内建解包可用**：`build/webio.cc` 的 `__web_gunzip__`/`__web_untar__`（zlib/ustar）在浏览器里
+  解真 forge tarball：`gunzip` 1 文件、`untar` **211 文件** ⇒ 客户端零 JS tar 解析器。
+- **核心 `pkg('install',…)` 在本构建下坏**（`dirlist(3): out of bound 2`，与 web `pkg.m` shim 的路径手术冲突）
+  ⇒ "直写"是 v1 主路（设计稿原以为可委托核心，T0 spike 翻案）。
+- **`kinds` 三态**：`m` / `src`（可选加速件源码，`.m` 照常可用）/ `oct`（异架构预编译）。
+  旧判别把 `src` 当 `oct` ⇒ 会误把 7 个开箱可用的包划到 v2；实测这 10 个包**预编译 `.oct` 数 = 0**
+  ⇒ **v1 范围 = 全部 10 个**。
+- 另两条坑：`copyfile` 走 `system('cp -r')`（无 shell ⇒ 必挂，依赖 **webfile** 资产）；
+  recursive glob `**/*.oct` 在 wasm 里返回 0（改用**显式递归**，否则反向断言静默失效）。
+
+**④ 验收 `test/browser/accept-forge-ondemand.mjs`：15 PASS / 0 FAIL**
+- 按需性**双向**证据：读 catalog 时 `tar.gz` 请求数 = **0**；install 时才发生 1 个包下载。
+- 装后三面可见：磁盘文件数 > 0 / `exist` ≠ 0 / 核心 `pkg list` 看得见。
+- **依赖闭包**：`install('optim')` ⇒ 自动装 statistics + struct ⇒ `fminunc` **真调用收敛 x=3.0000**。
+- **三条反向断言**：货架上没有的包 ⇒ 报错；篡改字节 ⇒ sha256 必然不符；带 `.oct` 的包 ⇒ **拒绝安装且不留半装**。

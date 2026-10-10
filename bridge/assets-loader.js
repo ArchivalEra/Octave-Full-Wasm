@@ -49,6 +49,11 @@
     var readyFn = isReady || function () { return global.__octaveReady === true; };
 
     var manifest = null;
+    // ── Forge 按需拉取状态（设计稿 §3）——每实例一份（与 manifest/loaded 同款纪律）──
+    var _catalog = null;        // 已读到的货架目录（缓存）
+    var _catalogP = null;       // 读取中的 promise（去重）
+    var _catalogByName = {};    // name → pack 条目
+    var installSeen = {};       // 安装去重（同实例内）
     var byName = {};
     var loaded = {};       // name -> {files: n, addpath: [...]}
     var inflight = {};     // name -> Promise
@@ -383,7 +388,101 @@
         });
       },
       // 便捷：把资产交给 Octave（在主线程可用时同步调用）
-      eval: function (expr) { return Msafe().eval_string(expr); }
+      eval: function (expr) { return Msafe().eval_string(expr); },
+
+      // ── Forge **按需拉取**（设计稿 build/113/NOTES-forge-ondemand.md §3）──────────
+      // 「货架」= 站点上的 `assets/forge-catalog.json`（构建期由 build/forge-catalog.py
+      // 从货架仓 `shelf/` 生成；版本按 **fork 的 Octave 版本**过滤、字节 sha 逐条核过）。
+      // 客户端**读它但不下载任何包字节** —— 谁 install 谁才拉。
+      catalog: function () {
+        if (_catalog) return Promise.resolve(_catalog);
+        if (_catalogP) return _catalogP;
+        _catalogP = fetchJSON(withBase('assets/forge-catalog.json')).then(function (c) {
+          _catalog = c || { packs: [] };
+          var byName = {};
+          (_catalog.packs || []).forEach(function (p) { byName[p.name] = p; });
+          _catalogByName = byName;
+          return _catalog;
+        }, function (e) {
+          _catalogP = null;                       // 失败不缓存（下次可重试）
+          throw new Error('读不到 Forge 货架（assets/forge-catalog.json）：' + e.message);
+        });
+        return _catalogP;
+      },
+
+      // install(name) —— 依赖闭包 → 逐个 fetch+sha 校验 → **委托引擎 gunzip+untar 解包**
+      //   → 按 `pkg install` 的真实布局落盘（inst/ 上提 + PKG_ADD + 元数据）→ addpath。
+      // ⚠️ 为什么不在 JS 里解 tar：引擎（wasm 内）已有真的 gunzip/untar（webio.cc，zlib+ustar），
+      //    `pkg install` 内部调的就是它们 —— 实测解真 tarball 211 文件。JS 侧零解析器。
+      // ⚠️ 为什么不调核心 `pkg install`：本构建下它坏（`dirlist(3): out of bound 2`，T0 spike
+      //    实测）⇒ 由本函数**直写**（正是布局复现那条路；对拍断见验收套件）。
+      // ⚠️ 只支持 kinds 里没有 'oct' 的包（纯 .m）：含预编译 .oct 的包要宿主预编 ⇒ v2。
+      install: function (name, opts) {
+        opts = opts || {};
+        var onProgress = opts.onProgress || function () {};
+        installSeen = installSeen || {};
+        return API.catalog().then(function (cat) {
+          var plan = [], seen = {};
+          (function walk (n) {
+            if (seen[n]) return;
+            seen[n] = true;
+            var p = _catalogByName[n];
+            if (!p) throw new Error('货架上没有包：' + n);
+            (p.deps || []).forEach(walk);
+            plan.push(p);
+          })(name);
+          onProgress({ phase: 'plan', plan: plan.map(function (p) { return p.name; }) });
+          // Forge 的 .m 包只依赖引擎内建的 gunzip/untar ⇒ 先确保它们在
+          // 先确保四样在（缺一不可，全部是**既有资产**，不新增机制）：
+          //   webio    —— 引擎内建 gunzip/untar（zlib/ustar，解包用）
+          //   webshell —— untar.m / gunzip.m 等 m 入口（把内建接上官方名字）
+          //   webfile  —— **无 shell 的 copyfile/movefile**（核心 copyfile 在本构建里会去
+          //                fork `cp -r`，无 shell ⇒ 必失败；这是本批实测踩到的坑）
+          //   forge    —— 安装助手 __forge_install__.m（本仓 build/forge/）
+          return API.load(['webio', 'webshell', 'webfile', 'forge']).catch(function () { return null; })
+            .then(function () { return plan.reduce(function (chain, p) {
+              return chain.then(function (acc) {
+                var key = 'forge:' + p.name;
+                if (loaded[key]) { acc.push(p.name); return acc; }
+                onProgress({ phase: 'fetch', name: p.name, size: p.size });
+                return fetchBinary(p.url).then(function (buf) {
+                  return sha256Hex(buf).then(function (hex) {
+                    if (p.sha256 && hex && hex !== p.sha256) {
+                      throw new Error('包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
+                                      + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
+                    }
+                    var tar = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
+                    fs().writeFile(tar, new Uint8Array(buf));
+                    onProgress({ phase: 'unpack', name: p.name });
+                    // 解包 + 按 `pkg install` 布局落盘：**引擎侧 m 助手**（build/forge/__forge_install__.m）
+                    //   —— 它内部调引擎内建 gunzip+untar（zlib/ustar，不写 JS tar 解析器），
+                    //      再把 inst/ 上提 + 元数据落包根 + 拒绝异架构 .oct（设计稿 §3/§4）。
+                    var M = Msafe();
+                    if (!M || !M.eval_string) throw new Error('引擎还没就绪，不能安装包');
+                    var pkgdir = '/usr/src/octave/m/forge/' + p.name;
+                    var rc = M.eval_string(
+                      "n = __forge_install__ ('" + tar + "', '" + p.name + "', '/usr/src/octave/m/forge');");
+                    if (rc !== 0) throw new Error('__forge_install__ 失败（rc=' + rc + '）：'
+                                                  + (M.last_error_message() || ''));
+                    addPaths([pkgdir]);
+                    // 让核心 pkg 数据库重扫（否则 `pkg list` 看不见新包 —— pkgfix 的既有机制）
+                    try {
+                      M.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end");
+                    } catch (e) { /* 数据库重扫失败不致命：包已经装上了 */ }
+                    loaded[key] = { files: 0, addpath: [pkgdir], forge: p };
+                    onProgress({ phase: 'installed', name: p.name });
+                    acc.push(p.name);
+                    return acc;
+                  });
+                });
+              });
+            }, Promise.resolve([])); })
+            .then(function (names) {
+              onProgress({ phase: 'done', installed: names });
+              return { name: name, installed: names };
+            });
+        });
+      }
     };
     return API;
   }

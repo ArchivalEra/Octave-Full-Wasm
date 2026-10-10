@@ -31,6 +31,15 @@
 !.gitmodules
 !upstream/
 !upstream/*
+# ── Forge 货架（submodule，issue 64，2026-10-09）──────────────────────────────
+# 独立仓 Octave-Forge-Shelf：每包一文件档案 + 工具链（只含元数据，不含包字节）。
+# 接成 submodule ⇒ pin 承载"货架有什么/哪个版本"，sha256 承载"字节是不是那份"
+# ⇒ 能力与包数解耦：加包 = 加一个文件，主仓三件套不用改（设计稿 §5）。
+!shelf
+!shelf/*
+!build/forge
+!build/forge/*
+!build/forge-catalog.py
 !upstream-patches/octave-wasm-quantstack/*
 !upstream-patches/octave-wasm-quantstack/*
 !build/Makefile
