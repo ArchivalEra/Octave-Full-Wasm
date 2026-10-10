@@ -1,7 +1,19 @@
 # 需求书：浏览器内 clang-wasm（全功能 C/C++ → emscripten side module）
 
-> 版本：v2（2026-10-10）。v1 有一处**结论性错误**（关于 sysroot `.a` 是否可省）已在 §5 更正，
-> 并有实测证据。**§4 与 §5 的全部数字与报错原文都来自实测**，非二手资料。
+> **本文是唯一一份**（工具链仓不另存副本；改动只改这里）。
+> 版本：**v3**（2026-10-10）。全部数字与报错原文来自实测，非二手资料。
+>
+> **v3 改了什么**（依据 = 工具链侧 M0 全绿的实测发现 + 本仓实测）：
+> - §4.2 删掉 `-mllvm -wasm-enable-eh`（**LLVM 24 已移除**）+ 加旗标版本表（§4.2 尾）
+> - §4.5 异常从三档改**四档**（补 legacy/standard），判据从"版本串相等"改成"**契约相等**"
+> - §5.4 缺口判定**必须扣 side 自导出**（实测 2 vs 1 假缺口）+ 自包含改成**按缺口**
+> - §5.5 新增**宿主符号契约**（基线取宿主 wasm 真值；tag 显式必带）
+> - §6 sysroot 只带**实际用到的**（实测 lib/ 586 MB 里绝大部分是 `.a`）
+> - §8 判据改**契约四项**（版本号只记档）
+> - §9.5 反例措辞更正（**装得上、跑到 throw 才炸**）；新增 §9.11 **双版本回归**
+> - §2 LICENSE **拆两份**
+>
+> **v2→v1 的更正**：v1 曾写"sysroot 的 `.a` 可以省" —— **错**（见 §5.1）。
 
 ---
 
@@ -26,8 +38,15 @@
 | `lld.wasm`（或与 clang 合并为一个 wasm） | `wasm-ld` 链接器 |
 | `sysroot-headers.tar` | **只含头文件**（不含 `.a`）—— 见 §5 |
 | 驱动 API/脚本 | 把「源码 → side module」封成一个入口 |
-| `manifest.json` | 逐资产名字 + 字节 + sha256 + **emsdk/LLVM 版本串** |
-| LICENSE | LLVM（Apache-2.0 with LLVM exceptions）+ 胶水 |
+| `manifest.json` | 逐资产名字 + 字节 + sha256 + **工具链版本串 + 宿主基线版本串**（§8） |
+| `LICENSE` | **你们的**（胶水层，许可自定） |
+| `LICENSE-LLVM.txt` | LLVM 原文（**Apache-2.0 WITH LLVM-exception**） |
+
+> ⚠️ **许可要拆开写，别选一个**：LLVM/clang/lld 派生的 wasm 二进制按**上游条款**
+> （Apache-2.0 with LLVM-exception，其 exception 就是为"链进别的程序不传染"设计的）；
+> **你们自己的胶水/脚本**按本仓/委托人选的许可（如 AGPL-3.0）。
+> `manifest.json` 里逐资产标 `license`。**别把 AGPL 套在 clang.wasm 上**（会给下游
+> "提供完整对应源码"的义务，而那份源码不是你们的）；**也别把 Apache 套在胶水上**（白送）。
 
 ## 3. 硬约束（红线）
 
@@ -64,8 +83,20 @@ wasm-ld -m<wasm64|wasm32> -o foo.so --strip-debug \
         -shared --shared-memory --no-stack-first \
         <SR>/lib/<TARGET>-emscripten/pic/crtbegin-mt.o foo.o \
         -L<SR>/lib/<TARGET>-emscripten/pic -L<emscripten>/src/lib \
-        -mllvm -wasm-enable-eh -mllvm -exception-model=wasm
+        -mllvm -exception-model=wasm
 ```
+
+**旗标随版本漂（所以不许内置一张表，见 §4.5）**：
+
+| 旗标 | 版本差异 | 处理 |
+|---|---|---|
+| `-mllvm -wasm-enable-eh` | **LLVM 24 已移除**（报 `Unknown command line argument`） | 按版本参数化，**不认识就跳过**（探针探测，别硬传） |
+| `--experimental-pic` | 现为 no-op（help 原文 `ignored`） | 留着无害，可删 |
+| `-sMEMORY64=1` | emcc ≤5 必需；**6.x 弃用** | 6.x 改 `-m64` / `--target=wasm64` |
+| `-sWASM_LEGACY_EXCEPTIONS` | 5.x 默认 `true`；6.x 需显式 | **按宿主上报值传**（见 §4.5） |
+
+> ⚠️ 实测教训：**死旗标会让整条链静默失败**。建议 M0/M1 脚本里加一个 `--probe-flags`：
+> 各旗标先编一个空 TU 探一次，不认识就跳过。
 
 ### 4.3 五处"缺一不可"（每条都有实测报错原文）
 
@@ -96,18 +127,38 @@ minithrow(1) C++ throw   → caught:thrown-from-oct|caught=1
 minithrow(2) 宿主 error() → caught:octave-error-from-oct|caught=1
 ```
 
-**反例**：去掉 `-fwasm-exceptions` ⇒ **装不上**（`LinkError: Incompatible version`）。
+**反例（措辞已按实测更正）**：去掉 `-fwasm-exceptions` ⇒ **装得上、静态检查全过，跑到第一次
+C++ throw 才炸**（未捕获 `WebAssembly.Exception`）。⇒ 判据**必须执行到运行期**，
+"链接期无错"不算通过。（原版写的"必须装不上"是错的：加载器不拦这一档。）
 ⇒ 异常模型必须与宿主一致，这是硬要求不是优化。
 
-### 4.5 旗标必须由宿主参数决定
+### 4.5 旗标必须由宿主参数决定（**ABI 契约，四轴**）
 
-上述旗标里，**异常模型 / pthread / memory64** 三项**必须与宿主主模块完全一致**。
-工具链**不要内置一套旗标表**，而是把这三项作为**参数**从调用方传入，按 §4.1/4.2 拼装。
-（两边各存一份表 ⇒ 必然漂移。）
+工具链**不内置旗标表**，四轴全部由调用方传入，按 §4.1/4.2 拼装（两边各存一份表 ⇒ 必然漂移）：
+
+```js
+abi: {
+  exceptions: 'none' | 'emscripten' | 'wasm-legacy' | 'wasm-standard',  // ★ 四档，不是三档
+  pthread:    bool,
+  memory64:   bool,
+  hostTags:   string[],       // 宿主承诺导出的 tag，如 ['__cpp_exception']（见 §5.4）
+}
+```
+
+**为什么异常是四档**：`-fwasm-exceptions` 在 emscripten 里还有 **legacy / standard** 之分
+（6.x：`WASM_LEGACY_EXCEPTIONS` 默认 `true`，选 `libc++-mt-legacyexcept.a`；置 0 才走标准 wasm EH，
+选 `-wasmexcept` 变体）。**两档的 tag 形态不同，混用装不上/跑不对**。
+本仓现役宿主（emcc 5.0.7）走的是 **legacy** 档 ⇒ 工具链默认产 `wasm-legacy`。
+
+**判据（替代"版本串必须相等"）**：真正必须一致的是**契约**，不是版本号——
+四条（异常档 / pthread / memory64 / MAIN_MODULE 级）匹配即可，版本号只记档不拦。
+实测支撑：**6.0.12 编的 `.oct` 能装进 5.0.7 构建的宿主**（见 §4.4 锚点）。
+⇒ 宿主须上报上述四项（可从产物自带的 `octave.build.json` 类文件读）；**读不到就响亮报错并列出
+候选**，不许默默选一个。
 
 ---
 
-## 5. ⚠️ 符号契约（**本节是 v2 的核心更正**）
+## 5. ⚠️ 符号契约（交付边界全在这）
 
 ### 5.1 更正：sysroot 的 `.a` **不能**简单去掉
 
@@ -167,9 +218,36 @@ STL 夹具需要宿主解析 **43** 个符号；宿主导出 **752** 个；**差
 2. **`.a` 不进交付包**，**但前提是宿主承诺符号可解析** —— 这是**宿主/插件契约**。
 3. **工具链必须提供"符号解析失败"的响亮报错**：编译/链接后**主动比对**产物的
    `env` 导入与宿主导出，**点名缺哪个符号**；不许静默装 stub。
-   （参考实现：`build/113/check-oct-host-symbols.mjs`，用 `WebAssembly.Module.imports/exports` 对差集。）
-4. **可选的"自包含模式"**：把需要的 libc++ 目标文件链进产物（20 KB → 1.1 MB 量级），
-   供"宿主导出面不可控"的场景。
+
+   **判定口径（必须扣掉 side 自导出，否则报假缺口）**：
+   ```
+   gap = imports(side, mod='env') − exports(host.wasm)   ← 宿主真值：从 .wasm 的 export 表读，
+                                                           不要只信 JSON 自称
+                                 − exports(side, mod='env')  ← ★ 修正项
+   ```
+   为什么必须扣：`--export-dynamic` 让 side **既导入又导出**同一符号（GOT 自引用），
+   而 emscripten 的 `resolveSymbol` 把 `moduleExports` 当合法解析源。
+   实测口径差一个差集 ⇒ **2 vs 1**（假缺口）。**本项判定收进工具链**，下游各写一份必然漂。
+   **tag 单列一类**（`__cpp_exception` 不是函数，混在函数缺口里会误导）。
+   输出机器可读：`{ missingFunctions, missingTags, sideSelfExported }` + `--strict`（非空 ⇒ rc≠0）。
+
+   ⚠️ 本仓的 `build/113/check-oct-host-symbols.mjs` 用的是**未修正口径**，待改（认领）。
+
+4. **自包含模式：按缺口，不整体**（不是"链进整个 libc++"）。整体链是错路（§5.3：22 KB → 1.1 MB）。
+   ```
+   gap 为空        ⇒ 什么也不做（多数情况）
+   gap 非空        ⇒ 只把缺口符号所在的归档成员按需链进产物（ld 支持）⇒ 体积只涨缺口那部分
+   仍有 gap        ⇒ 响亮报错 + 点名
+   ```
+
+### 5.5 宿主符号契约（三条硬要求）
+
+- **基线 = 宿主实际导出面**（从宿主 `.wasm` 的 export 表读），**不要**要求宿主另给"承诺清单"
+  —— 那个数随 keep-list 变，必然过期（"两处口径"的老形状）。
+- **tag 做成显式必带**，不依赖扫 `.oct` 导入：`__cpp_exception` + `__cxa_*` 五个
+  **无条件进宿主 keep-list**。理由：靠扫描反推 ⇒ 漏扫一个 `.oct` 就退化成"装得上、跑到才炸"。
+- **宿主 `MAIN_MODULE=2` 可行**（不必动 MM=1）：实测 MM=2 + 从 side 导入生成的 keep-list
+  ⇒ 宿主导出含 tag、dlopen 全绿。但 keep-list 必须**显式含 tag 与 `__cxa_*`**。
 
 ---
 
@@ -186,7 +264,13 @@ STL 夹具需要宿主解析 **43** 个符号；宿主导出 **752** 个；**差
 
 - ⚠️ 上表是 **LLVM 8**（该实现很老、WASI 向）。**现代 LLVM（23/24）会更大**——**这一格是推断，
   你的第一件事就是把它量成实测**（raw 量级估计 35–60 MB）。
-- **减重点**：只带 `include/`（头文件），不带 `lib/`（586 MB 的 `.a`）—— 前提见 §5.4。
+- **sysroot 只带"实际用到的"文件，不要整份 `lib/`**。实测本仓容器里的构成：
+  `include/` **23 MB**、`lib/wasm32-emscripten` **582 MB**、`lib/wasm64-emscripten` **4.5 MB**
+  —— 而 582 MB 里绝大部分是 `.a` 变体（asan/debug/mt/ww 各 66 组），**side module 不链 `.a`**。
+  ⇒ 只需：`crtbegin-mt.o` + `pic/` 里被 §4.1/4.2 实际读到的少量目标文件
+  + §5.4 按缺口自包含要的 libc++ 成员。
+  **另注（实测）**：`pic/` 与 `wasm64-emscripten/` **初始不存在**，要跑一次对应 target 才生成
+  ⇒ 交付物必须**预生成**（浏览器里没有 emcc 可按需生成）；建议 **wasm32/wasm64 分两个 tar**，按需拉。
 - 进一步压缩（待验证）：只编 WebAssembly 后端、关掉用不上的 clang 特性、`-Os`/MinSizeRel、
   `wasm-opt -Oz`、只带 `-cc1` + lld 不带完整 driver。
 - **预算目标**：brotli 后 **≤ 15 MB**（首拉），支持分片懒加载 + 浏览器缓存。
@@ -205,27 +289,40 @@ clang 驱动默认 spawn `cc1` 与链接器；浏览器无 fork。所以：
    ```
    compile({ source | files,
              target:   'wasm32' | 'wasm64',
-             abi:      { exceptions: 'wasm'|'emscripten'|'none',
+             abi:      { exceptions: 'none'|'emscripten'|'wasm-legacy'|'wasm-standard',
                          pthread: bool, memory64: bool },
-             hostExports?: string[],        // 见 §5.4：用于符号缺口检查
+             hostExports?: string[],        // 宿主实际导出面（§5.4 缺口检查）
+             hostTags?:    string[],        // 宿主承诺的 tag（§5.5）
              flags, define, include })
-     → { ok, moduleBytes | error, diagnostics, missingHostSymbols }
+     → { ok, moduleBytes | error, diagnostics,
+         symbolGap: { missingFunctions, missingTags, sideSelfExported } }
    ```
+
 5. **driver 策略**：**自己写薄驱动**（按 §4.1/4.2 拼 `-cc1` + lld 调用），
    **不要**移植整个 clang driver / `emcc.py`——driver 的价值是"猜旗标 + spawn 子进程"，
-   这两件事在浏览器里都不需要/不可用。
+   这两件事在浏览器里都不需要/不可用。**旗标要按版本探针**（§4.2 的 `--probe-flags`）。
 
 ---
 
-## 8. 版本锁定（最易翻车）
+## 8. 版本与契约（最易翻车）
 
 `crtbegin-mt.o`、`-L <SR>/lib/<target>-emscripten/pic`、libc++ 头、`__config_site`
-**都来自 emscripten sysroot**，**必须与宿主主模块的 emscripten 版本完全一致**。
+**都来自 emscripten sysroot**。
 
-- 实测教训：不同 emscripten 版本间，`-shared` 稳定性、符号处理、异常实现都变过
-  （旧版会打 `-shared ... is not yet stable` 警告，新版转正）。
-- 要求：`manifest.json` 显式记 **emsdk 版本串 + LLVM 版本串**；接入时**强制核对**宿主一致，
-  不一致 fail-closed，不许"凑合编"。
+**判据是"契约相等"，不是"版本串相等"**（v1 写的是后者，**过严**）：
+
+| 必须匹配（拦） | 只记档（不拦） |
+|---|---|
+| 异常档（§4.5 四档之一）/ pthread / memory64 / MAIN_MODULE 级 | emscripten 版本号、LLVM 版本号 |
+
+**实测支撑**：6.0.12 编的 `.oct` **能装进 5.0.7 构建的宿主**并正确调用（§4.4 锚点）
+⇒ 版本号相等不是必要条件。
+
+**manifest 要记两个版本串**：工具链版本 + 宿主基线版本；`compile()` 时**核对契约四项**，
+不匹配 fail-closed（读不到宿主的契约值 ⇒ 响亮报错并列候选）。
+
+- 实测教训：不同 emscripten 版本间，`-shared` 稳定性、符号处理、异常实现、**乃至旗标名**都变过
+  （`-mllvm -wasm-enable-eh` 在 LLVM 24 消失；`-sMEMORY64=1` 在 6.x 弃用）。
 
 ---
 
@@ -235,25 +332,30 @@ clang 驱动默认 spawn `cc1` 与链接器；浏览器无 fork。所以：
 2. **能装**：被 emscripten 主模块 `dlopen` 成功，符号可解析。
 3. **能调**：调用导出函数返回正确；**且回调宿主符号**（如宿主数学库）也正确。
 4. **异常**：产物内 C++ `throw` 被自己 `catch`；宿主抛的异常在产物侧也能被接住。
-5. **反例**：异常模型改错（去掉 `-fwasm-exceptions`）**必须装不上** —— 证明第 4 条非偶然。
+5. **反例（措辞已更正）**：异常模型改错（去掉 `-fwasm-exceptions`）**装得上、静态检查全过，
+   跑到第一次 throw 才炸** ⇒ **判据必须执行到运行期**，"链接期无错"不算通过。
 6. **模板**：用 `std::map`/`std::ostringstream` 这类**宿主体内未必实例化**的 STL ⇒
-   要么跑对，要么**响亮点名缺哪个宿主符号**（不许静默 stub）。
+   要么跑对，要么**响亮点名缺哪个宿主符号**（不许静默 stub）。**报缺口时必须扣 side 自导出**
+   （§5.4 口径），否则报假缺口。
 7. **两档**：wasm32 与 wasm64 **都**过 1–6。
 8. **纯客户端**：全程断网（除首次下载资产）也能完成一次编译；网络面板**无源码外发**。
 9. **体积**：首拉 brotli ≤ 15 MB；给出逐资产体积表。
 10. **可校验**：篡改任一资产字节 ⇒ 加载器**拒绝**（sha256 fail-closed）。
+11. **★ 双版本回归**：同一份源码，用**两个 emsdk 版本**各编一次，断言**两个产物都能被同一宿主
+    dlopen**。这是 §8「契约而非版本号」的**唯一硬证据**，也是宿主升级共存期的安全网。
+    （本仓已测单向：6.0.12 产物 → 5.0.7 宿主 ✔；反向未验。）
 
 ---
 
 ## 10. 里程碑
 
-- **M0（先做，最省力，不碰浏览器）**：原生环境手工命令跑通 §4 全链，产出 side module 并
-  被宿主 dlopen 调通；再跑 §9.5 反例与 §9.6 模板用例。
-  ⇒ 过了 = ABI 侧无未知；不过 = 后面全白搭。
+- **M0**（原生手工命令跑通 §4 全链）—— ✅ **已完成、全绿**（wasm32 + wasm64 两档；
+  符号解析 / 回调宿主符号 / 异常双向穿越 / STL 模板实例化全部正确）。
 - **M1**：clang+lld 编成 wasm（先求能跑，不优化体积），浏览器里编出 §9.1 的产物。
+  按 **6.0.12**，默认 `wasm-legacy` 档。
 - **M2**：进程内驱动（无 fork），跑通 §9.2–9.4；Worker 化。
 - **M3**：体积优化到 §6 预算；sha256 校验 + manifest + §5.4 符号缺口检查。
-- **M4**：wasm64 档 + 宿主版本锁定核对；发第一个 pin。
+- **M4**：wasm64 档 + 契约四项核对；§9.11 双版本回归；发第一个 pin。
 
 ---
 
@@ -292,5 +394,20 @@ clang 驱动默认 spawn `cc1` 与链接器；浏览器无 fork。所以：
 
 ---
 
-**给 agent 的第一条指令**：先做 **M0**（原生手工命令跑通 §4 + §9.5/9.6），把结果贴回来。
-M0 绿了再动手编 wasm。**不要**先搭 CI、先写胶水、先优化体积。
+## 14. 给 M1 的现成情报（本仓实测，别重复踩）
+
+- **性能预期 = 持平**：本仓用 5.0.7 vs 6.0.10 做过同源基准（dgemm/qsort/memcpy/byte-sum，
+  交错 3 轮）⇒ **geomean 1.001，编译器红利 ≈ 0**。升 6.x 的价值是**紧跟上游的能力**，
+  **不是提速**——别把 M1 当优化项目。
+- **已知必踩的坑**：side module 的 **`_emscripten_tls_init` 必须显式导出**
+  （`--export=_emscripten_tls_init`），否则宿主报 `TypeError: tlsInitFunc is not a function`。
+  它来自 `crtbegin-mt.o`，**emcc 会自动做、裸链不会**。（§4.3 第 4 条 ✔ 已复现。）
+- **宿主版本现状**：下游宿主容器是 **emscripten 5.0.7 / LLVM 23**，异常走 **legacy 档**，
+  `MAIN_MODULE=2` + keep-list，导出 752 个函数。
+- **跨版本兼容已单向验证**：6.0.12 编的 `.oct` → 5.0.7 宿主，dlopen + 调用全绿。
+
+---
+
+**给 agent 的第一条指令**：**M0 已完成（全绿）**，直接进 **M1**：按 **6.0.12** 做编译矩阵
+（默认产 `wasm-legacy` 档异常），把 clang+lld 编成 wasm，先求"能跑不优化"。
+**不要**先搭 CI、先写胶水、先优化体积；**不要**等宿主升级（那条是本仓的独立批次）。

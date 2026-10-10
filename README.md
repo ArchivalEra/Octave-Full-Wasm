@@ -276,7 +276,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/PLAN-wasm64.md` (14664 bytes)
 - `build/113/PROMOTION.md` (6444 bytes)
 - `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
-- `build/113/SPEC-clang-wasm.md` (14632 bytes)
+- `build/113/SPEC-clang-wasm.md` (22779 bytes)
 - `build/113/STATUS.md` (8407 bytes)
 - `build/113/apply-platform-patches.sh` (9710 bytes)
 - `build/113/atomics_scan.py` (8649 bytes)
