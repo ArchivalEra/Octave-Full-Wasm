@@ -52,14 +52,50 @@ need () { [ -f "$1" ] || { echo "FATAL: 缺 $1" >&2; exit 2; }; }
 #   机制与四个实验见 NOTES-wasm64.md「glpk 悬案结案」）。⇒ 解包时把当时的
 #   LANE_FLAGS 存进树里；目录已存在但指纹对不上（含没有指纹的老树）就整树重来。
 #   同旗标重跑不受影响（指纹相同 ⇒ 复用树续跑）。
-clear_if_flags_changed () {  # $1=目录：存在且指纹不符 ⇒ 清掉
-  local stamp="$1/.lane-flags"
-  if [ -d "$1" ] && ! grep -xqF "$LANE_FLAGS" "$stamp" 2>/dev/null; then
-    echo "  ⚠ 旗标变了（该目录旧指纹：$(cat "$stamp" 2>/dev/null || echo 无)）→ 清掉 $1 重解包"
+# ★ 工具链版本并入指纹（2026-10-10，emsdk 升级试点时发现的缺口）：原来指纹**只记
+#   LANE_FLAGS** ⇒ 从 5.0.7 切到 6.0.12 时旗标没变 ⇒ 指纹相同 ⇒ **不清树** ⇒ make 判
+#   "全部最新" ⇒ 零重编 ⇒ **产物仍是旧版 emcc 编的，而你以为升级了**。这与上面那条
+#   旗标事故**同形**（同一个坑换个变量再踩一次）⇒ 指纹串里并入 emcc 版本。
+#   ⚠️ 迁移纪律（别把"修缺口"变成"炸现役"）：**老格式指纹（无 `|` 分隔）一律当作
+#   "版本未知" ⇒ 复用 + 响亮警告**，不自动清树 —— 否则现役 5.0.7 的树会在下次
+#   普通构建时被整片清掉重编（几小时，且违反"现役产物不动"）。
+#   升级时**显式**清：`WIPE_TREES=1`（或换 WORK/DEPS 目录，或删该树）。
+#   反向断言：`--selftest` 用假指纹证明"版本变了 ⇒ 判据会红"。
+toolchain_id () {
+  # 读**编译器自己**报的版本（不猜路径）：emcc 首行（没有则退 clang）
+  local v
+  v="$( { emcc --version 2>/dev/null | head -1; } || true )"
+  [ -n "$v" ] || v="$( { clang --version 2>/dev/null | head -1; } || true )"
+  [ -n "$v" ] || v="(读不到编译器版本)"
+  printf '%s' "$v"
+}
+TOOL_ID="${TOOLCHAIN_ID:-$(toolchain_id)}"
+FINGERPRINT="${LANE_FLAGS}|${TOOL_ID}"
+WIPE_TREES="${WIPE_TREES:-0}"
+clear_if_flags_changed () {  # $1=目录：指纹不符 ⇒ 清掉（老格式指纹例外，见上）
+  local stamp="$1/.lane-flags" old
+  [ -d "$1" ] || return 0
+  old="$(head -1 "$stamp" 2>/dev/null || true)"
+  # ① 老格式（没有 `|`）：版本未知 ⇒ 复用 + 警告（不炸现役）；WIPE_TREES=1 才清
+  case "$old" in
+    *"|"*) : ;;                      # 新格式（含版本），走下面正常比对
+    *)
+      if [ "$WIPE_TREES" = "1" ]; then
+        echo "  ⚠ WIPE_TREES=1 ⇒ 清掉 $1（老格式指纹，版本未知）"
+        rm -rf "$1"; return 0
+      fi
+      echo "  ⚠ $1 的指纹是老格式（只记旗标、无工具链版本）⇒ 本次**复用**，不确认版本。" >&2
+      echo "     若刚换了 emcc：这会静默复用旧版编的树 ⇒ 用 WIPE_TREES=1 重跑（或换 WORK/DEPS）。" >&2
+      return 0
+      ;;
+  esac
+  # ② 新格式：逐字比对（含工具链版本）
+  if ! grep -xqF "$FINGERPRINT" "$stamp" 2>/dev/null; then
+    echo "  ⚠ 指纹变了（旧：$(printf '%s' "$old" | head -c 100)）→ 清掉 $1 重解包"
     rm -rf "$1"
   fi
 }
-stamp_dir () { mkdir -p "$1"; printf '%s\n' "$LANE_FLAGS" > "$1/.lane-flags"; }
+stamp_dir () { mkdir -p "$1"; printf '%s\n' "$FINGERPRINT" > "$1/.lane-flags"; }
 
 # ★ 架构断言（2026-09-29）：查符号**不够** —— 判别实验的方法论缺口就是只看 rc/符号，
 #   于是"静默错误架构的成功"被记成了 ✅。车道声明 MEMORY64 ⇒ 每个 `.a` 必须**逐成员**
@@ -454,6 +490,40 @@ do_suitesparse () {
 }
 
 case "${1:-list}" in
+  # ── 自证（F1）：证明"工具链指纹"判据会红，且**老格式不误伤现役** ──────────────
+  # 用假 deps 目录跑 clear_if_flags_changed 的纯逻辑部分（不编译任何东西）。
+  --selftest)
+    T="$(mktemp -d)"; n=0; bad=0
+    ck () { n=$((n+1)); if eval "$2" >/dev/null 2>&1; then echo "PASS | $1"; else echo "fail | $1"; bad=$((bad+1)); fi; }
+    mk () { mkdir -p "$T/$1"; printf '%s\n' "$2" > "$T/$1/.lane-flags"; }
+    # ⚠️ 判据函数读的是**载入时算好的** `$FINGERPRINT`（不是现读 LANE_FLAGS）⇒ 用例必须
+    #    直接给 FINGERPRINT（第一版只给 LANE_FLAGS ⇒ 用例①假红，实测踩到）。
+    # ① 新格式 + 指纹一致 ⇒ 不清（正常不报）
+    mk a "flagsX|clang 24.0.0"
+    ck "① 指纹一致 ⇒ 目录保留" \
+       "FINGERPRINT='flagsX|clang 24.0.0' clear_if_flags_changed '$T/a' && [ -d '$T/a' ]"
+    # ② 该报的必须报：版本变了 ⇒ 必须清
+    ck "★ ② 工具链版本变了 ⇒ 必须清掉重解包" \
+       "FINGERPRINT='flagsX|clang 23.0.0' clear_if_flags_changed '$T/a' && [ ! -d '$T/a' ]"
+    # ③ 该报的必须报：旗标变了 ⇒ 必须清
+    mk b "flagsY|clang 24.0.0"
+    ck "★ ③ 旗标变了 ⇒ 必须清掉" \
+       "FINGERPRINT='flagsX|clang 24.0.0' clear_if_flags_changed '$T/b' && [ ! -d '$T/b' ]"
+    # ④ ★ 老格式指纹（无 `|`）⇒ **复用 + 警告**（不许自动炸现役）
+    mk c "flagsX"
+    ck "★ ④ 老格式指纹 ⇒ 复用（不自动清，守'现役不动'）" \
+       "FINGERPRINT='flagsX|clang 24.0.0' clear_if_flags_changed '$T/c' 2>/dev/null && [ -d '$T/c' ]"
+    # ⑤ ★ WIPE_TREES=1 时老格式才清（升级的显式口子）
+    ck "★ ⑤ WIPE_TREES=1 ⇒ 老格式也清（升级显式口子）" \
+       "WIPE_TREES=1 FINGERPRINT='flagsX|clang 24.0.0' clear_if_flags_changed '$T/c' && [ ! -d '$T/c' ]"
+    # ⑥ 空输入：目录不存在 ⇒ 不报错（幂等）
+    ck "⑥ 目录不存在 ⇒ 静默返回（幂等）" \
+       "FINGERPRINT='x|y' clear_if_flags_changed '$T/nonexistent'"
+    rm -rf "$T"
+    echo "=== build-libs 自证：$((n-bad)) PASS / $bad fail ==="
+    [ "$bad" -eq 0 ]
+    exit $?
+    ;;
   zlibbz2)   do_zlibbz2 ;;
   glpk)      do_glpk ;;
   fftw)      do_fftw ;;
