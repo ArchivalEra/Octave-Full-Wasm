@@ -109,7 +109,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 
 - `STATE.md` —— 活状态；`build/FACTS.json` —— 实测数字台账（每键带复跑命令）
 - `zreflect/` —— 事实系统（**2026-10-09 采纳 Einfacht 重构版**：闸门平台 / 发现式名录 / 旋钮登记 / world 闸门）；`zreflect/measure_octave.py` 是本仓数据层，`reflect-hooks/Einfacht.env` 是旋钮载体
-- `HISTORY.md` —— 逐批 append-only 记录（上文全部证据在 §5.77–§5.104）
+- `HISTORY.md` —— 逐批 append-only 记录（上文全部证据在 §5.77–§5.106）
 - `maintaince.md` —— 方向地图；`docs/embed-api.md` —— 嵌入契约；`DEPLOY.md` —— 部署
 - **Octave-Forge 按需拉取**（v1 已跑通，2026-10-09）：`OctaveAssets.catalog()` 读站点货架、`OctaveAssets.install(name)` 在**被要求时才**下载+校验+安装（含依赖闭包）——**没用到的包 = 0 字节**。货架 = `shelf/` submodule（只含元数据，每包一文件）；站点目录 = `build/forge-catalog.py`；设计稿 = `build/113/NOTES-forge-ondemand.md`；验收 = `test/browser/accept-forge-ondemand.mjs`
 - `build/113/` —— 车道构建配方 + 闸门；`test/browser/` —— 验收 harness（`SWEEP_JOBS=4` 可并行；最近一次全绿轮 = 台账 `accept_suites` / `accept_pass`）

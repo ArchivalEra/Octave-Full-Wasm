@@ -4513,3 +4513,25 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 - 装后三面可见：磁盘文件数 > 0 / `exist` ≠ 0 / 核心 `pkg list` 看得见。
 - **依赖闭包**：`install('optim')` ⇒ 自动装 statistics + struct ⇒ `fminunc` **真调用收敛 x=3.0000**。
 - **三条反向断言**：货架上没有的包 ⇒ 报错；篡改字节 ⇒ sha256 必然不符；带 `.oct` 的包 ⇒ **拒绝安装且不留半装**。
+
+
+### 5.106 断电恢复 + Forge 按需拉取 v1 落档（2026-10-10）
+
+- **事故**：关机时正在写的那次提交（`fad7217`）留下 **3 个 0 字节 git 对象**
+  （提交本体 + 2 个 tree）⇒ 重启后 `refs/heads/IllegalPerformance` 与 `index` 双双被截成 0 字节，
+  git 报"分支损坏/索引比预期小"。
+- **恢复**（全部无损）：① 删零字节 ref 文件（`update-ref` 锁不住它）；
+  ② `git update-ref refs/heads/IllegalPerformance ff7dfe1`（reflog 末条）+ `symbolic-ref HEAD` 指回；
+  ③ `rm .git/index && git read-tree HEAD` 重建索引；
+  ④ `find .git/objects -size 0 -delete` 清 3 个空对象。
+  ⇒ **`git fsck` 零错误**、HEAD 全树 986 文件可读、441 个提交链完整。
+  **工作区文件一个没丢**（丢的只是那一个提交对象）⇒ 重建提交 `ef912a1`。
+- **损失清单（如实）**：`fad7217` 的提交对象与签名（内容已在工作区，重建后等价）；
+  其余零损失。**教训**：断电前 `git commit` 未完成 ⇒ ref/index 与对象三者不一致；
+  恢复顺序必须是 **ref → index → 清坏对象**。
+- **事实更新**：`upstream_submodule_count` 18→19（新增 `shelf` submodule，实测 `git submodule status`
+  = 19 行）；新增 6 条货架键（`forge_shelf_packs`/`forge_shelf_verified`/`forge_catalog_packs`/
+  `forge_catalog_oct_packs`/`forge_catalog_shelf_commit`/`forge_catalog_octave`）⇒ 台账 **139 键**。
+  STATE 活状态更新到 2026-10-10（Forge v1 已跑通段）。工单 64 结（v1）；发运 8761 留下批。
+- **凭据**：`gh` token 在断电后失效（origin 推送被拒；mirror 本地推送正常）。
+  ⇒ 本次只推了 **mirror**（`ef912a1`）；origin 待用户 `gh auth login` 后补推。

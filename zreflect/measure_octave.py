@@ -680,6 +680,59 @@ def measure():
                                        ".gitmodules + upstream/octave",
                                        "Octave wasm 分支（tarball 生成件 + 平台补丁）的 pin")
 
+    # ── ★ Forge 货架（issue 64，2026-10-09）：按需拉取的**目录侧**事实 ────────────
+    #   三条都从**磁盘**量（不猜）：货架档案数 / 已验证数 / 站点 catalog 的上架包数。
+    _shelf_pkgs = os.path.join(REPO, "shelf", "packages")
+    if os.path.isdir(_shelf_pkgs):
+        import json as _json
+        _n, _ver = 0, 0
+        for _f in sorted(os.listdir(_shelf_pkgs)):
+            if not _f.endswith(".json"):
+                continue
+            try:
+                _e = _json.load(open(os.path.join(_shelf_pkgs, _f), encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            _n += 1
+            if _e.get("verified"):
+                _ver += 1
+        facts["forge_shelf_packs"] = fact(_n,
+                                          "ls shelf/packages/*.json | wc -l",
+                                          "shelf/（submodule Octave-Forge-Shelf）",
+                                          "货架上的包档案数（每包一文件）")
+        facts["forge_shelf_verified"] = fact(_ver,
+                                             "grep -l '\"verified\": {' shelf/packages/*.json | wc -l",
+                                             "shelf/",
+                                             "已验证（--probe 实测过）的包数；未验证的默认不上架")
+    _cat = os.path.join(SITE, "assets", "forge-catalog.json")
+    if os.path.exists(_cat):
+        try:
+            _c = _json.load(open(_cat, encoding="utf-8"))
+            _packs = _c.get("packs") or []
+            facts["forge_catalog_packs"] = fact(len(_packs),
+                                                "python3 -c \"import json;print(len(json.load(open('%s'))['packs']))\"" % _cat,
+                                                os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                                                "站点货架上架的包数（客户端 catalog() 读它）")
+            _plug = [p for p in _packs if "oct" in (p.get("kinds") or [])]
+            facts["forge_catalog_oct_packs"] = fact(len(_plug),
+                                                    "python3 -c \"import json;print(len([p for p in json.load(open('%s'))['packs'] if 'oct' in (p.get('kinds') or [])]))\"" % _cat,
+                                                    os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                                                    "含**异架构预编译 .oct** 的包数（按需安装拒绝它们；见设计稿 §6A）")
+            _shr = _c.get("shelf_commit") or ""
+            if _shr:
+                facts["forge_catalog_shelf_commit"] = fact(_shr[:12],
+                                                           "python3 -c \"import json;print(json.load(open('%s'))['shelf_commit'])\" | cut -c1-12" % _cat,
+                                                           os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                                                           "catalog 由哪一版货架（submodule commit）生成")
+            _octv = _c.get("octave") or ""
+            if _octv:
+                facts["forge_catalog_octave"] = fact(_octv,
+                                                     "python3 -c \"import json;print(json.load(open('%s'))['octave'])\"" % _cat,
+                                                     os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                                                     "货架按哪个 Octave 版本过滤（应从 fork 的 configure.ac 读）")
+        except (OSError, ValueError) as _e:
+            print("⚠ 读不到站点 catalog（%s）：%s" % (_cat, _e), file=sys.stderr)
+
     # ★ **libm spike**（工单 60，2026-10-04）：链接期标量 libm 替换的实测判决。
     #   门槛 = 每调用几何均值 ≥1.5（热点压降 ≥1/3 的操作化）；实测 0.991 两轮一致 ⇒ 否决。
     #   机制根因（wasm 无标量 FMA）与全部数字见 build/113/NOTES-libm.md。
