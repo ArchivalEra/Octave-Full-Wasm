@@ -74,18 +74,27 @@ def skip_valtype(d, j):
 
 
 def skip_descriptor(d, j, kind):
-    """跳过 import/export 描述体（只关心名字，不关心类型）。"""
+    """跳过 import/export 描述体（只关心名字，不关心类型）。
+
+    ⚠️ limits 的旗标是**位域**（Wasm 规范）：bit0 = 有 max，bit1 = shared，
+    bit2 = is64（memory64）。判"后面跟不跟 max"必须测 **bit0**，不能测整个字节的
+    真假 —— 这正是本文件 2026-10-10 修掉的那个 IndexError：
+    memory64 的 table 旗标是 `0x04`（只置 is64、**无 max**），而旧写法 `if fl:`
+    把 0x04 当"有 max"⇒ 多吃一个 LEB ⇒ 后面整段导入错位 ⇒ 深处 `index out of range`。
+    （实测：5.0.7 的 side module 旗标是 0x00，所以老产物一路没暴露；
+      6.0.12/memory64 的产物一碰就炸 —— 8 个 `.oct` 复现。）
+    """
     if kind == 0:                                   # func: typeidx
         return leb(d, j)[1]
     if kind == 1:                                   # table: reftype + limits
         j = skip_valtype(d, j)
         fl = d[j]; j += 1
         j = leb(d, j)[1]
-        return leb(d, j)[1] if fl else j
+        return leb(d, j)[1] if fl & 0x01 else j
     if kind == 2:                                   # memory: limits
         fl = d[j]; j += 1
         j = leb(d, j)[1]
-        return leb(d, j)[1] if fl else j
+        return leb(d, j)[1] if fl & 0x01 else j
     j = skip_valtype(d, j)                          # global: valtype + mut
     return j + 1
 
@@ -245,25 +254,92 @@ def main():
 
 
 
-# ── 自证（F1）：喂**垃圾 wasm** ⇒ 必须报（零值守卫）而不是"（无）解析不了 ✔" ──────
+# ── 自证（F1）：三类用例齐 —— 正常不报 / 该报的必须报 / 空输入必须报 ──────────
+def _leb(n):
+    out = bytearray()
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        out.append(b | (0x80 if n else 0))
+        if not n:
+            return bytes(out)
+
+
+def _name(s):
+    b = s.encode("utf8")
+    return _leb(len(b)) + b
+
+
+def _section(sid, content):
+    return bytes([sid]) + _leb(len(content)) + content
+
+
+def _synthetic_imports():
+    """造一份**带 memory64 limits 位域**的最小 wasm（正是那个 IndexError 的形状）。
+
+    3 个导入：memory（flags=0x07 = has_max|shared|is64）、table（flags=0x04 = **只有 is64、
+    没有 max**）、func。旧写法 `if fl:` 会把 table 的 0x04 当"有 max"⇒ 多吃一个 LEB ⇒
+    第三个导入错位 ⇒ 名字读成乱码/越界。正确解析必须恰好读出这三个名字。
+    """
+    imp = bytearray()
+    imp += _leb(3)                                                    # 导入条数
+    imp += _name("env") + _name("memory") + bytes([0x02])            # memory
+    imp += bytes([0x07]) + _leb(1) + _leb(1)                         # flags=0x07, min, max
+    imp += _name("env") + _name("__indirect_function_table") + bytes([0x01])  # table
+    imp += bytes([0x70]) + bytes([0x04]) + _leb(1)                   # reftype, flags=0x04(仅is64), min
+    imp += _name("env") + _name("foo") + bytes([0x00]) + _leb(0)     # func, typeidx=0
+    body = b"\x00asm\x01\x00\x00\x00" + _section(2, bytes(imp))
+    return body
+
+
 def _selftest():
-    """喂**垃圾 wasm** ⇒ 必须报（零值守卫），而不是旧的"（无）解析不了 ✔" rc=0。"""
+    """三类用例：① 正常不报（memory64 limits 位域解析对）② 垃圾 wasm 必须报 ③ 空输入必须报。"""
     import os as _os, subprocess, tempfile
+    name = _os.path.basename(_os.path.abspath(__file__))
+    results = []
+
+    # ① 正常不报：memory64 limits 位域必须**恰好**解析出那三个导入（本文件修的就是它）
     d = tempfile.mkdtemp(prefix="gate-wasm-")
+    good = _os.path.join(d, "limits64.wasm")
+    with open(good, "wb") as fh:
+        fh.write(_synthetic_imports())
+    try:
+        got = imports_of(good)
+    except Exception as e:                                   # noqa: BLE001
+        got = "CRASH %s: %s" % (type(e).__name__, e)
+    want = [("env", "memory"), ("env", "__indirect_function_table"), ("env", "foo")]
+    ok1 = got == want
+    results.append(ok1)
+    print("%s | %s/memory64 limits 位域 ⇒ 恰好解析出 3 个导入（修 IndexError）"
+          % ("PASS" if ok1 else "fail", name))
+    if not ok1:
+        print("       实测：%r" % (got,))
+
+    # ② 该报的必须报：垃圾 wasm ⇒ 零值守卫必须拦（不是"（无）解析不了 ✔" rc=0）
     junk = _os.path.join(d, "junk.wasm")
     with open(junk, "wb") as fh:
         fh.write(b"\x00asm\x01\x00\x00\x00garbage\x01\x02")
     side = _os.path.join(d, "x.oct")
     with open(side, "wb") as fh:
         fh.write(b"\x00asm\x01\x00\x00\x00")
-    name = _os.path.basename(_os.path.abspath(__file__))
     argv = [sys.executable, _os.path.abspath(__file__)]
     argv += [junk, d] if "oct-imports" in name else [junk, side]
     rc = subprocess.run(argv, capture_output=True).returncode
-    ok = rc != 0
-    print("%s | %s/垃圾 wasm ⇒ **必须报**（零值守卫）" % ("PASS" if ok else "fail", name))
-    print("\n=== %s 自证：%s ===" % (name, "1 PASS / 0 fail" if ok else "0 PASS / 1 fail"))
-    return 0 if ok else 1
+    ok2 = rc != 0
+    results.append(ok2)
+    print("%s | %s/垃圾 wasm ⇒ **必须报**（零值守卫）" % ("PASS" if ok2 else "fail", name))
+
+    # ③ 空输入必须报：目录里没有任何 .oct ⇒ FATAL（不是静默通过）
+    empty = tempfile.mkdtemp(prefix="gate-empty-")
+    argv = [sys.executable, _os.path.abspath(__file__), good, empty]
+    rc = subprocess.run(argv, capture_output=True).returncode
+    ok3 = rc != 0
+    results.append(ok3)
+    print("%s | %s/空输入（没有 .oct）⇒ **必须报**" % ("PASS" if ok3 else "fail", name))
+
+    n = sum(results)
+    print("\n=== %s 自证：%d PASS / %d fail ===" % (name, n, len(results) - n))
+    return 0 if n == len(results) else 1
 
 
 if __name__ == "__main__":
