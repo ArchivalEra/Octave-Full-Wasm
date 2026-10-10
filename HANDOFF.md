@@ -380,8 +380,8 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.js` | 462,821 B raw / 89,652 B gz | sha256 `caac68bf62015859…` |
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
-| 资产条目 | 49 | |
-| 最近一次**全绿**回归 | `20261005-155430` · **6 套 / 107 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
-| 交付包 | `octave-full-wasm-site-20261005` · tar.zst 91,292,261 B · `548ba554359c58c8…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 资产条目 | 50 | |
+| 最近一次**全绿**回归 | `20261011-230032` · **6 套 / 107 PASS / 0 FAIL** | http://127.0.0.1:8773/ |
+| 交付包 | `octave-full-wasm-site-20261011` · tar.zst 91,155,710 B · `d3927b7753acdde3…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `wasm32-final`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
