@@ -68,6 +68,10 @@
    "manual": true,
    "why": "打印 surf 成本拆解，无汇总行"
   },
+  "probe-output-cost": {
+   "manual": true,
+   "why": "输出路径成本对照（工单 48）：**探索性，不设红绿**，只出数字 + EMBED_OUTPUT_COST_JSON 供人读（文件头明说「判据：不设红绿（探索性）」）。2026-10-10 登记：此前漏登记 ⇒ 每轮 PROBES=1 被 sweep 记成 NO-SUMMARY 假红。"
+  },
   "probe-gpu-backend": {
    "manual": true,
    "why": "打印本机 WebGL 后端，无汇总行"

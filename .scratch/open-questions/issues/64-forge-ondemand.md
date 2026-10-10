@@ -17,7 +17,7 @@ OctaveAssets.install('optim')     // 依赖闭包 → 逐个 fetch+sha256 校验
 **Blocked by:** 设计稿 §6 的三个分叉点需用户拍板（A：v1 纳不纳含编译件 `.oct` 的包；
 B：tarball+gzip 客户端解 vs 构建期预解包；C：catalog 生成入口）。**拍板前不开工实现。**
 
-**Status:** resolved （2026-10-10：**v1 已跑通并验收 15/15** —— 三个分叉点全部实测裁决：B=用引擎内建 gunzip+untar（不写 JS 解析器）、A=v1 覆盖全部 10 包（`src/` 是可选加速件、预编译 `.oct` 数=0）、货架=独立仓 submodule + 只上 verified。**发运 8761 = 下一批**）
+**Status:** resolved （2026-10-10：**v1 已跑通、验收 15/15、并发运 8761/8768/仓库 `site/`** —— 三个分叉点全部实测裁决：B=用引擎内建 gunzip+untar（不写 JS 解析器）、A=v1 覆盖全部 10 包（`src/` 是可选加速件、预编译 `.oct` 数=0）、货架=独立仓 submodule + 只上 verified。发运件与验收快照逐字节对拍；新闸门 `build/113/check-forge-catalog.py` 挂 pre-commit。**剩余：T4（`pkg load` 问 catalog）与 T8（v2 编译件按需）** —— 见设计稿 §10）
 
 **Settling:** 不存在 —— 本工单的**第一交付物就是它**：`test/browser/accept-forge-ondemand.mjs`。
 建好后按 rc 判：rc=0 ⇒ 按需装载成立（干净站点 install 后磁盘/`pkg list`/`exist` 三面可见 +

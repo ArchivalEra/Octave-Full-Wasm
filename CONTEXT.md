@@ -44,6 +44,28 @@ JSPI（单产物 + 运行时能力门 —— 不加 `-sJSPI`，包装发生在�
 
 ---
 
+## 多义词"插件"拆成两个具名术语
+
+### 部件插件（构建期）
+**换链进来的库/旗标**（BLAS / 分配器 / rust 缝……），一次构建、**影响全站产物**，
+粒度是车道（lane）级。载体 = 模式表旋钮 + 产物 `declared` 标签 + 登记表 +
+输入见证；一致性闸门把它钉住（R1 登记↔产物、R2 反向、R3 A/B 同旗标）。
+**证据：** `build/plugins.json` + `build/113/plugin-check.py`
+
+### Forge 按需插件（运行期）
+**用户要哪个包，客户端才去拉哪个** —— 没用到 = 0 字节；粒度是包（package）级，
+按会话/页面生效。载体 = 站点**货架**（`assets/forge-catalog.json` + 同源
+`assets/forge/*.tar.gz`）+ 加载器接缝 `catalog()`/`install()`；包按 `pkg install`
+真实布局落盘，解包委托**引擎内建** `gunzip`/`untar`。
+**证据：** `bridge/assets-loader.js` + `build/forge-catalog.py` + `build/forge/__forge_install__.m`
+
+> ⚠️ **别读混**：`build/plugins.json` 里没有、也**不该有** Forge 包（两者的轴不同 ——
+> 构建期 vs 运行期；见 `build/113/NOTES-forge-ondemand.md` §0 的对照表）。
+> 货架仓是独立仓库 `Octave-Forge-Shelf`（本仓 `shelf/` submodule，只含档案，每包一文件）。
+> **证据：** `build/113/NOTES-forge-ondemand.md`
+
+---
+
 ## 构建与产物
 
 ### 口径

@@ -13,9 +13,17 @@
 //
 // 用法：HARNESS=/mnt/hdd/octave-wasm-build/harness xvfb-run -a sh test/browser/run.sh \
 //        test/browser/probe-figures-geometry.mjs <部署了 wgsl-demo.html 的站点>
+//
+// ★ 2026-10-10 修（PROBES=1 实测的"探针腐烂"）：sweep 按契约给**站点根 URL**，而本站点
+//   不部署 `wgsl-demo.html` ⇒ 页面即站点首页、`__wgslDone` 永不为 true，探针在 180s 等待后
+//   拿空数据报 2 红（每轮全量都假红，而清单声明的输入又没被消费）。修法 = **两处**：
+//   ① URL 归一化：`…/` ⇒ `…/wgsl-demo.html`（根 URL 就当"这套页在该站点根下"）；
+//   ② **页面缺席时如实报 N/A**（与 probe-e2-threads 同款：既不算通过也不算失败）——
+//      判据 = 取回的 panel 是站点首页而不是探针页。避免"环境缺件 = 假红"。
 import { chromium } from 'playwright-core';
 
-const URL = process.argv[2] || 'http://127.0.0.1:8865/wgsl-demo.html';
+let URL = process.argv[2] || 'http://127.0.0.1:8865/wgsl-demo.html';
+if (/^https?:\/\/[^/]+\/?$/.test(URL)) URL = URL.replace(/\/?$/, '/') + 'wgsl-demo.html';
 let pass = 0, fail = 0;
 const check = (ok, name, detail = '') => {
   console.log(`${ok ? 'PASS' : 'fail'} | ${name}${detail ? ' :: ' + detail : ''}`);
@@ -33,6 +41,26 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
 const page = await (await browser.newContext()).newPage();
 page.on('pageerror', e => console.log('   [pageerror] ' + String(e).slice(0, 250)));
 await page.goto(URL, { waitUntil: 'load', timeout: 120000 });
+
+// ── ★ 页缺席 ⇒ 如实 N/A（既不算通过也不算失败；防"站点没部署 = 全量假红"）──────
+//    判据用**页面自己的标记**：探针页在脚本一开始就置 `window.__wgslDone`（哪怕是
+//    WebGPU 不可用那条路也会置 true）；站点首页上它恒为 undefined。
+//    ⚠️ 顺序：先探标记（最多 5s）**再**等完成 —— 反过来的话缺席站点要白等 180s
+//       （实测：修好的第一版就是这么慢的，sweep 里表现为"探针跑 3 分钟才报 N/A"）。
+let onProbePage = false;
+for (let w = 0; w < 25; w++) {
+  onProbePage = await page.evaluate(() => typeof window.__wgslDone !== 'undefined').catch(() => false);
+  if (onProbePage) break;
+  await new Promise(r => setTimeout(r, 200));
+}
+if (!onProbePage) {
+  console.log(`N/A  | 这个站点没有探针页 ${URL}（页面里没有 __wgslDone 标记）`);
+  console.log('      本探针只对**部署了 wgsl-demo.html 的站点**有意义（工单 50 的实验页，');
+  console.log('      随 embed 资产上站；8761/8768 目前不部署它）⇒ 不适用：不是通过也不是失败。');
+  console.log('=== 0 PASS / 0 FAIL ===');
+  await browser.close();
+  process.exit(0);
+}
 await page.waitForFunction('window.__wgslDone === true', null, { timeout: 180000 })
   .catch(() => {});
 

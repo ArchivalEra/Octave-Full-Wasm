@@ -71,11 +71,21 @@ async function probePage (page) {
     let mem64 = false;
     try { new WebAssembly.Memory({ initial: 1n, address: 'i64' }); mem64 = true; } catch (e) { /* 引擎不支持 ⇒ false */ }
     // ⚠️ eval_string 返回的是 **rc 不是表达式值**（第一版就栽在这：把 rc=0 当成"门关着"）。
-    //    值经 printf 进 #output（单页模式同步追加），用唯一标记取回。
+    //    值经 printf 进 #output，用唯一标记取回。
+    // ★ 2026-10-10 修（实测假红）：输出**不是在 eval 返回的同一 tick 里进 DOM 的** ——
+    //   引擎的输出队列要等一次 tick 才 drain（实测：紧跟 eval 读 #output = 只有 boot 警告；
+    //   +800ms 后 SUSP=1 / EVALOK=4 都在）。原版同步读 ⇒ evalOk/suspendOk 恒 null、
+    //   每轮 PROBES=1 在两个引擎上各假红一条。修法 = **轮询等到标记出现或超时**，
+    //   超时仍无标记才记 null（那才是真信号）。
     let susp = null, evalOk = null;
     try { window.Module.eval_string("printf('SUSP=%d\\n', __web_suspend_ok__);"); } catch (e) { susp = `ERR:${String(e).slice(0, 40)}`; }
     try { window.Module.eval_string("printf('EVALOK=%d\\n', 2+2);"); } catch (e) { evalOk = `ERR:${String(e).slice(0, 40)}`; }
-    const txt = (document.getElementById('output') || document.body).textContent || '';
+    const read = () => (document.getElementById('output') || document.body).textContent || '';
+    let txt = read();
+    for (let w = 0; w < 60 && !(/EVALOK=\d/.test(txt) && /SUSP=\d/.test(txt)); w++) {
+      await new Promise(r => setTimeout(r, 100));
+      txt = read();
+    }
     const ms = /SUSP=(\d+)/.exec(txt.slice(txt.lastIndexOf('SUSP=') >= 0 ? txt.lastIndexOf('SUSP=') : 0));
     const me = /EVALOK=(\d+)/.exec(txt.slice(txt.lastIndexOf('EVALOK=') >= 0 ? txt.lastIndexOf('EVALOK=') : 0));
     const c = window.__octaveCaps || {};

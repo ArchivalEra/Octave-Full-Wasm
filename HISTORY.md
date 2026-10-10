@@ -4535,3 +4535,51 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   STATE 活状态更新到 2026-10-10（Forge v1 已跑通段）。工单 64 结（v1）；发运 8761 留下批。
 - **凭据**：`gh` token 在断电后失效（origin 推送被拒；mirror 本地推送正常）。
   ⇒ 本次只推了 **mirror**（`ef912a1`）；origin 待用户 `gh auth login` 后补推。
+
+### 5.107 Forge v1 发运批 + **worker 模式整条坏**的真根因 + 探针腐烂三修（2026-10-10，接 §5.106）
+
+- **发运**：Forge 按需 v1 落到 **8768 + 8761 + 仓库 `site/`** 三处（装配 = `bundle-m forge` +
+  `sync-js` + `forge-catalog.py --site` + `make-lane-manifest.py` 两份分档清单 + 新版 loader）。
+  8768 装配件与已验收的 `site-fgt` **逐字节相同**（三清单 / loader / `forge.js` / catalog / 10 个
+  tarball 全对拍）⇒ 从仓库源**可复现**那个验收过的快照。8768 上 `accept-forge-ondemand` **15/15**。
+- **★ 真 bug（用户可见）：`?worker=1` 模式下每个 eval 永不返回。**（缺陷 2026-10-02 提交、
+  2026-10-09 页面资产上站后**在站点上生效** —— 这也解释了为什么 10-05 那轮全量 `accept-worker`
+  仍 21/0：那时站点还是旧 `index.html`。）
+  根因链（三步都可复跑）：① `9239cae`（工单 38 抽页面适配器）把 `octaveUiAppend` 的**定义**
+  从 `bridge/index.html` 删掉，而 worker 分支的 `flushUi()` **仍在调它**；② 第一次输出合批抛
+  `ReferenceError: octaveUiAppend is not defined`，且 `uiBuf = ''` 写在抛错行**之后**；
+  ③ 于是 uiBuf 永远非空 ⇒ 之后每次 flushUi 都抛 ⇒ **每条 `OctaveWorker.eval` 的 promise
+  永不 settle**（`accept-worker` C 格挂到 425s 截断；`probe-engine-parity` 的 G 格同因，
+  历史该探针 22/0 是 10-05 在**旧页**站点上跑的）。
+  修法（`bridge/index.html`）：worker 分支内定义 `appendOutput`（T6c 同语义：追加 `#output` +
+  200ms 节流滚动），并把 `flushUi` 改成**先清缓冲后写**（写抛错也不许把缓冲卡死）。
+  实测：修前 `eval('A=rand(1400)*…')` 60s 超时、ping 15s 超时；修后 4.5s / 2ms，
+  **`accept-worker` 21 PASS / 0 FAIL**、`probe-engine-parity` **22 PASS / 0 FAIL**（两引擎 G 格全过）。
+- **探针腐烂三修（`PROBES=1` 全量首跑抓的，全部为**既存**假红 —— 在未改动的 8761 上同样红）**：
+  ① `probe-browser-floor`：`#output` 在 eval 返回的**同一 tick 内还是旧文本**（输出队列下一 tick
+     才 drain）⇒ `evalOk/suspendOk` 恒 null、两引擎各假红一条；修法 = 轮询等标记（≤6s）。
+     修后 **8 PASS / 0 FAIL**。
+  ② `probe-figures-geometry`：它要 `wgsl-demo.html`（工单 50 的实验页，8761/8768 不部署），
+     而 sweep 按契约传**站点根 URL** ⇒ 页面即首页、空等 180s 后拿空数据报 2 红。
+     修法 = URL 归一化（根 ⇒ `wgsl-demo.html`）+ **页缺席如实报 N/A**（先探 `__wgslDone`
+     标记，最多 5s；与 `probe-e2-threads` 同款"不适用 ≠ 失败"）+ **有页时仍真跑**（实测把
+     `bridge/embed-wgsl.html` 放上去 ⇒ **9 PASS / 0 FAIL**，验后撤页）。
+  ③ `probe-output-cost`：文件头明说"**不设红绿（探索性）**"，但清单漏登记 `manual`
+     ⇒ sweep 记 NO-SUMMARY 假红。修法 = 清单补 `exceptions` 登记。
+- **`probe-gfx-isolation` 矩阵口径对齐**（同族）：它抄的是**裸 `title("t")`**，而契约是
+  "先 plot 再装饰"（裸 title 不建 axes ⇒ 桥不镜像，见 `accept-gfx-isolation.mjs` 同款注释）
+  ⇒ 与验收套件冲突的假红；对齐后 **12 PASS / 0 FAIL**。
+- **`make-dist.sh` 交付包静默丢件（实测）**：第 28 行的 `--exclude='*.gz'` 会把
+  `assets/forge/*.tar.gz`（**源资产**，`install()` 的下载源）一起排除 ⇒ 交付包里 10 个包
+  全没了（表现：站点能开、装包才 404）。修法 = 排除面收窄到**本脚本自己产出的派生 .gz**
+  （九种后缀逐列）+ 新增 fail-closed 计数（站点有几个包字节，包里必须一个不少）；
+  带 `--selftest`（正常 / 站点不存在必红 / 无 Forge 包明说不适用）并入 `gates-selftest.sh`。
+- **新闸门 `build/113/check-forge-catalog.py`**（设计稿 §8.2 落地；自证 9 条、pre-commit 挂上）：
+  R1 目录 `octave` == fork 的 `AC_INIT`（升 Octave 忘重生成 ⇒ 红）；R2 每条 (name,version,sha256)
+  与货架档案对读；R3 字节在仓库 `site/` 镜像里且 sha 相符；R4 `kinds` 说无编译件 ⇒ tarball 里
+  不许有 `*.oct`；空目录必红（零值守卫）；货架/目录缺席 ⇒ SKIP 明说。
+- **T7 术语落档**：`maintaince.md` 地图补"两个插件别读混"行 + 方向第 3 条 = Forge 按需线；
+  `CONTEXT.md` 新增两条具名术语（**部件插件**（构建期，全站产物）vs **Forge 按需插件**
+  （运行期，会话级））+ 互指警告；设计稿 §10 待办按实测翻状态（T4 未做 ⇒ 诚实标未做）。
+- **一仍存疑（如实记）**：`accept-worker` 在**未修的** 8761 上 500s 超时（hook 截断即杀），
+  与修后 21/0 对照 ⇒ 这条链**必须**随本轮 index.html 上站，否则 8761 用户点 `?worker=1` 仍卡死。

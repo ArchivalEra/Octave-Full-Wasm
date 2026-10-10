@@ -76,6 +76,31 @@
     OCTAVE(window.Module);
     return;
   }
+  // ★ 2026-10-10 修（真 bug：worker 模式自 9239cae 起整条坏）：
+  //   `flushUi` 调的是 `octaveUiAppend`，而那个函数在 9239cae（工单 38：页面适配器抽进
+  //   octave-page.js）时**从本文件删掉了**，没有任何地方重新定义它 ⇒ worker 模式下第一次
+  //   输出合批就抛 `ReferenceError: octaveUiAppend is not defined`；而 `flushUi` 里
+  //   `uiBuf` 的清空在抛错行**之后** ⇒ uiBuf 永远非空 ⇒ 之后每次 flushUi 都抛 ⇒
+  //   **每条 eval 的 promise 永不 settle**（accept-worker 在 C 格 425s 挂死，实测）。
+  //   修法 = 在本分支里定义真正的落点函数（与 T6c 的历史实现逐条同语义：追加到
+  //   `#output`；滚动按 200ms 节流——读 scrollHeight 会强制同步布局，海量输出下是
+  //   "背压"问题真身，别改成每条都读）。
+  function appendOutput(s) {
+    var el = document.getElementById('output');
+    if (!el) {
+      el = document.createElement('pre');
+      el.id = 'output';
+      document.body.appendChild(el);
+    }
+    el.appendChild(document.createTextNode(s));
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (now - (window.__octaveScrollAt || 0) > 200) {
+      window.__octaveScrollAt = now;
+      if (document.documentElement.scrollHeight > window.innerHeight) {
+        window.scrollTo(0, document.body.scrollHeight);
+      }
+    }
+  }
   var base = params.get('base') || '';
   // ★ B6（2026-09-27）：**把选档结果传给 worker**。Worker 里的 `location.search` 是
   //   **worker 脚本自己的** URL，看不到页面的 `?lane=`/`?worker=` ⇒ 不传的话 worker 会自己按
@@ -108,8 +133,9 @@
   function flushUi() {
     uiPending = false;
     if (!uiBuf) return;
-    octaveUiAppend(uiBuf);
-    uiBuf = '';
+    var t = uiBuf;
+    uiBuf = '';            // ★ 先清后写：写抛错也不许把缓冲区卡死（否则后续 eval 永不 settle）
+    appendOutput(t);
   }
   function queueUi(t) {
     uiBuf += t + '\n';

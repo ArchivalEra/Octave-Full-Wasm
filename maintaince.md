@@ -29,8 +29,14 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 - **悬案**：`.scratch/open-questions/issues/NN-*.md`（每条挂可执行结算件）。
 - **机制/推断**：`build/113/NOTES-*.md`（jspi/threads/webgl/wasm64/hotpath/libm/plugins/upstream）。
 - **上游**：`upstream/`（18 submodule，5 fork 的 wasm 补丁分支）+ `build/upstream-lock.json`
-  （无 git 上游的 URL+sha256）+ `build/113/NOTES-upstream.md`（升级 SOP）。
-- **部件插件契约**：`build/113/NOTES-plugins.md` + `build/plugins.json` + `plugin-check.py`。
+  （无 git 上游的 URL+sha256）+ `build/113/NOTES-upstream.md`（升级 SOP）；
+  **货架 `shelf/`**（第 19 个 submodule，`Octave-Forge-Shelf` 独立仓：只含 Forge 包档案，
+  每包一文件；pin 由 submodule commit 承载、字节由 sha256 承载）。
+- **两个"插件"别读混**（术语权威定义见 `CONTEXT.md`）：**部件插件**（构建期，换链进来的
+  库/旗标，影响全站产物）= `build/113/NOTES-plugins.md` + `build/plugins.json` +
+  `plugin-check.py`；**Forge 按需插件**（运行期，用到才拉的包）= `build/113/NOTES-forge-ondemand.md`
+  + `bridge/assets-loader.js` 的 `catalog()`/`install()` + `build/forge/__forge_install__.m`。
+  ⚠️ `build/plugins.json` 里没有、也不该有 Forge 包。
 - **C 库配方**：`build/CLIBS.md`；**术语**：`CONTEXT.md`；**部署**：`DEPLOY.md`。
 - **给 agent 的方法学**：`docs/agents/`（memory / fact-system / issue-tracker / upstream-issues）。
 
@@ -47,12 +53,17 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 2. **上游更新线**：SOP 已通（工单 62 结案——供给树 rebuild 恢复可复现）。**emcc 6.0.10
    探针判决：编译器红利 ≈ 0（geomean 1.001），旗标矩阵全绿——升级不立项**，重启时机 =
    Octave/emsdk 新版发布 → fork merge → 重编 → 验收（`emcc6_probe_geomean` 台账键哨兵）。
-3. **部署与 UI 线**（人的动作）：票 38 页面资产上站（`promote-pages.sh`）、票 12 真机手测
+3. **Forge 按需拉取插件线**（`OctaveAssets.catalog()`/`install()`；设计与分叉裁决 =
+   `build/113/NOTES-forge-ondemand.md`，工单 64）：客户端**用到才拉包**（没用到 = 0 字节），
+   站点货架 = `build/forge-catalog.py` 从 `shelf/` submodule 生成（版本按 **fork 的 Octave
+   版本**过滤、字节 sha 逐条核）。v1 = 纯 `.m` 包（全部 10 个货架包）；**v2**（T8）= 含编译件
+   的包：宿主预编 `.oct` + 客户端 dlopen 拉取。验收 = `test/browser/accept-forge-ondemand.mjs`。
+4. **部署与 UI 线**（人的动作）：票 38 页面资产上站（`promote-pages.sh`）、票 12 真机手测
    （等生产部署）、E6 图形线（embed 页 GL 纹理边界）。
-4. **Einfacht 反哺（暗线，持续推进）**：三插件已并（#11 check_pins/check_locks、
+5. **Einfacht 反哺（暗线，持续推进）**：三插件已并（#11 check_pins/check_locks、
    #12 check_ab）；**可执行闸门脚本必须显式 `__main__` 入口**（#12 并后抓到的缺口）。
    提 issue/PR 前先做现有档位对照表；覆盖不到或配置繁琐 ⇒ 自行迭代再提 PR。
-5. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
+6. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
    libm 标量替换（wasm 无标量 FMA）、fill 热点（带宽绑定）、faer/PGO/LTO/链接旗标/NT>8、
    工单 62 ABI 分叉（根因 = f77-fcn.h 未收编手改，已收编 fork `a5a7208`；供给树
    rebuild 可复现：1 条容忍 mismatch + wasm-opt 绿）——

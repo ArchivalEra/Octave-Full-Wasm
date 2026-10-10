@@ -134,17 +134,19 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   Gate-Plattform / entdecktes Gate-Register / Knopf-Register / World-Gate);
   `zreflect/measure_octave.py` ist die Datenschicht dieses Repos,
   `reflect-hooks/Einfacht.env` der Knopf-Träger
-- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.106 tragen die obigen
+- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.107 tragen die obigen
   Belege)
 - `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
   `DEPLOY.md` — Deployment
-- **Octave-Forge On-Demand-Pull** (v1 läuft, 2026-10-09): `OctaveAssets.catalog()` liest ein Site-Regal,
+- **Octave-Forge On-Demand-Pull** (v1 läuft, 2026-10-09; **ausgeliefert 2026-10-10** an
+  8761/8768/Repo-`site/`): `OctaveAssets.catalog()` liest ein Site-Regal,
   `OctaveAssets.install(name)` lädt+prüft+installiert ein Paket (samt Abhängigkeitsabschluss) erst
   **auf Anfrage** — **0 Bytes für nie genutzte Pakete**. Regal = `shelf/`-Submodule (nur Metadaten,
-  eine Datei pro Paket); Site-Katalog = `build/forge-catalog.py`;
-  Design = `build/113/NOTES-forge-ondemand.md` (nicht implementiert): das
-  **Octave-Forge-On-Demand-Pull**-Pluginsystem (Client-Regal + Laufzeit-Installation,
-  verzahnt mit der Fork/Lock-Pipeline)
+  eine Datei pro Paket); Site-Katalog = `build/forge-catalog.py` (Tor:
+  `build/113/check-forge-catalog.py`); Abnahme = `test/browser/accept-forge-ondemand.mjs`;
+  Design = `build/113/NOTES-forge-ondemand.md` (das
+  **Octave-Forge-On-Demand-Pull**-Pluginsystem: Client-Regal + Laufzeit-Installation,
+  verzahnt mit der Fork/Lock-Pipeline; v1 deckt reine `.m`-Pakete ab, `.oct`-Beschleuniger = v2/T8)
 - `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness
   (`SWEEP_JOBS=4` parallelisierbar; letzter grüner Lauf = `accept_suites` /
   `accept_pass` im Ledger)
@@ -153,6 +155,10 @@ Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
   Löschen von Neuanlagen), `p5canvas.js`/`queue.js` lösen das Modul über
   `window.__octaveHosts` auf — so erreichen Figuren im Embed-Modus das DOM;
   Abnahme = `accept-gfx-isolation` + `accept-gfx-render`
+- Worker-Modus (`?worker=1`, **repariert 2026-10-10**): jede `eval` kam nie zurück (der
+  Worker-Zweig rief weiterhin `octaveUiAppend` auf, nachdem der Seitenadapter
+  extrahiert worden war) — der Ausgabe-Flush kann die Warteschlange nicht mehr
+  blockieren; Abnahme = `accept-worker`
 - `.scratch/open-questions/issues/` — lokaler Ticket-Tracker
 - `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien); `docs/agents/ui-issue-interface-change.md` — Mitteilung von Schnittstellen-/Verhaltensänderungen an das UI-Repo
 

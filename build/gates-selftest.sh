@@ -44,6 +44,7 @@ build/113/hotpath.py --selftest
 build/113/wasm_symbols.py --selftest
 build/113/stage-oct-by-manifest.py --selftest
 build/113/make-lane-manifest.py --selftest
+build/113/check-forge-catalog.py --selftest
 build/113/unpatch-ax-pthread.py --selftest
 build/113/lane-shim.sh --selftest
 build/113/patch-openblas-f77-ret.py --selftest
@@ -58,6 +59,7 @@ build/113/lane-pick-selftest.mjs --selftest
 build/promote-pages.sh --selftest
 build/promote-w64-lane.sh --selftest
 build/gen-lanes.sh --selftest
+build/make-dist.sh --selftest
 EOF
 
 n=0; bad=0; badlist=""

@@ -1,0 +1,143 @@
+{
+ "schema": 1,
+ "octave": "11.3.0",
+ "generated_by": "build/forge-catalog.py",
+ "shelf_commit": "a6ab1a8cee71044fc84c71d3a7d07fdc8bfdac1f",
+ "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
+ "packs": [
+  {
+   "name": "geometry",
+   "version": "4.1.0",
+   "size": 113949,
+   "sha256": "dbc1658845c97d2d6687c1490a61b43d359913d33420e475b659f335f7a34360",
+   "url": "assets/forge/geometry-4.1.0.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/geometry-4.1.0.tar.gz",
+   "deps": [
+    "matgeom"
+   ],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
+  {
+   "name": "matgeom",
+   "version": "1.2.4",
+   "size": 572364,
+   "sha256": "6b344f870315bf2742ca88c0feb5c3da8835b4f4cbd2f8a2d793af798405f920",
+   "url": "assets/forge/matgeom-1.2.4.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/matgeom-1.2.4.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m"
+   ]
+  },
+  {
+   "name": "miscellaneous",
+   "version": "1.3.3",
+   "size": 110600,
+   "sha256": "da4671ee3661278330c02a59171f78e4df8a3a159a178c7c0727f3c7787118bb",
+   "url": "assets/forge/miscellaneous-1.3.3.tar.gz",
+   "upstream_url": "https://github.com/gnu-octave/octave-miscellaneous/releases/download/release-1.3.3/miscellaneous-1.3.3.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
+  {
+   "name": "nan",
+   "version": "3.7.2",
+   "size": 257606,
+   "sha256": "d2d2bac3f1d790428df2f7a396c6a1ffed93e91e29ab13678f641deaf021a216",
+   "url": "assets/forge/nan-3.7.2.tar.gz",
+   "upstream_url": "https://pub.ista.ac.at/~schloegl/matlab/NaN/nan-3.7.2.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
+  {
+   "name": "optim",
+   "version": "1.6.3",
+   "size": 422679,
+   "sha256": "59fb3771a2d2a2313447532c59a2e000a6a7bb7a677f3ef8183fbaaab5493a14",
+   "url": "assets/forge/optim-1.6.3.tar.gz",
+   "upstream_url": "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz",
+   "deps": [
+    "statistics",
+    "struct"
+   ],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
+  {
+   "name": "quaternion",
+   "version": "2.4.2",
+   "size": 47838,
+   "sha256": "4bcb64743972693f04ed6d2fea4906b38a9353f1b80c6e6f2d0bc0f6f8cf3a07",
+   "url": "assets/forge/quaternion-2.4.2.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/quaternion-2.4.2.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m"
+   ]
+  },
+  {
+   "name": "splines",
+   "version": "1.3.5",
+   "size": 34053,
+   "sha256": "af886877797c3a9c8a36ce7d94613c1059f79fab4883429e7b32a3b01e03d7a6",
+   "url": "assets/forge/splines-1.3.5.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/splines-1.3.5.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m"
+   ]
+  },
+  {
+   "name": "statistics",
+   "version": "1.7.7",
+   "size": 1437955,
+   "sha256": "cef3c090aee13eaad50b4b9beb2f003e8756cbf018d2be7233326de9696cdf7e",
+   "url": "assets/forge/statistics-1.7.7.tar.gz",
+   "upstream_url": "https://github.com/gnu-octave/statistics/releases/download/release-1.7.7/statistics-1.7.7.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
+  {
+   "name": "struct",
+   "version": "1.0.18",
+   "size": 64113,
+   "sha256": "fccea7dd84c1104ed3babb47a28f05e0012a89c284f39ab094090450915294ce",
+   "url": "assets/forge/struct-1.0.18.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/struct-1.0.18.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
+  {
+   "name": "tsa",
+   "version": "4.6.3",
+   "size": 85403,
+   "sha256": "54f3bce33dd439fea60e7d36252c04d6c6b313a632de6ce204f61ed6cfc17ddd",
+   "url": "assets/forge/tsa-4.6.3.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/tsa-4.6.3.tar.gz",
+   "deps": [
+    "nan"
+   ],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  }
+ ]
+}

@@ -277,17 +277,32 @@ grep -n "loadOne\|preloadIfHuge\|SHA" bridge/assets-loader.js | head
 
 ---
 
-## §10 待办（立单拆解，**等 §6 分叉拍板后开工**）
+## §10 待办（立单拆解；**状态如实，2026-10-10 更新**）
 
-- [ ] **T0（spike，先做）** 用真实纯 .m 包在浏览器里跑通 `pkg install <tarball>`（先 load webio+webshell）；
+- [x] **T0（spike，先做）** 用真实纯 .m 包在浏览器里跑通 `pkg install <tarball>`（先 load webio+webshell）；
       结论决定『委托核心』能覆盖多少（纯 .m）与哪里必须直写（编译件）。
-- [ ] **T1** `build/forge-catalog.py`：读上游 index + 本地缓存 → 站点 `assets/forge-catalog.json`
-      （含 §5 的 pin/witness 字段）
-- [ ] **T2** 站点装配：tarball 落 `assets/forge/`（**同源**）+ `assets.py` 入口（§6C）
-- [ ] **T3** `bridge/assets-loader.js` 加 `catalog()` + `install()`（§3），**tar+gzip 解包器**（§6B1）
-- [ ] **T4** `build/webshims/pkg.m`：`pkg load` 先问 catalog（已有骨架）
-- [ ] **T5** 闸门：catalog 闸门（§8.2）+ 对拍断言（§8.1）
-- [ ] **T6** 验收 `accept-forge-ondemand.mjs`（§8.3，含 3 条反向断言）+ 台账键（§8.4）
-- [ ] **T7** 文档：`maintaince.md` 地图加一行（两个"插件"的分界）+ `CONTEXT.md` 术语
-      （**Forge 按需插件** vs **部件插件**）——防止下一个人读混
-- [ ] **T8**（v2）含编译件包的 `.oct` 按需：宿主预编 + 客户端 dlopen 拉取（§6A）
+      ⇒ **实测：核心 `pkg install` 坏 ⇒ 直写**（见 §6B T0 spike 表）。
+- [x] **T1** `build/forge-catalog.py`：读上游 index + 本地缓存 → 站点 `assets/forge-catalog.json`
+      （含 §5 的 pin/witness 字段）—— 10 条自证、真仓装配 10 包上架。
+- [x] **T2** 站点装配：tarball 落 `assets/forge/`（**同源**）+ `assets.py` 入口（§6C）
+      —— 入口 = `build/forge-catalog.py --site <站点>`（不另写 assets.py 子命令，§6C 定的二选一）。
+- [x] **T3** `bridge/assets-loader.js` 加 `catalog()` + `install()`（§3）；**解包器 = 引擎内建
+      gunzip+untar**（§6B 实测裁决 ⇒ 不写 JS 解析器）。
+- [ ] **T4** `build/webshims/pkg.m`：`pkg load` 先问 catalog —— **未做**。
+      现状：`pkg.m` 只查**随站清单**的 `__webassets_pending__`（`/tmp/webassets.json`）；
+      catalog 的包（如没随站发的 optim）**不在那份账里** ⇒ `pkg load optim` 仍报
+      "is not installed"，而 `OctaveAssets.install('optim')` 能用。结案实验 = 验收套件加一条
+      "干净站上 `pkg load <未随站包>` ⇒ 触发 catalog 安装"；不通过就是没做。
+- [ ] **T5** 闸门：catalog 闸门（§8.2）—— 已落地 `build/113/check-forge-catalog.py`
+      （R1 AC_INIT 对读 / R2 货架 sha / R3 镜像字节 / R4 kinds↔tarball；自证 9 条）+
+      已登记 `build/gates-selftest.sh`（pre-commit 会跑）。
+      **对拍断言（§8.1）** 暂以 `__forge_install__.m` 的 `%!test`（glue-selftest 跑）
+      + 浏览器验收的 B4（落盘文件数）承担；"逐文件 path→sha 表对拍"留作加强项。
+- [x] **T6** 验收 `accept-forge-ondemand.mjs`（§8.3，含 3 条反向断言）+ 台账键（§8.4）
+      —— 15/15（8768 首跑）；台账键 6 条在 `FACTS.json`。
+- [x] **T7** 文档：`maintaince.md` 地图加行（两个"插件"的分界）+ `CONTEXT.md` 术语
+      （**Forge 按需插件** vs **部件插件**）—— 2026-10-10 落地。
+- [ ] **T8**（v2）含编译件包的 `.oct` 按需：宿主预编 + 客户端 dlopen 拉取（§6A）—— 未做。
+- [x] **发运**：8761 + 8768 + 仓库 `site/` 三处装配（catalog + 字节 + `forge` 资产 + 两份
+      分档清单 + 新版 loader）；`make-dist.sh` 的 `*.gz` 排除面修理（曾会把 `*.tar.gz`
+      包字节从交付包静默删掉，2026-10-10 实测）。

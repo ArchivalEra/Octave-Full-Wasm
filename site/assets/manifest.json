@@ -596,6 +596,13 @@
         "__web_ginput_pop__",
         "__web_run_js__"
       ]
+    },
+    {
+      "name": "forge",
+      "url": "assets/m/forge.js",
+      "sha256": "5080e92bf87da329faf207b875da2da0d8a795a8023a5f701480be8612fafae2",
+      "deps": [],
+      "kind": "js"
     }
   ]
 }

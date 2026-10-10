@@ -208,7 +208,11 @@ async function run (code, timeoutMs = 22000) {
 console.log('\n③ 矩阵（guard 生效后）：');
 const MATRIX = [
   ['plot(0:1:10); printf("|M=%d", numel(get(gca(),"children")))', 'plot', '|M='],
-  ['title("t"); printf("|T=[%s]", get(get(gca(),"title"),"string"))', 'title', '|T=[t]'],
+  // ⚠️ title 与 xlabel/ylabel 同款：**先 plot 再装饰**（issue #5 的真实用法）。
+  //    裸 `title("t")` 不建 axes ⇒ 桥按既有契约**不镜像到真 axes**（不是守卫的事）。
+  //    本探针最初抄的裸形式 ⇒ 每轮 PROBES=1 都在这儿假红；口径已与
+  //    `accept-gfx-isolation.mjs`（契约正确的那份，含同款注释）对齐（2026-10-10）。
+  ['plot(1:10); title("t"); printf("|T=[%s]", get(get(gca(),"title"),"string"))', 'title', '|T=[t]'],
   ['h = figure(); printf("|F=%d", ishghandle(h))', 'figure()', '|F=1'],
   ['h = gcf(); printf("|G=%d", ishghandle(h))', 'gcf()', '|G=1'],
   ['plot(1:10); xlabel("x"); printf("|X=[%s]", get(get(gca(),"xlabel"),"string"))', 'xlabel', '|X=[x]'],
@@ -244,5 +248,9 @@ console.log('  guard 修复记录 ::', JSON.stringify(rep));
 console.log(`\n因矩阵：${pass} PASS / ${fail} FAIL`);
 const exitOk = fail === 0;
 console.log(exitOk ? '\n=== 探针结束：守卫生效（矩阵全绿）===' : '\n=== 探针结束：仍有失败（守卫形状不成立）===');
+// ★ 2026-10-10：补**标准汇总行**。sweep.sh 的红绿判据是 `=== N PASS / M FAIL ===`
+//   （见 run_one 的 grep），而本探针原来只打 `因矩阵：N PASS / M FAIL`（中文前缀）⇒
+//   即使 rc=0 全绿也被记成 NO-SUMMARY，实测在 PROBES=1 全量里表现为"有问题的套件"。
+console.log(`=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(exitOk ? 0 : 1);
