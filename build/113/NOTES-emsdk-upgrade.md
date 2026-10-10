@@ -153,3 +153,62 @@ python3 .githooks/witness-upstream-pin.py       # 必须 ok
 
 farm 全套在**有 ccache 部分命中**下约 **3 分钟**（10:29→10:39 含重试；纯编约 2–4 min）。
 **冷编**（无 ccache）预计 **20–40 min**。Octave 树与 `.oct` 车道仍**未实测**。
+
+---
+
+## §7 深试：**w64 树 + 重链跑通**（2026-10-10，本批核心结论）
+
+### 7.1 实测结果
+
+| 步骤 | 结果 |
+|---|---|
+| w64 树 configure（6.0.12） | ✅ rc=0，3 分钟 |
+| w64 树 make（1466 `.o`） | ✅ **1432 个对象**，**零真错误**（唯一报错 = 已知预期：`octave-cli` 缺 `zgejsv_`） |
+| 树内库 | ✅ `liboctave.a` 25.5 MB / `liboctinterp.a` 36.5 MB / `libmex.a` 90 KB |
+| **重链 web 产物** | ✅ **产出 28.1 MB `octave.wasm`**（现役 31.0 MB，**小 2.9 MB**），`wasm-opt` 校验通过 |
+| 编译器确证 | ✅ `producers` 段 = **`clang 24.0.0git`** |
+
+⇒ **`clang 24` / emcc 6.0.12 能编整棵 Octave 树并产出 web 产物。**
+
+### 7.2 手拼环境变量的六个坑（**每个都是模式表里现成的，我漏传**）
+
+> 教训：`link-web.sh` 有 30+ 个环境变量，而 `relink.sh` 的模式表存在的意义就是"**一个都不许手设**"。
+> 我逐个手拼 ⇒ 逐个漏 ⇒ 每漏一个报一次错。**下次必须整份照 `relink.sh explain <模式>` 传。**
+
+| # | 症状 | 补上什么 |
+|---|---|---|
+| 1 | `--shared-memory is disallowed by main.o` | **PATH 上车道影子**（`relink.sh:524` 记过） |
+| 2 | Fortran 隐藏长度 i64/i32 混编（`wasm-opt: call param types must match`） | **`export F2C_PREFIX`**（`relink.sh:700` 记过：emf77 在 **make** 阶段被调） |
+| 3 | 保活集报 55 条缺 | **`KEEP_LIST` 用现役那份**（别重生成：现役 1304 = `keep.txt ∪ w64扫描`，**可逐字节复现**，已验证） |
+| 4 | 4 个 JS 库符号报缺 | **`LIB_FUNCS`**（现役值：`emscripten_run_script,__assert_fail,abort,exit`） |
+| 5 | 50 个 SLICOT LAPACK 符号报缺 | **`EXTRA_LDFLAGS` 的 `-L/src/deps-w64/lapack-simd/lib`**（SIMD 版 LAPACK；与编译器升级正交，直接复用现役那份） |
+| 6 | 差分级仍报 55 条 | **`BASELINE_WASM`** —— 判据是**与基线差分**（"基线导得出、新构建导不出"才报），漏传 ⇒ 退化成"逐条报缺"，把基线也没有的符号也报出来 |
+
+⇒ **修到第 6 条后：差异从 55 条收敛到 1 条。**
+
+### 7.3 ★ 唯一的真实差异（**升级必须处理的一条**）
+
+`_Unwind_CallPersonality` —— 4 个 `.oct` 导入它（`__ode15__` / `__init_gnuplot__` /
+`__bfgsmin` / `__disna_optim__`），而 6.0.12 的主模块**不再导出**它。
+
+**根因（实测，非推断）**：
+
+| | `_Unwind_CallPersonality` 引用数 |
+|---|---|
+| 现役树（5.0.7 / clang 23） | `liboctinterp.a` **63** + `liboctave.a` **15** |
+| 新树（6.0.12 / clang 24） | **0 + 0** |
+
+⇒ **clang 24 生成的异常处理表不再引用这个 personality 符号**（LLVM 24 改了 wasm EH 的实现）。
+而现存 `.oct` 是 **clang 23 编的，仍导入它** ⇒ **ABI 演进造成的版本配对缺口**，不是 bug。
+
+**修法（已验证可行）**：**把 `.oct` 也用 6.0.12 重编** —— 实测 6.0.12 编的 `__ode15__.oct`
+**导入该符号数 = 0**。⇒ 整套同版本即消失。
+
+**⇒ 这印证了 upgrade SOP 的一条硬要求**：升级**必须连 `.oct` 车道一起重编**，
+不能只重编 farm + 树（否则就是这样一条"装得上、调用才炸"的缺口）。
+
+### 7.4 `--export-if-defined` 对它是**无效**的（记录，免得后人重试）
+
+试过 `EXPORT_IF_DEFINED="_Unwind_CallPersonality"` ⇒ 产物字节**一个都没变**。
+原因：该符号在**我们的链接里未定义**，而 `--export-if-defined` 对"未定义"是**静默忽略**的。
+⇒ 唯一正确修法是 §7.3 的"重编 `.oct`"（或把符号包装成主模块导出，那是额外工程量）。
