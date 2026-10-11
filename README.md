@@ -382,7 +382,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/probe-wasm64-link.sh` (4618 bytes)
 - `build/113/provision-emsdk.sh` (8412 bytes)
 - `build/113/rebuild-pic-blas.sh` (6932 bytes)
-- `build/113/relink.sh` (59459 bytes)
+- `build/113/relink.sh` (62873 bytes)
 - `build/113/repro-umfpack-trap.sh` (8687 bytes)
 - `build/113/rust/.cargo/config.toml` (606 bytes)
 - `build/113/rust/Cargo.lock` (151 bytes)
