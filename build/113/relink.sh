@@ -205,16 +205,23 @@ EOF
       #   ⚠️ memory64 是 [compile+link] ⇒ 对象必须同旗标（那面实测墙见 PLAN-wasm64.md §1）。
       #   ⚠️ **GL4ES_A / GLU_A 现在指的是 threads 那份（wasm32）** —— w64 需要重编它们；
       #      先用它把链接跑通、看下一面墙在哪，别当作"w64 的 GL 已经好了"。
+      #   ★ 落地批（2026-10-11）：`LANE_TAG` 旋钮 —— emsdk 6.0.12 升级批在不覆盖现役
+      #     prefix 的前提下重编了一整套 `-6012-w64` 目录（farm/tree/oct/keep，见
+      #     NOTES-emsdk-upgrade §8.6），治理化重链用 `LANE_TAG=-6012` 把五个路径一次
+      #     指过去。**默认空 = 现行为逐字节不变**（自证有对照断言）。旋钮形状照
+      #     E2_OPENBLAS/OCT_TREE 先例：操作员输入由**表**读取，不许在表外手设。
+      echo "KEEP_LIST=/src/libwork/keep${LANE_TAG:-}-w64.txt"
       cat <<'EOF'
 MAIN_MODULE_LEVEL=2
 WITH_JSPI=1
-KEEP_LIST=/src/libwork/keep-w64.txt
 LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
-OCT_SCAN_DIRS=/src/libwork/octs-w64 /src/libwork/octs-w64-pkg
-DEPS=/usr/local-w64
-DEPS_ROOT=/src/deps-w64
+EOF
+      echo "OCT_SCAN_DIRS=/src/libwork/octs${LANE_TAG:-}-w64 /src/libwork/octs${LANE_TAG:-}-w64-pkg"
+      echo "DEPS=/usr/local${LANE_TAG:-}-w64"
+      echo "DEPS_ROOT=/src/deps${LANE_TAG:-}-w64"
+      cat <<'EOF'
 GL4ES_A=/src/libwork/gl4es-src-w64/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl-w64/lib/libGLU.a
 EOF
@@ -470,6 +477,15 @@ cmd_selfcheck() {
 cmd_link() {
   local m="$1" out="$2" diag="$3"
 
+  # ★ LANE_TAG 守卫（落地批 2026-10-11，零值守卫）：指了 tag 就必须有那套车道目录。
+  #   keep 清单是车道构建（farm→tree→oct→gen-keep-list）的最后一步 ⇒ 它在 =
+  #   整套 -<tag>-w64 目录在。缺了就在入口点名，而不是链到一半才炸。
+  if [ -n "${LANE_TAG:-}" ] && [ ! -f "/src/libwork/keep${LANE_TAG}-w64.txt" ]; then
+    echo "FATAL: LANE_TAG=$LANE_TAG 但 /src/libwork/keep${LANE_TAG}-w64.txt 不存在" >&2
+    echo "       （那套 -${LANE_TAG}-w64 车道没建过：farm/tree/oct/keep 四层缺一即如此）" >&2
+    exit 2
+  fi
+
   # ★ 工单 29（2026-09-30）：**链之前校验"树配的前缀"与模式一致**。
   #   为什么：产物会把树 configure 时的 --prefix **烘死**进 octave.js（docstrings/doc-cache
   #   等运行期路径）。一棵树只配一个前缀 ⇒ 在 threads 前缀的树上跑 `link product`，会产出
@@ -479,7 +495,7 @@ cmd_link() {
   local want
   case "$m" in
     threads)      want=/src/work/octave-install-threads ;;
-    w64|w64-base) want=/src/work/octave-install-w64 ;;
+    w64|w64-base) want=/src/work/octave-install${LANE_TAG:-}-w64 ;;
     *)            want=/src/work/octave-install ;;
   esac
   if [ -f "$OCT/Makefile" ]; then
@@ -926,6 +942,35 @@ cmd_selftest() {
     echo "PASS | ★ 工单 59：explain w64 的声明含 malloc=mimalloc；product 不含（双向）"
   else
     echo "fail | malloc 声明与模式表分叉（w64=$wd product=$pd）"; bad=1
+  fi
+  # ⑬ ★ 落地批：LANE_TAG 旋钮 —— 三类用例（默认逐字节不变 / 指了 tag 全路径跟随 / 乱 tag 必须红）
+  #    背景：emsdk 6.0.12 升级在不覆盖现役 prefix 的前提下重编了整套 -6012-w64 目录
+  #    （NOTES-emsdk-upgrade §8.6）⇒ 治理化重链的五个路径必须由**表**一次指过去。
+  #    ⚠️ `explain` 是列对齐打印（`%-20s %s`，行里没有 `=`）⇒ 先归一成 `key=value` 再断言。
+  n=$((n + 1))
+  norm() { awk '{ $1=$1; k=$1; $1=""; sub(/^ +/, ""); print k"="$0 }'; }
+  d1="$(LANE_TAG= bash "$0" explain w64 2>/dev/null | grep -E '^KEEP_LIST |^DEPS |^DEPS_ROOT |^OCT_SCAN_DIRS ' | norm)"
+  d2="$(bash "$0" explain w64 2>/dev/null | grep -E '^KEEP_LIST |^DEPS |^DEPS_ROOT |^OCT_SCAN_DIRS ' | norm)"
+  if [ "$d1" = "$d2" ] && printf '%s\n' "$d2" | grep -q 'KEEP_LIST=/src/libwork/keep-w64.txt' \
+     && printf '%s\n' "$d2" | grep -q 'DEPS_ROOT=/src/deps-w64' && printf '%s\n' "$d2" | grep -q 'DEPS=/usr/local-w64'; then
+    echo "PASS | ★ LANE_TAG 缺省 ⇒ 五路径 = 现役字面值（逐字节，含 LANE_TAG= 显式空）"
+  else
+    echo "fail | LANE_TAG 缺省与旧字面值不一致（表被改坏）"; bad=1
+  fi
+  n=$((n + 1))
+  t6012="$(LANE_TAG=-6012 bash "$0" explain w64 2>/dev/null | grep -E '^KEEP_LIST |^DEPS |^DEPS_ROOT |^OCT_SCAN_DIRS ' | norm)"
+  if printf '%s\n' "$t6012" | grep -q 'keep-6012-w64.txt' && printf '%s\n' "$t6012" | grep -q 'deps-6012-w64' \
+     && printf '%s\n' "$t6012" | grep -q '/usr/local-6012-w64' && printf '%s\n' "$t6012" | grep -q 'octs-6012-w64'; then
+    echo "PASS | ★ LANE_TAG=-6012 ⇒ 五路径全部跟随（keep/scan/deps/farm 一次指对）"
+  else
+    echo "fail | LANE_TAG=-6012 有路径没跟随：$t6012"; bad=1
+  fi
+  n=$((n + 1))
+  msg="$(LANE_TAG=-nonexistent bash "$0" link w64 --out /tmp/_zr_tag_probe 2>&1 || true)"
+  if printf '%s' "$msg" | grep -q 'keep-nonexistent-w64.txt 不存在'; then
+    echo "PASS | ★ LANE_TAG 指到不存在的车道 ⇒ 入口**点名** FATAL（零值守卫）"
+  else
+    echo "fail | 乱 LANE_TAG 没被拦（msg=${msg:0:110}）"; bad=1
   fi
   rm -rf "$tmp"
   echo ""
