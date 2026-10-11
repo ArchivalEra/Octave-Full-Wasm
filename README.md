@@ -10,6 +10,9 @@ pure client-side compute, **no server-side execution**.
 + mimalloc + a Rust `sort` kernel)**, shipped behind the same web UI as every other lane.
 All numerical results are IEEE 754 binary64 — audited explicitly (below).
 
+Toolchain: Emscripten **6.0.12** (all three lines rebuilt and shipped; the
+frozen `wasm32-final` archive line rebuilt but not promoted).
+
 ---
 
 ## Performance (measured 2026-10-07, medians of 5 native / 3 wasm interleaved runs)
@@ -220,8 +223,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (378707 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (11221 bytes)
-- `README.zh.md` (9871 bytes)
+- `README.de.md` (11380 bytes)
+- `README.zh.md` (10000 bytes)
 - `STATE.md` (32769 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (26335 bytes)

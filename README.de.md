@@ -12,6 +12,9 @@ relaxed-FMA OpenBLAS + mimalloc + Rust-`sort`-Kernel)**, hinter derselben
 Web-Oberfläche wie jede andere Spur betrieben. Alle numerischen Ergebnisse
 sind IEEE 754 binary64 — nachfolgend explizit auditiert.
 
+Toolchain: Emscripten **6.0.12** (alle drei Linien neu gebaut und ausgeliefert;
+die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
+
 ---
 
 ## Leistung (gemessen 2026-10-07, Median aus 5 nativen / 3 wasm-Läufen)
