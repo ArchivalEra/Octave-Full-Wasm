@@ -375,6 +375,37 @@ Wasm 的 limits 旗标是**位域**（bit0 = 有 max、bit1 = shared、bit2 = is
 6. **开机自检必须跑**（§7.6 是它抓到的；构建全绿 ≠ 页面起得来）。
 7. 数值四套 + 全量 `PROBES=1`（铁律）→ 独立站 → promote → 对拍。
 
+### 8.4 独立站实测（8772，2026-10-11）：**编译器升级线浏览器侧闭环**
+
+站点 = 仓库 `site/` 整份拷贝 → `site-6012/`，只换 **w64 档三件**（§7.5/§7.6 修好的产物）+
+按清单落新一代 `.oct` + **重生成 `manifest.w64.json`**；其余三档仍 5.0.7（车道隔离实测）。
+服务 = `serve-coi.py --port 8772`（带头 ⇒ 页面选 w64）。
+
+**结果（逐套实测，日志在 `sweep-logs/20261011-*`）**：
+
+| 套件 | 结果 | 备注 |
+|---|---|---|
+| check-boot | **BOOT OK 1.0s**、`eval_string("2+2")` rc=0 | §7.6 修复的直接验证 |
+| accept-113-assets/boot/libs/oct/pkgoct | 16/10/17/8/27 全 0 FAIL | |
+| **accept-113-ode15** | **29/0** | w64 sundials 重编的 `__ode15__` 端到端 ✓ |
+| accept-dldfcn | **68/3** | 3 失败见下（FreeType 配方缺口） |
+| accept-hdf5 / accept-slicot / accept-forge2 / accept-pkg | 16/25/44/16 全 0 FAIL | slicot 调度模块 `step` 无 TypeError |
+
+**唯一的 3 个失败 = `voronoi` 画图路径**：`render_text: support for rendering text
+(FreeType) was unavailable or disabled`。**根因不是编译器** —— 试点树 configure 配方
+带了 `--without-freetype --without-fontconfig --without-opengl`
+（`octave-6012-w64/config.status` 可查；config.h 里 `HAVE_FREETYPE` undef，现役树同位置
+`=1`）⇒ **落地批必须按 AGENTS 重配口径重建**（`WITH_OPENGL=1 WITH_GL2PS=1
+WITH_FREETYPE=1 WITH_FONTCONFIG=1`，漏 `WITH_OPENGL=1` 会静默掉回 web toolkit）。
+
+**踩到并证明其价值的：车道清单 sha 必须重生成**。第一跑 ode15 全线红：
+`OctaveAssets.load(__ode15__) ⇒ 资产校验失败（期望 fc26… 实得 49ee…）`——
+`stage-oct-by-manifest.py` 按**名字/结构**落件，但 `manifest.w64.json` 里的 sha256
+还是 5.0.7 的 ⇒ 完整性校验**按设计拒绝装载** ⇒ `__ode15__` 一直 undefined，
+套件挂到 425s 被 sweep SIGKILL（NO-SUMMARY 的形状）。重生成
+（`make-lane-manifest.py <site>/assets --lane w64` + `--check`）后 29/0。
+⇒ **换 `.oct` 代的批次，落件后必须重生成车道清单**（这同时证明了完整性校验真的在工作）。
+
 ---
 
 ## §9 Einfacht 追平上游 C1–C5（2026-10-10，用户点令"他们真的用心重构了"）
