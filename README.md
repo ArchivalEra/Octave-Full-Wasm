@@ -7,6 +7,8 @@ plot 桥 + `print -dsvg`。
 
 起点是 `rwl/octave-wasm`（BSD）的 7.2 骨架；**第四轮已换基线到 vanilla
 Octave 11.3.0 + emsdk 5.0.7**（计划见 `HISTORY.md` §9，实况与坑见 §10）。
+**工具链现已升级到 emsdk 6.0.12**：wasm64-NEXT 线在该版本下全配方重编并跑通
+（boot + 数值六套 107/0 + IEEE 逐位一致，2026-10-11）。
 构建产物（wasm/data/js）体积大，走 Release 分发，不进 git。
 
 ## 为什么是网页版
@@ -314,7 +316,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (328452 bytes)
 - `LICENSE` (34523 bytes)
-- `STATE.md` (29183 bytes)
+- `STATE.md` (29154 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (19869 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
