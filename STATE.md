@@ -9,15 +9,15 @@
   `build/113/NOTES-emsdk-upgrade.md`）：容器 `/emsdk` 与 submodule pin、
   `expect_version` 已同批落 6.0.12（**不回退**，用户点令）。试车道（`-6012-w64`
   隔离 prefix）已完成：**完整 `.oct` 集**（core+pkg+slicot，条数=基础清单）+
-  **主模块修复**，独立站（8772）**BOOT OK、`eval_string("2+2")` rc=0**；
-  数值回归 sweep 被断电打断（**未完成，续跑即从这开始**）。
-  踩到并落档两个 6.0.12 专属坑：**§7.5** keep-list 必须随 `.oct` 集跨版本重生成
-  （clang 24 把 EH personality 符号**改名** ⇒ 旧 keep-list 让 DCE 删掉整条
-  unwinder；§7.2-③ 的"别重生成"只对同版本成立）；**§7.6** emsdk 6.x 的
-  `<omp.h>` 有声明没实现 ⇒ configure 探测假阳 ⇒ 开机无限递归
-  （`build/main.cc` 已加 no-op stub，树侧治本 = configure 缓存变量，§8.3 留单）。
-  **8761 仍跑 5.0.7 现役**：发运前还差"治理化 relink 出 `octave.build.json`
-  （verdict=ok）+ 全量 `PROBES=1`"，§8.1 留单。
+  **主模块修复**，独立站（8772）**BOOT OK**；**全量 `PROBES=1` 已跑**（79 套 ran /
+  1269 PASS / 17 BAD），**17 个失败全部归因**（§8.5，含对拍现役）：`probe-pkg-d6`
+  真红 = 试点终链漏 `webgl_toolkit.o`（手拼第七坑 ⇒ `emscripten_run_script`
+  不再进 import 表）；其余 = 试点树 `--without-opengl/freetype/fontconfig`
+  配方缺口 + 环境性（现役同红）。**没有一个是编译器升级本身的问题** ——
+  §7.5（keep-list 必须随 `.oct` 集跨版本重生成）与 §7.6（`<omp.h>` 有声明没实现
+  ⇒ configure 探测假阳 ⇒ 开机无限递归，`build/main.cc` stub 已落）两个真升级坑
+  已修。落地批四步清单 = §8.6（farm 补库 → 树全配方重编 → 治理化重链 →
+  落件+清单重生成）；**8761 仍跑 5.0.7 现役**，等落地批产物过全量再 promote。
 - **断电恢复（2026-10-11）**：容器 o113 与三处站点服务被杀（§5.86 同款），
   已 `docker start` + `serve-coi.py` 重启，doctor 复验 **ok**、8761 BOOT OK；
   git 无损失（断电时被掐断的那次提交内容原样落在暂存区，已补提交）。

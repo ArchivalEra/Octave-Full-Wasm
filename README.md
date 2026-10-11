@@ -222,7 +222,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `LICENSE` (34523 bytes)
 - `README.de.md` (11221 bytes)
 - `README.zh.md` (9871 bytes)
-- `STATE.md` (32843 bytes)
+- `STATE.md` (32957 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (26335 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
