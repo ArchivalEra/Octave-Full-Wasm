@@ -406,6 +406,43 @@ WITH_FREETYPE=1 WITH_FONTCONFIG=1`，漏 `WITH_OPENGL=1` 会静默掉回 web too
 （`make-lane-manifest.py <site>/assets --lane w64` + `--check`）后 29/0。
 ⇒ **换 `.oct` 代的批次，落件后必须重生成车道清单**（这同时证明了完整性校验真的在工作）。
 
+### 8.5 全量 PROBES=1（8772）：79 套 ran / **1269 PASS / 17 BAD**，17 个失败**全部归因完毕**
+
+对拍现役（同样的套件在 8761 跑）：`probe-pkg-d6` 现役 **4/0**、`probe-internal-props`
+现役 **11/0**、`accept-requirements` 现役 **14/0** ⇒ 这三个是 6.0.12 站点真红；
+`probe-octc-spike` 现役同样 **0/12**（spike 资产本就不在站点上，环境性）。
+
+**归因（每个都有产物级证据）**：
+
+| # | 失败 | 根因 | 证据 |
+|---|---|---|---|
+| 1 | **probe-pkg-d6**（`pkg load statistics` 抛 `TypeError: resolved is not a function`） | **试点终链漏了 `webgl_toolkit.o`**（§7.2 六坑之外的**第七坑**：手拼环境没传 `P5_TOOLKIT=1`）⇒ 主模块不再引用 `emscripten_run_script` ⇒ glue 只留函数体、**没接进 import 表**（LIVE 映射=1，NEW 映射=0，`grep -c 'emscripten_run_script:_emscripten_run_script'`）⇒ `__web_pause_ms__.oct` 的 `__web_run_js__` 解析不到 ⇒ `pkg.m` shim 第一步就炸 | LIVE 链接输入 = `main.o + webgl_toolkit.o`（`w64-logs/link.log`）；pilot 终链 = 只有 `main.o`（`link8.cmd`）；LIVE 主模块**导入** `emscripten_run_script`、NEW **不导入**（import 段实扫） |
+| 2 | **图形簇**（print -dpng / getframe / engine-parity 出图 / p5-fallback 信号 / plotv2 句柄形态 / internal-props cells=0） | 两个配方缺口叠加：(a) **试点树 `--without-opengl`** ⇒ 树里没有 opengl_renderer ⇒ GL 栅格化整条不可用（SVG 回退在跑，所以还有 13/86 的 pass）；(b) 同 #1 工具包对象缺席 | `octave-6012-w64/config.status` 带 `--without-opengl`；"no working GL renderer (the SVG fallback is active)" 原文 |
+| 3 | **FreeType 簇**（listfonts / render_text / voronoi 画图 / requirements 2 条） | **试点树 `--without-freetype --without-fontconfig`** ⇒ 文本渲染器是"报警告的桩" | config.h：`HAVE_FREETYPE` undef（现役树同位置 `=1`）；警告原文 "support for rendering text (FreeType) was unavailable" |
+| 4 | probe-artifact-sha | 手工装配站点里 `octave.build.json` 是旧拷贝（治理化 relink 才会写新的） | page=04ce5c9f vs card=f6fec91f |
+| 5 | probe-octc-spike | 环境性（现役同样 0/12） | — |
+
+⇒ **没有一个是编译器升级本身的问题** —— 全部是试点配方缺口（树 configure + 终链对象集），
+与 §7.5/§7.6 已修的两个真升级坑分开记账。
+
+**重链验证踩到的新墙（如实记，别再撞）**：带全配方环境重跑 `link-web.sh` 会依次要
+① `octave-install-6012-w64/share/octave/11.3.0/fonts`（字体从现役 install 树 cp 即可，
+架构无关数据）② `/src/deps-6012-w64/freetype|fontconfig|gl2ps`（w64 farm 还没编这三个）
+③ **树的 `opengl_renderer`**——`--without-opengl` 的树编不出可用的 GL 渲染器。
+⇒ 这三件 + farm 补库 = **落地批的工作量**（树全配方重编 40–90 min），不该在手拼试点里继续补。
+
+### 8.6 落地批清单（从试点结论直接抄出的工单）
+
+1. **w64 farm 补库（6.0.12 影子）**：freetype / fontconfig(+expat) / gl2ps → `/src/deps-6012-w64/`。
+2. **树全配方重配重编**：`WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`
+   （AGENTS 重配铁律；漏 WITH_OPENGL=1 会静默掉回 web toolkit）+ §7.6 的
+   configure 缓存变量 `ac_cv_func_omp_get_num_threads=no`。
+3. **治理化重链**：`relink.sh` 的 w64 模式表指到 6012 prefix（或新增模式），
+   `KEEP_LIST=keep-6012-w64.txt`，`P5_TOOLKIT=1` 由模式表带出（不许手设）；
+   产物必须出 `octave.build.json` 且 `verdict=ok`。
+4. **落件 + 重生成车道清单**（§8.4 的教训）→ 独立站全量 `PROBES=1` 应全绿
+   → w64-base 档同流程 → 对拍（体积/sha/基准）→ `promote-w64-lane.sh`。
+
 ---
 
 ## §9 Einfacht 追平上游 C1–C5（2026-10-10，用户点令"他们真的用心重构了"）
