@@ -443,6 +443,49 @@ WITH_FREETYPE=1 WITH_FONTCONFIG=1`，漏 `WITH_OPENGL=1` 会静默掉回 web too
 4. **落件 + 重生成车道清单**（§8.4 的教训）→ 独立站全量 `PROBES=1` 应全绿
    → w64-base 档同流程 → 对拍（体积/sha/基准）→ `promote-w64-lane.sh`。
 
+### 8.7 落地批执行完毕（2026-10-11）：**emsdk 6.0.12 已发运 8768+8761**
+
+四步全过，途中又抓到**两个试点配方缺口**（连同修复一并记录）：
+
+| # | 缺口 | 症状 | 修复 | 证据 |
+|---|---|---|---|---|
+| A | **落地链接缺 `E2_OPENBLAS`**（工单 31 旋钮） | bench：矩阵乘 0.047 vs 现役 0.006（8×）、lu 4.7× | 重链带 `E2_OPENBLAS=/src/work/e2-openblas-lib-w64`（现役同款 OpenBLAS 后端 refblas 兼容件）→ 矩阵乘 0.008 / lu 0.024（持平） | keep 集出现 `blas_*_x__`；两次 bench 对比 |
+| B | **6012 树供错源**：试点从 `/src/work/octave-11.3.0`（tarball 死版本树）拷的，**缺 rust-sort seam**（pin f4bf15b 的 Array-base.cc 缝，权威供给树在 `/src/work/upstream/octave-11.3.0`） | sort 2e6 0.238 vs 现役 0.107（2.2×）；rust 库链了但**零调用点**（objdump=0） | 从 pin 管辖树回补 `liboctave/array/Array-base.cc` → `make liboctave/liboctave.la`（+112B）→ 重链 → sort 0.106 | 两树 diff 只有 configure（平台补丁）与该文件；seam 后 keep 不变 |
+
+**离线供给技巧（记下，容器无外网）**：freetype port 6.0.12 缺 `.SUBDIR` ⇒
+`EMCC_LOCAL_PORTS` 不可用；改**手工摆台**——git clone 到宿主 → `docker cp` 进
+`cache/ports/freetype/freetype-VER-2-14-3/` 并写 `.emscripten_url`（内容 = 下载 URL +
+换行）⇒ port 系统 `up_to_date()` 视为已装。mimalloc 是 emscripten **内置源码**
+（`system/lib/mimalloc/src`），wasm64 变体随用随编，无离线问题。
+
+**治理化重链的实际用法**（比预想多一个旋钮）：
+```sh
+LANE_TAG=-6012 \
+OCT_TREE=/src/work/octave-6012-w64 OCT=/src/work/octave-6012-w64 \  # ⚠️ relink 的树校验读 OCT（line 62 既有旋钮），OCT_TREE 只透传给 link-web
+E2_OPENBLAS=/src/work/e2-openblas-lib-w64 \
+  bash /src/bin/relink.sh link w64 --out /src/websrc/out-6012-gov
+# w64-base 同（不带 E2_OPENBLAS —— 模式表只在 w64 分支接它）
+```
+
+**发运验收（全绿）**：
+- 独立站 8772（最终产物）：全量 `PROBES=1` **85 套 / 1440 PASS / 12 FAIL**（唯一红
+  = probe-octc-spike，环境性，现役同红）；IEEE 双站逐位一致（剔除 url 字段后 data
+  sha 同为 `27b57d8f…`）；体积 31.2MB vs 现役 31.0。
+- **promote 8768**（promote-w64-lane 自检绿）→ BOOT 1.5s → probe-lane **33/0** →
+  全量 **47 套 / 1132 PASS / 0 FAIL 全绿**。
+- **promote 8761** → BOOT 1.4s → probe-lane **33/0** → 全量 `PROBES=1` **85 套 /
+  1440 PASS / 12 FAIL**（唯一红同上）。
+- 三层 SHA：磁盘（root base 未动 1ed3e528；w64 档 8c535553）/ HTTP ✓ / 页面实例化
+  == 身份证 ✓（probe-artifact-sha 4 PASS）。
+- 台账 7 条显式放行（w64/w64-base sha+bytes、导出 752→750（EH 改名）、v128
+  6582→6295 与 relaxed_madd 81→6（clang 24 自动向量化差异，基准持平））。
+- `make-dist` 包内 w64 wasm sha == 部署件（`8c535553…`）；`check-site-parity --strict`
+  三处完全一致。
+
+**遗留（如实留单）**：master 线（wasm64-NEXT）与 wasm32-final（冻结）未重编 ——
+wasm32-final 按既定决定不再做 wasm32 车道活；master 线非 8761 面向，等它下次
+需要重链时按同批配方走（本批的 LANE_TAG 旋钮 + §8.6 清单即配方）。
+
 ---
 
 ## §9 Einfacht 追平上游 C1–C5（2026-10-10，用户点令"他们真的用心重构了"）

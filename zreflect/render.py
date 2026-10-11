@@ -11,6 +11,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gate import module_meta                             # noqa: E402
 
+import re
+
 BLOCK_BEGIN = "<!-- AUTO:FACTS -->"
 BLOCK_END = "<!-- /AUTO:FACTS -->"
 
@@ -58,13 +60,19 @@ def body_of(block):
     return block.split(BLOCK_BEGIN, 1)[1].split(BLOCK_END, 1)[0]
 
 
+AUTO_PAIR_RE = re.compile(
+    r"<!--\s*AUTO:[A-Za-z0-9_-]+\s*-->[\s\S]*?<!--\s*/AUTO:[A-Za-z0-9_-]+\s*-->")
+
+
 def prose_of(doc_text):
-    """文档里**块以外**的正文（裸数字要在这里面查）。"""
-    if BLOCK_BEGIN not in doc_text:
-        return doc_text
-    pre = doc_text.split(BLOCK_BEGIN, 1)[0]
-    post = doc_text.split(BLOCK_END, 1)[-1] if BLOCK_END in doc_text else ""
-    return pre + post
+    """文档里**块以外**的正文（裸数字要在这里面查）。
+
+    ⚠️ 豁免的是**全部** `<!-- AUTO:x --> … <!-- /AUTO:x -->` 标记对，不止本模块
+    写的 FACTS 那对 —— STATE.md 还有 AUTO:GATES / AUTO:STATE（别的生成器维护）。
+    实测踩过：只豁免一对 ⇒ AUTO:STATE 里的机器行（如交付包字节数 `91,155,710`）
+    被当正文扫，尾组 `710` 子串撞上 `exported_functions=710` ⇒ 假红（2026-10-11）。
+    """
+    return AUTO_PAIR_RE.sub("", doc_text)
 
 
 # ── 自证 ──────────────────────────────────────────────────────────────────────
@@ -83,6 +91,11 @@ def _cases():
              "正文\n" + render_block(full) + "\ntail")),
         ("没有块标记时 prose_of 退回整篇（找不到块 ≠ 可以当空）",
          lambda: prose_of("没有标记的文档") == "没有标记的文档"),
+        ("★ 多个标记对**全部**豁免（别的生成器的块也不是正文）——"
+         "实测：只豁免一对时，AUTO:STATE 的机器行数字被当正文假红（2026-10-11）",
+         lambda: (lambda d: ("710" not in prose_of(d) and "中间" in prose_of(d)))(
+             "中间\n<!-- AUTO:FACTS -->\n| 4752 |\n<!-- /AUTO:FACTS -->\n"
+             "<!-- AUTO:STATE -->\n| 91,155,710 |\n<!-- /AUTO:STATE -->\n")),
         # ② 该报的必须报（渲染层的「该报」= 必须发生变化，不许是常量）
         ("★ 台账少一条 ⇒ 块跟着变（块不是常量）",
          lambda: render_block(full) != render_block({"facts": {"a": 4752}})),

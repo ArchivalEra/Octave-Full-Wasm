@@ -4583,3 +4583,32 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   （运行期，会话级））+ 互指警告；设计稿 §10 待办按实测翻状态（T4 未做 ⇒ 诚实标未做）。
 - **一仍存疑（如实记）**：`accept-worker` 在**未修的** 8761 上 500s 超时（hook 截断即杀），
   与修后 21/0 对照 ⇒ 这条链**必须**随本轮 index.html 上站，否则 8761 用户点 `?worker=1` 仍卡死。
+
+## 5.x emsdk 6.0.12 落地批闭环：8761 两档发运（2026-10-11）
+
+- **落地批四步全过**（清单 = `build/113/NOTES-emsdk-upgrade.md` §8.6）：
+  ① w64 farm 补库（freetype 2.14.3 / fontconfig+expat / gl2ps，全部 6.0.12 影子重编
+  进 `-6012-w64` 隔离 prefix；freetype port 走"手工摆台 + `.emscripten_url` 标记"绕
+  容器无外网，技巧记 §8.7）；② 树全配方重配重编（`WITH_OPENGL/GL2PS/FREETYPE/
+  FONTCONFIG=1` + `ac_cv_func_omp_get_num_threads=no`，config.h 判据全过）；
+  ③ **治理化重链**：`relink.sh` 新增 `LANE_TAG` 旋钮（自证 +3 条 23/23 绿），w64 与
+  w64-base 两档 `verdict=ok`；④ `.oct` 车道 44 个对新头文件重编 + keep 清单重生成
+  （值不变 ⇒ 产物有效）。
+- **途中两个试点配方缺口（非编译器问题，修复有 bench 铁证）**：
+  (a) 落地链接漏 `E2_OPENBLAS`（工单 31 旋钮）⇒ BLAS 慢 8×；带
+  `/src/work/e2-openblas-lib-w64` 重链后矩阵乘 0.008 vs 现役 0.006（持平）。
+  (b) 6012 树供错源——试点拷的是 tarball 死版本树，缺 pin f4bf15b 的 rust-sort
+  seam（权威供给树在 `/src/work/upstream/octave-11.3.0`）⇒ sort 慢 2.2× 且 rust 库
+  零调用点（objdump 证）；回补 Array-base.cc 重编后 sort 0.106 vs 现役 0.107（持平）。
+- **发运与验收全绿**：独立站 8772 全量 `PROBES=1` 1440 PASS（唯一红
+  probe-octc-spike，环境性，现役同红）；IEEE 双站排序逐位一致（data sha
+  `27b57d8f…`）；promote 8768（probe-lane 33/0 + 全量 1132/0 全绿）→
+  **promote 8761**（BOOT 1.4s + probe-lane 33/0 + 全量 1440 PASS，唯一红同上）；
+  三层 SHA（磁盘/HTTP/页面实例化）✓；`make-dist` 包内 sha == 部署件 ✓；
+  `check-site-parity --strict` 三处一致 ✓。
+- **台账 7 条显式放行**（`facts.py --accept-changes`，全部实测可溯源）：
+  w64/w64-base sha+bytes、导出 752→750（EH personality 改名，§7.5）、v128
+  6582→6295 与 relaxed_madd 81→6（clang 24 自动向量化差异；bench 持平，
+  如实记为"计数变了但端到端不慢"）。
+- **遗留**：master 线 / wasm32-final 未重编（wasm32-final 冻结；master 非 8761
+  面向）——配方 = 本批 LANE_TAG 旋钮 + §8.6 清单。
