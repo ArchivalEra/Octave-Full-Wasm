@@ -532,7 +532,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/lib/gate.py` (7246 bytes)
 - `build/lib/retractions.json` (10163 bytes)
 - `build/lib/sweep_select.py` (15827 bytes)
-- `build/main.cc` (25190 bytes)
+- `build/main.cc` (26639 bytes)
 - `build/make-dist.sh` (3226 bytes)
 - `build/normalize_arpack.py` (1861 bytes)
 - `build/pkgfix/__pkgfix_basename__.m` (1962 bytes)
