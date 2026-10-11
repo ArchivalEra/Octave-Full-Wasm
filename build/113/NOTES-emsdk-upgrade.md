@@ -254,6 +254,45 @@ cat /src/libwork/keep.txt <scan.txt> | LC_ALL=C sort -u > <新 keep.txt>
 ⇒ **升级 SOP 补一条硬要求**：**keep-list 与 `.oct` 集必须同代**。跨版本时
 "别重生成 keep-list"是**错的**（§7.2-③ 的条件没写出来）。已把这条写进 §8.3 的清单。
 
+### 7.6 ★ emsdk 6.x 第二坑：**`<omp.h>` 有声明没实现** ⇒ 开机无限递归（实测）
+
+独立站（8772）开机自检抓到的**第二个** 6.0.12 专属问题（症状与 §7.5 完全不同）：
+
+```
+[pageerror] RangeError: Maximum call stack size exceeded
+    at Object._omp_get_num_threads (octave.js:1:244753)   ← 自己调自己，×∞
+```
+
+**机制（逐层实测）**：
+1. emsdk 6.0.12 的 sysroot **带了 `<omp.h>`**（`sysroot/include/omp.h`）但**没有任何
+   libomp 实现**（`sysroot/lib/wasm64-emscripten/` 里搜不到 libomp/gomp）。
+2. Octave configure 的探测（`ac_cv_func_omp_get_num_threads`）在 emcc 的**宽松链接**
+   （`ERROR_ON_UNDEFINED_SYMBOLS=0`）下"成功" ⇒ `config.h:1708` 得到
+   `#define HAVE_OMP_GET_NUM_THREADS 1`（5.0.7 的 sysroot 没有 `<omp.h>` ⇒ 探测失败 ⇒
+   `/* #undef */`，config.h 同行可对照）。
+3. 于是 `libinterp/corefcn/sysdep.cc:449`（上游的 "force-load libgomp" 招数，bug #41699）
+   真的发起调用 ⇒ 主模块引用一个**谁也不提供**的符号。
+4. M2 胶水为它生成**自引用**包装：`_omp_get_num_threads(...){ return
+   wasmImports["omp_get_num_threads"](...args) }`，而 import 表又把这个名字映射回
+   同一个函数 ⇒ `sysdep_init()` 一跑就是无限递归 ⇒ **整页起不来**。
+   （这是 `ERROR_ON_UNDEFINED_SYMBOLS=0` 家族的新形态：undefined 不再是
+   "调用才炸"，而是**胶水自引用、开机就炸**。）
+
+**定位链**：重链日志 `warning: undefined symbol: omp_get_num_threads (referenced by
+root reference)` → 对 6.0.12 与 5.0.7 的 `liboctinterp.a` 做 `llvm-nm -u | grep omp_`
+⇒ 只有 6.0.12 有（1 处，`libcorefcn_la-sysdep.o`）→ config.h 对照 ⇒ `<omp.h>` 有无。
+
+**修法（已验证）**：`build/main.cc` 加一个真定义（wasm 没有 OpenMP ⇒ 语义就是 no-op）：
+```c
+extern "C" int omp_get_num_threads (void) { return 1; }
+```
+⚠️ 重链时**必须重编 main.o** —— 从链接日志里抠出来的那条 `em++` 命令**只含终链**，
+`main.o` 是旧字节（第一跑就是这么白干的：stub 加了、产物没变）。
+
+**树侧治本**（正式落地批再做，一次跨三 lane 生效）：configure 时传
+`ac_cv_func_omp_get_num_threads=no`（恢复 5.0.7 的现实）。代价：动 config.h ⇒ 全树重编
+（§2 估 40–90 min）。**别手改 config.h**（补丁不打在补丁上；改 configure 配方才是产地）。
+
 ---
 
 ## §8 升级落档：**容器已切 6.0.12 且不回退**（2026-10-10，用户点令）
@@ -328,7 +367,13 @@ Wasm 的 limits 旗标是**位域**（bit0 = 有 max、bit1 = shared、bit2 = is
 4. **EH 名字是版本相关的**：断言**不许**只匹配 `_Unwind_CallPersonality` 一个名字
    （clang 24 换成了 `__gxx_wasm_personality_v0` + `_Unwind_GetWasmLPadContext`）。
    这是本批最贵的一课：**单名断言在符号被改名时静默变绿**。
-5. 数值四套 + 全量 `PROBES=1`（铁律）→ 独立站 → promote → 对拍。
+5. **★ configure 探测在 emcc 宽松链接下会"谎报"**（§7.6）：跨到 emsdk 6.x 时
+   `ac_cv_func_omp_get_num_threads` 会假阳 ⇒ configure 配方（`configure-113-full.sh`）
+   要**显式传缓存变量** `ac_cv_func_omp_get_num_threads=no`（恢复 5.0.7 现实；
+   试车道临时用 main.cc 的 no-op stub，正式落地批必须树侧修）。
+   ⚠️ 新版 sysroot 新增的"有头文件没实现"的函数都要按这个形状过一遍。
+6. **开机自检必须跑**（§7.6 是它抓到的；构建全绿 ≠ 页面起得来）。
+7. 数值四套 + 全量 `PROBES=1`（铁律）→ 独立站 → promote → 对拍。
 
 ---
 

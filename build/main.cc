@@ -355,6 +355,22 @@ int EMSCRIPTEN_KEEPALIVE eval_string(std::string eval_str) {
   return 0;
 }
 
+// ── emsdk 6.x 的 <omp.h> 陷阱（2026-10-10，实测）： EMSDK 6.0.12 起 sysroot 里
+//    **只有 <omp.h> 声明、没有 libomp 实现**。emcc 的宽松链接（ERROR_ON_UNDEFINED_SYMBOLS=0）
+//    让 configure 的探测「成功」（ac_cv_func_omp_get_num_threads=yes）⇒ sysdep.cc:449 的
+//    `#if defined (HAVE_OMP_GET_NUM_THREADS) omp_get_num_threads (); #endif`（上游的
+//    "force-load libgomp" 招数，bug #41699）真的发起调用 ⇒ 链接期 undefined ⇒ M2 胶水
+//    生成**自引用**包装（`_omp_get_num_threads(){ return wasmImports["omp_get_num_threads"](...)}`
+//    而 import 表又指回它自己）⇒ 开机 sysdep_init 一跑就是无限递归（RangeError:
+//    Maximum call stack size exceeded，8772 独立站实测）。5.0.7 的 sysroot 没有
+//    <omp.h> ⇒ 探测失败 ⇒ 宏 undef ⇒ 无此调用（现役产物里这个名字 0 次出现）。
+//    wasm 没有 OpenMP ⇒ 这个调用的语义就是 no-op，这里给真定义（不是 JS 库符号，
+//    是 C 符号）让链接闭合并保持「现役没有的东西」不新增行为。
+//    ★ 树侧的治本修法（跨 lane 一次性的）：configure 时传
+//      `ac_cv_func_omp_get_num_threads=no`（恢复 5.0.7 的现实）—— 但那会动 config.h
+//      ⇒ 全树重编（§8.3 记在升级收尾清单里，等正式落地批再做）。
+extern "C" int omp_get_num_threads (void) { return 1; }
+
 // ── G1（2026-09-25，B 姿势）：可挂起的解释器入口 ──────────────────────────────
 // **为什么是 extern "C" 而不是 embind async**：`WebAssembly.promising()` 只能包
 // **真 wasm 导出**，而 embind 的 JS 名（eval_async）不是；且实测 5.0.7 里 `-sJSPI`
