@@ -135,22 +135,26 @@ EOF
       echo "MAXIMUM_MEMORY=2GB"
       ;;
     scalar|product)
+      # ★ 落地批（2026-10-11）：`LANE_TAG` 旋钮（同 IP 线 w64 的改法）——emsdk 6.0.12
+      #   重编在不覆盖现役 farm 的前提下走 `-6012` 隔离目录。**默认空 = 现行为不变**。
+      echo "KEEP_LIST=/src/libwork/keep${LANE_TAG:-}.txt"
       cat <<'EOF'
 MAIN_MODULE_LEVEL=2
 WITH_JSPI=1
-KEEP_LIST=/src/libwork/keep.txt
 LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
-OCT_SCAN_DIRS=/src/octs-site
-DEPS=/usr/local
-DEPS_ROOT=/src/deps
+EOF
+      echo "OCT_SCAN_DIRS=/src/octs-site${LANE_TAG:-}"
+      echo "DEPS=/usr/local${LANE_TAG:-}"
+      echo "DEPS_ROOT=/src/deps${LANE_TAG:-}"
+      cat <<'EOF'
 GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
 GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
 EOF
       echo "MAXIMUM_MEMORY=2GB"
       if [ "$m" = product ]; then
-        echo "EXTRA_LDFLAGS=-L/src/deps/lapack-simd/lib"
+        echo "EXTRA_LDFLAGS=-L/src/deps${LANE_TAG:-}/lapack-simd/lib"
         echo "BASELINE_WASM=$(pick_baseline scalar /src/websrc/m2fc-jspb-out/octave.wasm)"
       else
         # scalar = product 去掉 SIMD ⇒ 没有 EXTRA_LDFLAGS；基线是 m1

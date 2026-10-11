@@ -415,7 +415,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `build/113/probe-wasm64-baseline.sh` (5114 bytes)
 - `build/113/probe-wasm64-link.sh` (4618 bytes)
 - `build/113/rebuild-pic-blas.sh` (6932 bytes)
-- `build/113/relink.sh` (53569 bytes)
+- `build/113/relink.sh` (53928 bytes)
 - `build/113/repro-umfpack-trap.sh` (8687 bytes)
 - `build/113/ss-long64.h` (1265 bytes)
 - `build/113/stage-lane-assets.sh` (4635 bytes)
