@@ -3,7 +3,24 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
-## 现在是什么（2026-10-10）
+## 现在是什么（2026-10-11）
+
+- **emsdk 6.0.12 升级线 = 当前活跃批**（机制与复跑命令全在
+  `build/113/NOTES-emsdk-upgrade.md`）：容器 `/emsdk` 与 submodule pin、
+  `expect_version` 已同批落 6.0.12（**不回退**，用户点令）。试车道（`-6012-w64`
+  隔离 prefix）已完成：**完整 `.oct` 集**（core+pkg+slicot，条数=基础清单）+
+  **主模块修复**，独立站（8772）**BOOT OK、`eval_string("2+2")` rc=0**；
+  数值回归 sweep 被断电打断（**未完成，续跑即从这开始**）。
+  踩到并落档两个 6.0.12 专属坑：**§7.5** keep-list 必须随 `.oct` 集跨版本重生成
+  （clang 24 把 EH personality 符号**改名** ⇒ 旧 keep-list 让 DCE 删掉整条
+  unwinder；§7.2-③ 的"别重生成"只对同版本成立）；**§7.6** emsdk 6.x 的
+  `<omp.h>` 有声明没实现 ⇒ configure 探测假阳 ⇒ 开机无限递归
+  （`build/main.cc` 已加 no-op stub，树侧治本 = configure 缓存变量，§8.3 留单）。
+  **8761 仍跑 5.0.7 现役**：发运前还差"治理化 relink 出 `octave.build.json`
+  （verdict=ok）+ 全量 `PROBES=1`"，§8.1 留单。
+- **断电恢复（2026-10-11）**：容器 o113 与三处站点服务被杀（§5.86 同款），
+  已 `docker start` + `serve-coi.py` 重启，doctor 复验 **ok**、8761 BOOT OK；
+  git 无损失（断电时被掐断的那次提交内容原样落在暂存区，已补提交）。
 
 - **Forge 按需拉取插件系统 v1 已跑通并**发运**（2026-10-09/10，issue 64）**：客户端**用到才拉**——
   `OctaveAssets.catalog()` 读站点货架（**0 包下载**）、`OctaveAssets.install(name)` 拉包 + 依赖闭包
