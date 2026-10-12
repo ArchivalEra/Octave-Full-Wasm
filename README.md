@@ -683,7 +683,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `site/assets/data/installed_packages.m` (5603 bytes)
 - `site/assets/data/macros.texi` (3369 bytes)
 - `site/assets/m/lanetest.js` (380 bytes)
-- `site/assets/m/pkgfix.js` (20111 bytes)
+- `site/assets/m/pkgfix.js` (20084 bytes)
 - `site/assets/m/plotbridge.js` (199280 bytes)
 - `site/assets/m/webaudio.js` (39138 bytes)
 - `site/assets/m/webaudiorec.js` (22119 bytes)

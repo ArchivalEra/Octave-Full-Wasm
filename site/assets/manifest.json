@@ -434,7 +434,7 @@
    "name": "pkgfix",
    "kind": "js",
    "url": "assets/m/pkgfix.js",
-   "sha256": "d3ec183769f12e3f609b6ddacef9f7b6d5900394254bd4f5dffb318aa3166c63",
+   "sha256": "1be5457840af068659047561cb7d08dc1661bf5cd18b6e4cb042990f7a3fc820",
    "deps": [],
    "note": "T4：从磁盘现状生成 pkg 数据库（复用官方 get_description，故必须挂在 m/pkg/ 以解析 private 函数）"
   },
