@@ -1,6 +1,10 @@
 # 04: 发布包把 sysroot 装成了 wasm32 那档 ⇒ 同一份包编不出可用的 wasm64 产物（下游实测）
 
-> **已提交到对方仓库** → <https://github.com/ArchivalEra/LLVM-wasm/issues/1>（2026-10-12）。
+> **已提交到对方仓库** → <https://github.com/ArchivalEra/LLVM-wasm/issues/1>（2026-10-12，
+> **已关闭 / state_reason=completed**，对方发了 `fix/issue-1` → v0.1.1：两条 sysroot 都发 +
+> 缺档硬拒绝）。**下游独立复验通过**（见 `build/113/ISSUE-1-verify-comment.md`：
+> 反向断言生效、两档都编得出、wasm64 产物进真宿主 `dlopen OK`）。
+> 复验评论待发（需 GitHub 写凭据；本机 gh token 当前不可用）。
 > 本文件是**留档副本**（本仓事实纪律：对外提的单在本地留一份，便于复跑与追溯）。
 > 内容同时按该仓 `questions/` 约定撰写 ⇒ 亦可落成 `questions/04-release-ships-wasm32-sysroot-only.md`。
 > 提出方 = 下游宿主（Octave-Full-Wasm：真实 `MAIN_MODULE=2` 宿主，且**两条主线是 wasm64**）。
