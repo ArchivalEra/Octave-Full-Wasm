@@ -15,6 +15,9 @@ sind IEEE 754 binary64 — nachfolgend explizit auditiert.
 Toolchain: Emscripten **6.0.12** (alle drei Linien neu gebaut und ausgeliefert;
 die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
 
+Alle drei Linien sind jetzt auf **derselben Toolchain (Emscripten 6.0.12)** neu gebaut
+und im Browser verifiziert — einschließlich der eingefrorenen `wasm32-final`-Linie.
+
 ---
 
 ## Leistung (gemessen 2026-10-07, Median aus 5 nativen / 3 wasm-Läufen)
