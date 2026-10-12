@@ -15,6 +15,8 @@ binary64 —— 并经下文显式审计。
 
 三线**已全部推送且同步**（local = origin = mirror），每条都在 Emscripten 6.0.12 下重编并完成浏览器侧验收。
 
+与网页版 clang+lld 工具链（[LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)）的下游接入复核见 `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md`。
+
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
 归档线已重编但不上站）。
 

@@ -179,6 +179,10 @@ sh build/gates-selftest.sh                        # ★ 本仓专属闸门自证
   `build/assets-meta.json`**（`pkgfix` = `/usr/src/octave/m/pkg`、`plotbridge` =
   `/usr/src/octave/m/plotbridge`）。**少写一层**会把文件铺到 `m/` 根上，桥的"摘桥目录"路径手术
   就会把整棵核心 m 树摘掉（真发生过：`clf` 报 `no core implementation cached`）。
+- ★ **测 dlopen 必须每次用全新页面**（2026-10-12 实测）：同一页连续两次
+  `loadDynamicLibrary` 会因加载器内部状态给出**不一致**的结果（我第一次就是这样把
+  一个真失败误判成 OK，差点把两条真缺口当成已经满足）。判据：一个模块 = 一次
+  `page.goto`；要测 N 个模块就开 N 个页面（或把它们编进一个模块里各调一次）。
 - **探测/自检不许放在开机路径上**：坏产物会让**整页卡死**（JSPI 那次），连带所有浏览器验收全挂。
   探测器要**按需触发 + 带超时**，它的失败模式必须和被探测的东西解耦。
 - **JSPI × dlopen 三条机制**（实测，详见 `NOTES-jspi.md`）：① 链里有 dlopen ⇒ 它**上游整条入口**

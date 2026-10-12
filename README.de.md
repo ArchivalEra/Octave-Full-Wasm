@@ -18,6 +18,8 @@ Die Annahme-Triage je Linie steht in `build/113/NOTES-emsdk-upgrade.md` §8.9.
 
 Alle drei Linien sind **gepusht und synchron** (local = origin = mirror), jede unter Emscripten 6.0.12 neu gebaut und im Browser verifiziert.
 
+Die Downstream-Integration mit der Browser-clang+lld-Toolchain ([LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)) ist in `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md` dokumentiert.
+
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
 die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
 

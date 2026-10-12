@@ -16,6 +16,8 @@ See `build/113/NOTES-emsdk-upgrade.md` §8.9 for the per-line acceptance triage.
 
 All three lines are **pushed and in sync** (local = origin = mirror), each rebuilt and verified under Emscripten 6.0.12.
 
+Downstream integration with the browser clang+lld toolchain ([LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)) is audited in `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md`.
+
 Site asset bundles are audited per batch: regenerate `site/assets/m/*.js` from their `build/` sources and compare hashes (mount points come from `build/assets-meta.json`, *not* guessed).
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
@@ -216,6 +218,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.scratch/open-questions/issues/62-full-rebuild-abi-divergence.md` (3963 bytes)
 - `.scratch/open-questions/issues/63-rustpatch-fact-coverage.md` (10360 bytes)
 - `.scratch/open-questions/issues/64-forge-ondemand.md` (5466 bytes)
+- `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md` (5275 bytes)
 - `.scratch/perf-max/issues/01-openblas-levers.md` (4724 bytes)
 - `.scratch/perf-max/issues/02-native-baseline.md` (2545 bytes)
 - `.scratch/perf-max/issues/03-w64-big-heap.md` (2680 bytes)
@@ -227,13 +230,13 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.scratch/perf-max/issues/39-openblas-simd-kernel-dev.md` (12415 bytes)
 - `.scratch/perf-max/map.md` (7894 bytes)
 - `.zcode/config.json` (1597 bytes)
-- `AGENTS.md` (21225 bytes)
+- `AGENTS.md` (21648 bytes)
 - `CONTEXT.md` (11920 bytes)
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (378707 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (12077 bytes)
-- `README.zh.md` (10590 bytes)
+- `README.de.md` (12295 bytes)
+- `README.zh.md` (10787 bytes)
 - `STATE.md` (35113 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (26335 bytes)
