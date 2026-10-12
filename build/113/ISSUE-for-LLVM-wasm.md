@@ -1,7 +1,8 @@
 # 04: 发布包把 sysroot 装成了 wasm32 那档 ⇒ 同一份包编不出可用的 wasm64 产物（下游实测）
 
-> **对外件 —— 给 `ArchivalEra/LLVM-wasm` 的悬案**（按该仓 `questions/` 约定撰写，
-> 可直接落成 `questions/04-release-ships-wasm32-sysroot-only.md`）。
+> **已提交到对方仓库** → <https://github.com/ArchivalEra/LLVM-wasm/issues/1>（2026-10-12）。
+> 本文件是**留档副本**（本仓事实纪律：对外提的单在本地留一份，便于复跑与追溯）。
+> 内容同时按该仓 `questions/` 约定撰写 ⇒ 亦可落成 `questions/04-release-ships-wasm32-sysroot-only.md`。
 > 提出方 = 下游宿主（Octave-Full-Wasm：真实 `MAIN_MODULE=2` 宿主，且**两条主线是 wasm64**）。
 > 复核依据 = 该仓 `DELIVERY.md` §2 接入说明 + §3「`target='wasm64'` 也支持」，**按其说明实跑**。
 
