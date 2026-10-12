@@ -13,7 +13,30 @@
 
 ---
 
-## 0. 现在是什么（2026-10-01）
+## 0. 现在是什么（2026-10-12）
+
+- **三线（IllegalPerformance / master=wasm64-NEXT / wasm32-final）已全部在 emsdk 6.0.12 下
+  重编、浏览器侧验收、并推送**（local = origin = mirror，**三处一致**）：
+  | 线 | 产物 sha | 浏览器侧验收 |
+  |---|---|---|
+  | IllegalPerformance（本线，8761 现役） | `8c535553…`（w64）/ `f7139099…`（w64-base） | 全量 `PROBES=1` 全绿（唯一红 `probe-octc-spike` = 环境性） |
+  | master（wasm64-NEXT） | `1ff6a111…` | 数值六套 107/0 + IEEE 排序逐位一致 + `accept-gfx-render` 14/0 |
+  | wasm32-final（冻结线） | `f1c0d21b…` | 数值六套全 0 FAIL + IEEE 逐位一致 + 宽套件大幅转绿 |
+  验收站：8761（IP）/ 8773（master，`--no-coi`）/ 8775（wasm32，`--no-coi`）。
+- **⚠️ 验某一线必须让页面真跑它**：带 COI 头的四格站会让页面静默选 `w64/` ⇒ 在别的线产物上
+  跑本线验收（本日实测踩到）。单档站（删 `threads/ w64/ w64-base/ lanes.js` + `--no-coi`）才可信。
+- **⚠️ 站点资产包会陈旧**：`build/<名>/*.m` 修过 ≠ 站点跑的是修过的（bundle 是快照）。
+  判据：`build/assets.py bundle-m <名> build/<名> <挂载点> /tmp/x.js` 与站点那份比 sha。
+  **挂载点必须逐字读 `build/assets-meta.json` 的 `mount`**（`pkgfix` 挂 `m/pkg` **不是**默认！
+  我按默认猜过，已纠正）。本批在三条线上审计出过陈旧件。
+- **emcc 6.x 三个假阳（口径都已进代码，别用环境变量手传）**：① `keep-list` 必须随 `.oct` 集
+  跨版本重生成；② `<omp.h>` 有声明无实现 ⇒ omp stub + `ac_cv_func_omp_get_num_threads=no`；
+  ③ 同源 ⇒ `ax_cv_c_openmp=none ax_cv_cxx_openmp=none`（否则 glpk 链不过 ⇒ `HAVE_GLPK` undef
+  ⇒ `__glpk__.oct` **出厂即空桩**，而构建/链接/自检全绿）。
+
+---
+
+## 0b. 历史活状态（2026-10-01）
 
 - **8761 = 现役「四格」站点**（工单 30，2026-10-01 上线）：根目录基础档 + `threads/` + **`w64/`** +
   **`w64-base/`**，档清单 `lanes.js` = `[base,threads,w64,w64-base]`，**带头服务**（`build/serve-coi.py`）
@@ -387,7 +410,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 50 | |
-| 最近一次**全绿**回归 | `20261012-121855` · **1 套 / 40 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20261012-122444` · **1 套 / 14 PASS / 0 FAIL** | http://127.0.0.1:8775/ |
 | 交付包 | `octave-full-wasm-site-20261011` · tar.zst 91,155,710 B · `d3927b7753acdde3…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `wasm32-final`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
