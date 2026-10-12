@@ -19,6 +19,8 @@ binary64 —— 并经下文显式审计。
 
 给网页版 clang+lld 工具链的宿主侧接入报告见 `build/113/ISSUE-for-LLVM-wasm.md`（已用该仓自己的悬案闸门验过）。
 
+**一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
+
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
 归档线已重编但不上站）。
 

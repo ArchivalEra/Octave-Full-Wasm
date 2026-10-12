@@ -21,6 +21,23 @@
 2. 不 force-push / 不删 git 对象 / 不改历史；**禁用 `--no-verify`**。
 3. **白名单仓库**：新增文件必须同步 `!路径` 进 `.gitignore`，否则 pre-commit 直接拒。
 
+## 线划分 = 一线一架构（2026-10-12 用户点令）
+
+    master 线   → 产物 wasm64，**只编 wasm64**
+    wasm32 线   → 产物 wasm32，**只编 wasm32**
+
+**判据可执行**：`python3 build/113/check-lane-purity.py --lane <档> --host <wasm> --oct <目录…>`
+（三条：①宿主 ②车道 `.oct` ③站点**本档专属**目录 `oct-<lane>/octdir-<lane>`；
+错档逐条点名、rc=1。**别把基础档目录 `assets/oct`/`assets/octdir` 喂进去** ——
+多档站里它们合法装着另一档的 `.oct`，查了必假红，实测 8761 上 44 处假报）。
+已接进 `promote-w64-lane.sh` 第 5 步自检。
+
+**为什么要成文**：混编的失败模式是"两边都建成功、自检全绿、运行期才炸"——
+本仓实测三次：wasm32 对象链进 wasm64（`ida.c.o: wasm32 object file can't be linked in
+wasm64 mode`，`__ode15__` 整批挂掉）；错档模块进宿主（加载器只给
+`incorrect architecture (wasm32 vs wasm64)`，与"缺符号"的
+`reading 'value'` 混在一起时无法区分）；以及 `NOTES-emsdk-upgrade` §7.5/§7.6 那两个假阳。
+
 ## 验收底线
 `http://127.0.0.1:8761/` 永远是**最近一次通过浏览器实测**的构建。新实验失败**不许**让它退化：
 失败就回退（`cp site/octave.{wasm,js,data} siteWebGL/`，或站点备份目录）+ 记档 + 继续下一批。
