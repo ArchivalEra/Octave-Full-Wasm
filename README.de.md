@@ -16,6 +16,8 @@ Toolchain: Emscripten **6.0.12** (alle drei Linien neu gebaut und ausgeliefert;
 Die 6.0.12-Ausrollung der drei Linien ist in `build/113/NOTES-emsdk-upgrade.md` §8.8 dokumentiert.
 Die Annahme-Triage je Linie steht in `build/113/NOTES-emsdk-upgrade.md` §8.9.
 
+Alle drei Linien sind **gepusht und synchron** (local = origin = mirror), jede unter Emscripten 6.0.12 neu gebaut und im Browser verifiziert.
+
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
 die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
 

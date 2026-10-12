@@ -14,6 +14,8 @@ Toolchain: Emscripten **6.0.12** (all three lines rebuilt and shipped; the
 The three-line 6.0.12 rollout is written up in `build/113/NOTES-emsdk-upgrade.md` §8.8.
 See `build/113/NOTES-emsdk-upgrade.md` §8.9 for the per-line acceptance triage.
 
+All three lines are **pushed and in sync** (local = origin = mirror), each rebuilt and verified under Emscripten 6.0.12.
+
 Site asset bundles are audited per batch: regenerate `site/assets/m/*.js` from their `build/` sources and compare hashes (mount points come from `build/assets-meta.json`, *not* guessed).
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
@@ -230,8 +232,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (378707 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (11934 bytes)
-- `README.zh.md` (10452 bytes)
+- `README.de.md` (12077 bytes)
+- `README.zh.md` (10590 bytes)
 - `STATE.md` (35113 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (26335 bytes)
