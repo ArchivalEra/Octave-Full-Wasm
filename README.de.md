@@ -24,6 +24,8 @@ Ein host-seitiger Integrationsbericht für die Browser-clang+lld-Toolchain liegt
 
 Ausgehender Issue upstream: [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wasm/issues/1) (wasm64-Sysroot fehlt im Release-Bundle).
 
+Die **unabhängige Downstream-Re-Verifikation** des Fixes zu [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wasm/issues/1) ist an echten Artefakten durchgelaufen (v0.1.1).
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
