@@ -585,3 +585,19 @@ glpk（未编 atomics）链不过 ⇒ `HAVE_GLPK` 静默 undef ⇒ **`__glpk__.o
 **⚠️ 教训（验收口径）**：该缺口第一次没被抓到，是因为我在**带 COI 头**的服务上跑验收
 ⇒ 页面按档选择器走了 `w64/`（IP 线产物）⇒ 验的不是本线产物。**验某一线必须让页面真跑它**：
 单档站（删掉 `threads/` `w64/` `w64-base/` `lanes.js` + `--no-coi`）才可信。
+
+### 8.9 wasm32-final 宽套件分诊（2026-10-12）
+
+单档站（8775，`--no-coi` + 删四格目录）跑全量 `accept-*`：**45 套完成 / 1067 PASS**，
+5 套有红，逐个归因后 **4 类修复、1 类既存**：
+
+| 套件 | 症状 | 根因 | 处置 |
+|---|---|---|---|
+| `accept-help`（5/1→**12/0**）、`accept-t6-audio-doc`（29/4→**33/0**）、`accept-t9-helpm` | `failed to open docstrings file: /src/work/octave-install-6012-w32/share/...` | 站点 `manifest.json` 的 `mount` 还写**现役前缀** `octave-install/…`，而 wasm32 的 wasm **烘死的是** `octave-install-6012-w32/…` ⇒ 文件挂错路径。**这就是 `make-lane-manifest.py` 注释里记的同一类事故**，只是那次修的是车道清单（`manifest.<lane>.json`），基础档没覆盖 | 从 **wasm 里读**烘死前缀（不猜）→ 改口 3 条 file 资产的 `mount` ⇒ 三套转绿 |
+| `accept-gfx-isolation`（C/C2 红 → **6/0 全绿**） | 守卫报告为空 | 站点 `octave-core.js` 是旧拷贝（分支里已有 `gfxGuard` 的修复） | 同步分支资产 ⇒ 全绿。**此前在四格站上这两条红，是"验了 w64 档"的假象** |
+| `accept-forge-ondemand`（0/1） | `OctaveAssets.catalog()` 不在 | 该站 `octave-core.js`/assets-loader 是**旧版**（Forge 按需是 IP 线特性，wasm32 冻结线未移植） | 如实记：冻结线不含该特性 |
+| `accept-gfx-render`（11/3） | `hist(x,4)` 报 `__pb_add__` 尺寸不匹配 | 绘图桥 `__pb_add__` 的 hist 分支（与 6.0.12 无关的既存形态；`accept-plotv2`/`accept-print` 在同站 86/0、46/0 全绿） | 如实记，留待查 |
+| `accept-embed-api` / `accept-archive` | NO-SUMMARY / 20/0 | 环境性（embed 页依赖） | 如实记 |
+
+**⇒ 三条线的验收结论都建立在"页面真的跑了本线产物"之上**（单档站判据）。这一条是本日
+最贵的教训：四格站 + COI 头会让页面静默选 `w64/`，**在别的线的产物上跑本线的验收**。
