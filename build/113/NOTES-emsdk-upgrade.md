@@ -561,3 +561,27 @@ wasm32-final 按既定决定不再做 wasm32 车道活；master 线非 8761 面�
 
 **执行面**：pre-commit / pre-push 都内联传 `REFLECT_PINS=build/pins.json`；
 采纳后 `ran 10 / off 3 / failed 0`（采纳前 ran 8 / off 5）。
+
+### 8.8 三线 6.0.12 跑通推送（2026-10-12）——**唯一未完成动作：推 origin wasm32-final**
+
+| 线 | 产物 sha | 浏览器侧验收 | origin | mirror |
+|---|---|---|---|---|
+| IllegalPerformance（8761 现役） | w64 `8c535553…` / w64-base `f7139099…` | 全量 `PROBES=1` 1440 PASS（唯一红 probe-octc-spike=环境性） | ✓ `187e344` | ✓ `5026ada` |
+| master（wasm64-NEXT） | w64 `1ff6a111…` | 数值六套 107/0 + IEEE 排序逐位一致 | ✓ `36d1410` | ✓ |
+| wasm32-final（冻结线） | product `f1c0d21b…` | 数值六套 16/10/17/8/29/27 全 0 FAIL + IEEE 排序 399981B 逐字节一致 | **✗ `039439c`（需推 `6f97172`）** | ✓ `6f97172` |
+
+**阻塞原因（实测，不是推断）**：`~/.config/gh/hosts.yml` 的 `ArchivalEra:` 条目下**没有
+`oauth_token:` 字段**（凭据已被移除）⇒ `gh auth git-credential` 拿不到 token；
+SSH 22 与 443 两条出网路径都超时（`ConnectTimeout` 实测）。仓库本身公开可读
+（匿名 `git ls-remote` rc=0、HEAD 可见）⇒ **只缺写凭据**。
+⇒ 操作员一条命令：`git push origin wasm32-final`。
+
+**§7.6 同族的第三例（本批新踩，口径已进代码）**：emcc 6.x 的 `<omp.h>` 有声明无实现
+⇒ configure 探到 `-fopenmp` 可用 ⇒ **后续每个库探测都带它** ⇒ 要求 shared-memory ⇒
+glpk（未编 atomics）链不过 ⇒ `HAVE_GLPK` 静默 undef ⇒ **`__glpk__.oct` 出厂即空桩**
+（1494 B、0 个 `glp_` 符号）而构建/链接/自检全绿。修法固化进
+`build/113/configure-113-full.sh`（`ac_cv_func_omp_get_num_threads=no`
+`ax_cv_c_openmp=none` `ax_cv_cxx_openmp=none`）。
+**⚠️ 教训（验收口径）**：该缺口第一次没被抓到，是因为我在**带 COI 头**的服务上跑验收
+⇒ 页面按档选择器走了 `w64/`（IP 线产物）⇒ 验的不是本线产物。**验某一线必须让页面真跑它**：
+单档站（删掉 `threads/` `w64/` `w64-base/` `lanes.js` + `--no-coi`）才可信。
