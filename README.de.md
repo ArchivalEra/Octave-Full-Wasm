@@ -20,6 +20,8 @@ Alle drei Linien sind **gepusht und synchron** (local = origin = mirror), jede u
 
 Die Downstream-Integration mit der Browser-clang+lld-Toolchain ([LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)) ist in `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md` dokumentiert.
 
+Ein host-seitiger Integrationsbericht für die Browser-clang+lld-Toolchain liegt in `build/113/ISSUE-for-LLVM-wasm.md` (gegen das Issue-Gate jenes Repos validiert).
+
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
 die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
 

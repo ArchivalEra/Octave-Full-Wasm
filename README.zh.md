@@ -17,6 +17,8 @@ binary64 —— 并经下文显式审计。
 
 与网页版 clang+lld 工具链（[LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)）的下游接入复核见 `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md`。
 
+给网页版 clang+lld 工具链的宿主侧接入报告见 `build/113/ISSUE-for-LLVM-wasm.md`（已用该仓自己的悬案闸门验过）。
+
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
 归档线已重编但不上站）。
 
