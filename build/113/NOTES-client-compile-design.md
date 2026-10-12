@@ -1,0 +1,194 @@
+# 设计 · 客户端自编 `.oct`（A+B）——紧贴 fork 管线、零插件库维护
+
+> 用户点令（2026-10-12）：
+> · "无人值守先设计出 AB" · "**一定要紧贴 fork 管线**" · "**我真的不想维护一个插件库**"
+>
+> 本文件 = 设计（不是实现）。所有结论旁注明**复跑方式**；推断逐条标"推断"。
+> 前置实测：`NOTES-client-compile.md`（浏览器内 clang 编真 `.oct` 全链路已打通）。
+
+---
+
+## §0 两条硬约束，先把它们变成设计判据
+
+| 约束 | 反面（会被否掉的设计） | 收敛出的判据 |
+|---|---|---|
+| **紧贴 fork 管线** | 为工具链/包另造一套 pin、供给、见证 | 每一件外部输入的"版本 + 字节"都必须由**已有**三件套承载：`upstream-pins.json`（身份）+ `upstream-lock.json`（URL+sha256）+ `provision-upstream.sh`（供给）；判定器复用 `witness-upstream-pin.py` / `check_locks.py` |
+| **不想维护插件库** | 我们自己存/发工具链与包字节、自己记账 | 我们**不持有任何字节的权威**：字节按 URL+sha256 取、可随时重取；站点上的副本是**缓存**（可重生成），不是"维护对象"。工具链 = 别人的 Release；包 = 上游 Forge tarball |
+
+## §1 ★ 决定性的实测：COEP 把"运行时跨域拉工具链"这条路**封死**了
+
+这是本次设计最重要的一条实测，它**否掉了两个独立设计变体共同的首选方案**。
+
+```
+8761 COEP: require-corp | COI: true
+跨域 fetch（COI 页内）: {"threw":"TypeError: Failed to fetch"}
+```
+（复跑：在 8761 页内 `fetch('<GitHub Release 资产 URL>', {mode:'cors'})`；
+GitHub Release 资产 302 跳到 `release-assets.githubusercontent.com`，该域**不发** `CORP`，
+而本站是 `require-corp` ⇒ 被拦。curl 侧可复跑：`curl -sSI <URL>` 看 302 目标域。）
+
+**逃生口排查（都已实测/查证）**：
+
+| 逃生口 | 结论 |
+|---|---|
+| 非 COI 页面能跨域 | ✅ 能，但**要放弃 w64 档**（现役最快形态）⇒ **不可接受** |
+| Service Worker 拦截（SW 不受 COEP 约束） | 仓内无 SW；且这是既有待办（需宿主同意装 SW）⇒ **不作为本设计的依赖** |
+| 让上游给 Release 资产加 `CORP`/`ACAO` | **可以提，但不能当作我们的设计前提**（跨仓依赖 + 我们无法保证） |
+
+⇒ **工具链字节必须同源托管在我们站点上**。这条与"不想维护插件库"**表面冲突**，解法见 §3：
+**不维护字节，只维护一张"从哪取 + 什么 sha"的清单**；站点副本由 provision 生成、可随时重建。
+
+## §2 A 与 B 是什么（先分清，别混）
+
+| | **A：装 `.m`** | **B：编 `.oct`** |
+|---|---|---|
+| 触发 | `pkg load <包>` 或商店点击 | 包 `kinds` 含 `src` + 用户要加速件 |
+| 需要工具链 | **不需要** | 需要（clang+lld 122.9 MB 解包 / 34.7 MB 压缩） |
+| 现状 | **已实现并已发运**（`OctaveAssets.install()`，v1，10 包全绿） | 未实现；本轮已实测打通链路 |
+| 缺口 | `pkg load` 只查"随站清单"，**catalog 的包不在那份账里**（T4 未做） | 全链路（供给/pin/编译/落盘/验收） |
+
+## §3 字节从哪来（三族，各交一件已有物）
+
+| 族 | 字节来源 | pin 载体（**已有机制**） | 校验点 |
+|---|---|---|---|
+| **Octave 头**（788 个 / 6.2 MB） | 从 `upstream/octave` 树**派生** | `upstream-pins.json`（`kind=tree`，submodule pin） | `witness-upstream-pin.py` 每提交核"容器树 == pin" |
+| **工具链**（clang/lld/sysroot/driver） | LLVM-wasm 的 GitHub Release（34.7 MB 压缩） | **新增 `upstream-lock.json` 一条**：`{name:'llvm-wasm', version:'v0.1.1', url:<release>, sha256:…}` | `check_locks.py`（**已有**判定器，加一条即生效） |
+| **Forge 包 tarball** | 上游 Forge index → 持久盘 → 站点 | **货架 submodule commit**（每包 json 的 `url+sha256+version`） | `check-forge-catalog.py`（已有，R1–R4） |
+
+**关键设计决定（针对"不想维护插件库"）**：
+
+- **我们不入库工具链字节**，只在 lock 里记"URL + sha256"（与 `lapack`/`glpk` 那些条目同体例）。
+- 站点上的 `assets/llvm/` 是 **provision 的产物**（`provision-llvm-wasm.sh` 按 lock 拉一次、
+  逐件核 release 内 `manifest.json` 的 sha、解包落盘）——**可随时删掉重建**，
+  不是"我们维护的一份资产"。
+- **版本升级 = 改 lock 一行 + 重跑 provision**（与 emsdk 升级同款）；货架加包 = 加一个 json 文件。
+- ⇒ **零长期维护面**：没有我们自己的包仓库、没有我们自己的版本表。
+
+## §4 接缝在哪（codebase-design：深模块 + 小接缝）
+
+### 4.1 A 的主接缝（已存在，只补一个洞）
+
+`OctaveAssets.catalog()` / `.install(name,{onProgress})` **已经是深模块**
+（小接口 + 深实现）。A 的缺口**不是接口**，是**数据源**：
+
+```
+现状  build/webshims/pkg.m:  pkg load <名> ⇒ 只查 __webassets_pending__()（随站清单）
+目标  build/webshims/pkg.m:  pkg load <名> ⇒ 先查 catalog（货架）⇒ 有则触发 install()
+```
+（这是设计稿 T4，**未做**。判据：干净站上 `pkg load <未随站包>` ⇒ 真装上 ⇒ `exist=3`。）
+
+### 4.2 B 的新接缝 = **一个方法**（不是一套框架）
+
+B 的复杂度**不放进调用方**。新增**一个**接口方法：
+
+```js
+// OctaveAssets 上的第三个方法；前两个（catalog/install）语义不变
+OctaveAssets.compileExtension(name, { onProgress }) 
+//   → Promise<{ state:'compiled' | 'm-only', toolchain:{release,bytes}, diagnostics:[] }>
+//   幂等：已编过（同 pin 键）直接返回；state='m-only' = 编不成但包仍可用（软失败）
+```
+
+**为什么是这一个方法**（深度检验：删掉它会怎样）：
+删掉它 ⇒ 每个调用点都要自己：判 `kinds` → 取工具链 → 选对 sysroot 档 → 拼
+`-DHAVE_CONFIG_H=1 -std=c++17` + 788 个头路径 → 处理 `compile()` 的三个已知门槛
+（主 TU 必须排首位 / 多文件要逐级建目录 / `.oct` 靠文件名+addpath 发现）→ 落盘 → addpath。
+⇒ 复杂度会**在 N 个调用点复现** ⇒ 它挣到了位置。
+
+**两个调用点**（≥2 = 真接缝）：页面"编加速件"按钮；Octave 内 `pkg load`（可选自动编）。
+
+### 4.3 B 实现内部的小接缝（不暴露给调用方，只给自己的测试用）
+
+```
+compileExtension(name)
+ ├─ toolchain()      ← 供给：按 lock 取工具链（同源 assets/llvm/），逐件核 sha
+ ├─ headers()        ← 供给：Octave 头（从 pin 派生，同源 assets/octinc/）
+ ├─ pickSysroot()    ← 按**宿主档**选 wasm32/wasm64（复用 check-lane-purity 的档判据）
+ └─ compileAndLand() ← 调工具链 compile() → 写目录 → addpath → __pkgfix_sync_db__()
+```
+每件都可单独测（换一个假 toolchain 就能测编排，不需要真 122.9 MB）。
+
+## §5 pin 形状：三段各归已有机制，**不新造**
+
+```
+① 工具链身份+字节   上游 Release  tag v0.1.1 + tarball sha256
+                    → build/upstream-lock.json 新增一条（check_locks.py 接手）
+② 工具链树（可选）  upstream/llvm-wasm submodule（若要做"树级见证"）
+                    → upstream-pins.json 加 kind=tree（witness-upstream-pin.py 接手）
+③ 包（版本+字节）   货架 submodule commit + 每包 json 的 sha256
+                    → check-forge-catalog.py 接手（已发运）
+④ Octave 头         即 octave 树 pin（同一条路，不另立）
+```
+
+**双重对账（防"钉的 commit ≠ 用户真在跑的字节"）**：Release 内 `manifest.json` 记着
+`llvm_source_commit` ⇒ 在 `witness-upstream-pin.py` 的 `crosscheck()`（**已有**对账器）
+加一条：Release manifest 的 commit == submodule pin。不等即 DRIFT。
+
+## §6 验收与反向断言（每个新机制配一条"必须红"）
+
+| # | 断言 | 反向（必须红） |
+|---|---|---|
+| 1 | 工具链字节 sha == lock（三层：下载后/落盘后/客户端 fetch 后） | 改一字节 ⇒ 拒 |
+| 2 | 编出的 `.oct` 档 == 宿主档（w64 宿主 ⇒ wasm64 产物） | 喂错档产物 ⇒ 拒（**已有** `check-lane-purity.py`，接进来） |
+| 3 | 端到端：真编 → 落盘 → `addpath` → `exist=3` → 调用出已知值 | 编失败 ⇒ `state='m-only'` 且**明说哪一件没成**（不许静默当成功） |
+| 4 | A 的 catalog 路径：`pkg load <未随站包>` ⇒ 真装上 | catalog 无此包 ⇒ 明确失败（不许静默） |
+| 5 | 校验点齐全（release sha / manifest 逐资产 sha / catalog sha / 客户端 sha）| 任一不符 ⇒ 拒装（fail-closed） |
+
+## §7 本设计的已知风险（诚实清单）
+
+1. **站点体积**：工具链 122.9 MB 解包（34.7 MB 压缩）落站点 ⇒ 站点变大。
+   缓解：**懒加载**（只在用户真要编时拉；首拉 14.37 MB brotli，`lld` 8.49 MB 首次链接才拉）；
+   `make-dist` 要确认不吞（**已有先例**：`*.gz` 排除面曾静默删掉 forge 包）。
+   **未决**：是否把工具链放进 `make-dist` 交付包（会显著变大）——**倾向不进**（它可重取）。
+2. **内存**：63 MB wasm + sysroot + Octave 自身堆 ⇒ 低端机可能 OOM，表现是"编到一半死"。
+   **未实测**（本轮实验是在 Node 里跑的，不是低内存浏览器）。
+3. **只有少数包真能直编**：10 包里 7 个有 `src`，但**需自身 configure 的编不出来**（如
+   `nan` 依赖 sqlite/zlib 头）。⇒ B 的实际覆盖**要在真包上量一次**，不能按"有 src"报数。
+4. **ABI 漂移**：Octave 头 pin 与部署 wasm 不同步 ⇒ 链接过、运行期烂。
+   金丝雀只能端到端一条（§6.3）。
+5. **上游 Release 非持久制品**：可被删/替换 ⇒ 供给必须落持久盘备份 + sha fail-closed。
+
+## §8 明确不做（本设计范围外）
+
+- **不改上游工具链**（那两条小建议已作为 issue/建议提出，不阻塞）。
+- **不建包仓库、不做包签名体系、不做多版本共存**（用户明确不想维护）。
+- **不在开机路径碰工具链**（既有铁律：探测/自检不许进开机路径，坏产物会整页卡死）。
+- **不承诺"任意 Forge 包都能编"**（§7.3 的实测边界）。
+
+## §9 建议的落地顺序（每步独立可验收）
+
+1. **A 收尾（最小、零风险）**：`pkg.m` 先问 catalog（T4）⇒ 判据 §6.4。
+2. **供给 + pin（无客户端改动）**：`provision-llvm-wasm.sh` + lock 一条 + witness 对账 ⇒ 判据 §6.1/§5。
+3. **`compileExtension()` 实现 + 夹具测**：用一个假 toolchain 测编排；再上真工具链。
+4. **真包上量覆盖**（§7.3）：挑 2–3 个包实测，报"能编的有几个"（不许按 src 数推断）。
+5. **端到端浏览器验收**（§6.3）⇒ 才谈 UI（C）。
+
+---
+
+## §10 ★ 设计验证：真包源码直编成功（2026-10-12 实测，A+B 设计的关键输入）
+
+在设计定稿前，用**真包源码**（不是最小探针）验证 B 的核心假设。
+
+**样本**：`miscellaneous-1.3.3/src/cell2cell.cc`（3448 B，`#include <octave/oct.h>` + `"./config.h"`）
+
+**链路**：
+```
+解包真 tarball 取 src/cell2cell.cc
+  + 我们合成的 config.h（**从容器取出**：build-pkg-oct.sh 的 emit_config_h 产物，25 个宏）
+  + 788 个真 Octave 头（6.2 MB）
+  → 工具链 compile({target:'wasm64', abi:{wasm-legacy,pthread,memory64}})
+  → 13446 B 真 .oct（导出 Gcell2cell + _Z10Fcell2cellRK17octave_value_listi + _emscripten_tls_init）
+  → 写 FS + addpath → exist=3
+  → cell2cell({1,2}, 1) = 1×1 ；cell2cell({1,2}, 2) = 1×2    ← **语义正确**
+```
+
+**这验证了三件事**：
+
+1. **B 对真包可行**，不只是对玩具探针（本轮早先只验过 11 行的 minitest）。
+2. **`config.h` 是必须喂的输入**，而且它**不在 tarball 里** —— 是我们 `build-pkg-oct.sh` 的
+   `emit_config_h()` **合成的 25 个宏**（出处逐条注在该脚本头部：都是对 11.3.0 安装头
+   实测 grep 出来的）。⇒ **客户端要复现的核心知识 = 这 25 个宏**，
+   它必须是**数据**（跟 catalog 走），不是散在浏览器 JS 里的硬编码。
+3. **两个已知门槛都在真包上复现了**（不是理论风险）：
+   - 主 TU 必须排 `files` 首位（我第一跑编成了 `Array-base.cc`，`ok=true` 却是错的产物 ——
+     **这正是"能编过 ≠ 编对了"的形状**，务必进验收反向断言）；
+   - 多文件要逐级建父目录（否则 `ErrnoError errno=44`）。

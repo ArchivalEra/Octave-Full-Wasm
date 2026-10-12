@@ -267,6 +267,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/ISSUE-for-LLVM-wasm.md` (7964 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
+- `build/113/NOTES-client-compile-design.md` (12609 bytes)
 - `build/113/NOTES-client-compile.md` (4243 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
 - `build/113/NOTES-emsdk-upgrade.md` (42545 bytes)
