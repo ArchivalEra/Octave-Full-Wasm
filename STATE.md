@@ -5,15 +5,22 @@
 
 ## 现在是什么（2026-10-12）
 
-- **三线 6.0.12 全部跑通（2026-10-11→12）**：三条线各自在 emsdk 6.0.12 下重编、
-  浏览器侧验收、并推送。逐线状态与**未完成项**如下（诚实边界，别当全绿）：
-  | 线 | 产物 | 验收 | origin | mirror |
-  |---|---|---|---|---|
-  | IllegalPerformance（8761 现役） | w64 `8c535553…` / w64-base `f7139099…` | 全量 PROBES=1 **1440 PASS**（唯一红 probe-octc-spike=环境性） | ✓ `187e344` | ✓ |
-  | master（wasm64-NEXT） | w64 `1ff6a111…` / w64-base | 数值六套 **107/0** + IEEE 逐位一致 | ✓ `36d1410` | ✓ |
-  | wasm32-final（冻结线） | product `f1c0d21b…` | 数值六套 **16/10/17/8/29/27 全 0 FAIL** + IEEE 排序 399981B 逐字节一致 | **✗ 落后**（`039439c`，需推 `6f97172`） | ✓ `6f97172` |
-  **推 origin wasm32-final 是本轮唯一未完成动作**：本机 `gh` token 失效、SSH 出网被阻断
-  ⇒ 需操作员提供 GitHub 凭据后 `git push origin wasm32-final`。
+- **三线 6.0.12 全部跑通并推送（2026-10-11→12）**：三条线各自在 emsdk 6.0.12 下重编、
+  浏览器侧验收、推送 —— **local = origin = mirror 三处一致**：
+  | 线 | 产物（verdict=ok） | 浏览器侧验收 | 分支头（三处一致） |
+  |---|---|---|---|
+  | IllegalPerformance（8761 现役） | w64 `8c535553…` / w64-base `f7139099…` | 全量 PROBES=1 全绿（唯一红 probe-octc-spike=环境性） | `860307f` |
+  | master（wasm64-NEXT） | w64 `1ff6a111…` | 数值六套 107/0 + IEEE 逐位一致 + gfx-render 14/0 | `ea3d02d` |
+  | wasm32-final（冻结线） | product `f1c0d21b…` | 数值六套全 0 FAIL + IEEE 逐位一致 + 宽套件大幅转绿 | `c09e6d0` |
+  **两条验收纪律（本日实测踩到，别重犯）**：
+  ① **验某一线必须让页面真跑它** —— 带 COI 的四格站会让页面静默选 `w64/`（在别的线产物上
+  跑本线验收）；单档站（删 `threads/ w64/ w64-base/ lanes.js` + `--no-coi`）才可信。
+  ② **源码修了 ≠ 站点跑的是修过的** —— `site/assets/m/*.js` 是打好的 bundle 快照；
+  判据 = 用 `build/assets.py bundle-m` 重生成比 sha，且**挂载点必须逐字读
+  `build/assets-meta.json` 的 `mount`**（`pkgfix` 挂 `m/pkg` 不是默认 —— 我按默认猜过，已纠正）。
+- **两条冻结线的已知边界（非回归）**：Forge 按需拉取（`OctaveAssets.catalog/install`）只在
+  本线落地（`ef912a1` 起），master 与 wasm32-final 未移植 ⇒ 那两线 `accept-forge-ondemand`
+  的 A0 必然红（两线实测同形）。
 - **本批新踩的第三个 6.x 假阳（口径已搬进代码）**：emcc 6.x sysroot 有 `<omp.h>` 无
   libomp ⇒ configure 探到 `-fopenmp` 可用 ⇒ 后续库探测带它 ⇒ 要求 shared-memory ⇒
   glpk（无 atomics）链不过 ⇒ `HAVE_GLPK` undef ⇒ **`__glpk__.oct` 出厂即空桩**
@@ -301,7 +308,7 @@
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 50 | |
-| 最近一次**全绿**回归 | `20261012-121855` · **1 套 / 40 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20261012-123844` · **1 套 / 18 PASS / 0 FAIL** | http://127.0.0.1:8775/ |
 | 交付包 | `octave-full-wasm-site-20261011` · tar.zst 91,155,710 B · `d3927b7753acdde3…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
