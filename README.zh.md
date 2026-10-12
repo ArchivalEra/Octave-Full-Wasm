@@ -27,6 +27,8 @@ binary64 —— 并经下文显式审计。
 
 客户端自编 `.oct` 的 A+B 设计已落档：`build/113/NOTES-client-compile-design.md` —— 复用既有 fork 管线承载 pin（**无需维护插件库**），并用**真包源码**（`cell2cell.cc`）在浏览器内编出并正确调用作为验证。
 
+台账现已记录三线 6.0.12 状态（`lane6012_*`）与本轮客户端自编/上游闭环的工作。
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
