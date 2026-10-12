@@ -465,7 +465,7 @@ cmd_link() {
   case "$m" in
     threads)      want=/src/work/octave-install-threads ;;
     w64|w64-base) want=/src/work/octave-install-w64 ;;
-    *)            want=/src/work/octave-install ;;
+    *)            want=/src/work/octave-install${LANE_TAG:-} ;;
   esac
   if [ -f "$OCT/Makefile" ]; then
     local have
