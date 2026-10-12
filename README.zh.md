@@ -23,6 +23,8 @@ binary64 —— 并经下文显式审计。
 
 [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wasm/issues/1) 修复的**下游独立复验**已在真产物上通过（v0.1.1：两档 sysroot 齐发、缺档硬拒绝；wasm64 产物在我们真宿主里 dlopen 成功）。
 
+**浏览器内编 `.oct` 已端到端打通**：浏览器侧 clang+lld 工具链编出真 Octave `.oct`（喂 788 个真头文件），`addpath` 后真宿主 `exist=3` 并跑出结果（`minitest([10 20 30]) = 11 21 31`）。见 `build/113/NOTES-client-compile.md`。
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。

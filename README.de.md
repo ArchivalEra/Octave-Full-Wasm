@@ -26,6 +26,8 @@ Ausgehender Issue upstream: [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wa
 
 Die **unabhängige Downstream-Re-Verifikation** des Fixes zu [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wasm/issues/1) ist an echten Artefakten durchgelaufen (v0.1.1).
 
+**Browser-seitige `.oct`-Kompilierung ist end-to-end belegt**: die clang+lld-Toolchain im Browser baut ein echtes Octave-`.oct` (788 echte Header); nach `addpath` meldet der Live-Host `exist=3` und führt es aus. Siehe `build/113/NOTES-client-compile.md`.
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
