@@ -263,7 +263,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/GPT-REVIEW-4-threads-reply.md` (10099 bytes)
 - `build/113/GPT-REVIEW-4-threads.md` (12952 bytes)
 - `build/113/GRAPHICS-BRANCH.md` (7731 bytes)
-- `build/113/ISSUE-for-LLVM-wasm.md` (6312 bytes)
+- `build/113/ISSUE-for-LLVM-wasm.md` (6608 bytes)
 - `build/113/NOTES-archive.md` (4688 bytes)
 - `build/113/NOTES-asyncify.md` (4664 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)

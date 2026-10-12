@@ -5,6 +5,15 @@
 > 提出方 = 下游宿主（Octave-Full-Wasm，真实 `MAIN_MODULE=2` + `wasm-legacy EH` + `pthread` 宿主）。
 > 复核依据 = 该仓 `DELIVERY.md` §4「宿主侧必须承诺的」与 §2 接入说明，**按其说明实跑**。
 
+**Status:** needs-triage
+
+（提出方 = 下游宿主 Octave-Full-Wasm；这是外部缺口报告，未见重复。）
+
+**Settling:** `<落进你们仓后的复现脚本，建议 m0/ 或 driver/ 下新建>` —— rc=0 ⇒ 两条缺口都已修
+（模块 dlopen 成功且 `f(20)==20` 调得通）；rc=1 ⇒ 缺口 1（TLS `_emscripten_tls_init` 未定义）仍在；
+rc=2 ⇒ 缺口 2（基本类型 typeinfo `_ZTIi` 不可解析）仍在；rc=3 ⇒ 环境问题（宿主自带夹具都装不上
+/ 页面没起来），不是缺口结论。**结算件尚未存在 —— 本工单的第一交付物就是造它。**
+
 ## 先报好消息：DELIVERY §4 的三条宿主承诺，本仓全部满足（实测）
 
 | §4 要求 | 实测 |
@@ -108,12 +117,6 @@ clang 命令行只差一处：`m0/run-m0.sh:43` 有
 - **(b) 工具链侧**：驱动把 typeinfo 定义打进 side module（下游零改）。**倾向这条** ——
   更符合「宿主只承诺导出面」的分工。需要你们确认 wasm/emscripten 下 `_ZTIi` 的定义
   来源（libc++abi？还是得靠 `-frtti` + 显式实例化）。
-
-## 期望的结案形态（供你们建单时改写）
-
-**Settling:** `<你们仓内的复现脚本>` —— rc=0 ⇒ 两条缺口都已修（模块 dlopen 成功）；
-rc=1 ⇒ 缺口 1（TLS）仍在；rc=2 ⇒ 缺口 2（typeinfo）仍在；
-rc=3 ⇒ 环境问题（宿主夹具都装不上），不是缺口结论。
 
 ## 我们这边的对应件
 
