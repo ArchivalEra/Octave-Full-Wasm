@@ -526,7 +526,7 @@
       "name": "webaudiorec",
       "kind": "js",
       "url": "assets/m/webaudiorec.js",
-      "sha256": "18638a8c3ae361589486004d13623b545da0b6fbd3fa7ff05ca9503a2aa98f5c",
+      "sha256": "a463692f72f5b4c9724fe5338dbfa51992ae0c357bb6d07a77b926c57925252d8f5c",
       "deps": [],
       "note": "T7/B1：19 个 __recorder_* 纯 .m；页面侧 webaudiorec.js 用 getUserMedia + MediaRecorder 真采集"
     },
