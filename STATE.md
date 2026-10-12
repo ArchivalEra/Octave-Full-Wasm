@@ -3,7 +3,27 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
-## 现在是什么（2026-10-11）
+## 现在是什么（2026-10-12）
+
+- **三线 6.0.12 全部跑通（2026-10-11→12）**：三条线各自在 emsdk 6.0.12 下重编、
+  浏览器侧验收、并推送。逐线状态与**未完成项**如下（诚实边界，别当全绿）：
+  | 线 | 产物 | 验收 | origin | mirror |
+  |---|---|---|---|---|
+  | IllegalPerformance（8761 现役） | w64 `8c535553…` / w64-base `f7139099…` | 全量 PROBES=1 **1440 PASS**（唯一红 probe-octc-spike=环境性） | ✓ `187e344` | ✓ |
+  | master（wasm64-NEXT） | w64 `1ff6a111…` / w64-base | 数值六套 **107/0** + IEEE 逐位一致 | ✓ `36d1410` | ✓ |
+  | wasm32-final（冻结线） | product `f1c0d21b…` | 数值六套 **16/10/17/8/29/27 全 0 FAIL** + IEEE 排序 399981B 逐字节一致 | **✗ 落后**（`039439c`，需推 `6f97172`） | ✓ `6f97172` |
+  **推 origin wasm32-final 是本轮唯一未完成动作**：本机 `gh` token 失效、SSH 出网被阻断
+  ⇒ 需操作员提供 GitHub 凭据后 `git push origin wasm32-final`。
+- **本批新踩的第三个 6.x 假阳（口径已搬进代码）**：emcc 6.x sysroot 有 `<omp.h>` 无
+  libomp ⇒ configure 探到 `-fopenmp` 可用 ⇒ 后续库探测带它 ⇒ 要求 shared-memory ⇒
+  glpk（无 atomics）链不过 ⇒ `HAVE_GLPK` undef ⇒ **`__glpk__.oct` 出厂即空桩**
+  （1494B、0 个 glp_ 符号），而构建/链接/自检全绿。修法固化进
+  `build/113/configure-113-full.sh`：`ac_cv_func_omp_get_num_threads=no`
+  `ax_cv_c_openmp=none` `ax_cv_cxx_openmp=none`。
+- **既存形态（非本批引入，如实记）**：`accept-gfx-isolation` 的 C/C2 反向断言在
+  **8761 现役上同样红**（A/B 各 13/0 全过）⇒ 是图形守卫 `gfxGuard()` 报告通道的既存
+  缺口，与本轮三线重编无关。
+
 
 - **emsdk 6.0.12 已发运 8761（2026-10-11，落地批闭环）**：w64 两档 =
   治理化重链产物（`LANE_TAG` 旋钮，`verdict=ok`），sha 看台账
@@ -281,7 +301,7 @@
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 50 | |
-| 最近一次**全绿**回归 | `20261011-200121` · **0 套 / 0 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 1 套 / 33 PASS） |  |
+| 最近一次**全绿**回归 | `20261012-105613` · **1 套 / 6 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20261011` · tar.zst 91,155,710 B · `d3927b7753acdde3…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
