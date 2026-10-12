@@ -101,7 +101,20 @@ def measure():
         dirs = []
     # ⚠️ 只认"**全绿且够全**"的那一次：否则量出来的不是文档里那种"最近一次全绿回归"
     #    （实测踩过：随手取最新目录 ⇒ 42 套 / 1049 PASS，那是一次带过滤/未跑完的扫描）。
-    for d in dirs[:12]:
+    # ★ 2026-10-12 修：**窗口不能按"目录数"截**——本会话跑了几十个带过滤器的小扫描，
+    #   把真正全绿那次（11 日）挤出了 12 名之外 ⇒ 两条事实静默掉出台账（靠 facts.py 的
+    #   drop 守卫拦下才没写坏）。改为**廉价的目录级预筛**：候选目录必须**自带 ≥40 个
+    #   accept-*.log**（只看名字、不读内容）⇒ 小扫描目录直接不进候选，窗口不再是瓶颈。
+    cand = []
+    for d in dirs:
+        try:
+            n = sum(1 for f in os.listdir(os.path.join(LOGS, d))
+                    if f.startswith("accept-") and f.endswith(".log"))
+        except OSError:
+            continue
+        if n >= 40:
+            cand.append(d)
+    for d in cand:
         suites = total = fails = 0
         try:
             # ⚠️ 只数 `accept-*`：这样"最近一次全绿"与文档里那个口径一致（PROBES=1 那轮会多出探针）
@@ -1114,6 +1127,34 @@ def measure():
                 print("⚠ 读不到交付包选档日志 %s：%s" % (_dp, e), file=sys.stderr)
         facts["floor_matrix_fail"] = fact(_ff, "同上", "w64-logs/floor-*.log",
                                           "必须 0；含「无 memory64 的引擎必须落 threads」这条反向断言")
+
+    # ── ★ 三线 6.0.12 与客户端自编（2026-10-12 批）──────────────────────────────
+    #   为什么进台账：这些是"现在如此"的断言，且**各有可复跑的产物读数**（不是散文）。
+    #   判据都从**产物**读（`octave.build.json` / 车道目录），不抄文档。
+    _lane_art = {
+        "ip": ("/src/websrc/out-6012-gov", "w64"),
+        "master": ("/src/websrc/out-6012-gov-mst", "w64"),
+        "wasm32": ("/src/websrc/out-6012-w32", "product"),
+    }
+    _lane_ok = 0
+    for _t, (_out, _mode) in _lane_art.items():
+        _cp = os.path.join(W64LOGD, "lane6012-%s.verdict" % _t)
+        if os.path.exists(_cp):
+            try:
+                _v = open(_cp, encoding="utf-8").read().strip()
+            except OSError:
+                continue
+            facts["lane6012_%s_verdict" % _t] = fact(
+                _v, "cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-%s.verdict" % _t,
+                "w64-logs/lane6012-%s.verdict" % _t,
+                "6.0.12 重链产物 verdict（%s 模式；只有 ok 可部署）" % _mode)
+            if _v == "ok":
+                _lane_ok += 1
+    if _lane_ok:
+        facts["lane6012_ok_lines"] = fact(
+            _lane_ok, "grep -l '^ok$' /mnt/hdd/octave-wasm-build/w64-logs/lane6012-*.verdict | wc -l",
+            "w64-logs/lane6012-*.verdict",
+            "三线中 verdict==ok 的条数（0 = 一条没成 ⇒ 那比「部分成功」更该红）")
 
     # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
     #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
