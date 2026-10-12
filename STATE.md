@@ -5,6 +5,24 @@
 
 ## 现在是什么（2026-10-12）
 
+- **T4 落地：`pkg load <货架上的包>` 现在真能从货架装（2026-10-12，A+B 的第一块）**。
+  设计稿 §9① 的"A 收尾"已完成：`build/webshims/pkg.m` 改为**先问来源**（随站 ⇒ `load`；
+  货架 ⇒ `install`），并把"装完了没有"变成**可判的终态**（成功/失败/查无/问不到四态分开）。
+  配套：`build/pkgfix/{__webpackage_source__,__webshelf_names__}.m`（纯函数，宿主可测）+
+  加载器账本新增四字段（`catalog_state`/`catalog_packs`/`catalog_miss`/`install_error`）。
+  **结案实验** = `test/browser/accept-catalog-load.mjs`（含"真下载 tarball + 真算 `csaps`
+  与宿主 Octave 逐位一致"），跑在 `build/113/prep-catalog-accept-site.sh` 造的副本上
+  （把 `splines` 从随站清单摘掉、只留货架 ⇒ 否则测的还是老路 = 假绿）。
+  **三条实测教训（已写进代码注释，别改回去）**：
+  ① 货架目录**必须开机读**（`bridge/octave-core.js`）—— 让 `pkg.m` 现读就得挂起，
+     而**同步入口**（页面队列外的 `eval_string`）挂起会抛 `SuspendError`，那个抛错在
+     Octave 侧 try/catch **抓不住**（直接穿到 JS）⇒ 打错个包名就把调用方炸掉
+     （`accept-pkg` 当场变 CRASH，实测抓到）。
+  ② `miss`（两个名单都没有）**不许由 shim 报错** —— 包可能已在本会话磁盘上，
+     该不该报错只有核心 `pkg` 能判（shim 抢答 = 假失败）。
+  ③ 装载失败是**终态**（原因落账本）⇒ `.m` 侧立刻报错；老实现只有"等满 60 秒"一条路。
+  顺带修：`promote-pages.sh` 新增 `M_ASSETS` 旋钮（m 胶水批必须重生成**车道清单**；
+  空 = 老行为）+ 一条反向断言（陈旧车道清单 ⇒ 必须红）。
 - **客户端自编 `.oct`（A+B）设计已定稿（2026-10-12）**：`build/113/NOTES-client-compile-design.md`。
   **决定性实测**：COI 页面（`COEP: require-corp`）里跨域 fetch GitHub Release ⇒
   `TypeError: Failed to fetch` ⇒ **工具链字节必须同源托管**（逃生口全排查过：非 COI 页可跨域

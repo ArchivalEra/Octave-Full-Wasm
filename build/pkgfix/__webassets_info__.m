@@ -20,6 +20,14 @@
 ## 账本不存在（例如 `.m` 侧被单独调用、或页面还没 init）时**返回空结构**，不报错 ——
 ## 调用方（`pkg.m`）要能"没有账本就照旧干活"。
 ##
+## ── T4（2026-10-12）追加的四样：**货架**侧观察值 ─────────────────────────────
+##   · `catalog_state` — `unread` | `ok` | `fail`。**"货架读不到" ≠ "货架上没有"** ——
+##     `pkg load <名>` 必须能分辨这两句，否则网络抖一下就说"这个包不存在"（假断言）。
+##   · `catalog_packs` — 货架上的包名（`assets/forge-catalog.json` 的 packs[].name）
+##   · `catalog_miss`  — 货架**读成功而**查无的包（终态：再等也不会出现）
+##   · `install_error` — 装失败的包 → 原因（成功时被加载器删掉，重试成功不残留）
+## 老账本（未升级的页面）没有这四个字段 ⇒ 默认 `unread`/空，调用方退回老行为。
+##
 ## 判据写在纯函数里是为了**宿主可测**（写一个假账本文件即可，不需要页面）。
 
 function info = __webassets_info__ (path)
@@ -29,7 +37,10 @@ function info = __webassets_info__ (path)
   endif
 
   info = struct ("available", {{}}, "loaded", {{}}, ...
-                 "pkg_available", {{}}, "pkg_loaded", {{}}, "stamp", 0, "ok", false);
+                 "pkg_available", {{}}, "pkg_loaded", {{}}, ...
+                 "catalog_state", "unread", "catalog_packs", {{}}, ...
+                 "catalog_miss", {{}}, "install_error", struct (), ...
+                 "stamp", 0, "ok", false);
 
   if (! (ischar (path) && exist (path, "file")))
     return;                     ## 没有账本 ⇒ 空结构 + ok=false（调用方自己决定怎么办）
@@ -41,7 +52,7 @@ function info = __webassets_info__ (path)
     return;                     ## 坏账本同上：不抛错，避免把 pkg 整个弄坏
   end_try_catch
 
-  fn = {"available", "loaded", "pkg_available", "pkg_loaded"};
+  fn = {"available", "loaded", "pkg_available", "pkg_loaded", "catalog_packs", "catalog_miss"};
   for k = 1:numel (fn)
     if (isfield (raw, fn{k}))
       v = raw.(fn{k});
@@ -53,6 +64,14 @@ function info = __webassets_info__ (path)
       endif
     endif
   endfor
+  ## catalog_state：读失败/未读/可读三态必须**可分辨**（"读不到" ≠ "货架上没有"）
+  if (isfield (raw, "catalog_state") && ischar (raw.catalog_state))
+    info.catalog_state = raw.catalog_state;
+  endif
+  ## install_error：name → 原因（字符串映射）。jsondecode 给 struct（字段名 = 包名）。
+  if (isfield (raw, "install_error") && isstruct (raw.install_error))
+    info.install_error = raw.install_error;
+  endif
   if (isfield (raw, "stamp") && isnumeric (raw.stamp))
     info.stamp = raw.stamp;
   endif
@@ -90,4 +109,45 @@ endfunction
 %! fid = fopen (p, "w"); fputs (fid, "{not json at all"); fclose (fid);
 %! i = __webassets_info__ (p);
 %! assert (i.ok, false);
+%! unlink (p);
+
+%!test
+## T4：货架三样 + 失败原因读得进来（`pkg load` 的终态判据靠它们）
+%! p = tempname ();
+%! fid = fopen (p, "w");
+%! fputs (fid, '{"available":["statistics"],"loaded":[],"pkg_available":[],"pkg_loaded":[],');
+%! fputs (fid, '"catalog_state":"ok","catalog_packs":["splines","quaternion"],');
+%! fputs (fid, '"catalog_miss":["nope"],"install_error":{"tsa":"sha 不符"},"stamp":9}');
+%! fclose (fid);
+%! i = __webassets_info__ (p);
+%! assert (i.ok, true);
+%! assert (i.catalog_state, "ok");
+%! assert (i.catalog_packs, {"splines", "quaternion"});
+%! assert (i.catalog_miss, {"nope"});
+%! assert (i.install_error.tsa, "sha 不符");
+%! unlink (p);
+
+%!test
+## ★ 反向：老账本（没有 catalog_* 字段）⇒ 默认值，**不许**把缺席读成 "ok"
+%! p = tempname ();
+%! fid = fopen (p, "w");
+%! fputs (fid, '{"available":["statistics"],"loaded":[],"pkg_available":["statistics"],');
+%! fputs (fid, '"pkg_loaded":[],"stamp":1}');
+%! fclose (fid);
+%! i = __webassets_info__ (p);
+%! assert (i.ok, true);
+%! assert (i.catalog_state, "unread");
+%! assert (isempty (i.catalog_packs));
+%! assert (isempty (fieldnames (i.install_error)));
+%! unlink (p);
+
+%!test
+## ★ 反向：`install_error` 为空对象 ⇒ 空 struct，不是报错
+%! p = tempname ();
+%! fid = fopen (p, "w");
+%! fputs (fid, '{"catalog_state":"ok","install_error":{},"stamp":2}');
+%! fclose (fid);
+%! i = __webassets_info__ (p);
+%! assert (i.ok, true);
+%! assert (isempty (fieldnames (i.install_error)));
 %! unlink (p);

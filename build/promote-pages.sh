@@ -21,11 +21,24 @@
 #   sh build/promote-pages.sh --verify
 #   sh build/promote-pages.sh --selftest     # F1：证明它会红（夹具上做，不碰真站点）
 #   sh build/promote-pages.sh                # 真同步（会先备份被覆盖的文件）
+#
+# ── M_ASSETS 旋钮（2026-10-12，T4）：改过 `.m` 胶水的批次 ──────────────────────
+# 页面批默认**只**同步 `bridge/` 那批文件。但有的批次同时改了 `build/*/**.m`（本批：pkgfix
+# 的货架判定 + webshims 的 pkg.m）—— 那些是**资产**（打好的 bundle `assets/m/*.js`），
+# 不在页面清单里。空 `M_ASSETS=""`（默认）= 老行为，逐字节不变。
+#   M_ASSETS="pkgfix webshims" sh build/promote-pages.sh
+# 它做的事（与 `promote-webgl.sh` 第 3 步同构，**挂载点逐字读 assets-meta.json**）：
+#   ① `bundle-m` 重打包 → 两个站点 + 仓库镜像的 `assets/m/<名>.js`
+#   ② `sync-js` 刷新三个清单（`manifest{,.threads,.w64}.json`）里那两个资产的 sha
+#      ★ 漏第 ② 步的后果是加载器 **fail-closed 拒载**（"资产校验失败"）—— 实测过两次。
+#   ③ **重生成车道清单**（`make-lane-manifest.py --lane threads|w64`）：它们从基础清单复制
+#      非 oct 条目 ⇒ 基础清单的 m-asset sha 一变，车道那份就陈旧（本批实测抓到）。
 set -uo pipefail
 REPO=${REPO:-/mnt/hdd/zcode-projects/Octave-Full-Wasm}   # 可覆盖：自证在夹具上跑
 SITE=${SITE:-/mnt/hdd/octave-wasm-build/site}          # 8761（部署件）
 SITE_EXP=${SITE_EXP:-/mnt/hdd/octave-wasm-build/siteWebGL}   # 8768（实验车道）
 ARTIFACTS="octave.wasm octave.js octave.data"   # 空格分隔（保持 POSIX：dash 没有数组）
+M_ASSETS=${M_ASSETS:-}                          # 空 = 老行为（页面批不动资产）
 
 # ── 资产清单：从 recover-113.sh 推（不另抄）────────────────────────────────────
 page_files () {
@@ -44,6 +57,17 @@ page_files () {
   done
 }
 sha12 () { sha256sum "$1" 2>/dev/null | cut -c1-12 || echo "(缺)"; }
+
+# ⚠️ 挂载点**逐字读** `build/assets-meta.json` 的 mount —— 不许猜（`pkgfix` 挂 `m/pkg`
+#    而不是默认的 `m/pkgfix`；2026-09-23 猜错过一次，把 `pkg list` 整个弄坏）。
+#    ⚠️ 必须定义在**用它的地方之前**（dash 按出现顺序解析函数调用；第一次就栽在这）。
+m_asset_mount () {
+  python3 -c "
+import json
+m = json.load(open('$REPO/build/assets-meta.json', encoding='utf-8')).get('$1', {})
+print(m.get('mount') or '/usr/src/octave/m/$1')
+"
+}
 
 MODE=""
 case "${1:-}" in
@@ -73,6 +97,23 @@ if [ "$MODE" = "selftest" ]; then
   # ③ 空输入（目标站点不存在）⇒ 必须红
   n=$((n+1)); if REPO="$tmp" SITE="$tmp/nonexistent" SITE_EXP="$tmp/siteexp" REPO_MIRROR="$tmp/repomirror" \
       bash "$0" --verify >/dev/null 2>&1; then echo "fail | promote-pages/**空/缺输入竟没报**（零值守卫失效）"; bad=1; else echo "PASS | ★ 目标站点缺失 ⇒ 必须红"; fi
+  # ④ ★ M_ASSETS 批的反向断言（2026-10-12）：造一份**陈旧的车道清单**
+  #    （基础清单已变、而 manifest.threads.json 还是旧的）⇒ `make-lane-manifest --check`
+  #    必须红。若它不红，则"m 资产改了而车道清单没跟上"这件事**没人拦** ——
+  #    那正是本批实测抓到的形状（改 webaudiorec 时车道那份陈旧、校验直接报不合格）。
+  #    本脚本的 m 资产步骤里就跑同一个 --check，所以这条红 = 那道闸门有牙齿。
+  n=$((n+1))
+  mkdir -p "$tmp/site/assets"
+  printf '[{"name":"m1","kind":"js","url":"assets/m/m1.js","sha256":"%064d"}]' 0 \
+    > "$tmp/site/assets/manifest.json"
+  printf '[{"name":"m1","kind":"js","url":"assets/m/m1.js","sha256":"%064d"}]' 1 \
+    > "$tmp/site/assets/manifest.threads.json"
+  if python3 "$(dirname "$0")/113/make-lane-manifest.py" "$tmp/site/assets" --check --lane threads \
+      >/dev/null 2>&1; then
+    echo "fail | promote-pages/**陈旧的车道清单竟没报**（m 资产 sha 变更没人拦）"; bad=1
+  else
+    echo "PASS | ★ 陈旧的车道清单 ⇒ 必须红（m 资产改了必须重生成车道清单）"
+  fi
   rm -rf "$tmp"
   echo "=== promote-pages 自证：$((n-bad)) PASS / $bad fail ==="
   exit "$bad"
@@ -149,7 +190,54 @@ if [ "$MODE" = "dry" ]; then
   echo ""
   echo "[dry-run] 接下来会：① 备份 $SITE 下清单里的文件到 page-bak-<时间戳>/；"
   echo "          ② 从仓库 bridge/ 拷清单到 $SITE 与 $REPO_MIRROR；③ 重跑本脚本 --verify"
+  if [ -n "$M_ASSETS" ]; then
+    echo "          ④（M_ASSETS 批）重打包这些 .m 胶水 → 两站 + 镜像：$M_ASSETS"
+    for name in $M_ASSETS; do
+      mount=$(m_asset_mount "$name")
+      echo "             · $name → 挂载点 $mount（逐字读 build/assets-meta.json）"
+    done
+    echo "          ⑤ 刷新三份清单的 sha（sync-js）+ 重生成车道清单（make-lane-manifest）"
+  fi
   exit 0
+fi
+
+# ── m 资产（`M_ASSETS` 非空时）：重打包 + 刷 sha + 重生成车道清单 ──────────────
+if [ -n "$M_ASSETS" ]; then
+  echo ""
+  echo "── ③b m 资产批：重打包 + 刷 sha + 车道清单（$M_ASSETS）"
+  for name in $M_ASSETS; do
+    [ -d "$REPO/build/$name" ] || { echo "FATAL: 缺源目录 $REPO/build/$name" >&2; exit 2; }
+    mount=$(m_asset_mount "$name")
+    # ★ 先备份**旧 bundle**（页面文件那份备份不含它们 ⇒ 出问题要能手回滚）
+    [ -f "$SITE/assets/m/$name.js" ] && cp -p "$SITE/assets/m/$name.js" "$bak/assets-m-$name.js"
+    python3 "$REPO/build/assets.py" bundle-m "$name" "$REPO/build/$name" "$mount" "$SITE/assets/m/$name.js" \
+      || { echo "FATAL: bundle-m $name 失败" >&2; exit 1; }
+    cp -p "$SITE/assets/m/$name.js" "$SITE_EXP/assets/m/$name.js"
+    cp -p "$SITE/assets/m/$name.js" "$REPO_MIRROR/assets/m/$name.js"
+    # 三份清单的 sha 就地刷新（否则加载器 fail-closed 拒载 —— 实测过两次）
+    python3 "$REPO/build/assets.py" sync-js "$SITE" $M_ASSETS \
+      || { echo "FATAL: sync-js 失败" >&2; exit 1; }
+  done
+  for d in "$SITE_EXP" "$REPO_MIRROR"; do
+    [ -f "$SITE/assets/manifest.json" ] && cp -p "$SITE/assets/manifest.json" "$d/assets/manifest.json"
+  done
+  # 车道清单从基础清单复制非 oct 条目 ⇒ 基础那份的 m-asset sha 一变，车道那份就陈旧。
+  for lane in threads w64; do
+    for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
+      [ -f "$d/assets/manifest.$lane.json" ] || continue
+      python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --lane "$lane" >/dev/null \
+        || { echo "FATAL: 重生成 $d 的 manifest.$lane.json 失败" >&2; exit 1; }
+    done
+  done
+  # ★ 反向断言：车道清单**必须**跟着更新 —— 若它仍与磁盘字节不符，就是漏了上面那一步。
+  for lane in threads w64; do
+    for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
+      [ -f "$d/assets/manifest.$lane.json" ] || continue
+      python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --check --lane "$lane" >/dev/null 2>&1 \
+        || { echo "FATAL: $d 的 manifest.$lane.json --check 不过（m 资产 sha 没跟上？）" >&2; exit 1; }
+    done
+  done
+  echo "   已同步 $(echo $M_ASSETS | wc -w) 个 m 资产 + 三份清单 + 车道清单（两站 + 镜像）"
 fi
 
 # ── 真同步 ───────────────────────────────────────────────────────────────────

@@ -288,16 +288,40 @@ grep -n "loadOne\|preloadIfHuge\|SHA" bridge/assets-loader.js | head
       —— 入口 = `build/forge-catalog.py --site <站点>`（不另写 assets.py 子命令，§6C 定的二选一）。
 - [x] **T3** `bridge/assets-loader.js` 加 `catalog()` + `install()`（§3）；**解包器 = 引擎内建
       gunzip+untar**（§6B 实测裁决 ⇒ 不写 JS 解析器）。
-- [ ] **T4** `build/webshims/pkg.m`：`pkg load` 先问 catalog —— **未做**。
-      现状：`pkg.m` 只查**随站清单**的 `__webassets_pending__`（`/tmp/webassets.json`）；
-      catalog 的包（如没随站发的 optim）**不在那份账里** ⇒ `pkg load optim` 仍报
-      "is not installed"，而 `OctaveAssets.install('optim')` 能用。结案实验 = 验收套件加一条
-      "干净站上 `pkg load <未随站包>` ⇒ 触发 catalog 安装"；不通过就是没做。
+- [x] **T4** `build/webshims/pkg.m`：`pkg load` 先问 catalog —— **已做（2026-10-12）**。
+      结案实验 = `test/browser/accept-catalog-load.mjs`（**28/0**，含"真下载 tarball +
+      真算 `csaps` 与宿主 Octave 逐位一致"），跑在
+      `build/113/prep-catalog-accept-site.sh` 造的副本上（它把 `splines` 从随站清单摘掉、
+      只留货架 ⇒ 否则测的还是老路 = 假绿）。
+      **三处实现细节（都是实测逼出来的，别照"更简单"的想法改回去）**：
+      ① **两段式**：货架**开机不读**（`OctaveAssets.catalog()` 是"读了就用"，省一次请求）
+         ⇒ 第一次问必然得 `unread`。把 unread 当终态 ⇒ 货架路径**从来没被执行过**
+         （第一次验收 13 条红全是这一个形状）。现在 `unread ⇒ src=unknown + state=idle`
+         （"还没问" ≠ "没有"），shim 据此点火读货架、落定后重判。
+      ② **来源标签与终态分开定**：先按名单归属定 `shipped`/`shelf`，再看
+         `install_error`/`catalog_miss` 定 `state`。混在一起会把"装载失败的**随站**包"
+         标成 `shelf`（用户按提示去找货架会再撞一次墙）—— `%!test` 抓到了这一条。
+      ③ **失败是终态**：加载器把失败原因落进账本（`install_error`，成功时删掉），
+         `.m` 侧**立刻**报错。老实现只有"等满 60 秒"一条路 ⇒ 失败时用户干等，
+         且期间无法与"正在装"区分（验收里有这条反向断言：失败 < 15 s 返回）。
+      另：`miss`（两个名单都没有）**不许由 shim 报错** —— 包可能已在本会话的磁盘上
+      （早先装过/用户自己写的），该不该报错只有核心 `pkg` 能判（shim 抢答 = 假失败）。
+      账本新增四个字段：`catalog_state` / `catalog_packs` / `catalog_miss` / `install_error`
+      （老页面没有 ⇒ `unread`/空，行为与老 shim 逐字节一致）。
 - [ ] **T5** 闸门：catalog 闸门（§8.2）—— 已落地 `build/113/check-forge-catalog.py`
       （R1 AC_INIT 对读 / R2 货架 sha / R3 镜像字节 / R4 kinds↔tarball；自证 9 条）+
       已登记 `build/gates-selftest.sh`（pre-commit 会跑）。
       **对拍断言（§8.1）** 暂以 `__forge_install__.m` 的 `%!test`（glue-selftest 跑）
       + 浏览器验收的 B4（落盘文件数）承担；"逐文件 path→sha 表对拍"留作加强项。
+      ★ T4 批次顺带补的一条：**m 资产批必须重生成车道清单** ——
+      `promote-pages.sh` 新增 `M_ASSETS` 旋钮（**空 = 老行为**，逐字节不变），它跑
+      `bundle-m → sync-js → make-lane-manifest --lane threads|w64`，并带一条反向断言
+      （陈旧的车道清单 ⇒ 必须红；`--selftest` 4/0）。
+      实测抓到的形状：改 `webaudiorec` 时 8761 与仓库镜像的 `manifest.json` 换了 sha，
+      而两份**车道**清单仍是旧的；8768 那份更早就漂了 —— 根因是
+      `promote-pages.sh` 只同步页面清单里那批文件，站点上的 `assets/m/*.js` 是**上一次
+      promote 的产物**，仓库源改了它不跟。（本批 8768 上还测到 `webaudiorec` 的
+      sha 值是 **68 位**——正确的 64 位前缀 + 陈旧尾部，属同一次漂移的另一面。）
 - [x] **T6** 验收 `accept-forge-ondemand.mjs`（§8.3，含 3 条反向断言）+ 台账键（§8.4）
       —— 15/15（8768 首跑）；台账键 6 条在 `FACTS.json`。
 - [x] **T7** 文档：`maintaince.md` 地图加行（两个"插件"的分界）+ `CONTEXT.md` 术语

@@ -46,7 +46,14 @@ check(hasApi, 'A0 OctaveAssets 暴露 catalog()/install()（接口在）', hasAp
 if (!hasApi) { console.log('=== 0 PASS / 1 FAIL ==='); await browser.close(); process.exit(1); }
 
 // ── A 货架目录（零包下载）─────────────────────────────────────────────────
-net.length = 0;
+// ★ T4（2026-10-12）改了这条的**前提**：货架目录现在**开机就后台读一次**
+//   （`bridge/octave-core.js`；理由见那里的注释：`pkg load` 的 shim 要同步回答"包从哪来"，
+//   现读就得挂起 ⇒ 同步入口会撞 SuspendError）。所以到这里 `catalog()` 多半**命中缓存**、
+//   本轮网络请求数 = 0 —— 断言"本轮恰好 1 个请求"会把**正确**的行为判红（实测就是这条）。
+//   ⇒ 判据改成**与缓存状态无关**（意图不变：读目录不下载包字节）：
+//     ① 目录读到了（A1）；② 本轮**没有任何 `.tar.gz` 请求**（A3）；
+//     ③ 若本轮确实发生了请求，那它**只能**是 catalog 那一份（不是别的东西顺带拉的）。
+net.length = 0;                      // ⚠️ 必须重置：否则算的是**开机那一堆**请求（wasm/js/data）
 const cat = await page.evaluate(async () => {
   try {
     const c = await window.OctaveAssets.catalog();
@@ -55,9 +62,9 @@ const cat = await page.evaluate(async () => {
   } catch (e) { return { ok: false, err: String(e).slice(0, 180) }; }
 });
 check(cat.ok && cat.n > 0, 'A1 catalog() 读到货架', JSON.stringify(cat).slice(0, 180));
-check(cat.ok && /^https?:\/\/[^/]+\/assets\/forge-catalog\.json/.test(net[0] || ''),
-      'A2 读目录只取 catalog 一个请求（不预下包字节）',
-      `第一个请求=${(net[0] || '').slice(0, 90)}；本轮请求数=${net.length}`);
+check(cat.ok && net.every(u => /assets\/forge-catalog\.json$/.test(u)),
+      'A2 读目录**不拉包字节**（本轮请求只可能是 catalog 那份；0 个 = 开机已读好，也算过）',
+      `本轮请求数=${net.length}：${net.slice(0, 3).map(u => u.split('/').pop()).join(', ') || '（命中缓存，无请求）'}`);
 check(cat.ok && !net.some(u => /\/assets\/forge\/.+\.tar\.gz$/.test(u)),
       'A3 **零包下载**（catalog 阶段没有任何 .tar.gz 请求）',
       `tar.gz 请求数=${net.filter(u => /\.tar\.gz/.test(u)).length}`);

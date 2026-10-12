@@ -54,6 +54,14 @@
     var _catalogP = null;       // 读取中的 promise（去重）
     var _catalogByName = {};    // name → pack 条目
     var installSeen = {};       // 安装去重（同实例内）
+    // ── 给 `.m` 侧观察的**安装结果账**（T4，2026-10-12）──────────────────────────
+    //   为什么需要：`pkg load <货架上的包>` 在 `.m` 侧只能"点火"（`__web_run_js__` 即返），
+    //   而落盘是**异步**的 ⇒ `.m` 必须能分辨四种终态：装好了 / 装失败（带原因）/
+    //   货架上没有 / 货架读不到。这三样跟 available/loaded 一起进 /tmp/webassets.json。
+    //   读它的：build/pkgfix/__webassets_info__.m 与 build/pkgfix/__websource_of__.m。
+    var installError = {};      // name → 失败原因（成功时删）
+    var catalogMiss = {};       // name → 1（货架**读成功**但确实没这个包）
+    var catalogState = 'unread'; // unread | ok | fail —— miss 是不是终态取决于它
     var byName = {};
     var loaded = {};       // name -> {files: n, addpath: [...]}
     var inflight = {};     // name -> Promise
@@ -351,6 +359,11 @@
         f.writeFile('/tmp/webassets.json', JSON.stringify({
           available: av, loaded: ld,
           pkg_available: pkgs(av), pkg_loaded: pkgs(ld),
+          // T4：货架侧的三样观察值（`pkg load <未随站包>` 靠它们分辨终态，见 __websource_of__.m）
+          catalog_state: catalogState,
+          catalog_packs: Object.keys(_catalogByName),
+          install_error: installError,
+          catalog_miss: Object.keys(catalogMiss),
           stamp: Date.now()
         }));
       } catch (e) { /* 记账失败不影响任何东西 */ }
@@ -383,7 +396,16 @@
         var list = Array.isArray(names) ? names : [names];
         return API.init().then(function () {
           return list.reduce(function (chain, n) {
-            return chain.then(function (acc) { return loadOne(n).then(function () { acc.push(n); return acc; }); });
+            return chain.then(function (acc) {
+              return loadOne(n).then(function () { acc.push(n); return acc; },
+                function (e) {
+                  // T4：随站资产的**装载失败**也是终态 ⇒ 落账（与 install() 同一张表）。
+                  //   不落账的后果：`.m` 侧的 `pkg load` 只能干等满轮询上限才吭声。
+                  installError[n] = String(e && e.message ? e.message : e).slice(0, 400);
+                  publish();
+                  throw e;
+                });
+            });
           }, Promise.resolve([]));
         });
       },
@@ -399,12 +421,16 @@
         if (_catalogP) return _catalogP;
         _catalogP = fetchJSON(withBase('assets/forge-catalog.json')).then(function (c) {
           _catalog = c || { packs: [] };
-          var byName = {};
-          (_catalog.packs || []).forEach(function (p) { byName[p.name] = p; });
-          _catalogByName = byName;
+          var byName2 = {};
+          (_catalog.packs || []).forEach(function (p) { byName2[p.name] = p; });
+          _catalogByName = byName2;
+          catalogState = 'ok';
+          publish();                              // 货架可读这件事本身也要进账本（T4）
           return _catalog;
         }, function (e) {
           _catalogP = null;                       // 失败不缓存（下次可重试）
+          catalogState = 'fail';
+          publish();                              // 读不到 ≠ 货架没这个包（两态必须可分辨）
           throw new Error('读不到 Forge 货架（assets/forge-catalog.json）：' + e.message);
         });
         return _catalogP;
@@ -421,13 +447,18 @@
         opts = opts || {};
         var onProgress = opts.onProgress || function () {};
         installSeen = installSeen || {};
-        return API.catalog().then(function (cat) {
+        var chain = API.catalog().then(function (cat) {
           var plan = [], seen = {};
           (function walk (n) {
             if (seen[n]) return;
             seen[n] = true;
             var p = _catalogByName[n];
-            if (!p) throw new Error('货架上没有包：' + n);
+            if (!p) {
+              // T4：货架**读成功**而查无此包 ⇒ 记进账本（这是**终态**：再等也不会出现）。
+              catalogMiss[n] = 1;
+              publish();
+              throw new Error('货架上没有包：' + n);
+            }
             (p.deps || []).forEach(walk);
             plan.push(p);
           })(name);
@@ -470,7 +501,9 @@
                       M.eval_string("if (exist('__pkgfix_sync_db__')) try; __pkgfix_sync_db__ (); catch; end; end");
                     } catch (e) { /* 数据库重扫失败不致命：包已经装上了 */ }
                     loaded[key] = { files: 0, addpath: [pkgdir], forge: p };
+                    delete installError[p.name];   // T4：成功就要**清掉**旧失败（否则重试成功仍报错）
                     onProgress({ phase: 'installed', name: p.name });
+                    publish();
                     acc.push(p.name);
                     return acc;
                   });
@@ -481,6 +514,13 @@
               onProgress({ phase: 'done', installed: names });
               return { name: name, installed: names };
             });
+        });
+        // T4：**整条链**的失败都要落账（含"货架读不到"这种在 catalog() 就炸掉的路径）——
+        //   `.m` 侧等的是终态；只挂在后半段的话，网络错误会让它干等满 60 秒轮询上限。
+        return chain.then(null, function (e) {
+          installError[name] = String(e && e.message ? e.message : e).slice(0, 400);
+          publish();
+          throw e;
         });
       }
     };

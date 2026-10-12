@@ -33,7 +33,8 @@ targets = {"copyfile", "movefile", "ls", ...
            "__pb_legend_args__", "__pb_surf_args__", ...
            "__pb_is_linespec__", "__pb_check_parent__", "__pb_strip_props__", ...
            "__pb_integerhandle_off__", ...
-           "__webassets_info__", "__webassets_available__", "__webassets_pending__"};
+           "__webassets_info__", "__webassets_available__", "__webassets_pending__", ...
+           "__webshelf_names__", "__webpackage_source__"};
 
 ## plotbridge 那三个是 2026-09-23 审计之后加的（候选 4）：字段表与调色板的单一真源
 ## 靠它们自己的 `%!test` 钉住（表自洽、取色循环、stamp/restore 往返）。
@@ -48,6 +49,11 @@ targets = {"copyfile", "movefile", "ls", ...
 ##
 ## 说明：**不含** `build/forge-preload/*.m` 那 16 个文件 —— 它们是上游 Forge 的函数，
 ## 不是我们的胶水；它们的 `%!test` 是上游的，失败不欠我们的债（要跑另开一轮）。
+##
+## 末两个（`__webshelf_names__` / `__webpackage_source__`）是 T4（2026-10-12）新增的
+## **货架感知**判定：`pkg load <货架上的包>` 该点哪个火（load 还是 install）、以及装完了没有。
+## 它们是**纯函数**（读账本文件 + 出三个字符串）正是为了让这一层宿主可测 ——
+## 端点行为（真下载真解包）由 `test/browser/accept-catalog-load.mjs` 在浏览器里验。
 
 logfile = "/tmp/glue-selftest.log";
 total_pass = 0;

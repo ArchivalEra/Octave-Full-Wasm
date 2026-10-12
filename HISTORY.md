@@ -4612,3 +4612,31 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   如实记为"计数变了但端到端不慢"）。
 - **遗留**：master 线 / wasm32-final 未重编（wasm32-final 冻结；master 非 8761
   面向）——配方 = 本批 LANE_TAG 旋钮 + §8.6 清单。
+
+## 5.x T4：`pkg load` 从货架装（用户点令 A+B 的第一块，2026-10-12）
+
+- **做了什么**：`pkg load <名>` 的 shim 从"只查随站清单"改成**先问来源**——随站资产点
+  `OctaveAssets.load`，货架包点 `OctaveAssets.install`（fetch 同源 tarball + sha256 +
+  引擎内建 gunzip/untar）。新增两个**纯函数**判定（`__webpackage_source__` /
+  `__webshelf_names__`，宿主可测），加载器账本加四字段（`catalog_state` /
+  `catalog_packs` / `catalog_miss` / `install_error`）。
+- **结案实验**：`test/browser/accept-catalog-load.mjs` 跑在
+  `build/113/prep-catalog-accept-site.sh` 造的副本上（把 `splines` 从随站清单摘掉、
+  只留货架）。**绿的是真路径**：网络审计证 1 个 tarball 请求、包根落 20 个文件、
+  `csaps` 出 `v=1 / w1=w2=0.6875` 与宿主 Octave 逐位一致；第二次 `pkg load` 零下载。
+  ⚠️ 反面对照：**第一版在现役站点上跑 ⇒ 假绿**（货架 10 个包全在随站清单里，
+  货架路径一行都没执行）。
+- **三条实测教训**（都进了代码注释）：
+  ① **同步入口 × 挂起原语**：第一版让 `pkg.m` 现读货架再等它落定 ⇒ 同步入口
+     （页面队列外 `eval_string`）抛 `SuspendError`，而它在 Octave 侧 try/catch
+     **抓不住**（直接穿到 JS）⇒ `accept-pkg` 的"未安装的包 ⇒ 清晰报错"当场变 CRASH。
+     修法：货架目录**开机后台读一次**（~4 KB，失败不致命）⇒ 来源判定永远同步可答。
+  ② **shim 不许替核心判"没有"**：两个名单都没命中时若由 shim 报错，会误杀
+     "包已在磁盘上"的正常情形（假失败）⇒ 一律交给核心 pkg 走 `is not installed`。
+  ③ **失败是终态**：加载器把失败原因落账本 ⇒ `.m` 侧立刻报错；老实现只有"等满 60 秒"
+     一条路（验收里加了反向断言：失败 < 15 s 返回）。
+- **顺带抓到的两处既有漂移**（都修了）：`promote-pages.sh` 只同步页面清单那批文件 ⇒
+  站点上的 `assets/m/*.js` 是**上一次 promote 的产物**，仓库源改了它不跟
+  （8768 的 `webaudiorec` 是旧 bundle；8761/镜像的 `manifest.json` 里它那条 sha 是
+  **68 位**——64 位真值 + 陈旧尾部）。⇒ 新增 `M_ASSETS` 旋钮（空 = 老行为）：
+  重打包 + `sync-js` + **重生成车道清单**，并带一条反向断言（陈旧车道清单 ⇒ 必须红）。
