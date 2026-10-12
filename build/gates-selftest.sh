@@ -36,6 +36,7 @@ build/113/check-oct-imports.py --selftest
 build/113/check-dylink-signatures.py --selftest
 build/113/check-oct-lane.py --selftest
 build/113/atomics_scan.py --selftest
+build/113/check-lane-purity.py --selftest
 build/113/witness-build-provenance.py --selftest
 build/113/witness-build-inputs.py --selftest
 .githooks/witness-upstream-pin.py --selftest

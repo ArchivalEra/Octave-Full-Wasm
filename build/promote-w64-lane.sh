@@ -361,6 +361,16 @@ done
 #    （lane.js 的 FILES 表两档都指它 —— 差的是主产物，`.oct` 那套是同一批 wasm64 side module）
 lane_manifest_check "$SITE" w64 || rc=1
 lanes_js_check "$SITE" || rc=1
+# ★ 架构纯度（用户点令 2026-10-12）：本批只许 wasm64 —— 宿主 / `.oct` / 站点资产三处同档。
+#   为什么放在这：混编的失败模式是"宿主与 .oct 都建成功、自检全绿、运行期才炸"
+#   （NOTES-emsdk-upgrade §7.5/§7.6 两个 6.x 假阳都是这个形状），而发运是最后一道闸。
+#   反向断言见 check-lane-purity.py --selftest（喂错档的 .oct 必须红）。
+for lane in w64 w64-base; do
+  python3 "$REPO/build/113/check-lane-purity.py" --lane "$lane" \
+    --host "$SITE/$lane/octave.wasm" \
+    --oct "$SITE/assets/oct-$lane" "$SITE/assets/octdir-$lane" || {
+      echo "FATAL: $lane 架构不纯（宿主与 .oct 不同档）⇒ 别上线" >&2; rc=1; }
+done
 # 落件属 root（docker cp）⇒ 把站点归还给当前用户（与 promote-webgl.sh 第 4 步同构）
 run "sudo chown -R \$(id -u):\$(id -g) '$SITE'"
 [ "$rc" = 0 ] || die "自检没过 ⇒ **别上线**（站点可能已是半成品：重跑本脚本或从备份回滚）"
