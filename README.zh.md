@@ -10,6 +10,7 @@ GNU Octave 11.3.0 编译为 WebAssembly —— 一个完整的数值计算环境
 binary64 —— 并经下文显式审计。
 
 工具链：Emscripten **6.0.12**（三线全部重编并发运；冻结的 `wasm32-final`
+三线 6.0.12 的落地记录见 `build/113/NOTES-emsdk-upgrade.md` §8.8。
 归档线已重编但不上站）。
 
 三条线现已在**同一工具链（Emscripten 6.0.12）**下重编并完成浏览器侧验收，

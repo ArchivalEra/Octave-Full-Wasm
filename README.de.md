@@ -13,6 +13,7 @@ Web-Oberfläche wie jede andere Spur betrieben. Alle numerischen Ergebnisse
 sind IEEE 754 binary64 — nachfolgend explizit auditiert.
 
 Toolchain: Emscripten **6.0.12** (alle drei Linien neu gebaut und ausgeliefert;
+Die 6.0.12-Ausrollung der drei Linien ist in `build/113/NOTES-emsdk-upgrade.md` §8.8 dokumentiert.
 die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
 
 Alle drei Linien sind jetzt auf **derselben Toolchain (Emscripten 6.0.12)** neu gebaut
