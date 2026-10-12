@@ -143,6 +143,12 @@
    页面层自证 4/0（`probe-artifact-sha`：页面实例化的字节 == `w64/` 身份证记的 sha）。
 4. **8761 全量 + `PROBES=1`**：全绿（台账 `accept_suites` / `accept_pass`，探针另计），`probe_lane_pass` 已是四格版。
 5. `site/`（仓库镜像）→ `make-dist.sh`（四档包内 sha 与部署件逐档相同）→ `parity --strict` 三处一致
+   ★ **源码修了 ≠ 站点跑的是修过的**（2026-10-12 实测）：`.m` 源码修复移植到了本线，
+   但 `site/assets/m/*.js` 是**打好的 bundle 快照**，没重生成 ⇒ 站点仍跑旧桥
+   （accept-gfx-render 11/3 红、对拍现役 14/0 全绿才定为资产陈旧）。
+   判据：`build/assets.py bundle-m <名> build/<名> <挂载点> /tmp/x.js` 重生成后与站点那份比 sha
+   （本次审计出 3/10 陈旧：plotbridge / pkgfix / webaudiorec）。
+   ⇒ **凡动过 `build/<name>/*.m` 的批次，必须重生成对应站点 bundle + 更新清单 sha。**
    → 六道闸门 → 提交推送。
    ★ **交付包也起过并验过**（不只是字节相同）：包自带 `serve.py` 起来 ⇒ 开机 1.1 s、包内的四格选档
    `dist_lane_probe_pass` / `dist_lane_probe_fail`（日志 `w64-logs/dist-probe-lane.log`、`dist-e2e.log`）。
@@ -381,7 +387,7 @@ sh build/gates-selftest.sh                   # ★ 每个闸门必须都能证�
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 50 | |
-| 最近一次**全绿**回归 | `20261012-113556` · **1 套 / 12 PASS / 0 FAIL** | http://127.0.0.1:8775/ |
+| 最近一次**全绿**回归 | `20261012-114956` · **1 套 / 14 PASS / 0 FAIL** | http://127.0.0.1:8775/ |
 | 交付包 | `octave-full-wasm-site-20261011` · tar.zst 91,155,710 B · `d3927b7753acdde3…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `wasm32-final`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
