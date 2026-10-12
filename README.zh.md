@@ -11,6 +11,7 @@ binary64 —— 并经下文显式审计。
 
 工具链：Emscripten **6.0.12**（三线全部重编并发运；冻结的 `wasm32-final`
 三线 6.0.12 的落地记录见 `build/113/NOTES-emsdk-upgrade.md` §8.8。
+逐线验收分诊见 `build/113/NOTES-emsdk-upgrade.md` §8.9。
 归档线已重编但不上站）。
 
 三条线现已在**同一工具链（Emscripten 6.0.12）**下重编并完成浏览器侧验收，

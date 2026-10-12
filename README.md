@@ -12,6 +12,7 @@ All numerical results are IEEE 754 binary64 — audited explicitly (below).
 
 Toolchain: Emscripten **6.0.12** (all three lines rebuilt and shipped; the
 The three-line 6.0.12 rollout is written up in `build/113/NOTES-emsdk-upgrade.md` §8.8.
+See `build/113/NOTES-emsdk-upgrade.md` §8.9 for the per-line acceptance triage.
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -227,8 +228,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (378707 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (11655 bytes)
-- `README.zh.md` (10219 bytes)
+- `README.de.md` (11734 bytes)
+- `README.zh.md` (10285 bytes)
 - `STATE.md` (34493 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (26335 bytes)
