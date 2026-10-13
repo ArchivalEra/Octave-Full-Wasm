@@ -232,3 +232,83 @@ rustup target list --installed
 - **`.mat` 握手只验了"两边都能读写"**，**没验"OM 写的那个具体文件 Octave 能读"**
   （omc-web 用的是 MAT4；我们 v4 也通，但**端到端没连过**）。这是下一步该做的**真集成实验**。
 - **OM wasm 我们自己还没 build 过**（只测了别人的演示）—— 仍是第 1 步的未知。
+
+---
+
+## §9 ★ 两个决策判定（2026-10-13，用户点令）：块图仓库会被吞吗？OM 是"同级别上游"吗？
+
+> 用户原话："确认一下块图仓库的开发目标是否完全被 OM+Octave 吞噬，
+> OM 是否作为与我们同级别的上游仓库给 Octave-UI 供货。"
+> 这两个都是**能不能省一个仓库 / 能不能少一条线**的判断，必须用事实答。
+
+### 9.1 块图仓库会被"OM + Octave"吞噬吗？—— **大部分会，但有一小块不会**
+
+先看**块图的两种形态**（上一轮已提），现在有了实测可以判：
+
+| 块图的能力 | 谁能提供 | 结论 |
+|---|---|---|
+| **因果块图库**（Continuous/Discrete/Logical/Math/Sources…） | **MSL.Blocks**（实测该目录有 17 个 `.mo` 库文件） | **OM 已提供** ⇒ 自研块图库**没必要** |
+| **图形块图编辑器**（画块、连线、放元件） | **OMEdit**（实测有 `OMEditLIB/{Annotations,Modeling,Element}` 图形编辑源码；**且有 Qt-for-WebAssembly 构建目标**，含 `Widgets/Quick3D/Qml/OpenGL`） | **OM 已提供**（官方 IDE 的 wasm 版）⇒ 自研编辑器**没必要** |
+| **因果求解**（信号流图的 ODE 求解） | 两边都有：OM（自带）/ 我们（ode45/ode15s 实测 6/0） | 不构成"要开新仓库"的理由 |
+| ★ **"Octave 语法 + 块图"的结合** | **没人提供**：MSL.Blocks 是 **Modelica 语法**的块；OMEdit 编辑的是 `.mo` 文件 | **这才是唯一没被吞噬的那一小块** |
+
+**⇒ 判定**：
+- **"做一个通用块图环境"这个目标，被 OM 吞噬了**——OM 有块图库（MSL.Blocks）+ 图形编辑器
+  （OMEdit wasm）+ 编译器 + 求解器，**一整套**。我们再自研一套块图，是**重复造轮子**。
+- **"在 Octave 语法里画块图"这个目标，没被吞噬**——因为 MSL.Blocks 的块是 **Modelica**
+  语义（非因果方程、`.mo` 文本），不是"`ode45` + MATLAB 语法的因果块"。
+  但**这一小块值不值得单开一个仓库？**——**存疑**（见 9.3）。
+
+### 9.2 OM 是"与我们同级别的上游仓库"吗？—— **是，且证据充分**
+
+"同级别上游"的判据（本仓已有 19 条 submodule 的成例）应该是：
+**① 有独立的源；② 我们照配方 build 它、同源托管产物；③ 用 pin 机制锁住版本。**
+OM 逐条满足：
+
+| 判据 | OM 的实情 |
+|---|---|
+| ① 独立源 | `github.com/OpenModelica/OpenModelica`（402 MB，活跃：2026-10-12 还在动） |
+| ② 我们 build + 同源托管 | omc-web 已给出**完整 pin 死的配方**（emsdk 3.1.74/3.1.24 + OM SHA + emception + MSL 4.0.0）；COEP 那堵墙要求**必须同源**，所以只能自己 build —— 与 Forge 包/emsdk 同形 |
+| ③ pin 机制 | 本仓已有 `upstream-pins.json` + `upstream-lock.json` + `provision-upstream.sh` + `witness-upstream-pin.py`；OM 作为第 20 条 submodule 完全套用 |
+| 许可 | **AGPLv3 / OSMC-PL 双选** —— 与本仓 AGPL-3.0 **兼容**（本仓 AGPL 重，这是加分不是障碍） |
+
+**⇒ 判定**：**是**。OM 应当作为**第 20 条上游 submodule**，与本仓平级。
+它不是"Octave 的一个插件"，而是**与 Octave 平级的第二个引擎上游**。
+
+### 9.3 那到底开几个仓库？（把两个判定合起来）
+
+```
+上游层（各自的独立仓，本仓用 submodule + pin 锁）：
+  ├─ upstream/octave        （已有）
+  ├─ upstream/emsdk         （已有）
+  ├─ … 18 条 …              （已有）
+  └─ upstream/openmodelica  ← **新增：第 20 条**（OM 作为平级上游）
+        ↓ 各自 build 出 wasm 产物，各自同源托管
+供货层：
+  └─ Octave-UI  ← 用户提到的"我们这一侧"，**一个页面供货两个引擎档**
+       ├─ Octave 档（现役）
+       └─ OM 档（新）  ← 通过 .mat 与 Octave 档握手（§8）
+```
+
+**⇒ 不需要"块图仓库"**（它的目标被 OM 吞了），**需要的是**：
+1. **OM 作为第 20 条上游**（pin + provision + 自 build）；
+2. **Octave-UI 侧加一个"OM 档"**（供货第二个引擎，UI 上与 Octave 档并列）。
+
+⚠️ **一个诚实的保留**：9.1 表里最后一行（"Octave 语法 + 块图"）**理论上仍是个缺口**，
+但它值不值得单开仓库，取决于**用户是否真的要"在 MATLAB 语法里画块图"**。
+若答案是"用 Modelica 画块图就够了" ⇒ **零新仓库**；若"必须 MATLAB 语法" ⇒ 那一小块才单列。
+**这个问题只有用户能答**，所以本判定**先按"被吞噬"记**，并把这个问号显式留下。
+
+### 9.4 复跑命令
+
+```bash
+# MSL.Blocks 的库文件
+gh api "repos/modelica/ModelicaStandardLibrary/contents/Modelica/Blocks" --jq '.[].name'
+# OMEdit 图形编辑器源码
+gh api "repos/OpenModelica/OpenModelica/contents/OMEdit/OMEditLIB" --jq '.[].name'
+# OMEdit 的 Qt-wasm 目标（含 Widgets/Quick3D/OpenGL）
+gh api "repos/OpenModelica/OpenModelica/contents/OMEdit/OMEditGUI/wasm/CMakeLists.txt" \
+  --jq .content | base64 -d | head -30
+# 本仓现有上游 submodule 数
+git config --file .gitmodules --get-regexp path | wc -l
+```
