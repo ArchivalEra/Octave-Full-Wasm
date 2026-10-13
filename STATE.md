@@ -354,6 +354,6 @@
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 50 | |
 | 最近一次**全绿**回归 | `20261012-123844` · **1 套 / 18 PASS / 0 FAIL** | http://127.0.0.1:8775/ |
-| 交付包 | `octave-full-wasm-site-20261011` · tar.zst 91,155,710 B · `d3927b7753acdde3…` | 包内 wasm （**与部署件同 sha** ✓） |
+| 交付包 | `octave-full-wasm-site-20261013` · tar.zst 91,174,916 B · `979d3cf0d085e165…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
