@@ -262,6 +262,17 @@ Octave 是**数值/命令式**语言，没有"非因果方程建模 + 符号处�
 ⇒ **建议**：把 OM 当**第三个独立项目**（与"块图前端"并列），**别混进本仓**；
 先做一个"能不能 build 出 OM wasm"的**可行性实验**（结案件 = 页面里跑通 MSL 的一个电气模型）。
 
+### 8.4b ★ 可行性实验**已做，且成功**（2026-10-13，见 `NOTES-experiment-omc-wasm.md`）
+
+实测（真浏览器，截图证据 `evidence-omc-web-demo.png`）：第三方 `EthanJamesLew/omc-web`
+的在线演示把 `BouncingBall.mo` 跑通全链路 ——
+`parse(381ms) → 生成 C(28ms) → **浏览器内 emcc+wasm-ld 编 wasm(49.57s)** → 仿真(50ms) → 出图`，
+350 samples / 13 events / 3 vars。
+⇒ **"Modelica 上浏览器"成立，且不必从零**（有完整 pin 死的配方 + 在线演示）。
+**代价**：自己 build 要 emsdk 3.1.74/3.1.24（与本仓 6.0.12 不同）；**能力边界**：求解器窄
+（Euler/RK/dassl）、内存吃紧、编译慢 ⇒ 定位是"**方程级建模的教学/探索环境**"，
+**不是**工业级 Simscape 替代。详见该实验记录。
+
 ### 8.5 复跑命令（本节每个事实的出处）
 
 ```bash
