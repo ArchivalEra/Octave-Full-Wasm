@@ -312,3 +312,90 @@ gh api "repos/OpenModelica/OpenModelica/contents/OMEdit/OMEditGUI/wasm/CMakeList
 # 本仓现有上游 submodule 数
 git config --file .gitmodules --get-regexp path | wc -l
 ```
+
+---
+
+## §10 ★ OMMatlab 线索查证（2026-10-13，用户点令）：MATLAB 语义那一块，其实**已经有桥**
+
+> 用户原话："还是把 MATLAB 语义的事情先找找。OpenModelica 自带 MATLAB 接口 OMMatlab，
+> 可以在 MATLAB 中调用 Modelica 编译器、加载模型、仿真、读结果。"
+> **这条线索是对的，而且比"一个 MATLAB 脚本包"更重要**——它暴露了 OM 的**脚本协议**，
+> 而那正是浏览器集成该用的东西。
+
+### 10.1 OMMatlab 是什么（实测）
+
+| 项 | 实情 |
+|---|---|
+| 仓 | `OpenModelica/OMMatlab`（官方，MATLAB，★12，505 KB，**2024-03 后未动**） |
+| 内容 | 就三个文件：`OMMatlab.m`（48 KB）、`README.md`、`jeromq-0.4.4-SNAPSHOT.jar`（429 KB） |
+| 机制 | README 原文："Matlab scripting OpenModelica interface **using ZEROMQ**" |
+| 依赖 | OpenModelica + MATLAB + **zeromq/jeromq**（JAR，MATLAB 走 Java） |
+| 接口面 | `omc.sendExpression("getVersion()")` / `loadFile(...)` / `simulate(BouncingBall)` → 返回 `resultFile = "...BouncingBall_res.mat"` |
+
+**⇒ 它的本质**：**MATLAB 侧的一个客户端**，通过 **ZeroMQ socket** 连到一个**本地跑着的
+`omc` 进程**，把 OM 的**脚本命令**（`sendExpression`）发过去、把结果拿回来。
+
+### 10.2 关键洞察：**`sendExpression` 就是 OM 的通用脚本协议**
+
+OMMatlab 的价值**不是**"它是个 MATLAB 包"，而是它**证明了接口面**：
+OM 对外暴露的是 **`sendExpression(<OM 脚本>)`** 这一族命令
+（`loadFile`/`simulate`/`getClassNames`/`getVersion`…）。
+
+**而浏览器的官方 OM wasm 暴露的是同一族命令，只是换了个名字**（实测
+`OMCompiler/Compiler/OpenModelica.rs/wasm/omc-cli.js`）：
+
+| 环境 | 接口 | 传输层 |
+|---|---|---|
+| MATLAB（OMMatlab） | `omc.sendExpression(src)` | ZeroMQ → 本地 omc 进程 |
+| **浏览器（官方 OM wasm）** | **`omc_eval(src)`** | **直接 wasm 函数调用**（无进程、无 socket） |
+| 官方 wasm 导出面 | `omc_init` / `omc_eval` / `omc_set_env` / `omc_enable_wasm_blobs` / `omc_take_pending_downloads` | |
+
+⇒ **同一个协议，两个传输层。** OMMatlab 证明"MATLAB 语法侧能驱动 OM"这件事**成立**；
+浏览器侧只需把传输层从 ZeroMQ 换成 `omc_eval`。
+
+### 10.3 这解决了 §9.3 留下的那个问号
+
+§9.3 我留了一个显式问号：**"在 MATLAB 语法里驱动 Modelica，是不是一个没被覆盖的缺口？"**
+现在答案清楚了：
+
+**不是缺口，因为桥的接口面已经存在**（`sendExpression` / `omc_eval`）。要做的是：
+
+```
+Octave 侧（我们的引擎）                OM 侧（omc.wasm）
+  .m 脚本里调用一个桥函数  ──────────▶  omc_eval("loadFile(...); simulate(...)")
+        ▲                                      │
+        │                                      ▼
+  读 .mat 结果 ◀──────────────────────── 产出 xxx_res.mat
+```
+
+**"MATLAB 语义"与"Modelica"之间的桥 = 一个 Octave 侧的 `omc_*` 函数族**，
+它们内部把命令拼成 OM 脚本、调 `omc_eval`、再把 `.mat` 读回来。
+**这就是 §8 说的 `.mat` 握手，加上 §10 说的脚本协议** —— 两者**OM 都已提供**。
+
+### 10.4 但必须如实说清两条**边界**（别过度乐观）
+
+1. **OMMatlab 本体在浏览器里用不了**：它靠 ZeroMQ socket 连**本地 omc 进程**，
+   而浏览器**没有到本地进程的 socket**，且我们**纯客户端、无服务端**。
+   ⇒ **不要移植 OMMatlab**；要的是它证明的**接口面**，浏览器侧用 `omc_eval` 实现。
+2. **`sendExpression` 不等于"MATLAB 语言兼容"**：它是**命令字符串**（OM 脚本），
+   **不是**把 `.m` 代码翻译成 Modelica。它能让"Octave 脚本驱动 OM 编译/仿真/取结果"，
+   **不能**让"一段 MATLAB 代码自动变成 Modelica 模型"。后者需要**符号翻译**，那**不在**此列。
+
+### 10.5 结论
+
+- **MATLAB 语义这块，有一个官方的、成型的接口面**（`sendExpression` ↔ `omc_eval`），
+  这比"自己设计一套 Octave↔Modelica 桥"强得多——**协议是 OM 定的，我们只是接上**。
+- **OMMatlab 的机制（ZeroMQ）在浏览器不可用**，但它的**接口清单**正是我们要实现的函数族。
+- **§9.3 的问号解开了**：不必为"MATLAB 语法块图"单开仓库——**用脚本协议驱动 OM** 即可；
+  剩下的只是"桥函数写几个、怎么拼命令"的实现问题。
+
+### 10.6 复跑命令
+
+```bash
+gh api repos/OpenModelica/OMMatlab --jq '{stars,size,lang:.language,pushed:.pushed_at}'
+gh api repos/OpenModelica/OMMatlab/contents/ --jq '.[].name'
+gh api "repos/OpenModelica/OMMatlab/contents/README.md" --jq .content | base64 -d | head -50
+# 官方 OM wasm 的接口面（omc_eval 等）
+gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/OpenModelica.rs/wasm/omc-cli.js" \
+  --jq .content | base64 -d | grep -oE 'omc_[a-z_]+' | sort -u
+```
