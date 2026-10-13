@@ -36,6 +36,8 @@ Das Fakten-Ledger erfasst jetzt den 6.0.12-Stand der drei Linien (`lane6012_*`) 
 
 Die Installation des Forge-Pakets `datatypes` vom Regal macht die **modernen MATLAB-Typen** nutzbar: `table([1;2;3],{'a';'b';'c'})` liefert `class=table` (height 3, width 2), `string(42)` ergibt `"42"`. Nicht implementierte MATLAB-Namen melden jetzt den echten Octave-Text ("belongs to the 'datatypes' package … not installed") statt eines `makeinfo`-Subprozessfehlers. Siehe `build/113/REQUIREMENTS-store-and-matlab.md`. (`help sin`/`help ode45`/`lookfor` bleiben unberührt; die drei Help-Suiten prüfen jetzt, dass `__makeinfo__` auf den sanktionierten webshims-Downgrade zeigt.)
 
+Diese Engine hat bereits alles, was ein Simulink-artiges **Blockdiagramm**-Backend braucht — State-Space-/Übertragungsfunktions-Blöcke, `ode45`, **steifes `ode15s`**, LQR, `zpkdata` (Probe `test/browser/probe-blockdiag-backend.mjs`, 6/0). Ein Blockdiagramm-Frontend kann also **auf dieser Engine** gebaut werden (eigenes JS-Repo), statt eine zweite Laufzeit wie Pyodide einzuführen. Siehe `build/113/NOTES-plugin-survey.md`.
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).

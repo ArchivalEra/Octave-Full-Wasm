@@ -33,6 +33,8 @@ binary64 —— 并经下文显式审计。
 
 从货架装 Forge 的 `datatypes` 包 ⇒ **现代 MATLAB 类型当场可用**：`table([1;2;3],{'a';'b';'c'})` 得 `class=table`（height 3、width 2），`string(42)` 得 `"42"`。未实现的 MATLAB 名字现在报 Octave 的原话（"belongs to the 'datatypes' package … not installed"），而不再是 `makeinfo` 子进程错误。见 `build/113/REQUIREMENTS-store-and-matlab.md`。（`help sin`/`help ode45`/`lookfor` 未受影响；三个 help 套件的断言已翻面为"`__makeinfo__` 指向受管辖的 webshims 降级覆写"。）
 
+本引擎**已经**具备 Simulink 式**块图**后端所需的全部数值能力 —— 状态空间/传函块、`ode45`、**刚性 `ode15s`**、LQR、`zpkdata`（探针 `test/browser/probe-blockdiag-backend.mjs`，6/0）。⇒ 块图前端可以建在**本引擎**上（另开一个 JS 仓库），**不必**引 Pyodide 那样的第二个运行时。见 `build/113/NOTES-plugin-survey.md`。
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
