@@ -20,7 +20,7 @@ Downstream integration with the browser clang+lld toolchain ([LLVM-wasm](https:/
 
 Site asset bundles are audited per batch: regenerate `site/assets/m/*.js` from their `build/` sources and compare hashes (mount points come from `build/assets-meta.json`, *not* guessed).
 
-`pkg load <name>` now resolves **where a package comes from** before firing: site-shipped assets go through `OctaveAssets.load`, shelf (Forge catalog) packages through `OctaveAssets.install` (same-origin tarball + sha256 + in-engine gunzip/untar). See `build/113/NOTES-forge-ondemand.md` §10 (T4) and the acceptance suite `test/browser/accept-catalog-load.mjs`.
+`pkg load <name>` now resolves **where a package comes from** before firing: site-shipped assets go through `OctaveAssets.load`, shelf (Forge catalog) packages through `OctaveAssets.install` (same-origin tarball + sha256 + in-engine gunzip/untar). **Shipped to 8761 and verified in-browser** (real tarball download + `csaps` bit-identical to host Octave). See `build/113/NOTES-forge-ondemand.md` §10 (T4) and the acceptance suite `test/browser/accept-catalog-load.mjs`.
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -237,8 +237,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (381188 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (13963 bytes)
-- `README.zh.md` (12493 bytes)
+- `README.de.md` (14082 bytes)
+- `README.zh.md` (12596 bytes)
 - `STATE.md` (39662 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
