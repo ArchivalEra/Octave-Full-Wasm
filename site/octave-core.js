@@ -554,6 +554,19 @@
               "  try; __pkgfix_sync_db__ (); catch e; " +
               "    warning('pkg sync failed: %s', e.message); end; endif;");
           } catch (e) { warn('[pkg] 数据库同步失败: ' + e.message); }
+          // ★ T4（2026-10-12）：**后台读一次货架目录**（`assets/forge-catalog.json`，~4 KB）。
+          //   为什么必须在**开机**读、不能让 `pkg.m` 按需读（实测教训，别改回去）：
+          //   `pkg.m` 的 shim 要回答"这个包是随站资产还是货架包"——答案就在这份目录里。
+          //   若让它在 `pkg load` 里现读，读的 Promise 落地前 shim 得**等**（`__web_pause_ms__`）
+          //   ⇒ **同步入口**（页面队列外的 `eval_string("pkg load x")`）当场抛
+          //   `SuspendError: trying to suspend without WebAssembly.promising`，而这个抛错在
+          //   Octave 侧 try/catch **抓不住**（实测：它直接穿到 JS）⇒ 一个"包名打错"就把调用方
+          //   炸掉（`accept-pkg` 的"未安装的包 ⇒ 清晰报错"当场变 CRASH，实测抓到）。
+          //   ⇒ 开机读、**不 await**（不阻塞 ready，失败也不致命）：之后 shim 的问法永远同步可答。
+          //   代价：每次开机一次 ~4 KB 同源请求（浏览器会缓存）。**包字节仍然"谁装谁才拉"**。
+          Assets.catalog().catch(function (e) {
+            warn('[assets] 货架目录读取失败（`pkg load <货架包>` 将退回老行为）: ' + e.message);
+          });
           return null;
         }).catch(function (e) {
           warn('[assets] pkg 支持装载失败（pkg list/load 将不可用）: ' + e.message);

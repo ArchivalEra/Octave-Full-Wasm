@@ -434,7 +434,7 @@
    "name": "pkgfix",
    "kind": "js",
    "url": "assets/m/pkgfix.js",
-   "sha256": "1be5457840af068659047561cb7d08dc1661bf5cd18b6e4cb042990f7a3fc820",
+   "sha256": "d7030fc35da6736c9bb96acb0e8ffcfe16afd2fc373dd089cf524446a43c1ad6",
    "deps": [],
    "note": "T4：从磁盘现状生成 pkg 数据库（复用官方 get_description，故必须挂在 m/pkg/ 以解析 private 函数）"
   },
@@ -526,7 +526,7 @@
    "name": "webaudiorec",
    "kind": "js",
    "url": "assets/m/webaudiorec.js",
-   "sha256": "18638a8c3ae361589486004d13623b545da0b6fbd3fa7ff05ca9503a2aa98f5c",
+   "sha256": "a463692f72f5b4c9724fe5338dbfa51992ae0c357bb6d07a77b926c57925252d",
    "deps": [],
    "note": "T7/B1：19 个 __recorder_* 纯 .m；页面侧 webaudiorec.js 用 getUserMedia + MediaRecorder 真采集"
   },
@@ -577,7 +577,7 @@
   {
    "name": "webshims",
    "url": "assets/m/webshims.js",
-   "sha256": "78dc3ed33fb54423de7caa18a4f5915039824567b202f8c4bed5abb6dcfb8bb8",
+   "sha256": "a16dc07c2e2eeb6970437903e74eebd83faa3c5c8e3f4e43e8dcff36565ca8b5",
    "deps": [],
    "kind": "js"
   },
