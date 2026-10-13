@@ -40,6 +40,8 @@ Diese Engine hat bereits alles, was ein Simulink-artiges **Blockdiagramm**-Backe
 
 Diese Untersuchung behandelt auch das, was diese Engine **nicht** erreicht: MATLAB hat drei Achsen (Sprache / Simulink / Simscape), wir decken die ersten beiden ab — **nicht-kausale physikalische Modellierung (Simscape) ist hier nicht abgedeckt**, und **OpenModelica** ist dafür die realistische Antwort (wasm-Pfad im offiziellen Repo, Rust-Neuschreibung, ausgelieferter Browser-FMI-Simulator; AGPLv3/OSMC-PL). Siehe §8 dort.
 
+Ein Folge**experiment bestätigte, dass Modelica im Browser läuft**: ein Drittanbieter-Port OpenModelica→wasm führt `BouncingBall.mo` durch den vollen Zyklus `parse → C → emcc+wasm-ld im Browser → Simulation → Plot` (Beleg: `build/113/evidence-omc-web-demo.png`; Protokoll: `build/113/NOTES-experiment-omc-wasm.md`). „Modelica im Web" ist also bewiesen, nicht spekulativ — die Solver-Abdeckung ist allerdings schmal (Euler/RK/dassl).
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
