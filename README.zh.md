@@ -37,7 +37,9 @@ binary64 —— 并经下文显式审计。
 
 该探查也写了本引擎**够不到**的那块：MATLAB 有三根轴（语言 / Simulink / Simscape），我们覆盖前两根 —— **非因果物理建模（Simscape）在本仓零覆盖**，而 **OpenModelica** 是那块最现实的答案（它的 wasm 路径**在官方主仓里**、有 Rust 重写、**已发货浏览器 FMI 仿真器**；AGPLv3/OSMC-PL）。见该文 §8。
 
-后续**实验已证实 Modelica 能在浏览器里跑**：一个第三方 OpenModelica→wasm 移植把 `BouncingBall.mo` 跑通了完整链路 `parse → 生成 C → 浏览器内 emcc+wasm-ld → 仿真 → 出图`（证据 `build/113/evidence-omc-web-demo.png`；记录 `build/113/NOTES-experiment-omc-wasm.md`）。⇒ "Modelica 上网页"是**已证**、不是设想 —— 但它的求解器覆盖窄（Euler/RK/dassl）。
+后续**实验已证实 Modelica 能在浏览器里跑**：一个第三方 OpenModelica→wasm 移植把 `BouncingBall.mo` 跑通了完整链路 `parse → 生成 C → 浏览器内 emcc+wasm-ld → 仿真 → 出图`（证据 `build/113/evidence-omc-web-demo.png`；记录 `build/113/NOTES-experiment-omc-wasm.md`）。⇒ "Modelica 上网页"是**已证**、不是设想 —— 但那条**第三方**路线的求解器覆盖窄（Euler/RK/dassl）。
+
+**官方**路线是 OpenModelica 自己树里的一等 CMake 目标（`rust_omc.cmake`：`RUST_OMC_WASM_RUNTIME`、`wasm32-wasip1` 交叉编、`omc.wasm`、产物交接）—— 与本仓自己的管线**同形**（上游 submodule + pin + 交叉编 + 同源托管）。⇒ 它是**照我们编 Octave 的方式编**，不是抄第三方配方（见 §11）。
 
 而且它能与本站**同页**（实测，非假设）：本引擎能解 **index-1 DAE**（`ode15i`、`Mass` 矩阵；RC 电路得 V(5)=0.9931，理论 0.9933），但**解不了 index-3**（约束摆失败）—— 而**指标约简正是 OpenModelica 编译器干的活**。两个引擎都能读写 `.mat`（omc-web 的仿真就是 dump MAT4）。⇒ 这个组合复刻的正是 Simscape↔MATLAB 的分工：OM 建模、Octave 分析，中间用 `.mat`（见实验记录 §8）。
 
