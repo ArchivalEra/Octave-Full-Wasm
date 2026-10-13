@@ -43,6 +43,8 @@ binary64 —— 并经下文显式审计。
 
 这也定了仓库规划：**不需要**单独开"块图仓库"—— MSL 的 `Blocks` 已提供因果块图库、OMEdit 已有 Qt-for-WebAssembly 图形编辑器 ⇒ OpenModelica 是**平级上游**（AGPLv3/OSMC-PL 许可相符），即与 Octave 并列的**第 20 条 submodule**，为同一页面供货第二个引擎档。见 §9。
 
+MATLAB 语义那块的桥，**在接口层面也已经存在**：OM 的脚本 API（`sendExpression`，其官方 `OMMatlab` MATLAB 客户端经 ZeroMQ 用它）在浏览器里以 **`omc_eval`** 暴露 —— 同一套命令协议、不同的传输层。所以要补的只是一个 Octave 侧的 `omc_*` 函数族（拼脚本 → 调 `omc_eval` → 读回 `.mat`）；OMMatlab 本体在浏览器跑不了（它需要本地进程 socket）。见 §10。
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。

@@ -46,6 +46,8 @@ Und es kann sich **dieselbe Seite** teilen — gemessen, nicht angenommen: diese
 
 Das klärt auch den Repo-Plan: ein separates „Blockdiagramm-Repo" ist **nicht** nötig — MSL `Blocks` liefert bereits die kausale Blockbibliothek, und OMEdit bringt bereits einen Qt-for-WebAssembly-Grafikeditor mit; OpenModelica ist also ein **gleichrangiger Upstream** (Lizenz AGPLv3/OSMC-PL passt), d. h. ein 20. Submodul neben Octave, das eine zweite Engine-Lane auf derselben Seite versorgt. Siehe §9.
 
+Die Brücke zur MATLAB-Semantik existiert auf der Schnittstellenebene ebenfalls bereits: OMs Skript-API (`sendExpression`, genutzt vom offiziellen `OMMatlab`-MATLAB-Client über ZeroMQ) wird im Browser als **`omc_eval`** exponiert — dasselbe Kommandoprotokoll, anderer Transport. Fehlt also nur eine Octave-seitige `omc_*`-Funktionsfamilie (Skript bauen → `omc_eval` aufrufen → `.mat` zurücklesen); OMMatlab selbst läuft nicht im Browser (es braucht einen lokalen Prozess-Socket). Siehe §10.
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
