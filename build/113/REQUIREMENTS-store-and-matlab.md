@@ -170,6 +170,18 @@ UI 上应把它排在推荐位，并如实标注 `datetime` 暂不可用。
 用户另问：`scilab` / `pathsim` / `pyblocksim` 作为浏览器 wasm 插件的可能。
 **那是别的 wasm 项目**，不在本仓范围 —— 见 `build/113/NOTES-plugin-survey.md`（本单同批产出）。
 
+★ **2026-10-13 晚补充（用户 + Claude 的挑战，已查证）**：要覆盖**更广泛的差距**，
+关键的不是那三个，而是 **OpenModelica**。把"差距"拆成三根轴后才看得清：
+
+| 轴 | 我们的覆盖 | 谁覆盖 |
+|---|---|---|
+| ① MATLAB 语言 | **✓ 本仓**（Octave = MATLAB 语法） | 本仓 |
+| ② Simulink 因果块图 | **能**（引擎实测 6/0，探针 `probe-blockdiag-backend`） | 本仓引擎 + 新仓前端 |
+| ③ **Simscape 非因果物理建模**（电/流体/热/机械…） | **✗ 零覆盖** | **OpenModelica**（wasm 路径**在官方主仓里**、有 Rust 重写、**已发货浏览器 FMI 仿真器**、许可 AGPLv3/OSMC-PL 兼容） |
+
+⇒ 本仓引擎**天然给不了**轴 ③（Octave 是数值/命令式语言，没有"非因果方程建模 + DAE"那套机器）。
+**详见 `NOTES-plugin-survey.md` §8**（含 OM 的 wasm 成熟度、代价与限制的实测查证）。
+
 ---
 
 ## §3 明确不做（本单范围外）

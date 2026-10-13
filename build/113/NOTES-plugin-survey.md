@@ -15,12 +15,19 @@
 ## §0 一句话结论（重写）
 
 **最好的路不是 pathsim，是"用我们自己的引擎做块图前端"。** 实测：本仓已发运的 wasm
-**已经具备 Simulink 式仿真的全部数值底座**（§0.5 五条实测全过）。缺的只有**前端编辑器**
+**已经具备 Simulink 式仿真的全部数值底座**（§0.5 六条实测全过）。缺的只有**前端编辑器**
 （一个 JS 图编辑器），而那**恰恰是可以独立于 Octave 做的事**。
+
+> ★ **但本结论只覆盖"轴 ②（Simulink 因果块图）"** —— 用户 + Claude 指出"覆盖更广泛的
+> 差距要看 OpenModelica"，**那是对的**：MATLAB 生态还有**轴 ③（Simscape 非因果物理建模）**，
+> 我们**零覆盖**，而 OpenModelica（**wasm 路径在官方主仓里、有 Rust 重写、已发货浏览器
+> FMI 仿真器**）是那块的现实解。**完整的三轴对照与 OM 的实测查证见 §8**（本结论不变，
+> 只是补上它**覆盖不到**的那一半）。
 
 | 方案 | 引擎 | 前端 | 体积 | 判断 |
 |---|---|---|---|---|
-| **★ 自建块图（新仓库）** | **复用我们的 Octave wasm**（已具备） | 新写（litegraph/rete 之类） | 复用现有 ~10 MB 首包 | **首选**（§0.5 实测支持） |
+| **★ 自建块图（新仓库）** | **复用我们的 Octave wasm**（已具备） | 新写（litegraph/rete 之类） | 复用现有 ~10 MB 首包 | **首选**（§0.5 实测支持）——**覆盖轴 ②** |
+| **OpenModelica（wasm）** | OM 的 Rust 重写 + `wasm-jit` | 官方 wasm 前端 / OMEdit wasm | 要自己 build（无预编译产物） | **轴 ③ 的唯一现实解**（§8）——**与上面并列，不冲突** |
 | pathsim | Pyodide + Python 栈 | 自带（Python 内） | **Pyodide 运行时 + 科学栈，几十 MB** | 次选：**另起一个更重的运行时** |
 | pyblocksim | 同上 + sympy/ipydex/symbtools | 自带 | 更重 | 再次 |
 | scilab | Scilab C++/Java 整树 | Xcos（Java/Swing，**上不了浏览器**） | 464 MB 源码 | 不做（§3） |
@@ -192,3 +199,86 @@ curl -s https://pyodide.org/en/stable/usage/packages-in-pyodide.html | grep -oiE
 
 （详细的"fork 管线"本身 = 上游 submodule + 每提交 pin 见证 + lock 字节 + provision 供给；
 本仓 `maintaince.md` 的"地图"一节是入口。）
+
+---
+
+## §8 ★ 重大补充（2026-10-13 晚，用户 + Claude 的挑战）：覆盖"更广泛的差距"要看 **OpenModelica**，而我上一轮漏了它
+
+> 用户原话："我跟 claude 讨论过，想要覆盖更广泛的差距还是 openmodelica 更好。"
+> **这是对的，且我上一轮的探查**（只查 scilab/pathsim/pyblocksim）**漏了这条线**。
+> 本节是补查结果；**不改 §0–§7 的结论**（"块图前端建在我们引擎上"仍成立），
+> 而是指出它**覆盖不到**的那一块。
+
+### 8.1 先把"差距"拆成三根轴（这是关键——上一轮我把它们混成一件事）
+
+MATLAB 生态其实有**三块**，Simulink 只是中间那块：
+
+| 轴 | 是什么 | 我们的覆盖 | OpenModelica 的覆盖 |
+|---|---|---|---|
+| **① MATLAB 语言** | `.m` 脚本/函数/矩阵语义 | **✓ 有**（Octave = MATLAB 语法） | ✗（Modelica 是**另一门**语言） |
+| **② Simulink（因果块图）** | 框图建模 + 求解 | **能**（引擎已实测 6/0，§0.5） | ✓（MSL `Blocks` 库） |
+| **③ Simscape（非因果物理建模）** | **跨域**物理系统（电/流体/热/机械…），**方程级**建模，求解器解 DAE | **✗ 零覆盖** | **✓ 全库**（MSL） |
+
+**上一轮我只回答了轴 ②**（"块图后端我们引擎有"）——**对，但那只覆盖了 Simulink 那一半**。
+用户说的"更广泛的差距" = **轴 ③**，而那一块**我们的 Octave 引擎天然给不了**：
+Octave 是**数值/命令式**语言，没有"非因果方程建模 + 符号处理 + DAE 指标约简"这套机器。
+
+### 8.2 OpenModelica 的 wasm 故事**比我以为的成熟得多**（实测查证）
+
+我上一轮把 scilab 一笔带过时**没查 OpenModelica**。查了之后，这条线**不是"又一个 C++ 巨兽"**：
+
+| 事实 | 证据（复跑见 §8.5） |
+|---|---|
+| **wasm 构建路径在官方主仓里**（不是第三方 fork） | `OMCompiler/Compiler/OpenModelica.rs/wasm/`（含 `fmi-simulator/`、`simulator/`、`index.html`、`omc-worker.js`） |
+| **有 Rust 重写**，带 `--simCodeTarget=wasm-jit` | `OpenModelica.rs/README.md`：wasm-jit 跳过代码生成、直接造 wasm 加载进内存跑 |
+| **已发货一个浏览器 FMI 仿真器** | `wasm/fmi-simulator/README.md`：浏览器里开 `.fmu`、跑、画图；**"Nothing is uploaded anywhere and no server is involved"** |
+| 它跟的是**官方 wasm 标准** | [FMI-LS-WASM](https://github.com/modelica/fmi-ls-wasm)（Modelica 协会在推，2026-10-07 仍在动） |
+| **许可与本仓兼容** | **AGPLv3 / OSMC-PL 双选**（`OSMC-License.txt`）——本仓是 AGPL-3.0 |
+| **OMEdit（IDE）也有 wasm 目标** | `OMEdit/OMEditGUI/wasm/`（含 QML、cloud storage、worker VFS） |
+
+### 8.3 但要如实说清**它的代价与限制**（不能只说好话）
+
+| 项 | 实情 |
+|---|---|
+| **没有预编译 wasm 产物** | releases 只有 `-src-with-submodules.zip` ⇒ **要自己 build**（Rust + CMake + Susan 模板链） |
+| **wasm-jit 求解器覆盖窄** | 官方 README 原文：*"only 1 dense linear solver, a Newton non-linear solver, Euler, and dassl"* ⇒ 对比我们引擎的 ode45/ode15s/ode23s/ode15i，**它的数值面反而更窄** |
+| **Rust 重写仍在进行** | `TODO.md` 记着 wasm-jit 的**事件循环正确性缺口**（无 guard 的 bouncing ball 会穿地）；`ColPack` 那类 external C 还没 port |
+| **语言不兼容 MATLAB** | Modelica ≠ MATLAB；用户点令是"**完全靠近 MATLAB**"⇒ 引 OM **不能替代**本仓，只能**并列** |
+| **规模** | 主仓 402 MB；`OMCompiler/Compiler/OpenModelica.rs` 是重写体 |
+
+### 8.4 结论（给用户的判断，不是我的偏好）
+
+**两条轴各有一个"对的工具"，不冲突**：
+
+```
+轴 ① MATLAB 语言        → 本仓（Octave wasm）              ← 用户点令"完全靠近 MATLAB"
+轴 ② Simulink 因果块图   → 本仓引擎 + 新仓 JS 前端（§0.5）  ← 已实测 6/0，可做
+轴 ③ Simscape 非因果物理 → **OpenModelica**（wasm 路线）    ← 我们天然给不了，OM 是唯一现实解
+```
+
+⇒ 用户/Claude 的判断成立：**要"覆盖更广泛的差距"，OM 是更好的选择**——
+**但"更广泛"指轴 ③，不是轴 ①②**。而 OM 的 wasm 要**自己 build**、且**数值面比我们窄**
+（它的价值在**建模范式**，不在求解器）。
+⇒ **建议**：把 OM 当**第三个独立项目**（与"块图前端"并列），**别混进本仓**；
+先做一个"能不能 build 出 OM wasm"的**可行性实验**（结案件 = 页面里跑通 MSL 的一个电气模型）。
+
+### 8.5 复跑命令（本节每个事实的出处）
+
+```bash
+# wasm 路径在主仓
+gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/OpenModelica.rs/wasm" --jq '.[].name'
+# Rust 重写 + wasm-jit
+gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/OpenModelica.rs/README.md" \
+  --jq .content | base64 -d | head -40
+# 浏览器 FMI 仿真器（已发货）
+gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/OpenModelica.rs/wasm/fmi-simulator/README.md" \
+  --jq .content | base64 -d | head -40
+# 许可（AGPLv3 / OSMC-PL 双选）
+gh api "repos/OpenModelica/OpenModelica/contents/OSMC-License.txt" --jq .content | base64 -d | head -12
+# 有没有预编译 wasm（答案：没有，只有源码 zip）
+gh api "repos/OpenModelica/OpenModelica/releases?per_page=5" --jq '.[] | "\(.tag_name): \([.assets[].name]|join(","))"'
+# FMI-LS-WASM 标准
+gh api repos/modelica/fmi-ls-wasm --jq '{stars:.stargazers_count, pushed:.pushed_at}'
+# MSL 的物理域（轴 ③ 的实体）
+gh api "repos/modelica/ModelicaStandardLibrary/contents/Modelica" --jq '.[]|select(.type=="dir")|.name'
+```
