@@ -282,7 +282,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-client-compile.md` (4243 bytes)
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
 - `build/113/NOTES-emsdk-upgrade.md` (42545 bytes)
-- `build/113/NOTES-experiment-omc-wasm.md` (7801 bytes)
+- `build/113/NOTES-experiment-omc-wasm.md` (12472 bytes)
 - `build/113/NOTES-forge-ondemand.md` (25608 bytes)
 - `build/113/NOTES-hotpath.md` (8092 bytes)
 - `build/113/NOTES-jspi.md` (28469 bytes)
