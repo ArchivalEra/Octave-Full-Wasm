@@ -18,6 +18,11 @@ addpath ('$REPO/build/webfile');
 addpath ('$REPO/build/pkgfix');
 addpath ('$REPO/build/plotbridge');   # 候选 4 起：字段表/调色板的 %!test 也在这里跑
 addpath ('$REPO/build/webaudio');     # 候选 5 起：播放状态机的 %!test
+# webshims（2026-10-13，工单 66）：__makeinfo__ 覆写与它的纯函数内核在这里。
+# ⚠️ 它会遮蔽核心名字（system/popen/pkg/pause…）——本驱动里这是已知且可接受的：
+#    那些 shim 在宿主上都 builtin(...) 透传（见各文件头），而目标集里的 %!test 不调它们。
+#     加它的理由：__makeinfo__ 是本构建特有的适配，宿主侧也得跑它自己的 %!test。
+addpath ('$REPO/build/webshims');
 source ('$REPO/build/glue-selftest.m');
 " 2>&1 | grep -v "shadows a core library function\|^warning: called from\|^ *[a-z_]* at line\|^$" > "$OUT" || true
 
