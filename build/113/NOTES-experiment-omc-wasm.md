@@ -399,3 +399,64 @@ gh api "repos/OpenModelica/OMMatlab/contents/README.md" --jq .content | base64 -
 gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/OpenModelica.rs/wasm/omc-cli.js" \
   --jq .content | base64 -d | grep -oE 'omc_[a-z_]+' | sort -u
 ```
+
+---
+
+## §11 ★ 更正：**官方 wasm 路线存在，且是 CMake 原生**（2026-10-13，用户点令）
+
+> 用户原话："那人家那个肯定不是官方路线啊，我希望按我们这个来时路走，肯定更方便。"
+> **用户是对的，我 §1–§7 拿第三方 `omc-web` 当路线是错的框法。**
+> 实测：**OpenModelica 官方主仓有第一方的 wasm 构建目标**，就在它的 CMake 里。
+
+### 11.1 官方 wasm 路线的证据（`OMCompiler/Compiler/.cmake/rust_omc.cmake`，2313 行）
+
+| 事实 | 原文/位置 |
+|---|---|
+| **官方有 wasm 构建目标** | `RUST_OMC_WASM_RUNTIME`（13 处引用）、`omc.wasm`、`RUST_OMC_WASM_ARTIFACTS_OUT` / `RUST_OMC_PREBUILT_WASM_DIR`（构建产物交接） |
+| **WASI 交叉编译是一等公民** | `wasm32-wasip1` 出现 **27 处**；写 `CMAKE_C_COMPILER_TARGET wasm32-wasip1` 工具链文件 |
+| **求解器也交叉编到 wasm** | `option(RUST_OMC_ENABLE_SUNDIALS "Build the 3rd-party solver archives (SUNDIALS/KLU/UMFPACK/Lis) **for wasm32-wasip1**")` |
+| **wasm-jit 运行时** | `wasm32-unknown-unknown` + `openmodelica_codegen_wasm_jit_runtime.wasm`（用 `--target wasm32-unknown-unknown` 编） |
+| **有 CI 交接设计** | 注释：一个阶段用 `RUST_OMC_WASM_ARTIFACTS_OUT` 收集、后续阶段用 `RUST_OMC_PREBUILT_WASM_DIR` 直接吃（"produces needs a wasm toolchain (clang + wasi-libc + wasm-ld)"） |
+| **产物布局是定死的** | `<dir>/sundials-wasm/`（SUNDIALS/KLU/UMFPACK/Lis 归档+头）、`wasi_snapshot_preview1.reactor.wasm`、`blobs/`（含 wasm-jit 的 `runtime.wasm`） |
+| **官方 wasm 页面在树里** | `wasm/{index.html, omc-cli.js, omc-terminal/, simulator/, fmi-simulator/, omplot/, anim/}` |
+
+⇒ **这是第一方路线，不是第三方移植。** `omc-web` 只是**其中一条已跑通的实例**（它用
+emsdk 3.1.74/3.1.24 + emception），**不等于**官方怎么 build。
+
+### 11.2 对我们"来时路"的意义（用户点令的核心）
+
+用户说"按我们这个来时路走"——本仓的来时路是：
+**上游 submodule + pin/lock + 自己用 Emscripten 交叉编 + 同源托管 + 事实系统**。
+
+**官方 wasm 路线与这条"来时路"同形**：
+- 官方就是**用 clang + wasi-libc + wasm-ld 交叉编**（CMake 工具链文件）——和本仓
+  `emcc` 编 Octave 是**同一类**动作；
+- 官方有**产物交接 + 定死布局**——与本仓的 `octave.build.json` / keep-list 同族；
+- 官方 CMake 有**显式旋钮**（`RUST_OMC_*` 一族）——与本仓 `relink.sh` 模式表同族。
+
+⇒ **可以照本仓的纪律，用官方的 CMake 目标，build 出我们自己的 `omc.wasm`**，
+而不是抄第三方的 emception 配方。
+
+### 11.3 但仍要如实说清（不确定的地方）
+
+- **官方 wasm 目标没在 release 里发预编译产物**（§8.3 已记：releases 只有 `-src-with-submodules.zip`）
+  ⇒ 仍要**自己 build**；
+- **官方路线要 Rust + WASI toolchain**（`wasm32-wasip1` 等）——本机当前**没有** wasi target
+  （§3 已记），要装；
+- **两条路线（官方 CMake vs 第三方 emception）产出不同**：官方是 `omc.wasm`（WASI/原生 wasm），
+  第三方是"浏览器内再跑一次 clang"（emception）——**能力面不同**，本记录 §5 的"求解器窄"
+  那条是针对第三方的，**官方路线未实测**。
+
+### 11.4 更正 §1–§7 的框法
+
+- §1–§7 是**用第三方演示站快速验证"可行性"**——那个结论（Modelica 能在浏览器跑）**仍然成立**；
+- 但"路线选择"应以**官方 CMake 目标**为准（§11），第三方配方只作参考。
+- **§5 的限制清单**（求解器窄/内存/编译慢）要标注"**第三方路线**的实测"，官方路线**待测**。
+
+### 11.5 复跑命令
+
+```bash
+gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/.cmake/rust_omc.cmake" \
+  --jq .content | base64 -d | grep -nE 'RUST_OMC_WASM|wasm32-wasip1|omc\.wasm|wasm-jit' | head -30
+gh api "repos/OpenModelica/OpenModelica/contents/OMCompiler/Compiler/OpenModelica.rs/wasm" --jq '.[].name'
+```
