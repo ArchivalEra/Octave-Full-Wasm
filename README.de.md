@@ -32,6 +32,8 @@ A+B-Design für client-seitige `.oct`-Kompilierung: `build/113/NOTES-client-comp
 
 Das Fakten-Ledger erfasst jetzt den 6.0.12-Stand der drei Linien (`lane6012_*`) sowie die Client-Compile-/Upstream-Arbeit dieser Sitzung.
 
+`pkg load <Name>` klärt jetzt zuerst die **Herkunft** eines Pakets: mitgelieferte Assets über `OctaveAssets.load`, Regal-Pakete (Forge-Katalog) über `OctaveAssets.install` (same-origin Tarball + sha256 + Gunzip/Untar in der Engine). Siehe `build/113/NOTES-forge-ondemand.md` §10 (T4) und die Abnahmesuite `test/browser/accept-catalog-load.mjs`.
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
