@@ -567,7 +567,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/plugins.json` (3944 bytes)
 - `build/post.js` (1885 bytes)
 - `build/prerender-m-docstrings.py` (16068 bytes)
-- `build/promote-pages.sh` (15544 bytes)
+- `build/promote-pages.sh` (16660 bytes)
 - `build/promote-w64-lane.sh` (21423 bytes)
 - `build/promote-webgl.sh` (21939 bytes)
 - `build/provision-upstream.sh` (2435 bytes)

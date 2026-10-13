@@ -201,45 +201,6 @@ if [ "$MODE" = "dry" ]; then
   exit 0
 fi
 
-# ── m 资产（`M_ASSETS` 非空时）：重打包 + 刷 sha + 重生成车道清单 ──────────────
-if [ -n "$M_ASSETS" ]; then
-  echo ""
-  echo "── ③b m 资产批：重打包 + 刷 sha + 车道清单（$M_ASSETS）"
-  for name in $M_ASSETS; do
-    [ -d "$REPO/build/$name" ] || { echo "FATAL: 缺源目录 $REPO/build/$name" >&2; exit 2; }
-    mount=$(m_asset_mount "$name")
-    # ★ 先备份**旧 bundle**（页面文件那份备份不含它们 ⇒ 出问题要能手回滚）
-    [ -f "$SITE/assets/m/$name.js" ] && cp -p "$SITE/assets/m/$name.js" "$bak/assets-m-$name.js"
-    python3 "$REPO/build/assets.py" bundle-m "$name" "$REPO/build/$name" "$mount" "$SITE/assets/m/$name.js" \
-      || { echo "FATAL: bundle-m $name 失败" >&2; exit 1; }
-    cp -p "$SITE/assets/m/$name.js" "$SITE_EXP/assets/m/$name.js"
-    cp -p "$SITE/assets/m/$name.js" "$REPO_MIRROR/assets/m/$name.js"
-    # 三份清单的 sha 就地刷新（否则加载器 fail-closed 拒载 —— 实测过两次）
-    python3 "$REPO/build/assets.py" sync-js "$SITE" $M_ASSETS \
-      || { echo "FATAL: sync-js 失败" >&2; exit 1; }
-  done
-  for d in "$SITE_EXP" "$REPO_MIRROR"; do
-    [ -f "$SITE/assets/manifest.json" ] && cp -p "$SITE/assets/manifest.json" "$d/assets/manifest.json"
-  done
-  # 车道清单从基础清单复制非 oct 条目 ⇒ 基础那份的 m-asset sha 一变，车道那份就陈旧。
-  for lane in threads w64; do
-    for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
-      [ -f "$d/assets/manifest.$lane.json" ] || continue
-      python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --lane "$lane" >/dev/null \
-        || { echo "FATAL: 重生成 $d 的 manifest.$lane.json 失败" >&2; exit 1; }
-    done
-  done
-  # ★ 反向断言：车道清单**必须**跟着更新 —— 若它仍与磁盘字节不符，就是漏了上面那一步。
-  for lane in threads w64; do
-    for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
-      [ -f "$d/assets/manifest.$lane.json" ] || continue
-      python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --check --lane "$lane" >/dev/null 2>&1 \
-        || { echo "FATAL: $d 的 manifest.$lane.json --check 不过（m 资产 sha 没跟上？）" >&2; exit 1; }
-    done
-  done
-  echo "   已同步 $(echo $M_ASSETS | wc -w) 个 m 资产 + 三份清单 + 车道清单（两站 + 镜像）"
-fi
-
 # ── 真同步 ───────────────────────────────────────────────────────────────────
 ts=$(date +%Y%m%d-%H%M%S); bak="/mnt/hdd/octave-wasm-build/page-bak-$ts"
 mkdir -p "$bak"
@@ -250,6 +211,64 @@ for f in $(page_files); do
   cp -p "$REPO/bridge/$f" "$SITE/$f" && cp -p "$REPO/bridge/$f" "$REPO_MIRROR/$f"
 done
 echo "   已同步 $(page_files | wc -l) 个文件到 8761 与仓库镜像"
+
+# ── m 资产（`M_ASSETS` 非空时）：重打包 + 刷 sha + 重生成车道清单 ──────────────
+# ⚠️ 放在**页面文件之后**：`$bak` 在上面才建好（第一版把这步写在前面 ⇒ `cp` 到不存在的
+#    目录、静默失败）。备份也复用同一个 `bak`。
+if [ -n "$M_ASSETS" ]; then
+  echo ""
+  echo "── ③b m 资产批：重打包 + 刷 sha + 车道清单（$M_ASSETS）"
+  for name in $M_ASSETS; do
+    [ -d "$REPO/build/$name" ] || { echo "FATAL: 缺源目录 $REPO/build/$name" >&2; exit 2; }
+    mount=$(m_asset_mount "$name")
+    [ -f "$SITE/assets/m/$name.js" ] && cp -p "$SITE/assets/m/$name.js" "$bak/assets-m-$name.js"
+    python3 "$REPO/build/assets.py" bundle-m "$name" "$REPO/build/$name" "$mount" "$SITE/assets/m/$name.js" \
+      || { echo "FATAL: bundle-m $name 失败" >&2; exit 1; }
+    cp -p "$SITE/assets/m/$name.js" "$SITE_EXP/assets/m/$name.js"
+    cp -p "$SITE/assets/m/$name.js" "$REPO_MIRROR/assets/m/$name.js"
+  done
+  # ★ sha 刷新**一次**（`sync-js` 会扫整个 assets/m 与 assets/pkg ⇒ 循环里反复跑是浪费，
+  #   且第一版写在循环内 ⇒ 每个名字各跑一遍全部资产）。
+  #   漏这一步的后果：加载器 **fail-closed 拒载**（"资产校验失败"）—— 实测过两次。
+  python3 "$REPO/build/assets.py" sync-js "$SITE" $M_ASSETS \
+    || { echo "FATAL: sync-js 失败" >&2; exit 1; }
+  for d in "$SITE_EXP" "$REPO_MIRROR"; do
+    cp -p "$SITE/assets/manifest.json" "$d/assets/manifest.json"
+  done
+  # 车道清单从基础清单复制非 oct 条目 ⇒ 基础那份的 m-asset sha 一变，车道那份就陈旧。
+  for lane in threads w64; do
+    for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
+      [ -f "$d/assets/manifest.$lane.json" ] || continue
+      python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --lane "$lane" >/dev/null \
+        || { echo "FATAL: 重生成 $d 的 manifest.$lane.json 失败" >&2; exit 1; }
+    done
+  done
+  # ★ 反向断言两条：
+  #   ① 车道清单必须与磁盘字节一致（漏重生成 ⇒ 红）
+  #   ② 三个站点的 m-asset 必须逐字节相同（拷贝漏一处 ⇒ 红）
+  for lane in threads w64; do
+    for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
+      [ -f "$d/assets/manifest.$lane.json" ] || continue
+      python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --check --lane "$lane" >/dev/null 2>&1 \
+        || { echo "FATAL: $d 的 manifest.$lane.json --check 不过（m 资产 sha 没跟上？）" >&2; exit 1; }
+    done
+  done
+  for name in $M_ASSETS; do
+    a=$(sha256sum "$SITE/assets/m/$name.js" | cut -d' ' -f1)
+    for pair in "$SITE_EXP:$name" "$REPO_MIRROR:$name"; do
+      p="${pair%%:*}"; b=$(sha256sum "$p/assets/m/$name.js" 2>/dev/null | cut -d' ' -f1)
+      [ "$a" = "$b" ] || { echo "FATAL: $p/assets/m/$name.js 与 8761 不一致（拷贝漏了？）" >&2; exit 1; }
+    done
+    # 清单里那条 sha 必须等于磁盘字节（否则加载器拒载 —— 这条是上面 sync-js 的反向断言）
+    m=$(python3 -c "
+import json,io
+d=json.load(io.open('$SITE/assets/manifest.json',encoding='utf-8'))
+print(next((x['sha256'] for x in d['assets'] if x['name']=='$name'), ''))")
+    [ "$a" = "$m" ] || { echo "FATAL: $name 清单 sha($m) != 磁盘($a) ⇒ 加载器会拒载" >&2; exit 1; }
+  done
+  echo "   已同步 $(echo $M_ASSETS | wc -w) 个 m 资产 + 三份清单 + 车道清单（两站 + 镜像，逐字节核过）"
+fi
+
 sh "$REPO/build/gen-lanes.sh" "$SITE" || { echo "FATAL: 生成 $SITE/lanes.js 失败" >&2; exit 1; }
 cp -p "$SITE/lanes.js" "$REPO_MIRROR/lanes.js"
 echo ""
