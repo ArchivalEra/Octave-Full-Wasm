@@ -25,6 +25,8 @@ Site asset bundles are audited per batch: regenerate `site/assets/m/*.js` from t
 Installing the Forge `datatypes` package from the shelf makes the **modern MATLAB types** work: `table([1;2;3],{'a';'b';'c'})` returns `class=table` (height 3, width 2), `string(42)` gives `"42"`. Unimplemented MATLAB names now report Octave's real message ("belongs to the 'datatypes' package … not installed") instead of a `makeinfo` subprocess error. See `build/113/REQUIREMENTS-store-and-matlab.md`. (`help sin`/`help ode45`/`lookfor` are unaffected; the three help suites now assert `__makeinfo__` resolves to the sanctioned webshims downgrade.)
 
 This engine already has everything a Simulink-style **block-diagram** backend needs — state-space/transfer-function blocks, `ode45`, **stiff `ode15s`**, LQR, `zpkdata` (probe `test/browser/probe-blockdiag-backend.mjs`, 6/0). So a block-diagram frontend can be built **on this engine** (a separate JS repo) rather than pulling in a second runtime like Pyodide. See `build/113/NOTES-plugin-survey.md`.
+
+That survey also covers what this engine **cannot** reach: MATLAB has three axes (language / Simulink / Simscape), and we cover the first two — **non-causal physical modelling (Simscape) is zero-covered here**, and **OpenModelica** is the realistic answer for it (its wasm path lives in the official repo, has a Rust rewrite, and ships a browser FMI simulator; AGPLv3/OSMC-PL). See the survey's §8.
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -242,8 +244,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (382994 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (15127 bytes)
-- `README.zh.md` (13572 bytes)
+- `README.de.md` (15558 bytes)
+- `README.zh.md` (13958 bytes)
 - `STATE.md` (42429 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)

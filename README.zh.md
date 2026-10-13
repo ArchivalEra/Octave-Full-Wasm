@@ -35,6 +35,8 @@ binary64 —— 并经下文显式审计。
 
 本引擎**已经**具备 Simulink 式**块图**后端所需的全部数值能力 —— 状态空间/传函块、`ode45`、**刚性 `ode15s`**、LQR、`zpkdata`（探针 `test/browser/probe-blockdiag-backend.mjs`，6/0）。⇒ 块图前端可以建在**本引擎**上（另开一个 JS 仓库），**不必**引 Pyodide 那样的第二个运行时。见 `build/113/NOTES-plugin-survey.md`。
 
+该探查也写了本引擎**够不到**的那块：MATLAB 有三根轴（语言 / Simulink / Simscape），我们覆盖前两根 —— **非因果物理建模（Simscape）在本仓零覆盖**，而 **OpenModelica** 是那块最现实的答案（它的 wasm 路径**在官方主仓里**、有 Rust 重写、**已发货浏览器 FMI 仿真器**；AGPLv3/OSMC-PL）。见该文 §8。
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
