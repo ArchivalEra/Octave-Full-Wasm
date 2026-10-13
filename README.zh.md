@@ -29,7 +29,7 @@ binary64 —— 并经下文显式审计。
 
 台账现已记录三线 6.0.12 状态（`lane6012_*`）与本轮客户端自编/上游闭环的工作。
 
-`pkg load <名>` 现在会**先判来源**再点火：随站资产走 `OctaveAssets.load`，货架（Forge catalog）包走 `OctaveAssets.install`（同源 tarball + sha256 + 引擎内建 gunzip/untar）。**已发运 8761 并浏览器实测**（真下载 tarball + `csaps` 与宿主 Octave 逐位一致）。见 `build/113/NOTES-forge-ondemand.md` §10（T4）与验收套件 `test/browser/accept-catalog-load.mjs`。
+`pkg load <名>` 现在会**先判来源**再点火：随站资产走 `OctaveAssets.load`，货架（Forge catalog）包走 `OctaveAssets.install`（同源 tarball + sha256 + 引擎内建 gunzip/untar）。**已发运 8761 并浏览器实测**（真下载 tarball + `csaps` 与宿主 Octave 逐位一致）。见 `build/113/NOTES-forge-ondemand.md` §10（T4）与验收套件 `test/browser/accept-catalog-load.mjs`（27/0，含 4 条反向断言）。
 
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
