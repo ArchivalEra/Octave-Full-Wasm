@@ -4640,3 +4640,23 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   （8768 的 `webaudiorec` 是旧 bundle；8761/镜像的 `manifest.json` 里它那条 sha 是
   **68 位**——64 位真值 + 陈旧尾部）。⇒ 新增 `M_ASSETS` 旋钮（空 = 老行为）：
   重打包 + `sync-js` + **重生成车道清单**，并带一条反向断言（陈旧车道清单 ⇒ 必须红）。
+
+## 5.x 商店杀手用例 + 工单 66（未实现函数报错）修复（2026-10-13）
+
+- **★ 杀手用例**：从货架装 Forge `datatypes` ⇒ 现代 MATLAB 类型可用（`table`/`string`/`duration`）。
+  实测：`table([1;2;3],{'a';'b';'c'})` = class=table height 3 width 2；`string(42)`→"42"；
+  落盘 79 文件；走货架（1 个 tarball 请求）。**边界**：`datetime()` 要 `.oct` ⇒ v2。
+- **工单 66 修复**：未实现的 MATLAB 名字报 `makeinfo` 子进程错（误导），根因是
+  `__unimplemented__.m:549` 调 `__makeinfo__` 渲染而后者 shell out 到 makeinfo（本构建无 shell）。
+  修法 = `build/webshims/__makeinfo__.m` 覆写（无 makeinfo 时剥标记）+ 纯函数
+  `__webshim_strip_texinfo__.m`。修后报 Octave 原话"belongs to the 'datatypes' package …"。
+  已发运 8761，结算件 6/0，四个 pkg 套件复验全绿。
+  **三个 Octave regexp 坑（PCRE 差异）**（写进代码注释）：`\s*` 会吃换行；
+  `(?m)` 让 `.*` 跨行贪婪匹配到串尾；`\b` 在 `n` 与空格之间**不匹配** ⇒ 改用 `[^\n]*` 且不加锚。
+- **纠正错前提**：`NOTES-forge-ondemand.md` §1 的"12MB 强制下载"被实测推翻
+  （开机包传输 0.00 MB；gzip bundle 比 tarball 小）⇒ 货架价值改为"广度 + 交付件体积"。
+  **教训形状**：一句话里的两个数字都没量过就写进设计稿，还据此给用户下过结论。
+- **两份文档**：`REQUIREMENTS-store-and-matlab.md`（商店契约 + MATLAB 贴近度 C1–C4）、
+  `NOTES-plugin-survey.md`（pathsim 首选 / pyblocksim 次选 / scilab 不做；纠正 pyblocksim 的 owner）。
+- **货架 +2 包**：`cgi`（证"从未预打包也能装"）、`datatypes`（杀手用例）。
+- **宿主测试** glue-selftest 124/124（+11）。

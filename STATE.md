@@ -3,6 +3,34 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-13）
+
+- **★ 商店杀手用例实测 + 工单 66 已修（2026-10-13）**：从货架装 Forge 的 **`datatypes`** 包
+  ⇒ **现代 MATLAB 类型当场可用** —— `table([1;2;3],{'a';'b';'c'})` 得 `class=table`
+  （height 3 / width 2）、`string(42)` 得 `"42"`、`duration` 类存在、落盘 79 文件。
+  **边界如实记**：`datetime()` 要编译件（`__datetime__.oct`）⇒ v2，v1 装不了。
+  同批修好**工单 66**：未实现的 MATLAB 名字（`table`/`string`/`contains`…）以前报
+  `system: unable to start subprocess for 'makeinfo …'`（误导），现在报 Octave 的**原话**
+  *"belongs to the 'datatypes' package … seems not to be installed"*（**直接点名装哪个包**）。
+  根因：`upstream/.../__unimplemented__.m:549` 生成提示后调 `__makeinfo__` 渲染，而它是
+  `system("makeinfo …")`、本构建无 shell ⇒ 渲染抛错盖掉了那句有用的话。修法 =
+  `build/webshims/__makeinfo__.m`（无 makeinfo 时**剥 texinfo 标记**给可读文本）+
+  `__webshim_strip_texinfo__.m`（纯函数）。**已发运 8761**（`M_ASSETS=webshims`），
+  结算件 `test/browser/probe-unimplemented-msg.mjs` **6/0**；四个 pkg 套件复验全绿
+  （pkgview 17/0、pkg 16/0、forge-ondemand 15/0、catalog-load 27/0）。
+- **两份文档（2026-10-13）**：`build/113/REQUIREMENTS-store-and-matlab.md`（商店接口契约
+  + 贴近 MATLAB 的 C1–C4 + UI 师傅交接清单）、`build/113/NOTES-plugin-survey.md`
+  （scilab/pathsim/pyblocksim 探查：**pathsim 首选**，MIT + 依赖仅 numpy/scipy/matplotlib
+  且 Pyodide 全有；pyblocksim 次选，GPL + 多 2 个非标准依赖；**scilab 不做**，464 MB C++ 且
+  语言不兼容 MATLAB）。
+- **纠正一个错前提（2026-10-13）**：`NOTES-forge-ondemand.md` §1 原写"12 MB 对每个用户
+  强制下载"——**实测推翻**：开机 `assets/pkg/*.js` 传输 = **0.00 MB**（包懒加载），
+  且 gzip 后 bundle（statistics 0.92 MB）比货架 tarball（1.44 MB）**更小**。
+  ⇒ 货架价值 = **广度**（能装的包 12 → 142，上游兼容数）+ 交付件体积，**不是**每用户带宽。
+  原文已更正（保留旧文作对照）。
+- **货架扩到 12 包**（submodule `shelf`，已推 origin）：新增 `cgi`（纯 `.m`，证明
+  "**从未预打包的包也能装**"）与 `datatypes`（杀手用例）。
+
 ## 现在是什么（2026-10-12）
 
 - **T4 落地：`pkg load <货架上的包>` 现在真能从货架装（2026-10-12，A+B 的第一块）**。

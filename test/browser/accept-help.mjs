@@ -40,10 +40,16 @@ async function ev(name, code, check, wait = 1200) {
   console.log(`${ok ? 'PASS' : 'fail'} | ${name.padEnd(30)} :: ${out.slice(0,140) || String(r.err).slice(0,120)}`);
 }
 
-console.log('--- 官方性：必须没有 __makeinfo__ 覆写 ---');
-await ev('which __makeinfo__ 是核心文件',
+console.log('--- 官方性：__makeinfo__ 只许被 **webshims 的降级覆写** 遮蔽（工单 66）---');
+// ★ 2026-10-13 翻面（AGENTS「行为变了就翻面」）：原断言是"which 必须指向核心
+//   m/help/__makeinfo__.m"——它的**意图**是"不许有自研渲染器偷偷替换 help 管线"。
+//   工单 66 引入了一个**有意的**覆写（本构建无 makeinfo ⇒ 剥标记给可读文本），
+//   于是"必须指向核心"按字面不再成立。⇒ 翻成更强的两条（意图不变、且更严）：
+//     ① which 指向的**只能是** webshims 那份（不是别处的野覆写）；
+//     ② help 真的**没被弄坏**（下面的 `help sin` 断言查它无 makeinfo/原始标记）。
+await ev('which __makeinfo__ 是 webshims 的降级覆写（工单 66）',
   "disp(which('__makeinfo__'))",
-  o => o.includes('/usr/src/octave/m/help/__makeinfo__.m'));
+  o => o.includes('/usr/src/octave/m/webshims/__makeinfo__.m'));
 await ev('无 docbridge 残留',
   "disp(exist('__tf_texinfo_to_plain__'))",
   o => /\b0\b/.test(o));

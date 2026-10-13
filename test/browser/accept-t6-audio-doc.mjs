@@ -145,7 +145,8 @@ console.log(`${domHasSin ? 'PASS' : 'fail'} | DOM #output 含文档正文（${do
 console.log('--- 回归护栏（不许因为覆写 doc 而破坏 help）---');
 await ev('help sin 仍可用', 'h=help("sin"); disp(!isempty(strfind(h,"sine")))', '1');
 await ev('没有自研渲染器残留', 'disp(exist("__tf_texinfo_to_plain__"))', '0');
-await ev('__makeinfo__ 仍是官方文件', 'disp(!isempty(strfind(which("__makeinfo__"), "m/help/__makeinfo__.m")))', '1');
+await ev('__makeinfo__ 是 webshims 的降级覆写（工单 66；原断言"仍是官方文件"已按 AGENTS「行为变了就翻面」改）',
+  'disp(!isempty(strfind(which("__makeinfo__"), "m/webshims/__makeinfo__.m")))', '1');
 await ev('lookfor 仍可用', 'disp(!isempty(lookfor("sine")))', '1');
 await ev('audioplayer 不回归', 'p=audioplayer(sin(2*pi*440*(0:999)/8000),8000); disp(p.SampleRate)', '8000');
 

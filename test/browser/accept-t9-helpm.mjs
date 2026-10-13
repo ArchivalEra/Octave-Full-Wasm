@@ -129,7 +129,8 @@ console.log('--- ④ 内建不回归（T1 那条路要还在）---');
 await ev('help sin（内建，走 built-in-docstrings）', 'h=help("sin"); disp(!isempty(strfind(h,"sine")))', '1');
 await ev('help sqrt（内建）', 'h=help("sqrt"); disp(!isempty(strfind(h,"square root")))', '1');
 await ev('没有自研渲染器残留', 'disp(exist("__tf_texinfo_to_plain__"))', '0');
-await ev('__makeinfo__ 仍是官方文件', 'disp(!isempty(strfind(which("__makeinfo__"), "m/help/__makeinfo__.m")))', '1');
+await ev('__makeinfo__ 是 webshims 的降级覆写（工单 66；原断言"仍是官方文件"已按 AGENTS「行为变了就翻面」改）',
+  'disp(!isempty(strfind(which("__makeinfo__"), "m/webshims/__makeinfo__.m")))', '1');
 await ev('lookfor 仍可用', 'disp(!isempty(lookfor("sine")))', '1');
 await ev('disp(@sin) 不报错', 'disp(@sin); disp("ok")', 'ok');
 await ev('help plot（plot 桥覆写）仍可读', 'h=help("plot"); disp(!isempty(h))', '1');
