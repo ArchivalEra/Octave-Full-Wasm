@@ -29,6 +29,8 @@ This engine already has everything a Simulink-style **block-diagram** backend ne
 That survey also covers what this engine **cannot** reach: MATLAB has three axes (language / Simulink / Simscape), and we cover the first two — **non-causal physical modelling (Simscape) is zero-covered here**, and **OpenModelica** is the realistic answer for it (its wasm path lives in the official repo, has a Rust rewrite, and ships a browser FMI simulator; AGPLv3/OSMC-PL). See the survey's §8.
 
 A follow-up **experiment confirmed Modelica runs in the browser**: a third-party OpenModelica→wasm port runs a full `parse → C → in-browser emcc+wasm-ld → simulate → plot` cycle on `BouncingBall.mo` (evidence: `build/113/evidence-omc-web-demo.png`; record: `build/113/NOTES-experiment-omc-wasm.md`). So "Modelica on the web" is proven, not speculative — though its solver coverage is narrow (Euler/RK/dassl).
+
+And it can share the **same page** — measured, not assumed: this engine solves **index-1 DAE** (`ode15i`, `Mass` matrix; an RC circuit gives V(5)=0.9931 vs theory 0.9933) but **not index-3** (a constrained pendulum fails), and index reduction is exactly what the OpenModelica compiler does. Both engines read/write `.mat`, which is what omc-web already dumps. So the pairing is the same split as Simscape↔MATLAB: OM models, Octave analyses, `.mat` in between (see §8 of the experiment record).
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -246,8 +248,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (382994 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (16009 bytes)
-- `README.zh.md` (14390 bytes)
+- `README.de.md` (16544 bytes)
+- `README.zh.md` (14876 bytes)
 - `STATE.md` (42429 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
