@@ -44,6 +44,8 @@ Ein Folge**experiment bestätigte, dass Modelica im Browser läuft**: ein Dritta
 
 Und es kann sich **dieselbe Seite** teilen — gemessen, nicht angenommen: diese Engine löst **index-1 DAE** (`ode15i`, `Mass`-Matrix; eine RC-Schaltung ergibt V(5)=0.9931 gegen Theorie 0.9933), aber **nicht index-3** (ein Zwangspendel schlägt fehl) — und Indexreduktion ist genau das, was der OpenModelica-Compiler tut. Beide Engines lesen/schreiben `.mat`, was omc-web ohnehin ausgibt. Die Paarung entspricht also der Simscape↔MATLAB-Aufteilung: OM modelliert, Octave analysiert, `.mat` dazwischen (siehe §8 des Protokolls).
 
+Das klärt auch den Repo-Plan: ein separates „Blockdiagramm-Repo" ist **nicht** nötig — MSL `Blocks` liefert bereits die kausale Blockbibliothek, und OMEdit bringt bereits einen Qt-for-WebAssembly-Grafikeditor mit; OpenModelica ist also ein **gleichrangiger Upstream** (Lizenz AGPLv3/OSMC-PL passt), d. h. ein 20. Submodul neben Octave, das eine zweite Engine-Lane auf derselben Seite versorgt. Siehe §9.
+
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
 Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).

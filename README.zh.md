@@ -41,6 +41,8 @@ binary64 —— 并经下文显式审计。
 
 而且它能与本站**同页**（实测，非假设）：本引擎能解 **index-1 DAE**（`ode15i`、`Mass` 矩阵；RC 电路得 V(5)=0.9931，理论 0.9933），但**解不了 index-3**（约束摆失败）—— 而**指标约简正是 OpenModelica 编译器干的活**。两个引擎都能读写 `.mat`（omc-web 的仿真就是 dump MAT4）。⇒ 这个组合复刻的正是 Simscape↔MATLAB 的分工：OM 建模、Octave 分析，中间用 `.mat`（见实验记录 §8）。
 
+这也定了仓库规划：**不需要**单独开"块图仓库"—— MSL 的 `Blocks` 已提供因果块图库、OMEdit 已有 Qt-for-WebAssembly 图形编辑器 ⇒ OpenModelica 是**平级上游**（AGPLv3/OSMC-PL 许可相符），即与 Octave 并列的**第 20 条 submodule**，为同一页面供货第二个引擎档。见 §9。
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。
