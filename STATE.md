@@ -75,7 +75,7 @@
     （实测 serial/usb/hid 三件全在）⇒ 比 MATLAB 的"装驱动+daemon"**更轻**；
   · **pthread 分档** —— 不是"缺线程"，是**给无 COI 环境留的活路**（比 MATLAB 更宽容）。
   **真正剩下的差距**：**符号计算**（`sym`=0，硬缺口）、**库的厚度**（长度问题，
-  靠 Forge 市场 + 浏览器内 clang 自编 `.oct` 长）、**用户计划内三件**（Simulink 前端 /
+  靠**额外内容**（货架按需装 + 浏览器内 clang 自编 `.oct`；见 CONTEXT.md 的"额外内容"）长）、**用户计划内三件**（Simulink 前端 /
   OM 自产 `omc.wasm` / `.mat` 端到端）。
 
 - **8761 货架补装（2026-10-14）**：装配产物停在 10 包，而 `shelf` submodule 早已 pin 到
@@ -85,7 +85,7 @@
 
 ## 现在是什么（2026-10-13）
 
-- **★ 商店杀手用例实测 + 工单 66 已修（2026-10-13）**：从货架装 Forge 的 **`datatypes`** 包
+- **★ 额外内容的杀手用例实测 + 工单 66 已修（2026-10-13）**：从货架装 Forge 的 **`datatypes`** 包
   ⇒ **现代 MATLAB 类型当场可用** —— `table([1;2;3],{'a';'b';'c'})` 得 `class=table`
   （height 3 / width 2）、`string(42)` 得 `"42"`、`duration` 类存在、落盘 79 文件。
   **边界如实记**：`datetime()` 要编译件（`__datetime__.oct`）⇒ v2，v1 装不了。
@@ -98,7 +98,7 @@
   `__webshim_strip_texinfo__.m`（纯函数）。**已发运 8761**（`M_ASSETS=webshims`），
   结算件 `test/browser/probe-unimplemented-msg.mjs` **6/0**；四个 pkg 套件复验全绿
   （pkgview 17/0、pkg 16/0、forge-ondemand 15/0、catalog-load 27/0）。
-- **两份文档（2026-10-13）**：`build/113/REQUIREMENTS-store-and-matlab.md`（商店接口契约
+- **两份文档（2026-10-13）**：`build/113/REQUIREMENTS-store-and-matlab.md`（额外内容拉取接口契约
   + 贴近 MATLAB 的 C1–C4 + UI 师傅交接清单）、`build/113/NOTES-plugin-survey.md`
   （scilab/pathsim/pyblocksim 探查：**pathsim 首选**，MIT + 依赖仅 numpy/scipy/matplotlib
   且 Pyodide 全有；pyblocksim 次选，GPL + 多 2 个非标准依赖；**scilab 不做**，464 MB C++ 且
