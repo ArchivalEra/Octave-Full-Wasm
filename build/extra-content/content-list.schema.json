@@ -4,8 +4,22 @@
   "title": "content-list/v2 — 额外内容清单（三仓统一接缝的记录形状）",
   "description": "权威形状。产地 = 本文件（宿主仓 build/extra-content/）。设计判决见 build/113/NOTES-extra-content-seam.md §2（记录形状）与 §4（产地）。校验器 validate-content-list.py 从本文件读 enum（单一产地，防漂移）。",
   "type": "object",
-  "required": ["schema", "octave"],
-  "anyOf": [{ "required": ["entries"] }, { "required": ["packs"] }],
+  "required": [
+    "schema",
+    "octave"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "entries"
+      ]
+    },
+    {
+      "required": [
+        "packs"
+      ]
+    }
+  ],
   "properties": {
     "schema": {
       "type": "integer",
@@ -20,37 +34,65 @@
       "type": "array",
       "minItems": 1,
       "description": "规范键。能力层（Pyodide/clang）= 一条 form:\"tree\" 的普通条目，进同一张 deps 图（接缝 §2：不引入新字段）。",
-      "items": { "$ref": "#/$defs/entry" }
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
     },
     "packs": {
       "type": "array",
       "minItems": 1,
       "description": "**兼容别名**（= entries）。现役站点目录 `assets/forge-catalog.json` 与 loader 读的是这个键；两者语义相同，表里**只许出现一个**。",
-      "items": { "$ref": "#/$defs/entry" }
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
     },
     "optional_keys": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "★ 协商规则（接缝 §2）：本表声明**哪些非规范键可被旧消费者忽略**。不在本清单里的未知键 ⇒ 该条目必须被撤下（fail-closed）。『忽略是礼遇，不是默认』。"
     },
     "producer": {
       "type": "object",
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "properties": {
-        "id": { "type": "string", "description": "生产者标识（octave-extra-content / llvm-wasm / …）" },
-        "pin": { "type": "string", "description": "身份自述：货架 = submodule commit；工具链/运行时 = URL+sha256 或 release tag。" }
+        "id": {
+          "type": "string",
+          "description": "生产者标识（octave-extra-content / llvm-wasm / …）"
+        },
+        "pin": {
+          "type": "string",
+          "description": "身份自述。**建议形态（裁决 2026-10-14，回应内容仓 mail/007 缺口③）**：`release:<tag>` / `commit:<sha>` / `submodule:<sha>` —— **前缀自述类型**，让读的人一眼看出 pin 指的是『已发布的 tag』还是『某个 commit』。⚠️ 实测教训：LLVM-wasm 的表写 `pin: \"v0.1.2\"` 而该版本**四处皆无**（本地 tag/远端 tag/gh release/磁盘 bundle）—— 它是『预示』。形状合法（自由字符串）但**无判据可拦**；前缀至少让类型可见，而 `release:` 前缀给未来留一条『可核 release 存在性』的路（本批不实现，登记为悬案）。"
+        }
       },
       "description": "谁产的这张表 + 它的身份怎么钉。"
     },
-    "note": { "type": "string" }
+    "note": {
+      "type": "string"
+    }
   },
   "$defs": {
     "entry": {
       "type": "object",
-      "required": ["name", "version", "sha256", "url"],
+      "required": [
+        "name",
+        "version",
+        "sha256",
+        "url"
+      ],
       "properties": {
-        "name": { "type": "string", "minLength": 1, "description": "唯一键（deps 指它）" },
-        "version": { "type": "string", "minLength": 1 },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "唯一键（deps 指它）"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
@@ -61,35 +103,81 @@
           "minLength": 1,
           "description": "交付路径。站点态**必为同源相对**（COEP 拦跨域）；生产者态可以是上游绝对 URL（『重取入口』），宿主装配时改写为同源。校验器两种都接受，`--site` 模式强制同源。"
         },
-        "upstream_url": { "type": "string", "description": "出处（记账用，不参与运行期）" },
-        "size": { "type": "integer", "minimum": 0, "description": "可选（进度条；不作为第二断言）" },
+        "upstream_url": {
+          "type": "string",
+          "description": "出处（记账用，不参与运行期）"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "可选（进度条；不作为第二断言）"
+        },
         "form": {
           "type": "string",
-          "enum": ["pkg", "tree", "oct", "octdir", "file", "js"],
+          "enum": [
+            "pkg",
+            "tree",
+            "oct",
+            "octdir",
+            "file",
+            "js"
+          ],
           "description": "投送形态（供给期从字节派生，不是作者手写）。能力层 = \"tree\"。"
         },
         "content": {
           "type": "array",
-          "items": { "type": "string", "enum": ["m", "src", "oct"] },
-          "description": "内容构成（= 旧 kinds 的语义）。"
+          "items": {
+            "type": "string",
+            "enum": [
+              "m",
+              "src",
+              "oct"
+            ]
+          },
+          "description": "内容构成（= 旧 kinds 的语义）。**只对 `form:\"pkg\"` 有意义**（包里有什么源：m/src/oct）；**能力层（`form:\"tree\"`）与单文件形态留空数组 `[]`** —— 裁决 2026-10-14（回应内容仓 mail/007 缺口①）：`content` 的语义是『包里有哪类源』，wasm/js 不是它的同类；硬塞进枚举会让这个轴变成『什么都有』的垃圾桶。⇒ **不扩枚举**；能力层条目 `content: []`（本仓 golden/toolchain.json 即此形态，作示范）。"
         },
         "kinds": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "**兼容视图**（= content 的旧名）。旧消费者照读；新代码用 content。"
         },
         "deps": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "依赖边（包 → 包，或 包 → 能力层条目）。闭包由消费者解析；**不加新字段**表达能力层需求（接缝 §2）。"
         },
         "requires": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "平台/版本约束串（如 'octave (>= 4.0.0)'）。"
         },
-        "license": { "type": ["string", "object"], "description": "许可（spdx 串或对象）" },
-        "note": { "type": "string" }
+        "license": {
+          "type": [
+            "string",
+            "object"
+          ],
+          "description": "许可（spdx 串或对象）"
+        },
+        "note": {
+          "type": "string"
+        },
+        "consumer": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "octave",
+              "omc"
+            ]
+          },
+          "description": "消费面：这条内容交给哪个引擎消费（裁决 2026-10-14，回应内容仓 mail/007 缺口②，源自 OpenModelica）。**为什么进数据不进文档**：UI 拿到混合表要知道 `optim` 交 Octave、`Modelica` 交 omc —— 这类判断放数据里才能被机器查；放文档里就回到手抄（本仓 doctrine）。取值：`octave`（pkg install + addpath 那套）/ `omc`（omc_vfs_load_zip → MODELICAPATH → loadModel）。**可选**（旧表没有它 ⇒ 默认归 `octave`，因为现役全是 Octave 侧内容）。"
+        }
       },
       "additionalProperties": true
     }

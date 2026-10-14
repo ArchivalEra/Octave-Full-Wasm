@@ -65,6 +65,22 @@ python3 build/extra-content/check-content-port.py
 python3 build/extra-content/check-content-port.py --selftest
 ```
 
+## 三裁决（2026-10-14，回应内容仓 `mail/007` 的缺口上报）
+
+| 缺口 | 裁决 | 落地 |
+|---|---|---|
+| ① `content` 对能力层无合法取值 | **不扩枚举**；能力层 `content: []`（`content` 只对包有意义） | schema 描述 + 校验器**反向断言**（`form:tree` 带非空 content ⇒ 必红） |
+| ② 消费面无处声明（OM 提出） | **加 `consumer`**（可选，`["octave","omc"]`，缺省 `octave`） | schema + 校验器取值校验 + 正反自证 |
+| ③ `pin` 指向"未发布"无判据 | **建议前缀形态**（`release:`/`commit:`/`submodule:`，不强制） | schema 描述；**核 release 存在性登记为悬案**（待办见下） |
+
+> 缺口③ 的实测背景：LLVM-wasm 的表写 `pin:"v0.1.2"` 而该版本**四处皆无**
+> （本地 tag / 远端 tag / `gh release` / 磁盘 bundle）—— 形状合法但**无判据可拦**。
+
+## 待办（本产地）
+
+- [ ] **核 `pin` 的 `release:` 存在性**（要网络 + 各生产者仓可达性；新活，未做）
+- [ ] 生产者推广进度（内容仓在做）：LLVM-wasm 已出表待修两处；OM 缺席（合法）
+
 ## 与内容仓的关系（2026-10-14 裁决后）
 
 - **产地 = 宿主（本目录）**；内容仓**符合**它并**共发布副本**（`Octave-Extra-Content/port/README.md`

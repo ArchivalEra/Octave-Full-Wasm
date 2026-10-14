@@ -55,6 +55,7 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
     schema = schema if schema is not None else _load_schema()
     form_enum = _enum(schema, "$defs", "entry", "properties", "form", "enum")
     content_enum = _enum(schema, "$defs", "entry", "properties", "content", "items", "enum")
+    consumer_enum = _enum(schema, "$defs", "entry", "properties", "consumer", "items", "enum")
     entry_keys = set(schema["$defs"]["entry"]["properties"].keys())
 
     probs = []
@@ -112,6 +113,15 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
             for c in e["content"]:
                 if c not in content_enum:
                     probs.append("%s content 含未知值 %r（词表 %s）" % (tag, c, content_enum))
+        # 裁决①（2026-10-14）：`content` 只对包有意义 ⇒ 能力层（form:tree）必须留空
+        if e.get("form") == "tree" and e.get("content"):
+            probs.append("%s form=tree（能力层）的 content 必须为空 []（content 只对包有意义，"
+                         "裁决见 schema 的 content 描述）：得到 %r" % (tag, e["content"]))
+        # 裁决②（2026-10-14）：consumer 取值（可选；缺省归 octave）
+        if "consumer" in e:
+            for c in e["consumer"]:
+                if c not in consumer_enum:
+                    probs.append("%s consumer 含未知值 %r（词表 %s）" % (tag, c, consumer_enum))
         # 站点态：url 必须同源相对（COEP 拦跨域）
         if site and isinstance(e.get("url"), str) and re.match(r"^[a-z]+://", e["url"]):
             probs.append("%s 站点态 url 是绝对地址（%s…）⇒ 必须同源相对"
@@ -152,6 +162,24 @@ def selftest():
         {**_good(schema),
          "entries": [{**_good(schema)["entries"][0], "x_future": 1}],
          "optional_keys": ["x_future"]}, schema=schema), True)
+
+    add("裁决①：form=tree 且 content=[] ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "pyodide", "version": "1", "sha256": "b" * 64,
+             "url": "assets/x.tar", "form": "tree", "content": []}]}, schema=schema), True)
+    add("★ 裁决①反向：form=tree 却带 content ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "pyodide", "version": "1", "sha256": "b" * 64,
+             "url": "assets/x.tar", "form": "tree", "content": ["wasm"]}]}, schema=schema), False)
+    add("裁决②：consumer=[\"omc\"] ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "msl", "version": "1", "sha256": "c" * 64,
+             "url": "assets/msl.tar", "form": "tree", "content": [], "consumer": ["omc"]}]},
+        schema=schema), True)
+    add("★ 裁决②反向：consumer 未知值 ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "x", "version": "1", "sha256": "c" * 64,
+             "url": "assets/x.tar", "consumer": ["wat"]}]}, schema=schema), False)
 
     # ② 该报的必须报
     add("★ 空表 ⇒ 必须报", lambda: check_table(

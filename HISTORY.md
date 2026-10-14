@@ -5070,3 +5070,28 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   · 教训形状（值得记）：**"base 恒为空"让一条真 bug 潜伏了很久** —— 与"两档站点让页面静默选错档"
     同族：**只有换一种输入形状才暴露**。
 - **回归**：`accept-forge-ondemand` 15/0、`accept-catalog-load` 27/0、8761 `BOOT OK`。
+
+## 5.x 端口三裁决 + 跨 agent 收口定义确认（2026-10-14）
+
+- **内容仓回信 `006`/`007`**（我方 `005` 之后）：`006` 报两件小事已办（`--emit` 加 `producer` +
+  `upstream_url`，自证 17→24）；`007` **上报三个端口缺口请裁决**（它按推广角色跑了 LLVM-wasm 与
+  OpenModelica 各一封 `mail/001`，两家回信暴露的）。
+- **三裁决（产地 = 宿主 `build/extra-content/`，已落 schema + 校验器 + 反向断言）**：
+  · **① `content` 对能力层无合法取值**（LLVM 填 `wasm`/`js` 等全不在枚举）⇒ **不扩枚举**；
+    能力层（`form:"tree"`）**`content: []`** —— 理由：`content` 的语义是"包里有哪些源"，
+    wasm/js 不是同类，硬塞会让这个轴变成"什么都有"的垃圾桶。**校验器加反向断言**
+    （`form:tree` 带非空 content ⇒ **必红**）；本仓 `golden/toolchain.json` 早就是这个形态。
+  · **② 消费面无处声明**（OM 提出：MSL 走 `omc_vfs_load_zip`→`MODELICAPATH`→`loadModel`，
+    与 Octave 的 `pkg install`+`addpath` 不同）⇒ **加 `consumer` 可选轴**（`["octave","omc"]`，
+    **缺省 octave** ⇒ 旧表一字不改；本仓复跑内容仓真表仍 `ok`）。理由：这类"UI 该交给谁"的
+    判断**放数据里才能被机器查**，放文档里就回到手抄（本仓 doctrine）。
+    **并核实它不违背 §2**（§2 禁的是"为了表达能力层而加字段"，不是禁止一切 optional 新轴）。
+  · **③ `pin` 指向"未发布"无判据**（LLVM 写 `pin:"v0.1.2"`，实测**四处皆无**：本地 tag /
+    远端 tag / `gh release` / 磁盘 bundle）⇒ **建议前缀形态** `release:`/`commit:`/`submodule:`
+    （**不强制**，只让类型可见）；**核 release 存在性登记为待办**（新活，未做）。
+- **确认"收口方"窄定义**（内容仓 `006` 末问、OM 给出、它采纳）：**"收口" = 内容记录的单一
+  聚合点**，**不是**运行期端点（UI 读的是宿主站点装配好的表）⇒ 与 §8.1「归属 ≠ 投送」一致，**无异议**。
+- **复核并确认**：内容仓 `--emit` 过 `--producer`（`ok`，实测）⇒ `005` 的 A① 结案；
+  LLVM-wasm 两处必修（`content: []` + `producer.id` 小写）由内容仓回信告知（**它是生产者，不越界改它仓**）；
+  OM「缺席（合法）」（判据 `grep -c 'import.*Modelica\.' > 0` ⇒ 出表）记录方式接受。
+- 校验器自证 18→**22**（新增裁决①反向 / 裁决②正反 / 既有三类齐备）；闸门 `check-content-port` 6/0。
