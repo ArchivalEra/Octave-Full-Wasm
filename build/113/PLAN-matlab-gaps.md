@@ -149,6 +149,25 @@ test/browser/probe-pyodide-sympy.mjs（三种模式，同一探针）
 
 ### 1.4 v1 批次（建议形状，每步独立验收）
 
+> ★ **归属（用户点问 2026-10-14："所以这个也作为插件市场的东西咯"）：是 —— 但要分清两件东西的归属不同。**
+>
+> | 东西 | 归属 | 为什么 |
+> |---|---|---|
+> | **`symbolic` 包本身** | **货架条目**（`shelf/packages/symbolic.json`） | 它就是个 Forge 包：有 version/url/sha256/依赖，形状与其余 12 个条目完全相同 |
+> | **Pyodide 运行时**（core + sympy/mpmath 轮子，~27 MB） | **基础设施**，**不是**货架条目 | 与 **clang 工具链**（`NOTES-client-compile-design.md` §3）**同一类**：同源托管 + `upstream-lock.json` 钉 URL+sha256 + provision 产物（可重建的缓存）——它不"装"给某个包，是**多个包共用的能力层** |
+>
+> ⚠️ **货架的现有字段会说谎（实测）**：`forge-shelf.py detect_kinds('symbolic-3.2.2.tar.gz')` 返回
+> **`['m']`** —— 与真·开箱即用的 `cgi` **判得一模一样**。而 `symbolic` 的 `DESCRIPTION` 明写
+> `SystemRequirements: python, sympy (>= 1.5.1), mpmath (>= 1.0)` ⇒ **`['m']` 这个字段在本构建里是假的**
+> （能装上、装完调不动）。⇒ 货架要加**新轴**（建议 `needs: ["pyodide"]`，空 = 无特殊需求），
+> 并给 `detect_kinds` 配一条"看 DESCRIPTION 的 SystemRequirements"的旁路。
+> **这条新轴的规模也是实测的**：144 个上游包里只有 **2 个**需要 Python 生态
+> （`symbolic`、`pythonic`）⇒ 加这一轴是**个例处理**，不是给全部包加负担。
+>
+> ⇒ **UI 侧的含义**：商店里 `symbolic` 这一条要显示"**约 27 MB 运行时按需拉取**"，
+> 而不是像 `cgi` 那样显示"开箱可用"。这正是需求单 §2.A4 那条"`kinds` 要如实标注"的延伸
+> —— **多了一个"要拉多少"的维度**，而它有实测数字（§1.3 / §1.3b / §1.3c）。
+
 ```
 ① 供给（纯宿主，无客户端改动）
    provision-pyodide.sh 按 URL+sha256 取 Pyodide core + sympy/mpmath 轮子（可选 .pyc 版）
@@ -159,11 +178,16 @@ test/browser/probe-pyodide-sympy.mjs（三种模式，同一探针）
    我们的原语 = `__web_run_js__`（点火）+ `__web_pause_ms__`（挂起等 Promise —— JSPI 已实测可用）。
    ⚠️ 铁律（T4 实测教训）：**同步入口挂起会抛 SuspendError 且 Octave 侧抓不住** ⇒
    这条缝必须走 eval_async/页面队列，且**不许放在开机路径**。
-③ 验收（三档）
+③ 货架新轴（与 ① ② 可并行，纯元数据）
+   shelf/packages/symbolic.json 加 `needs: ["pyodide"]`；detect_kinds 旁路读 SystemRequirements
+   ⇒ 判据（可证伪）：干净站 `pkg load symbolic` ⇒ 先拉运行时（有进度）⇒ 装上可用；
+   **反向**：不拉运行时就直接 load ⇒ 清晰报错点名"需要 Python 运行时"，不许静默半死。
+④ 验收（三档）
    a. 端到端：`pkg load symbolic` ⇒ `syms x; diff(sin(x),x)` ⇒ `cos(x)`（与宿主 Octave 逐字比对）
    b. 无 COI 站同样通过（基础档用户有份）——探针已证装载可行，这里验的是**我们的缝**
    c. 反向：不装 Pyodide ⇒ 清晰报错（点名"符号计算需要 Python 运行时"，不许 makeinfo 式误导）
-④ 台账：sympy_pyodide_* / sympy_import_ms_* / sympy_pyc_speedup 已有（本批落），v1 再加端到端键
+⑤ 台账：sympy_pyodide_* / sympy_import_ms_* / sympy_pyc_* / sympy_perf_* 已有（本批落），
+   v1 再加端到端键
 ```
 
 ### 1.5 已知边界（诚实清单）

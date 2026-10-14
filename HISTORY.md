@@ -4765,3 +4765,23 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 - 台账 +3 键（`sympy_pyc_import_speedup_pyodide` / `sympy_pyc_cold_geo_speedup` /
   `sympy_pyc_steady_geo_ratio`），161 → 164；一条改口经 `--accept-changes` 接受
   （`sympy_perf_pyodide_over_native` 2.04→2.01，基准重跑的方差，不是翻案）。
+
+## 5.x 归属钉死：符号计算进插件市场吗（用户追问，2026-10-14）
+
+- **用户点问**："所以这个也作为插件市场的东西咯"。
+- **答案：是，但两件东西归属不同**：
+  · **`symbolic` 包本身** = **货架条目**（形状与其余 12 条完全一样：version/url/sha256/deps）；
+  · **Pyodide 运行时**（core + sympy/mpmath 轮子 ≈27 MB）= **基础设施，不是货架条目**
+    —— 与 **clang 工具链**同一类（`NOTES-client-compile-design.md` §3）：同源托管 +
+    `upstream-lock.json` 钉 URL+sha256 + provision 产物（可重建缓存）；它不"装"给某个包，
+    是**多个包共用的能力层**。
+- **★ 实测到一个会让商店说谎的角落**：`forge-shelf.py detect_kinds('symbolic-3.2.2.tar.gz')`
+  返回 **`['m']`** —— 与真·开箱即用的 `cgi` **判得一模一样**；而 `symbolic` 的
+  `DESCRIPTION` 明写 `SystemRequirements: python, sympy (>= 1.5.1), mpmath (>= 1.0)`
+  ⇒ 它能装上、**装完调不动**（本构建无 Python 运行时）。⇒ 货架要加 **`needs` 新轴**
+  （`["pyodide"]`，空 = 无特殊需求），`detect_kinds` 加"读 SystemRequirements"旁路。
+  **规模也是实测的**：144 个上游包里只有 **2 个**需要 Python 生态（`symbolic`/`pythonic`）
+  ⇒ 个例轴，不是给全部包加负担。
+- **落档**：`PLAN-matlab-gaps.md` §1.4 加归属表 + 批次第③步（货架新轴，与供给/IPC 可并行）；
+  `REQUIREMENTS-store-and-matlab.md` 加 **A4b**（给 UI 师傅：这条要显示"约 27 MB 运行时按需拉取"，
+  而不是像 `cgi` 那样显示"开箱可用"；并附反向断言"该轴为空的包不许出现运行时提示"）。
