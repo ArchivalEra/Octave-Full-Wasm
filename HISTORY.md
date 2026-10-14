@@ -4876,9 +4876,13 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   ⇒ **外部克隆者无法 init `shelf/`**。宿主既有门（`check-forge-catalog` 等）对"货架不在"
   按 `SKIP` 退 0 ⇒ **不会假红**；但方向要记住：缺货架 = 能力减一（装不了货架包），不是错。
 - **遗留（等用户决定）**：旧 public 仓 `Octave-Forge-Shelf` 仍在（内容与迁徙前一致）——
-  归档/删除是**对外可见**的动作，未擅自做；旧独立克隆 `/mnt/hdd/zcode-projects/Octave-Forge-Shelf`
-  已 repoint 到新仓（不再是"推错仓"的陷阱）。站点 `assets/forge-catalog.json` 仍记
-  `shelf_commit: 980e093`（内容逐字节有效，下次装配自然更新为 7eee94d）。
+  归档/删除是**对外可见**的动作，未擅自做。**⚠️ 就地更正（同日）**：上面这段最初写的是
+  "旧独立克隆已 repoint 到新仓"——**当时不实**（只改过宿主 submodule 的三处，没碰那个克隆；
+  它仍指旧 public 仓 = "推错仓"的陷阱）。现已**真做**：`git remote set-url` + `fetch` + 切到
+  `main`（取到新仓 `928317a`），并核过它零独有内容（`git status` 空、全部 6 个 commit
+  在新仓可达）⇒ 它现在是一份**冗余等价克隆**，不是陷阱，但**名字仍是旧的**（会误导——
+  交接时要么删、要么当备用，由用户定）。站点 `assets/forge-catalog.json` 仍记
+  `shelf_commit: 980e093`（内容逐字节有效，下次装配自然更新）。
 
 ## 5.x 知识转移：把三条线的经验做成 md 送出去（用户点令 2026-10-14）
 
@@ -4907,3 +4911,24 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   `packages/`+`tools/` 与 `980e093` 逐字节相同 ⇒ **功能零差异、站点无需重装配**。
 - **下一步（用户那句"是不是"）**：本仓专注 Octave 本体 = 引擎/接口/验收；
   内容侧交给额外内容仓的 agent。两者的对话面就是接缝（`NOTES-extra-content-seam.md`）。
+
+## 5.x 交接：给接手方准备干净克隆（用户点令 2026-10-14）
+
+- **用户点令**："你帮我克隆到 zcode-projects 的一个文件夹里吧，我让人开始接手"。
+- **做了**：`gh repo clone ArchivalEra/Octave-Extra-Content` ⇒
+  **`/mnt/hdd/zcode-projects/Octave-Extra-Content`**（远端权威 tip `928317a`；**不是**从本地工作树拷
+  —— 保证接手人拿到的是**远程状态**，不会被我的未推改动污染）。
+- **接手前验证（克隆后当场跑，全部通过）**：
+  ① `tools/forge-shelf.py --selftest` ⇒ **14 PASS / 0 fail**；
+  ② `--list` ⇒ **12 包**；③ `--emit` ⇒ 12 包目录生成；
+  ④ `docs/` 三份经验集到位；⑤ `recipes/`（LLVM-wasm + Pyodide）与 `port/` 到位。
+- **README 补「接手先读」四步**（`928317a`）：README 角色与边界 → `docs/FORK-PIPELINE.md`
+  （供给纪律）→ `docs/FACT-SYSTEM.md`（**本仓尚未接入事实系统；接入是第一个交付物**）
+  → `docs/LANES-AND-MEMORY-MODEL.md`（内容有"档"属性）；并指向宿主侧接缝
+  （`NOTES-extra-content-seam.md`）与组织判决（其 §8）。
+- **★ 一处不实记录的就地更正**（见上节末）：我先前写过"旧克隆已 repoint"——当时**没做**。
+  现已真做（`git remote set-url` + fetch + 切 main，取到 `928317a`），并核过它零独有内容。
+  它现在是**冗余等价克隆**（不再是推错仓的陷阱），但**目录名仍是旧的** `Octave-Forge-Shelf`。
+- **遗留（等用户定）**：① 旧 public 仓 `ArchivalEra/Octave-Forge-Shelf` 仍在线（归档/删除 = 对外动作）；
+  ② 旧目录 `/mnt/hdd/zcode-projects/Octave-Forge-Shelf`（已等价于新仓，名字误导 ⇒ 建议删或改名）；
+  ③ 站点 `assets/forge-catalog.json` 记 `shelf_commit: 980e093`（内容有效，下次装配自然更新）。
