@@ -37,6 +37,8 @@ binary64 —— 并经下文显式审计。
 
 该探查也写了本引擎**够不到**的那块：MATLAB 有三根轴（语言 / Simulink / Simscape），我们覆盖前两根 —— **非因果物理建模（Simscape）在本仓零覆盖**，而 **OpenModelica** 是那块最现实的答案（它的 wasm 路径**在官方主仓里**、有 Rust 重写、**已发货浏览器 FMI 仿真器**；AGPLv3/OSMC-PL）。见该文 §8。
 
+**WebGPU 在这里可用，已在 Worker 内实测**：`navigator.gpu` 在主线程与**无 DOM 的 Worker 内**都能拿到真 adapter/device（vendor=nvidia），且在其中跑 compute shader，`[1,1,1,1]×2` 读回 `[2,2,2,2]`。⇒ GPU 计算**不是**结构性差距；而且与 CUDA（私有栈、手机没有）相反，WebGPU 在 NVIDIA/AMD/Intel/Apple 上是同一套 API。WebSerial/USB/HID 同样原生可用。见 `test/browser/probe-webgpu-capability.mjs`。
+
 后续**实验已证实 Modelica 能在浏览器里跑**：一个第三方 OpenModelica→wasm 移植把 `BouncingBall.mo` 跑通了完整链路 `parse → 生成 C → 浏览器内 emcc+wasm-ld → 仿真 → 出图`（证据 `build/113/evidence-omc-web-demo.png`；记录 `build/113/NOTES-experiment-omc-wasm.md`）。⇒ "Modelica 上网页"是**已证**、不是设想 —— 但那条**第三方**路线的求解器覆盖窄（Euler/RK/dassl）。
 
 **官方**路线是 OpenModelica 自己树里的一等 CMake 目标（`rust_omc.cmake`：`RUST_OMC_WASM_RUNTIME`、`wasm32-wasip1` 交叉编、`omc.wasm`、产物交接）—— 与本仓自己的管线**同形**（上游 submodule + pin + 交叉编 + 同源托管）。⇒ 它是**照我们编 Octave 的方式编**，不是抄第三方配方（见 §11）。
