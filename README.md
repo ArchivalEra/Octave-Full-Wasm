@@ -52,7 +52,7 @@ The MATLAB-semantics bridge also already exists at the interface level: OM's scr
 
 **Organisational decision (2026-10-14, user: you choose)**: backend integration of extra content **stays with this repo**; non-core content (package/runtime/toolchain metadata + provisioning recipes) belongs to the **extra-content repo's agent**; the **UI repo holds two contracts** — one with this repo (engine / `docs/embed-api.md` / the four-state `install` return) and one with the extra-content repo (content governance / the port). **Rejected: an integrator repo in the middle** (the integration knowledge lives here — lane/COI/promote/gates/the Qt-derived embed API; an integrator would either re-learn it or become a facade); **rejected: pure promote-the-standard** (a standard is an activity, not a structure — no owner means it drifts). Note **there is still exactly one same-origin runtime endpoint**: the two contracts are two conversation partners, not two origins (COEP blocks cross-origin fetch, measured; the content tables are assembled into this site). See `build/113/NOTES-extra-content-seam.md` §8.
 
-**Migration: shelf repo → extra-content repo (private, 2026-10-14)**: the former `Octave-Forge-Shelf` (public) is now **`Octave-Extra-Content` (private)** — this repo's `shelf/` submodule points at it. Beyond the original package archives it adds `recipes/` (provisioning recipes for the LLVM-wasm toolchain and the Pyodide/SymPy runtime: URL + sha256 + budgets) and `port/` (a copy of the content-list port spec). **This lands org decision ③ (no middleman)**: this repo is the core host / consuming adapter, the extra-content repo is the producing adapter, and the UI holds one contract with each. **Honest consequence of private**: this repo is public, so **outside clones cannot init `shelf/`** — a capability minus, not a build failure (gates tolerate a missing shelf with SKIP). The old public repo is left un-archived (an outward-facing action, awaiting a decision). See `build/113/NOTES-extra-content-seam.md` §8.
+**Migration: shelf repo → extra-content repo (private, 2026-10-14)**: the former `Octave-Forge-Shelf` (public) is now **`Octave-Extra-Content` (private)** — this repo's `shelf/` submodule points at it. Beyond the original package archives it adds `recipes/` (provisioning recipes for the LLVM-wasm toolchain and the Pyodide/SymPy runtime: URL + sha256 + budgets) and `port/` (a copy of the content-list port spec). **This lands org decision ③ (no middleman)**: this repo is the core host / consuming adapter, the extra-content repo is the producing adapter, and the UI holds one contract with each. **Honest consequence of private**: this repo is public, so **outside clones cannot init `shelf/`** — a capability minus, not a build failure (gates tolerate a missing shelf with SKIP). The old public repo is left un-archived (an outward-facing action, awaiting a decision). See `build/113/NOTES-extra-content-seam.md` §8. (Pin log: the extra-content repo went 980e093 -> upgrade 7eee94d -> whitelist .gitignore af7508c; both later commits touch only docs/gitignore, so `packages/`+`tools/` stay byte-identical to 980e093 — zero functional difference, no site rebuild needed.)
 
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
@@ -271,8 +271,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (402779 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (25717 bytes)
-- `README.zh.md` (22813 bytes)
+- `README.de.md` (25994 bytes)
+- `README.zh.md` (23072 bytes)
 - `STATE.md` (55626 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
