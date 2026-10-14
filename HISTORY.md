@@ -5095,3 +5095,23 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   LLVM-wasm 两处必修（`content: []` + `producer.id` 小写）由内容仓回信告知（**它是生产者，不越界改它仓**）；
   OM「缺席（合法）」（判据 `grep -c 'import.*Modelica\.' > 0` ⇒ 出表）记录方式接受。
 - 校验器自证 18→**22**（新增裁决①反向 / 裁决②正反 / 既有三类齐备）；闸门 `check-content-port` 6/0。
+
+## 5.x 清理陈旧计划/目标文件（用户点令，2026-10-14）
+
+- **用户点令**："人家你那些计划和 todo 和 goal 啥的可以清理一下了，以前的都没清"（提过两次）。
+- **删了什么**：`.opencode/goal-state.md`（**未跟踪**的 harness 遗留，2026-09-20 的 opencode goal）。
+  · **删前先看目标**（本仓纪律）：它 checklist 的 4 个"未完成项"逐条核过，**全部已完成** ——
+    ① CXSparse/SPQR（静态链进 wasm：`spqr` 命中 1 处）；② SUNDIALS（`__ode15__.oct` 在站点）；
+    ③ HDF5（静态链：`H5Fcreate` 命中 1 处）；④ 桥接（`webaudio/webnet/webimage/webfile.js` 全在）。
+  · 它是**别的 agent 的临时产物**（`.opencode/` 不在 `.gitignore`、也不被跟踪），
+    且已被本仓自己的 `STATE.md` + `build/FACTS.json` 取代 ⇒ 留着会误导（下一人以为有活）。
+- **核清后不删的两类**（删了会断引用/丢依据，**如实记**）：
+  · **`build/113/PLAN-*.md`（6 份）是承重文档**：被 `CONTEXT.md`（证据指针，`check-consistency`
+    会查路径存在）、`AGENTS.md`（方向指针）、`README.md`（AUTO:FILES 清单）引用；
+    内容已被 STATE/HISTORY/NOTES 承载，但**文件本身是指针对象** ⇒ 删了断链。
+    `PLAN-jspi`/`PLAN-next` 自带"转入历史"标记（已完成），保留为过程记录。
+  · **`.scratch/perf-max/`（wayfinding 9 票）已完结且有完结标记**（`map.md` 第 73 行"01–08 全结"），
+    且被**活代码的注释当出处引用**（`link-web.sh`/`relink.sh` 的 `MAXIMUM_MEMORY=8GB` 依据、
+    `measure_octave.py` 的原生基线出处）⇒ 删了会让后来人不知道那些魔数从哪来。
+- ⇒ **清理的判据**（值得记）：**不是"看起来旧就删"，而是"它指向的东西还在不在"** ——
+  删前逐条核目标（goal 的 4 项全完成 ⇒ 删；PLAN/perf-max 有活引用 ⇒ 留）。
