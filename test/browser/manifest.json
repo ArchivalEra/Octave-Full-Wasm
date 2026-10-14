@@ -222,6 +222,14 @@
     "value": "/mnt/hdd/octave-wasm-build/site/embed-demo.html",
     "why": "几何通道+WebGPU 参考渲染（工单 50）。需站点部署 embed 资产（wgsl-demo.html 等）；未上站站点按清单跳过。"
    }
+  ],
+  "accept-install-verdict": [
+   {
+    "kind": "path",
+    "env": "VERDICT_SITE_DIR",
+    "value": "/mnt/hdd/octave-wasm-build/site-verdict/verdict-tamper",
+    "why": "V3（sha-mismatch）需要**同源子路径** `/verdict-tamper/`（篡改 catalog 的 sha、字节不动）；由 `sh build/113/prep-verdict-site.sh` 造 + 用 serve-coi 起站。缺此项 ⇒ 按清单跳过 V3（V1/V2/V4/planOnly 仍可在普通站跑）。同源是硬约束（COEP 拦跨域，实测）。"
+   }
   ]
  }
 }

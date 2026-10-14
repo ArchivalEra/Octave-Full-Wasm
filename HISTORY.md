@@ -5041,3 +5041,32 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   并告知其悬案 03 可结案、悬案 02 可对照 `golden/{runtime,toolchain}.json` 两个 `form:"tree"` 示范。
 - **§5 余下步骤**（②表加新字段兼容 → ③Verdict 四态+planOnly → ④能力层进图 → ⑤工具链合流）
   **未做**，各自独立验收。
+
+## 5.x 接缝 §5 第②③步：表加两轴（兼容）+ install() 四态 Verdict（2026-10-14，无人值守）
+
+- **用户点令**："那就无人值守跑完2和3吧"（接缝 §5 增量路径第②③步）。
+- **② 表加新字段（向后兼容）**：
+  · `build/forge-catalog.py`：加 `derive_form`/`derive_axes`（**口径与内容仓 `--emit` 一致**：
+    货架包恒 `form:"pkg"`，`content` = 旧 `kinds`）；catalog 升 **schema 2**；`kinds` **保留为兼容视图**。
+  · `check-forge-catalog.py` 加 **R5**（`content == kinds` 且 `form == "pkg"`）—— R4 的推广
+    （R4 查 kinds↔字节，R5 查新两轴↔kinds，防两处各写一份漂移）；三条自证（含两条反向）。
+  · **判据达成**：重装配后 `accept-forge-ondemand` **15/0 不变**、`accept-catalog-load` **27/0 不变**
+    ⇒ **老 loader 在 schema 2 上照装**（向后兼容被真浏览器验收证明，不是推断）。
+- **③ install() 四态 Verdict + planOnly**：
+  · `bridge/assets-loader.js` 的 `install()`：resolve 返回加 `state`（四态）+ `layers` + `bytes` +
+    `acceleration`；**旧字段 `name`/`installed` 逐一保留**（老套件在用）；reject 的 Error 带
+    `__verdict__`（`{state,cause,why,retriable}`）。
+  · `planOnly`：只算闭包与字节预算、**零下载**。
+  · **新套件 `accept-install-verdict.mjs` 12/0**：V1 `ok` / V2 `not-found` / V3 `sha-mismatch`（真篡改）
+    / V4 `cannot-know`（真读不到）+ **两条关键反向**（not-found 不许混"读不到"；cannot-know
+    **绝不许**报成 not-found —— T4 的教训）+ P1 planOnly 零下载（网络审计）+ P2 默认路径旧字段不变。
+  · 配套 `build/113/prep-verdict-site.sh`（造同源子路径 `/verdict-tamper/`：改一条 sha、字节不动）；
+    manifest 登记该输入（缺则跳过、不假绿）。
+- **★ 顺手抓到并修了两个真 bug（都不是本批引入的，是新套件暴露的）**：
+  1. **双拼 base**：`catalog()` 里 `fetchJSON(withBase('assets/forge-catalog.json'))` —— `fetchJSON`
+     内部**又** `withBase` ⇒ base 非空时变成 `/base//base/assets/…` ⇒ 404。base 为空时无害，
+     故**从没被暴露**；V3（同源子路径 base）第一次撞出来。已改为传裸路径。
+  2. **`done is not defined`**：planOnly 分支用了未 `var` 的变量（本批新代码，当场修）。
+  · 教训形状（值得记）：**"base 恒为空"让一条真 bug 潜伏了很久** —— 与"两档站点让页面静默选错档"
+    同族：**只有换一种输入形状才暴露**。
+- **回归**：`accept-forge-ondemand` 15/0、`accept-catalog-load` 27/0、8761 `BOOT OK`。

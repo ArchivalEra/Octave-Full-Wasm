@@ -18,6 +18,9 @@
 #      （仓库镜像 = 入库的可部署物 ⇒ "目录说有什么"必须与"committed 的字节"对上）
 #   R4 `kinds` 与实际 tarball 内容一致：不含 'oct' 的包 ⇒ tarball 里**不许有 `*.oct`**
 #      （v1 只卖纯 .m / m+src；带了预编译件就该在货架上被划成 'oct' 形态）
+#   R5（端口 schema 2，接缝 §2/§5②）：`form`/`content` 两轴与 `kinds` **一致**
+#      （`content` == `kinds` 兼容视图；`form` 由 `kinds` 派生 —— 货架包恒 `pkg`）。
+#      这是 R4 的推广：R4 查"kinds 与字节"，R5 查"新两轴与 kinds"（防两处各写一份漂移）
 #
 # stdout 裸值契约（平台闸门惯例）：`ok` / `PROBLEM: <哪条>`；SKIP 明说退 0。
 #   · 货架不在（submodule 未初始化）⇒ `SKIP:` 退 0（换机器不是错，同 plugin-check）
@@ -147,6 +150,15 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
             if has:
                 problems.append("R4 %s kinds=%s 却说没有编译件，tarball 里躺着 %s"
                                 % (name, kinds, first))
+        # R5（端口 schema 2）：两轴与 kinds 一致（content == kinds；form 派生 = pkg）
+        content = p.get("content")
+        form = p.get("form")
+        if content is not None and list(content) != list(kinds):
+            problems.append("R5 %s content=%s ≠ kinds=%s（兼容视图必须同值）"
+                            % (name, content, kinds))
+        if form is not None and form != "pkg":
+            problems.append("R5 %s form=%r —— 货架装配的包恒为 \"pkg\"（能力层走 form:\"tree\" 的另一条）"
+                            % (name, form))
     return problems, []
 
 
@@ -245,6 +257,37 @@ def _selftest():
         cases.append(("★ R4：kinds 说纯 .m 但 tarball 里有 .oct ⇒ 必须报",
                       lambda d=d: any("tarball 里躺着" in p for p in check(
                           "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=yes_oct)[0])))
+        # R5（端口 schema 2 两轴与 kinds 一致）
+        d = _mk_fixture(os.path.join(tmp, "good_axes"),
+                        [_pack(sha=good_sha, kinds=("m",))], blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat))
+        _d0["packs"][0]["form"] = "pkg"
+        _d0["packs"][0]["content"] = ["m"]
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("R5：form=pkg + content==kinds ⇒ 不报",
+                      lambda d=d: check("site", "shelf", repo=d, sha_of=real_sha_of(data),
+                                        has_oct=no_oct)[0] == []))
+        d = _mk_fixture(os.path.join(tmp, "bad_content"),
+                        [_pack(sha=good_sha, kinds=("m",))], blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat))
+        _d0["packs"][0]["form"] = "pkg"
+        _d0["packs"][0]["content"] = ["m", "src"]      # ≠ kinds（[m]）⇒ 必须报
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R5：content ≠ kinds ⇒ 必须报",
+                      lambda d=d: any("R5" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        d = _mk_fixture(os.path.join(tmp, "bad_form"),
+                        [_pack(sha=good_sha, kinds=("m",))], blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat))
+        _d0["packs"][0]["form"] = "tree"             # ≠ pkg ⇒ 必须报
+        _d0["packs"][0]["content"] = ["m"]
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R5：form 不是 pkg ⇒ 必须报（能力层走另一条）",
+                      lambda d=d: any("R5" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
         d = _mk_fixture(os.path.join(tmp, "bad_missing"), [_pack(sha=good_sha)], blob_sha=data)
         os.remove(os.path.join(d, "site", "assets", "forge", "demo-1.0.0.tar.gz"))
         cases.append(("★ R3：目录说有的字节镜像里没有 ⇒ 必须报",

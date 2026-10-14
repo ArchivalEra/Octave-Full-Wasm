@@ -419,7 +419,10 @@
       catalog: function () {
         if (_catalog) return Promise.resolve(_catalog);
         if (_catalogP) return _catalogP;
-        _catalogP = fetchJSON(withBase('assets/forge-catalog.json')).then(function (c) {
+        // ⚠️ 传**裸路径**（fetchJSON 内部会 withBase）—— 曾经这里又 withBase 一次，
+        //    base 为空时无害、非空时双拼（`/base//base/assets/…` ⇒ 404）。
+        //    由 accept-install-verdict 的 V3（同源子路径 base）首次暴露。
+        _catalogP = fetchJSON('assets/forge-catalog.json').then(function (c) {
           _catalog = c || { packs: [] };
           var byName2 = {};
           (_catalog.packs || []).forEach(function (p) { byName2[p.name] = p; });
@@ -463,6 +466,17 @@
             plan.push(p);
           })(name);
           onProgress({ phase: 'plan', plan: plan.map(function (p) { return p.name; }) });
+          // ★ planOnly（©5 第③步）：**只算账不下载**（UI 预演"要拉多少"）。零网络字节。
+          //   判据：page.on('response') 在该调用期间**没有任何**对 assets/pkg|assets/forge 的响应。
+          if (opts.planOnly) {
+            var layers = plan.filter(function (p) { return p.form === 'tree'; })
+                             .map(function (p) { return { name: p.name, form: p.form, bytes: p.size }; });
+            var done = { state: 'ok', name: name, planOnly: true,
+                     installed: [], layers: layers,
+                     bytes: plan.reduce(function (a, p) { return a + (p.size || 0); }, 0) };
+            onProgress({ phase: 'done', plan: plan.map(function (p) { return p.name; }), planOnly: true });
+            return done;
+          }
           // Forge 的 .m 包只依赖引擎内建的 gunzip/untar ⇒ 先确保它们在
           // 先确保四样在（缺一不可，全部是**既有资产**，不新增机制）：
           //   webio    —— 引擎内建 gunzip/untar（zlib/ustar，解包用）
@@ -512,14 +526,30 @@
             }, Promise.resolve([])); })
             .then(function (names) {
               onProgress({ phase: 'done', installed: names });
-              return { name: name, installed: names };
+              // ★ Verdict（©5 第③步）：四态返回值是**值**，不是布尔。
+              //   旧字段 `name`/`installed` **逐一保留**（老套件/老代码在用）；
+              //   新键 = `state`（四态之一）+ `layers`（要拉的能力层）+ `bytes`。
+              return { state: 'ok', name: name, installed: names,
+                       layers: [], bytes: 0,
+                       acceleration: 'not-built' };
             });
         });
         // T4：**整条链**的失败都要落账（含"货架读不到"这种在 catalog() 就炸掉的路径）——
         //   `.m` 侧等的是终态；只挂在后半段的话，网络错误会让它干等满 60 秒轮询上限。
+        // ★ 返回 Verdict（四态），并**同时保留旧语义**：reject 的 Error 仍按旧样（消息）抛，
+        //   但在其 `.verdict` 上带 {state,cause,why,retriable}（对我不想 catch 重做判断的调用方）。
         return chain.then(null, function (e) {
-          installError[name] = String(e && e.message ? e.message : e).slice(0, 400);
+          var msg = String(e && e.message ? e.message : e).slice(0, 400);
+          installError[name] = msg;
           publish();
+          var st = 'failed', why = msg, cause = 'unknown';
+          if (/^货架上没有包：/.test(msg))              { st = 'not-found';    cause = 'not-in-any-list'; }
+          else if (/^读不到 Forge 货架/.test(msg))      { st = 'cannot-know';  cause = 'catalog-unreadable'; }
+          else if (/包校验失败/.test(msg))             { st = 'failed';       cause = 'sha-mismatch'; }
+          else if (/引擎还没就绪/.test(msg))           { st = 'failed';       cause = 'engine-not-ready'; }
+          else if (/__forge_install__ 失败/.test(msg)) { st = 'failed';       cause = 'unpack-failed'; }
+          e.__verdict__ = { state: st, name: name, cause: cause, why: why,
+                            retriable: st === 'cannot-know' };
           throw e;
         });
       }

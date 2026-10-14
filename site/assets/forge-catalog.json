@@ -1,8 +1,8 @@
 {
- "schema": 1,
+ "schema": 2,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "980e0933dd901265cd2d46cc912c84ca0afc867a",
+ "shelf_commit": "928317a0eefc12853796524efeb108d1f760c5e9",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
   {
@@ -13,6 +13,10 @@
    "url": "assets/forge/cgi-0.1.2.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/cgi-0.1.2.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m"
+   ],
    "kinds": [
     "m"
    ]
@@ -25,6 +29,11 @@
    "url": "assets/forge/datatypes-1.4.2.tar.gz",
    "upstream_url": "https://github.com/pr0m1th3as/datatypes/releases/download/release-1.4.2/datatypes-1.4.2.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -40,6 +49,11 @@
    "deps": [
     "matgeom"
    ],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -53,6 +67,10 @@
    "url": "assets/forge/matgeom-1.2.4.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/matgeom-1.2.4.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m"
+   ],
    "kinds": [
     "m"
    ]
@@ -65,6 +83,11 @@
    "url": "assets/forge/miscellaneous-1.3.3.tar.gz",
    "upstream_url": "https://github.com/gnu-octave/octave-miscellaneous/releases/download/release-1.3.3/miscellaneous-1.3.3.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -78,6 +101,11 @@
    "url": "assets/forge/nan-3.7.2.tar.gz",
    "upstream_url": "https://pub.ista.ac.at/~schloegl/matlab/NaN/nan-3.7.2.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -94,6 +122,11 @@
     "statistics",
     "struct"
    ],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -107,6 +140,10 @@
    "url": "assets/forge/quaternion-2.4.2.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/quaternion-2.4.2.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m"
+   ],
    "kinds": [
     "m"
    ]
@@ -119,6 +156,10 @@
    "url": "assets/forge/splines-1.3.5.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/splines-1.3.5.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m"
+   ],
    "kinds": [
     "m"
    ]
@@ -131,6 +172,11 @@
    "url": "assets/forge/statistics-1.7.7.tar.gz",
    "upstream_url": "https://github.com/gnu-octave/statistics/releases/download/release-1.7.7/statistics-1.7.7.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -144,6 +190,11 @@
    "url": "assets/forge/struct-1.0.18.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/struct-1.0.18.tar.gz",
    "deps": [],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
    "kinds": [
     "m",
     "src"
@@ -158,6 +209,11 @@
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/tsa-4.6.3.tar.gz",
    "deps": [
     "nan"
+   ],
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
    ],
    "kinds": [
     "m",

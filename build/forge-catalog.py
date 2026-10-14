@@ -102,6 +102,22 @@ def load_shelf(pkg_dir=None):
     return out
 
 
+def derive_form(kinds):
+    """投送形态（接缝 §2 / 端口 schema 2）。
+
+    ⚠️ **口径与内容仓 `tools/forge-shelf.py` 的 `derive_form` 一致**（同一规则的唯一产地
+    是端口 schema 的 enum；这里实现的是"本仓只产一种形态"的派生）：
+    货架包 = **一个 tarball 整包投送** ⇒ 恒 `pkg`；`tree`/`oct`/`octdir`/`file`/`js`
+    是能力层 / 编译件 / 单文件的形态，由各自的生产者出，**不是货架装配的活**。
+    纯函数（自证直接喂它）。"""
+    return "pkg"
+
+
+def derive_axes(kinds):
+    """(form, content) —— 端口 schema 2 的两轴；`content` = 旧的 `kinds`。"""
+    return derive_form(kinds), list(kinds or [])
+
+
 def resolve(shelf, octave, allow_unverified, cache=None):
     """货架 → 上架清单。返回 (packs, skipped)。**纯函数**（自证直接喂它）。"""
     cache = cache if cache is not None else CACHE
@@ -124,6 +140,10 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             "url": "assets/forge/%s-%s.tar.gz" % (name, v["version"]),  # **同源相对路径**
             "upstream_url": v.get("url", ""),
             "deps": e.get("depends") or [],
+            # 端口 schema 2 两轴（接缝 §2）：`form`/`content` 从字节/kinds **派生**；
+            # `kinds` **保留为兼容视图**（旧 loader 与旧套件照读 —— 判据：不改它们也全绿）。
+            "form": derive_form(v.get("kinds") or []),
+            "content": list(v.get("kinds") or []),
             "kinds": v.get("kinds") or [],
             "_src": src,                      # 装配时用（不进 catalog）
         })
@@ -173,7 +193,7 @@ def shelf_commit():
 
 def catalog_doc(packs, octave, gen):
     return {
-        "schema": 1,
+        "schema": 2,          # 接缝 §2：schema 2 加 form/content 两轴（kinds 留作兼容视图）
         "octave": octave,
         "generated_by": gen,
         "shelf_commit": shelf_commit(),
@@ -218,6 +238,16 @@ def _selftest():
                            and not r[1])(resolve(mk_shelf(), "11.3.0", False, "/nonexistent"))))
     cases.append(("octave_from_fork：读得到版本串（真仓）",
                   lambda: bool(re.match(r"^\d+\.\d+", octave_from_fork() or ""))))
+    cases.append(("★ 派生：form 恒 pkg、content = kinds（端口 schema 2 两轴）",
+                  lambda: (lambda p: p["form"] == "pkg" and p["content"] == ["m"]
+                           and p["kinds"] == ["m"])(
+                      resolve(mk_shelf(), "11.3.0", False, "/nonexistent")[0][0])))
+    cases.append(("★ 兼容视图：kinds 与 content 同值（旧 loader 照读）",
+                  lambda: (lambda p: p["kinds"] == p["content"])(
+                      resolve(mk_shelf(versions=[{"version": "1.0.0", "sha256": "a" * 64,
+                                                  "size": 1, "url": "http://x",
+                                                  "requires": [], "kinds": ["m", "src"]}]),
+                              "11.3.0", False, "/nonexistent")[0][0])))
     cases.append(("pick_version：挑满足约束的最新",
                   lambda: pick_version({"versions": [
                       {"version": "1.0.0", "requires": []},
