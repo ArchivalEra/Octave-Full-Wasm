@@ -4660,3 +4660,26 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   `NOTES-plugin-survey.md`（pathsim 首选 / pyblocksim 次选 / scilab 不做；纠正 pyblocksim 的 owner）。
 - **货架 +2 包**：`cgi`（证"从未预打包也能装"）、`datatypes`（杀手用例）。
 - **宿主测试** glue-selftest 124/124（+11）。
+
+## 5.x WebGPU 实测 + MATLAB 差距盘点（2026-10-14）
+
+- **★ WebGPU 在 Worker 里可用且真算对**（`test/browser/probe-webgpu-capability.mjs` 8/0）：
+  主线程与 **Worker 内**都拿得到 adapter/device（vendor=nvidia）；**Worker 里真跑
+  compute shader**：`[1,1,1,1] × 2` 读回 `[2,2,2,2]`；Worker 内 `OffscreenCanvas +
+  webgl2` 可用；硬件接口 WebSerial/USB/HID 三件全在。
+- **★ 一次自己造成的假结论（教训的形状）**：我最初在**无头浏览器 + `about:blank`** 上探
+  `navigator.gpu` ⇒ `undefined` ⇒ 写下"这台机器/我们的场景没有 WebGPU"，并据此把 GPU
+  列为"结构性差距"。**两处都错**：真因是 **`about:blank` 不是安全上下文**
+  （`isSecureContext=false`），`navigator.gpu` 因此不存在；`http://127.0.0.1` 才是安全
+  上下文 ⇒ 有 GPU 且能拿真设备。**与有头无头无关，与 WebGPU 支持无关** —— 是**探测条件**
+  错了。⇒ 探针把"先 `goto` 真页面再探"写成代码；台账 6 键
+  （`webgpu_main_device`/`webgpu_worker_device`/`webgpu_worker_compute_ok`/
+  `webgpu_worker_webgl2`/`hw_apis_available`/`webgpu_vendor`）。
+- **用户裁定三条"不是差距"**（2026-10-14）：CUDA（私有栈 + 手机没有 ⇒ 不进开源项目；
+  WebGPU 才是那条路）、App Designer（网页自带 UI 框架）、硬件支持包（网页原生
+  serial/usb/hid ⇒ 比 MATLAB 的装驱动+daemon 更轻）。pthread 分档也不是缺口，是
+  **给无 COI 环境留的活路**。
+- **剩下的真差距**：符号计算（`sym`=0）、库的厚度（长度问题）、以及计划内三件
+  （Simulink 前端 / OM 自产 `omc.wasm` / `.mat` 端到端）。
+- **8761 货架补装**：装配产物停在 10 包而 submodule 已 pin 到 12 包 ⇒ 重装配 + gate ok。
+  形状：改了子模块 ≠ 装配产物跟上。台账 `forge_catalog_packs` 10→12。

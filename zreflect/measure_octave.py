@@ -1156,12 +1156,61 @@ def measure():
             "w64-logs/lane6012-*.verdict",
             "三线中 verdict==ok 的条数（0 = 一条没成 ⇒ 那比「部分成功」更该红）")
 
+    # ── ★ 浏览器能力面：WebGPU / DOM-free / 硬件接口（2026-10-14 批）──────────────
+    #   为什么进台账：这三条决定"**算力能否放 Worker + 用 GPU 加速 + 页面出图**"这条链路
+    #   成不成立，而它**曾被我测错过**（在 `about:blank` 上探 `navigator.gpu` ⇒ 假结论
+    #   "没有 WebGPU"）。真相：**`about:blank` 不是安全上下文**，`http://127.0.0.1` 才是。
+    #   ⇒ 判据（在**真页面**上、且**真跑一个 compute shader**）：
+    #       ① 主线程有 adapter+device；② Worker 内同样有；③ Worker 里 [1,1,1,1]×2 读回 [2,2,2,2]。
+    #   读数来源：`test/browser/probe-webgpu-capability.mjs` 落盘的 JSON。
+    _wg = os.path.join(W64LOGD, "probe-webgpu-capability.json")
+    if os.path.exists(_wg):
+        try:
+            _d = json.load(open(_wg, encoding="utf-8"))
+        except Exception:
+            _d = None
+        if _d:
+            _m = _d.get("main", {})
+            _w = _d.get("worker", {})
+            _hw = _d.get("hw", {})
+            facts["webgpu_main_device"] = fact(
+                _m.get("device"), "python3 -c \"import json;print(json.load(open('%s'))['main']['device'])\"" % _wg,
+                "w64-logs/probe-webgpu-capability.json",
+                "主线程 WebGPU 能否拿到 device（前提：安全上下文；**about:blank 探不出**）")
+            facts["webgpu_worker_device"] = fact(
+                _w.get("device"), "python3 -c \"import json;print(json.load(open('%s'))['worker']['device'])\"" % _wg,
+                "w64-logs/probe-webgpu-capability.json",
+                "**Worker 内**（DOM-free）能否拿到 WebGPU device —— 算力放 Worker 的前提")
+            facts["webgpu_worker_compute_ok"] = fact(
+                bool(_w.get("computeOK")),
+                "python3 -c \"import json;print(json.load(open('%s'))['worker']['computeOK'])\"" % _wg,
+                "w64-logs/probe-webgpu-capability.json",
+                "Worker 里**真跑 compute shader**并读回 [2,2,2,2]（不是只看 typeof）")
+            facts["webgpu_worker_webgl2"] = fact(
+                bool(_w.get("webgl2")),
+                "python3 -c \"import json;print(json.load(open('%s'))['worker']['webgl2'])\"" % _wg,
+                "w64-logs/probe-webgpu-capability.json",
+                "Worker 内 OffscreenCanvas+webgl2 可用（渲染不依赖 DOM）")
+            facts["hw_apis_available"] = fact(
+                sum(1 for k in ("serial", "usb", "hid") if _hw.get(k)),
+                "python3 -c \"import json;d=json.load(open('%s'))['hw'];print(sum(1 for k in ('serial','usb','hid') if d.get(k)))\"" % _wg,
+                "w64-logs/probe-webgpu-capability.json",
+                "网页原生硬件接口可用数（WebSerial/USB/HID）—— MATLAB 要装驱动，这里是浏览器 API")
+            facts["webgpu_vendor"] = fact(
+                _m.get("vendor"), "python3 -c \"import json;print(json.load(open('%s'))['main']['vendor'])\"" % _wg,
+                "w64-logs/probe-webgpu-capability.json",
+                "实测 GPU 厂商（WebGPU **不挑厂商**：NVIDIA/AMD/Intel/Apple 同 API）")
+
     # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
     #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
     #   · 重活（浏览器/容器/构建/基准）与派生/散文式复跑方式显式 `replay=False`
     #     （**有名单、有明说**的豁免 —— 不是静默；全豁免会被零值守卫红，见 check-facts-replay）。
     _no_replay = {
         # 重活：需要浏览器 / 容器 / 构建 / 基准机（REFLECT_REPLAY_TIMEOUT 会杀掉它们）
+        #  ★ 2026-10-14：WebGPU 族也在此（读数由**浏览器探针**产出；纯读 JSON 的 cmd 可复跑，
+        #    但"读数是否新鲜"取决于探针是否重跑 ⇒ 按重活标注更诚实）。
+        "webgpu_main_device", "webgpu_worker_device", "webgpu_worker_compute_ok",
+        "webgpu_worker_webgl2",
         "probe_lane_pass", "e2_threaded_oct_rc", "w64_mem_5g_bytes", "w64_mem_8g_bytes",
         "w64_mem_shared_5g_bytes", "w64_ob_lib_wasm64_members", "w64_ob_lib_wasm32_members",
         "w64_ob_matmul500_s",
