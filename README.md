@@ -50,6 +50,8 @@ The MATLAB-semantics bridge also already exists at the interface level: OM's scr
 
 **Unified "extra content" interface across the three repos (decided 2026-10-14)**: a seam between Octave-Full-Wasm, LLVM-wasm and the shelf repo — **the seam is on the record, not on the method**: one record kind (`form` = delivery form, `content` = what's inside — two axes named separately, ending today's `kind`/`kinds` overload) + capability layers (Pyodide/clang) as ordinary `form:"tree"` entries in the SAME dependency graph + a host return of **four-state values** (ok/failed/not-found/cannot-know, which cannot collapse into a boolean — the T4 lesson "unread is not absent" made a type-level invariant) + the port living in `build/extra-content/` (schema + pure-stdlib validator + golden/bad fixtures; producers self-certify without the host present). See `build/113/NOTES-extra-content-seam.md`.
 
+**Organisational decision (2026-10-14, user: you choose)**: backend integration of extra content **stays with this repo**; non-core content (package/runtime/toolchain metadata + provisioning recipes) belongs to the **extra-content repo's agent**; the **UI repo holds two contracts** — one with this repo (engine / `docs/embed-api.md` / the four-state `install` return) and one with the extra-content repo (content governance / the port). **Rejected: an integrator repo in the middle** (the integration knowledge lives here — lane/COI/promote/gates/the Qt-derived embed API; an integrator would either re-learn it or become a facade); **rejected: pure promote-the-standard** (a standard is an activity, not a structure — no owner means it drifts). Note **there is still exactly one same-origin runtime endpoint**: the two contracts are two conversation partners, not two origins (COEP blocks cross-origin fetch, measured; the content tables are assembled into this site). See `build/113/NOTES-extra-content-seam.md` §8.
+
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -265,11 +267,11 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (22754 bytes)
 - `CONTEXT.md` (14021 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (398338 bytes)
+- `HISTORY.md` (400331 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (23663 bytes)
-- `README.zh.md` (21184 bytes)
-- `STATE.md` (54868 bytes)
+- `README.de.md` (24708 bytes)
+- `README.zh.md` (22025 bytes)
+- `STATE.md` (55595 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -304,7 +306,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
 - `build/113/NOTES-emsdk-upgrade.md` (42545 bytes)
 - `build/113/NOTES-experiment-omc-wasm.md` (26756 bytes)
-- `build/113/NOTES-extra-content-seam.md` (11163 bytes)
+- `build/113/NOTES-extra-content-seam.md` (15195 bytes)
 - `build/113/NOTES-forge-ondemand.md` (25608 bytes)
 - `build/113/NOTES-hotpath.md` (8092 bytes)
 - `build/113/NOTES-jspi.md` (28469 bytes)
