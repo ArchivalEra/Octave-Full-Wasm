@@ -5,6 +5,14 @@
 
 ## 现在是什么（2026-10-14）
 
+- **★ 接缝 §5 第①②③步已落地（2026-10-14 无人值守批）**：
+  **① 端口产地**（`build/extra-content/`：schema + 校验器自证 22 条 + golden×3 + bad×5 + 闸门 6/0）；
+  **② 表升 schema 2**（`form`/`content` 两轴，`kinds` 留兼容视图；闸门加 R5；**判据 = 老 loader 照装**：`accept-forge-ondemand` 15/0、`accept-catalog-load` 27/0 不变）；
+  **③ `install()` 四态 Verdict**（ok/failed/not-found/cannot-know **不可塌陷**；旧字段全保留）+ `planOnly` 零下载 —— 新套件 `accept-install-verdict` **12/0**（含两条关键反向）。
+  **端口三裁决**（回应内容仓上报）：①能力层 `content` 留空（不扩枚举）；②加 `consumer` 可选轴（`octave`/`omc`，缺省 octave）；③`pin` 建议前缀（`release:`/`commit:`/`submodule:`）。
+  **顺手修两个潜伏 bug**：`catalog()` 双拼 base（base 非空才暴露）、planOnly 未声明变量。
+  **§5 余下**：④能力层进图（Pyodide 供给 + `form:"tree"` 条目）/ ⑤工具链合流 —— 未做。
+
 - **★ 三仓统一「额外内容」接口设计已判决（2026-10-14，用户点令「大一统」）**：
   `build/113/NOTES-extra-content-seam.md` —— **缝在「记录」上，不在「方法」上**：
   一种记录（`form`=投送形态 / `content`=内容构成，两轴各自命名，收编今天 `kind`/`kinds` 的同名两义）
