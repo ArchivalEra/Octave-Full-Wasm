@@ -1,0 +1,23 @@
+{
+ "schema": 2,
+ "octave": "11.3.0",
+ "producer": {
+  "id": "llvm-wasm",
+  "pin": "release:v0.1.1"
+ },
+ "note": "★ 样件（golden）：形状取自 LLVM-wasm release manifest（release/out/manifest.json）；bundle sha 为本机实测（读不到就不写这条 —— 见 recipes/llvm-wasm.md）。工具链是**能力层**，故 form=\"tree\"（接缝 §2：不引入新字段）。",
+ "entries": [
+  {
+   "name": "llvm-wasm",
+   "version": "v0.1.1",
+   "form": "tree",
+   "sha256": "a9ba3b41e5fa8e7445e9b8ffaf32ca73e10ae9285bc1afc5327d0f549c84f733",
+   "url": "assets/llvm/llvm-wasm-bundle-v0.1.1.tar.gz",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.1/llvm-wasm-bundle-v0.1.1.tar.gz",
+   "size": 34679853,
+   "content": [],
+   "deps": [],
+   "note": "clang+lld（wasm 版）；首拉预算 brotli ≤15MB，lld 首次链接才拉"
+  }
+ ]
+}

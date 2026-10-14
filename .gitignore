@@ -42,6 +42,11 @@
 !build/forge
 !build/forge/*
 !build/forge-catalog.py
+# ── 额外内容端口（接缝 §4 产地：schema + 校验器 + golden/bad + 闸门）──────────
+!build/extra-content
+!build/extra-content/*
+!build/extra-content/golden/*
+!build/extra-content/bad/*
 !upstream-patches/octave-wasm-quantstack/*
 !upstream-patches/octave-wasm-quantstack/*
 !build/Makefile

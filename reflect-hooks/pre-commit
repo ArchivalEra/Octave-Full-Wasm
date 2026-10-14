@@ -60,6 +60,9 @@ python3 "$REPO/build/113/plugin-check.py"
 # ★ Forge 货架目录闸门（工单 64 / 设计稿 §8.2）：目录 ↔ 货架档案 ↔ 仓库镜像字节三方一致
 #   （R1 fork AC_INIT 对读 / R2 货架 sha / R3 镜像字节 / R4 kinds↔tarball）；未装配 ⇒ SKIP 明说。
 python3 "$REPO/build/113/check-forge-catalog.py"
+# ★ 额外内容端口闸门（接缝 §4/§5 第①步）：golden 全过 + bad 全红 + schema 词表单一产地
+#   （R1 golden / R2 bad 反向 / R3 enum 产地 / R4 pkg+tree 两形态覆盖）。
+python3 "$REPO/build/extra-content/check-content-port.py"
 
 # ── ④ 闸门自证（F1）：闸门不能证明自己会红，就不许提交 ─────────────────────────
 #   前几道是"查仓库"，这一道是"查检查器本身"。平台闸门 + 本仓专属闸门都过一遍。

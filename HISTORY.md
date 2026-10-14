@@ -5013,3 +5013,31 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   还**抛出一处我文档内部的真矛盾**（§4 vs §8.1），附悬案 03 与结案判据，并**给倾向不给判决**
   （"这是判决，不是我的"）。这正是接缝设计想要的对话质量。
 - **宿主侧待办**：`build/extra-content/` 端口产地落地（schema + 校验器 + golden/bad）——§5 第①步。
+
+## 5.x 接缝 §5 第①步：端口落地产地（2026-10-14）
+
+- **用户点令**："那就做"（接缝增量路径第①步：端口落地产地 + 校验器，零客户端改动）。
+- **落了什么**（产地 = `build/extra-content/`，§8.1 裁决后归宿主）：
+  · `content-list.schema.json` —— 唯一权威形状；**`form`/`content` 的 enum 产地**
+    （校验器从它读词表，**不硬编码第二份** ⇒ C4 对账器）；
+  · `validate-content-list.py` —— 纯 stdlib 校验器（`--list`/`--producer`/`--site`/`--max-schema`/
+    `--selftest`），实现三件事：形状 / 词表 / **协商规则**（未知键默认 fail-closed，
+    除非表里 `optional_keys` 显式声明 —— "忽略是礼遇，不是默认"）；**18 条自证**三类用例齐备；
+  · `golden/` 三个真样件：`shelf.json` = **内容仓 `--emit` 的真输出**（13 包）、
+    `toolchain.json`（LLVM-wasm，`form:"tree"`）、`runtime.json`（Pyodide，`form:"tree"`）；
+  · `bad/` 五个反向夹具（sha 缺 / 未知 form / 未知轴 / 空表 / 站点态绝对 URL）；
+  · `check-content-port.py` —— **闸门**：R1 golden 全过 + R2 bad 全红（含 `--site` 专项）
+    + R3 词表单一产地 + R4 golden 覆盖 `pkg` 与 `tree` 两形态；**6 条自证**。
+- **接线**：白名单加 `!build/extra-content/*`（含 golden/bad 子目录）；自证台登记
+  （现 **41 个闸门**全绿）；pre-commit 本仓专属段加一道。
+- **端到端实测（跑出来的两个发现，不是臆测）**：
+  · 内容仓 `--emit` 输出**过校验器**（`--list` ok）；
+  · **发现①**：`--emit` 顶层**没写 `producer`** ⇒ `--producer` 校验失败
+    （schema 里 `producer` 是可选块；已写信 `mail/005` 告知，由内容仓决定加不加）；
+  · **发现②**：`--emit` 出**上游绝对 URL**，而 `--site` 模式**正确地报红** ——
+    这正是"两段式"（生产者态 = 上游重取入口 / 站点态 = 同源 `assets/forge/...`）的意义，
+    宿主的 `forge-catalog.py` 就是做这个改写的。**不是错，是模式不同**。
+- **信 `mail/005`**：告知两件内容仓侧的小事（`producer` 字段 / URL 两段式）；
+  并告知其悬案 03 可结案、悬案 02 可对照 `golden/{runtime,toolchain}.json` 两个 `form:"tree"` 示范。
+- **§5 余下步骤**（②表加新字段兼容 → ③Verdict 四态+planOnly → ④能力层进图 → ⑤工具链合流）
+  **未做**，各自独立验收。
