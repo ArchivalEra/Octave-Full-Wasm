@@ -1201,6 +1201,83 @@ def measure():
                 "w64-logs/probe-webgpu-capability.json",
                 "实测 GPU 厂商（WebGPU **不挑厂商**：NVIDIA/AMD/Intel/Apple 同 API）")
 
+    # ── ★ 符号计算路线（2026-10-14 批）：Pyodide+SymPy 前提 + .pyc 预编译收益 ────────
+    #   为什么进台账：缺口①"符号计算"（`sym`=0）的**路线前提**是"浏览器里有没有真 Python"
+    #   —— `symbolic` 包是**纯 .m** 却全靠 SymPy（实测：`python_ipc_native` 用
+    #   `pyexec/pyeval/pycall`，本构建 wasm 里这三个符号数 = 0；`python_ipc_system` 用
+    #   `system()`，本构建无 shell）⇒ 包原样跑不了，必须引 Python 运行时。
+    #   本批实测：Pyodide 起得来、**COI 与非 COI 双模式都真算对**（`diff(sin(x),x)`=cos(x)）。
+    #   第二组 = 用户点问"预编译 python 是不是更快"的 A/B（唯一变量 = 轮子里有没有
+    #   `__pycache__`；仪器 = `SourceFileLoader.source_to_code` 调用次数，必须 ≈0 才有效）。
+    _sym = os.path.join(W64LOGD, "probe-pyodide-sympy.json")
+    if os.path.exists(_sym):
+        try:
+            _d = json.load(open(_sym, encoding="utf-8"))
+        except Exception:
+            _d = None
+        if _d:
+            _ms = {m.get("tag"): (m.get("result") or {}) for m in _d.get("modes", [])}
+            _coi = _ms.get("coi=true breakSympy=false", {})
+            _no = _ms.get("coi=false breakSympy=false", {})
+            _brk = _ms.get("coi=true breakSympy=true", {})
+            facts["sympy_pyodide_ok"] = fact(
+                bool(_coi.get("ok")), "python3 -c \"import json;print(json.load(open('%s'))['modes'][0]['result']['ok'])\"" % _sym,
+                "w64-logs/probe-pyodide-sympy.json",
+                "Pyodide+SymPy 在 **COI** Worker 里起得来（符号计算路线的前提）")
+            facts["sympy_pyodide_diff"] = fact(
+                _coi.get("diff"), "python3 -c \"import json;print(json.load(open('%s'))['modes'][0]['result']['diff'])\"" % _sym,
+                "w64-logs/probe-pyodide-sympy.json",
+                "**真算对**：`diff(sin(x),x)` 的符号结果（判据 = 恰好 `cos(x)`）")
+            facts["sympy_pyodide_nocoi_ok"] = fact(
+                bool(_no.get("ok")) and _no.get("diff") == "cos(x)",
+                "python3 -c \"import json;d=json.load(open('%s'))['modes'];print(d[1]['result']['ok'], d[1]['result']['diff'])\"" % _sym,
+                "w64-logs/probe-pyodide-sympy.json",
+                "**无 COI**（发不了 COOP/COEP 的宿主）同样算对 ⇒ 基础档用户也有份")
+            facts["sympy_pyodide_break_fails_loud"] = fact(
+                _brk.get("ok") is False,
+                "python3 -c \"import json;print(json.load(open('%s'))['modes'][2]['result']['ok'])\"" % _sym,
+                "w64-logs/probe-pyodide-sympy.json",
+                "反向断言：拿掉 SymPy 轮子 ⇒ 装载**响亮失败**（`ok` 必须为 False，不许静默）")
+            _dd = (_d.get("bytes") or {}).get("disk") or {}
+            if _dd:
+                facts["sympy_assets_bytes"] = fact(
+                    _dd.get("coreTar"), "python3 -c \"import json;print(json.load(open('%s'))['bytes']['disk']['coreTar'])\"" % _sym,
+                    "w64-logs/probe-pyodide-sympy.json",
+                    "Pyodide core 压缩包字节（符号计算路线**站点新增交付**的下限口径）")
+
+    _pyc = os.path.join(W64LOGD, "sympy-pyc-ab.json")
+    if os.path.exists(_pyc):
+        try:
+            _d = json.load(open(_pyc, encoding="utf-8"))
+        except Exception:
+            _d = None
+        _s = (_d or {}).get("summary", {})
+        if _s.get("importA_ms"):
+            facts["sympy_import_ms_source"] = fact(
+                _s.get("importA_ms"), "python3 -c \"import json;print(json.load(open('%s'))['summary']['importA_ms'])\"" % _pyc,
+                "w64-logs/sympy-pyc-ab.json",
+                "`import sympy` 耗时（**源码轮子**档；编译次数见 sympy_pyc_compile_calls）")
+            facts["sympy_import_ms_pyc"] = fact(
+                _s.get("importB_ms"), "python3 -c \"import json;print(json.load(open('%s'))['summary']['importB_ms'])\"" % _pyc,
+                "w64-logs/sympy-pyc-ab.json",
+                "`import sympy` 耗时（**.pyc 轮子**档，唯一变量 = 轮子里有没有 `__pycache__`）")
+            facts["sympy_pyc_speedup"] = fact(
+                _s.get("speedup"), "python3 -c \"import json;print(json.load(open('%s'))['summary']['speedup'])\"" % _pyc,
+                "w64-logs/sympy-pyc-ab.json",
+                "派生：A÷B（>1 = 预编译更快 —— 用户问「能快几倍」的直接答案）")
+            _stc = _s.get("sourceToCode", {})
+            facts["sympy_pyc_compile_calls"] = fact(
+                _stc.get("B"), "python3 -c \"import json;print(json.load(open('%s'))['summary']['sourceToCode']['B'])\"" % _pyc,
+                "w64-logs/sympy-pyc-ab.json",
+                ".pyc 档的源码→字节码编译次数（**必须 ≈0**；不为 0 则 A/B 无效 ⇒ 探针 rc=2）")
+            _by = _s.get("bytes", {})
+            if _by:
+                facts["sympy_pyc_bytes_ratio"] = fact(
+                    round(_by.get("B", 0) / max(_by.get("A", 1), 1), 2),
+                    "python3 -c \"import json;d=json.load(open('%s'))['summary']['bytes'];print(round(d['B']/d['A'],2))\"" % _pyc,
+                    "w64-logs/sympy-pyc-ab.json",
+                    "交付字节代价：.pyc 轮子 ÷ 源码轮子（**速度不是免费的**）")
+
     # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
     #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
     #   · 重活（浏览器/容器/构建/基准）与派生/散文式复跑方式显式 `replay=False`
@@ -1211,6 +1288,11 @@ def measure():
         #    但"读数是否新鲜"取决于探针是否重跑 ⇒ 按重活标注更诚实）。
         "webgpu_main_device", "webgpu_worker_device", "webgpu_worker_compute_ok",
         "webgpu_worker_webgl2",
+        #  ★ 2026-10-14：符号计算族同此（读数由**浏览器探针/A-B 夹具**产出；纯读 JSON 的 cmd
+        #    可复跑，但"读数是否新鲜"取决于探针是否重跑 ⇒ 按重活标注更诚实）。
+        "sympy_pyodide_ok", "sympy_pyodide_diff", "sympy_pyodide_nocoi_ok",
+        "sympy_pyodide_break_fails_loud", "sympy_import_ms_source", "sympy_import_ms_pyc",
+        "sympy_pyc_speedup", "sympy_pyc_compile_calls",
         "probe_lane_pass", "e2_threaded_oct_rc", "w64_mem_5g_bytes", "w64_mem_8g_bytes",
         "w64_mem_shared_5g_bytes", "w64_ob_lib_wasm64_members", "w64_ob_lib_wasm32_members",
         "w64_ob_matmul500_s",

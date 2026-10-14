@@ -4683,3 +4683,34 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   （Simulink 前端 / OM 自产 `omc.wasm` / `.mat` 端到端）。
 - **8761 货架补装**：装配产物停在 10 包而 submodule 已 pin 到 12 包 ⇒ 重装配 + gate ok。
   形状：改了子模块 ≠ 装配产物跟上。台账 `forge_catalog_packs` 10→12。
+
+## 5.x 符号计算路线实测 + 缺口补法工作令（2026-10-14）
+
+- **用户点问**："transcrypt 预编译 python 是不是更好的路径，性能能快几倍吧"。
+  ⇒ 这句含两半，两半都用实测答了（不猜）：
+  **① 静态编译成 JS：不可行**（不是快慢问题）—— Transcrypt 官方 README 第 45 行原文
+  *"No eval and exec of Python code."*；而 SymPy 1.14.0 实测 `eval(` **340 处**、
+  `exec(` **61 处**（去 benchmarks/testing，89 文件）。静态翻译器无法翻译运行期构造的代码串。
+  **② 预编译字节码（.pyc）：可行且现在完全没做** —— 实测 `.pyc` 计数：pyodide 的
+  `python_stdlib.zip` = 0、sympy/mpmath 轮子 = 0。A/B（`test/fixtures/sympy-pyc-ab/`，
+  唯一变量 = 轮子里有没有 `__pycache__`）：`import sympy` **2757 → 380 ms（7.26×）**，
+  源码→字节码编译 **472 → 0 次**；代价 = 轮子字节 **6.55 → 21.47 MB（3.28×，gzip 后 3.29×）**。
+  **做这条 A/B 踩到两个真坑**（都写进夹具注释）：`.pyc` 必须用 **Pyodide 自己的 CPython**
+  编（magic 匹配）；必须 **hash 校验模式**（timestamp 模式 mtime 对不上 ⇒ CPython 静默
+  拒绝 .pyc 回落现编 ⇒ A/B 假阴性）。**仪器 = `SourceFileLoader.source_to_code` 调用次数**
+  （B 档 0 次才有效；不为 0 则探针 rc=2 判仪器失效 —— 这条就是 A/B 的反向断言）。
+- **★ 缺口①"符号计算"路线前提实测通过**：`test/browser/probe-pyodide-sympy.mjs` **5/0**
+  —— COI 模式 Worker 里 Pyodide+SymPy 真算出 `diff(sin(x),x)`=**`cos(x)`**；
+  **无 COI 模式同样算对**（⇒ 基础档用户也有份）；反向（拿掉 SymPy 轮子）**响亮失败**。
+  **为什么必须引 Python**：`symbolic` 是纯 `.m`（0 个 `.cc`）但功能全经 `python_ipc_driver`
+  起 Python（四个后端逐行核过），而本构建 wasm 里 `pyexec`/`pyeval`/`pycall` 字节数全 = 0、
+  无 shell ⇒ 包原样跑不了。
+  **探针自身踩到三个坑（都进注释）**：根路径映射（`/` 必须映射到 index.html）；
+  pyodide 314 **拒绝 classic worker**（原文 "Classic web workers are not supported"）
+  ⇒ 必须 module worker + 静态 import；Worker **自启动**（页面从不发消息）。
+  另：pfail-closed 生效抓到 **PyPI 字节 ≠ pyodide lock 字节**（pyodide 对纯 Python 包
+  去测试重打包）⇒ 供给走 PyPI，托管副本的 lock sha 由我们改写（overlayLock，有记录）。
+- **工作令落档**：`build/113/PLAN-matlab-gaps.md` —— 三条缺口（符号 / 库厚度 / 计划内三件）
+  各带实测现状 + 复跑命令 + 验收与反向断言；库厚度实测：货架 12 包 vs 上游索引
+  **144 全兼容**（纯候选 102）。
+- 台账 +10 键（`sympy_*` 族），149 → 159 条。
