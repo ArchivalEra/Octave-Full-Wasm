@@ -52,7 +52,7 @@ The MATLAB-semantics bridge also already exists at the interface level: OM's scr
 
 **Organisational decision (2026-10-14, user: you choose)**: backend integration of extra content **stays with this repo**; non-core content (package/runtime/toolchain metadata + provisioning recipes) belongs to the **extra-content repo's agent**; the **UI repo holds two contracts** — one with this repo (engine / `docs/embed-api.md` / the four-state `install` return) and one with the extra-content repo (content governance / the port). **Rejected: an integrator repo in the middle** (the integration knowledge lives here — lane/COI/promote/gates/the Qt-derived embed API; an integrator would either re-learn it or become a facade); **rejected: pure promote-the-standard** (a standard is an activity, not a structure — no owner means it drifts). Note **there is still exactly one same-origin runtime endpoint**: the two contracts are two conversation partners, not two origins (COEP blocks cross-origin fetch, measured; the content tables are assembled into this site). See `build/113/NOTES-extra-content-seam.md` §8.
 
-**Migration: shelf repo → extra-content repo (private, 2026-10-14)**: the former `Octave-Forge-Shelf` (public) is now **`Octave-Extra-Content` (private)** — this repo's `shelf/` submodule points at it. Beyond the original package archives it adds `recipes/` (provisioning recipes for the LLVM-wasm toolchain and the Pyodide/SymPy runtime: URL + sha256 + budgets) and `port/` (a copy of the content-list port spec). **This lands org decision ③ (no middleman)**: this repo is the core host / consuming adapter, the extra-content repo is the producing adapter, and the UI holds one contract with each. **Honest consequence of private**: this repo is public, so **outside clones cannot init `shelf/`** — a capability minus, not a build failure (gates tolerate a missing shelf with SKIP). The old public repo `Octave-Forge-Shelf` is now **archived** (read-only; deleting it needs a `delete_repo` scope the token lacks, so it awaits one interactive `gh auth refresh`), and the local clone was removed. See `build/113/NOTES-extra-content-seam.md` §8. (Pin log: the extra-content repo went 980e093 -> upgrade 7eee94d -> whitelist .gitignore af7508c; both later commits touch only docs/gitignore, so `packages/`+`tools/` stay byte-identical to 980e093 — zero functional difference, no site rebuild needed.) (Knowledge transfer 2026-10-14: sent three experience docs to the extra-content repo — `docs/{FORK-PIPELINE,FACT-SYSTEM,LANES-AND-MEMORY-MODEL}.md`, each trimmed to its producing-adapter role with replayable commands and real error strings — and the memory-model/lane doc to the OM repo, incl. how three lines still stand when the upstream has zero wasm64 support.) (Handover 2026-10-14: the extra-content repo is cloned to /mnt/hdd/zcode-projects/Octave-Extra-Content via `gh repo clone` (remote authoritative state), verified on the spot: tool selftest 14/0, 12 packages, all three docs present; README now lists a four-step "read first" order.) (Cross-agent mail channel + one drift fix, 2026-10-14: the extra-content repo got a `mail/` channel and a first letter asking about the role boundary — seam §8.1 says "content contract = extra-content repo ↔ UI" while its manager said he does not handle UI, so the two conflict and need a decision; also fixed a drift of our own, where PLAN/REQUIREMENTS said "add a `needs` axis" but seam §2 rules that capability layers are ordinary `form:"tree"` entries plus a dependency edge, with no new field — flipped and logged as retraction `R-015`.)
+**Migration: shelf repo → extra-content repo (private, 2026-10-14)**: the former `Octave-Forge-Shelf` (public) is now **`Octave-Extra-Content` (private)** — this repo's `shelf/` submodule points at it. Beyond the original package archives it adds `recipes/` (provisioning recipes for the LLVM-wasm toolchain and the Pyodide/SymPy runtime: URL + sha256 + budgets) and `port/` (a copy of the content-list port spec). **This lands org decision ③ (no middleman)**: this repo is the core host / consuming adapter, the extra-content repo is the producing adapter, and the UI holds one contract with each. **Honest consequence of private**: this repo is public, so **outside clones cannot init `shelf/`** — a capability minus, not a build failure (gates tolerate a missing shelf with SKIP). The old public repo `Octave-Forge-Shelf` is now **archived** (read-only; deleting it needs a `delete_repo` scope the token lacks, so it awaits one interactive `gh auth refresh`), and the local clone was removed. See `build/113/NOTES-extra-content-seam.md` §8. (Pin log: the extra-content repo went 980e093 -> upgrade 7eee94d -> whitelist .gitignore af7508c; both later commits touch only docs/gitignore, so `packages/`+`tools/` stay byte-identical to 980e093 — zero functional difference, no site rebuild needed.) (Knowledge transfer 2026-10-14: sent three experience docs to the extra-content repo — `docs/{FORK-PIPELINE,FACT-SYSTEM,LANES-AND-MEMORY-MODEL}.md`, each trimmed to its producing-adapter role with replayable commands and real error strings — and the memory-model/lane doc to the OM repo, incl. how three lines still stand when the upstream has zero wasm64 support.) (Handover 2026-10-14: the extra-content repo is cloned to /mnt/hdd/zcode-projects/Octave-Extra-Content via `gh repo clone` (remote authoritative state), verified on the spot: tool selftest 14/0, 12 packages, all three docs present; README now lists a four-step "read first" order.) (Cross-agent mail channel + one drift fix, 2026-10-14: the extra-content repo got a `mail/` channel and a first letter asking about the role boundary — seam §8.1 says "content contract = extra-content repo ↔ UI" while its manager said he does not handle UI, so the two conflict and need a decision; also fixed a drift of our own, where PLAN/REQUIREMENTS said "add a `needs` axis" but seam §2 rules that capability layers are ordinary `form:"tree"` entries plus a dependency edge, with no new field — flipped and logged as retraction `R-015`.) (Cross-agent exchange closed 2026-10-14: the extra-content repo accepted "the repo is authoritative" and takes the content contract; its raised conflict over port origin was ruled **host-owned** (seam §4 and §8.1 had contradicted each other; §8.1 narrowed and logged as retraction R-016); also added a distinction of **ownership vs delivery** — the content repo is private while the UI repo is public, so UI cannot read it directly: content semantics belong to the content repo, delivery goes through the host site.)
 
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
@@ -269,10 +269,10 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (22754 bytes)
 - `CONTEXT.md` (14215 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (412893 bytes)
+- `HISTORY.md` (415250 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (27367 bytes)
-- `README.zh.md` (24293 bytes)
+- `README.de.md` (27896 bytes)
+- `README.zh.md` (24698 bytes)
 - `STATE.md` (55626 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
@@ -308,7 +308,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-coverage-100.md` (8206 bytes)
 - `build/113/NOTES-emsdk-upgrade.md` (42545 bytes)
 - `build/113/NOTES-experiment-omc-wasm.md` (26756 bytes)
-- `build/113/NOTES-extra-content-seam.md` (15207 bytes)
+- `build/113/NOTES-extra-content-seam.md` (16757 bytes)
 - `build/113/NOTES-forge-ondemand.md` (25608 bytes)
 - `build/113/NOTES-hotpath.md` (8092 bytes)
 - `build/113/NOTES-jspi.md` (28469 bytes)
@@ -523,7 +523,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/lib/doctor.py` (15989 bytes)
 - `build/lib/facts_block.py` (4696 bytes)
 - `build/lib/gate.py` (7246 bytes)
-- `build/lib/retractions.json` (11170 bytes)
+- `build/lib/retractions.json` (12200 bytes)
 - `build/lib/sweep_select.py` (15827 bytes)
 - `build/main.cc` (26639 bytes)
 - `build/make-dist.sh` (7787 bytes)

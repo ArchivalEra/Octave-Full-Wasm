@@ -119,6 +119,13 @@
    "why": "接缝 §2 的判决是『能力层 = `form:\"tree\"` 的普通条目、进同一张 deps 图、**不引入新字段**』。而 PLAN-matlab-gaps.md §1.4 与 REQUIREMENTS-store-and-matlab.md §A4b 曾写『建议加 `needs` 轴』——那是设计判决改后散文没跟的漂移（额外内容仓管理者在翻案台账 R-002 里先抓到）。实测判据：`grep needs build/113/NOTES-extra-content-seam.md` 返回空（接缝无此轴）；宿主无任何代码读 `needs`。",
    "evidence": "grep -n needs /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/NOTES-extra-content-seam.md（空）；grep -rn '\"needs\"' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/*.py（空）",
    "fixed_in": "build/113/PLAN-matlab-gaps.md §1.4（正文 + 批次③）与 build/113/REQUIREMENTS-store-and-matlab.md §A4b 已改为『form:tree 普通条目 + 依赖边』；交叉引用额外内容仓 build/retractions.json R-002"
+  },
+  {
+   "id": "R-016",
+   "text": "内容契约 = 端口（schema + 校验器）",
+   "why": "接缝 §8.1 曾把「端口（schema + `validate-content-list.py`）」划进『内容契约（额外内容仓 ↔ UI）』，与同文件 §4「产地 = 宿主仓 build/extra-content/」**自相矛盾**（内容仓管理者在 mail/003 里抛出，附悬案 03）。2026-10-14 裁决：**产地 = 宿主**（§4 胜）。依据 = 端口是应用核心的**接受面**、宿主已有 check-forge-catalog.py 的 R1–R4 判据范式、UI 读的是宿主站点的表。§8.1 已收窄为『内容语义（四态含义/content 诚实/版本策略/许可台账）』。",
+   "evidence": "grep -n '产地' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/NOTES-extra-content-seam.md（§4 = 宿主）；对照 git show 该文件 §8.1 的裁决段",
+   "fixed_in": "build/113/NOTES-extra-content-seam.md §8.1（已收窄 + 就地裁决 + 补『归属≠投送』段）；交叉引用内容仓 mail/003、questions/03-port-origin.md"
   }
  ]
 }
