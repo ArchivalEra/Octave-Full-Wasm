@@ -4740,3 +4740,28 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   让 bench **跑两遍**（第二遍全热 ⇒ `import_s` 读出 0.0）；② compare.py 的首行
   regex 没容忍 `OCT|` 前缀 ⇒ 第一列缺失。两条都留注释。
 - 台账 +2 键（`sympy_perf_pyodide_over_native` / `sympy_perf_cold_start_ms`），159 → 161。
+
+## 5.x 追加之问：预编译 .pyc 还能快多少（四段口径，2026-10-14）
+
+- **用户点令**："那试试预编译 pyc，还能快多少"。
+- **方法**：把"预编译"拆成四段分别量（**只看 import 会答错** —— 这是本批的主要方法论）：
+  ① `import sympy`；② 每 op **首次调用**（SymPy 到处是函数内惰性 import：第一次用
+  `integrate` 才加载 `sympy.integrals`）；③ **稳态**（预热后；`.pyc` **不该**改变这段 ——
+  作为对照，证明预编译不是万能药）；④ 同会话二次 import。
+  实现：`bench-sympy.py` 加 `cold_ms` / `reimport_s` 两段；探针加 `WHEELS=source|pyc`
+  （**只改 pyodide lock 指向哪个轮子**，不在页面里塞 .pyc —— 早先实测过逐文件 FS 写要 3.6 s，
+  那是交付方式的开销，会污染读数）；预编脚本抽成 `prepare-pyc-wheels.sh`（两夹具共用）。
+- **读数**：① 2.71 s → **0.37 s（7.40×）**；② 首次调用几何均值 **1.29×**
+  （明细：`diff_exp_sin` 4.56× 因为首调顺带拖进 `sympy.core` 一大票子模块；
+  `solve_poly` 1.01× / `matrix_det5` 1.00× —— 首调本来就便宜的没编译可省）；
+  ③ **稳态 0.99×（如预期不变）**；④ 2.73 s → 0.28 s。
+- **★ 最值钱的发现（④ 的含义）**：源码档**二次 import 仍要 2.73 s** ⇒
+  **浏览器里没有隐式字节码缓存**。原生 CPython 会把 `.pyc` 写进 `__pycache__` 供后续复用；
+  浏览器里 site-packages 只读（我们的 Pyodide 档挂着只读 zip/FS）⇒ **每次冷启动都要
+  从头重编那 472 个模块**。⇒ `.pyc` 轮子的本质不是"让执行更快"，而是
+  "**把每次冷启动的固定成本从 2.7 s 砍到 0.37 s**"（−85%）。
+- **部署判断（维持）**：v1 用源码轮子（字节小 3.3×）；`.pyc` 当**可选加速档**
+  （在意首拉那 2.3 s 的加载它）—— 因为稳态两者一样。
+- 台账 +3 键（`sympy_pyc_import_speedup_pyodide` / `sympy_pyc_cold_geo_speedup` /
+  `sympy_pyc_steady_geo_ratio`），161 → 164；一条改口经 `--accept-changes` 接受
+  （`sympy_perf_pyodide_over_native` 2.04→2.01，基准重跑的方差，不是翻案）。

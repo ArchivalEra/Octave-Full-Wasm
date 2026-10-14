@@ -1312,6 +1312,45 @@ def measure():
                 "w64-logs/sympy-perf-pyodide.json",
                 "浏览器侧**冷启动**（Pyodide 装载 + 装 sympy 包）—— 与稳态倍数分开读")
 
+    # ── ★ 用户追加之问（2026-10-14）："那试试预编译 pyc，还能快多少" ──────────────
+    #   四段口径（只看 import 会答错；说明见 compare-pyc.py 头部）：
+    #     ① import（.pyc 主战场）② 每 op **首次调用**（惰性子模块加载，用户体感那段）
+    #     ③ 稳态（**.pyc 不该改变** —— 对照，证明预编译不是万能药）④ 同会话 reimport
+    #   实测：import 7.40× / 首次调用几何均值 1.29× / **稳态 0.99×（不变）**；
+    #   且 reimport 源码档 2.73 s ⇒ **浏览器里没有隐式字节码缓存**（原生有磁盘 .pyc，
+    #   浏览器 site-packages 只读 ⇒ 每次冷启动都重编 —— 这正是预编译轮子的价值所在）。
+    _perfp = os.path.join(W64LOGD, "sympy-perf-pyodide-pyc.json")
+    if os.path.exists(_perf) and os.path.exists(_perfp):
+        try:
+            import math
+            _A = json.load(open(_perf, encoding="utf-8"))["bench"]
+            _B = json.load(open(_perfp, encoding="utf-8"))["bench"]
+            _sp = _A["import_s"] / max(_B["import_s"], 1e-9)
+            _cold = [_A["cold_ms"][k] / max(_B["cold_ms"][k], 1e-9)
+                     for k in _A["cold_ms"] if k in _B["cold_ms"]]
+            _cg = math.exp(sum(math.log(x) for x in _cold) / len(_cold)) if _cold else None
+            _steady = [_A["ops"][k]["min_ms"] / max(_B["ops"][k]["min_ms"], 1e-9)
+                       for k in _A["ops"] if k in _B["ops"] and _A["ops"][k]["min_ms"] > 0.5]
+            _sg = math.exp(sum(math.log(x) for x in _steady) / len(_steady)) if _steady else None
+        except Exception:
+            _sp = _cg = _sg = None
+        if _sp:
+            facts["sympy_pyc_import_speedup_pyodide"] = fact(
+                round(_sp, 2),
+                "python3 test/fixtures/sympy-perf/compare-pyc.py（读末行 JSON 的 import_s.speedup）",
+                "w64-logs/sympy-perf-pyodide{,-pyc}.json",
+                "**用户追加之问**：.pyc 轮子的 `import sympy` 加速（浏览器侧，同一份基准）")
+            facts["sympy_pyc_cold_geo_speedup"] = fact(
+                round(_cg, 2) if _cg else None,
+                "python3 test/fixtures/sympy-perf/compare-pyc.py（读 cold_geo_speedup）",
+                "w64-logs/sympy-perf-pyodide{,-pyc}.json",
+                "每 op **首次调用**的几何均值加速（惰性子模块加载那段 —— 用户体感）")
+            facts["sympy_pyc_steady_geo_ratio"] = fact(
+                round(_sg, 2) if _sg else None,
+                "python3 test/fixtures/sympy-perf/compare-pyc.py（读 steady_geo_ratio）",
+                "w64-logs/sympy-perf-pyodide{,-pyc}.json",
+                "**稳态对照**：≈1.0 = 如预期 .pyc 不改执行（预编译不是万能药）")
+
     # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
     #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
     #   · 重活（浏览器/容器/构建/基准）与派生/散文式复跑方式显式 `replay=False`
@@ -1328,6 +1367,8 @@ def measure():
         "sympy_pyodide_break_fails_loud", "sympy_import_ms_source", "sympy_import_ms_pyc",
         "sympy_pyc_speedup", "sympy_pyc_compile_calls",
         "sympy_perf_pyodide_over_native", "sympy_perf_cold_start_ms",
+        "sympy_pyc_import_speedup_pyodide", "sympy_pyc_cold_geo_speedup",
+        "sympy_pyc_steady_geo_ratio",
         "probe_lane_pass", "e2_threaded_oct_rc", "w64_mem_5g_bytes", "w64_mem_8g_bytes",
         "w64_mem_shared_5g_bytes", "w64_ob_lib_wasm64_members", "w64_ob_lib_wasm32_members",
         "w64_ob_matmul500_s",

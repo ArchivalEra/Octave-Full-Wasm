@@ -53,6 +53,8 @@ MATLAB 语义那块的桥，**在接口层面也已经存在**：OM 的脚本 AP
 
 **定论：Pyodide 是不是性能承重件**（三边实测，同一份基准、同 SymPy 1.14.0、同 ground types）：原生 CPython（uv 3.14）= 1.00×；**浏览器 Pyodide = 2.04×**（15 个 CAS op 的几何均值，逐项 1.6–3.2×）；原生 Octave+`symbolic`（持久 IPC）= 7.54× —— 浏览器档反而**比它快 3.69×**（`symbolic` 每步都要过管道编组变量）。冷启动 = Pyodide 装载 + 装 sympy 包 ≈ 2.3 s（可懒加载，不进开机路径）。⇒ **≈2× 不是数量级变化，不改变架构选择**。复跑：`sh test/fixtures/sympy-perf/run-perf.sh`。
 
+**追问：预编译 `.pyc` 到底快多少**（四段口径 —— 只看 `import` 会答错）：`import sympy` **2.71 s → 0.37 s（7.40×）**；每个 op 的**首次调用**几何均值 **1.29×**（SymPy 是惰性导入子模块的）；**稳态 0.99× —— 如预期不变**（这条对照说明预编译不是万能药）。最关键是第四个数：源码档**同会话二次 import 仍要 2.73 s**，即**浏览器里没有隐式字节码缓存**（原生 CPython 会写 `__pycache__`，而浏览器里 site-packages 只读）⇒ 每次冷启动都要重编那 472 个模块。⇒ `.pyc` 轮子买到的其实是**一件事**：**每次会话的启动固定成本降约 85%**，代价是 3.28× 字节。见 `test/fixtures/sympy-perf/compare-pyc.py`。
+
 
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 

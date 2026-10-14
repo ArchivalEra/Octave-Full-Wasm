@@ -138,10 +138,20 @@ def _fresh(k, tag):
 
 
 def run_bench(reps=3, tag=""):
-    """返回 {import_s, info, ops:{name:{min_ms,median_ms,times_ms}}}。
+    """返回 {import_s, info, cold_ms, ops, reimport_s}。
 
-    `tag` 用来给符号起唯一名字（跑两轮时第二轮也要避开第一轮的缓存）。
+    四段口径（用户点问"预编译 .pyc 还能快多少" —— 只看 import 会漏掉两段）：
+      · `import_s`   ：`import sympy` 本身（.pyc 主要打这一段）
+      · `cold_ms`    ：**每个 op 的首次调用**（SymPy 是惰性导入：`sympy.integrals`
+                       这类子模块在**第一次用到**时才加载 ⇒ 这段也吃 .pyc）
+      · `ops`        ：稳态（预热后 min/median —— **.pyc 不该改变它**，这正是要证明的对照）
+      · `reimport_s` ：**同会话内第二次** import（pop sys.modules 后重入）——
+                       用来判"不预编时 CPython 会不会自己把 .pyc 写进 MEMFS 缓存"
+                       （原生侧恒有磁盘缓存；浏览器侧若 site-packages 不可写就不会有）
+    `tag` 给符号起唯一名字（避免 SymPy 的 cacheit 把第二轮变成缓存查表）。
     """
+    import sys
+
     t0 = time.perf_counter()
     import sympy
     t_import = time.perf_counter() - t0
@@ -153,20 +163,28 @@ def run_bench(reps=3, tag=""):
     except Exception:
         info["gmpy2"] = False
 
-    # 全局预热：把各 op 的**惰性 import** 都走一遍（两侧同法；否则第一个 op 替所有 op
-    # 付模块加载费 ⇒ 读数不可比）。
+    from sympy import symbols
+
+    def fresh(k, t):
+        return symbols(f"{t}x{k}"), symbols(f"{t}y{k}")
+
+    # ── cold：每个 op 的首次调用（无预热；含各自子模块的惰性加载）──
+    cold = {}
     for name, fn in _OPS:
-        x, y = _fresh(99, tag + "w")
+        x, y = fresh(0, tag + "c")
+        t = time.perf_counter()
         try:
             fn(x, y)
         except Exception:
             pass
+        cold[name] = round((time.perf_counter() - t) * 1000.0, 3)
 
+    # ── warm：稳态（min/median）──
     ops = {}
     for name, fn in _OPS:
         times = []
         for k in range(reps):
-            x, y = _fresh(k, tag)
+            x, y = fresh(k, tag)
             t = time.perf_counter()
             fn(x, y)
             times.append((time.perf_counter() - t) * 1000.0)
@@ -174,7 +192,17 @@ def run_bench(reps=3, tag=""):
         ops[name] = {"min_ms": round(ts[0], 3),
                      "median_ms": round(ts[len(ts) // 2], 3),
                      "times_ms": [round(v, 3) for v in times]}
-    return {"import_s": round(t_import, 4), "info": info, "ops": ops}
+
+    # ── reimport：同会话第二次 import（判有没有隐式字节码缓存）──
+    for k in list(sys.modules):
+        if k == "sympy" or k.startswith("sympy.") or k == "mpmath" or k.startswith("mpmath."):
+            del sys.modules[k]
+    t = time.perf_counter()
+    import sympy as _s2                                               # noqa: F401
+    t_reimport = time.perf_counter() - t
+
+    return {"import_s": round(t_import, 4), "info": info, "cold_ms": cold,
+            "ops": ops, "reimport_s": round(t_reimport, 4)}
 
 
 if __name__ == "__main__":

@@ -42,6 +42,8 @@ The MATLAB-semantics bridge also already exists at the interface level: OM's scr
 
 **Verdict on "is Pyodide a performance burden"** (three-way measurement, same bench, same SymPy 1.14.0, same ground types): native CPython (uv 3.14) = 1.00×; **browser Pyodide = 2.04×** (geometric mean over 15 CAS ops, per-op range 1.6–3.2×); native Octave + `symbolic` with a persistent IPC = 7.54× (the browser lane is actually **3.69× faster** than that, because `symbolic` marshals variables across a pipe on every op). Cold start = Pyodide load + sympy package ≈ 2.3 s (lazy-loadable, never on the boot path). So: yes it costs something, but **≈2× is not a magnitude change** — it does not alter the architecture choice. Rerun: `sh test/fixtures/sympy-perf/run-perf.sh`.
 
+**Follow-up: how much does precompiled `.pyc` actually buy?** (four-way breakdown — measuring only `import` would mislead): `import sympy` **2.71 s → 0.37 s (7.40×)**; per-op **first call** geometric mean **1.29×** (SymPy lazily imports submodules on first use); **steady state 0.99× — unchanged, as it must be** (the control showing precompilation is no panacea). The key finding is in the fourth number: a second `import sympy` in the same session still costs 2.73 s on source wheels — i.e. **the browser has no implicit bytecode cache** (native CPython writes `__pycache__`; site-packages is read-only here), so every cold start recompiles those 472 modules. `.pyc` wheels therefore buy one thing: **the per-session startup constant drops ~85%**, for 3.28× the bytes. `test/fixtures/sympy-perf/compare-pyc.py`.
+
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -257,11 +259,11 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (22754 bytes)
 - `CONTEXT.md` (12515 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (389742 bytes)
+- `HISTORY.md` (391975 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (20342 bytes)
-- `README.zh.md` (18194 bytes)
-- `STATE.md` (52174 bytes)
+- `README.de.md` (21217 bytes)
+- `README.zh.md` (18962 bytes)
+- `STATE.md` (53580 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -316,7 +318,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-webgl.md` (59320 bytes)
 - `build/113/PLAN-arch.md` (58795 bytes)
 - `build/113/PLAN-jspi.md` (21638 bytes)
-- `build/113/PLAN-matlab-gaps.md` (16796 bytes)
+- `build/113/PLAN-matlab-gaps.md` (19072 bytes)
 - `build/113/PLAN-next.md` (16370 bytes)
 - `build/113/PLAN-threads.md` (31770 bytes)
 - `build/113/PLAN-wasm64.md` (14664 bytes)
@@ -456,7 +458,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
 - `build/CLIBS.md` (91292 bytes)
-- `build/FACTS.json` (59190 bytes)
+- `build/FACTS.json` (60422 bytes)
 - `build/GAPS-2.md` (28532 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
@@ -1101,13 +1103,15 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `test/fixtures/libm-spike/driver.mjs` (4411 bytes)
 - `test/fixtures/libm-spike/shim.c` (494 bytes)
 - `test/fixtures/relaxed_madd_min.wasm` (794 bytes)
-- `test/fixtures/sympy-perf/bench-sympy.py` (5314 bytes)
+- `test/fixtures/sympy-perf/bench-sympy.py` (6796 bytes)
+- `test/fixtures/sympy-perf/compare-pyc.py` (4395 bytes)
 - `test/fixtures/sympy-perf/compare.py` (5617 bytes)
-- `test/fixtures/sympy-perf/probe-sympy-perf-pyodide.mjs` (4650 bytes)
-- `test/fixtures/sympy-perf/run-perf.sh` (3716 bytes)
+- `test/fixtures/sympy-perf/probe-sympy-perf-pyodide.mjs` (6289 bytes)
+- `test/fixtures/sympy-perf/run-perf.sh` (4425 bytes)
+- `test/fixtures/sympy-pyc-ab/prepare-pyc-wheels.sh` (3833 bytes)
 - `test/fixtures/sympy-pyc-ab/probe-sympy-pyc-ab.mjs` (9197 bytes)
 - `test/fixtures/sympy-pyc-ab/repack-wheel.py` (2255 bytes)
-- `test/fixtures/sympy-pyc-ab/run-ab.sh` (4030 bytes)
+- `test/fixtures/sympy-pyc-ab/run-ab.sh` (1985 bytes)
 - `test/fixtures/xpow-spike/run-spike.sh` (1304 bytes)
 - `test/fixtures/xpow-spike/rust/.cargo/config.toml` (606 bytes)
 - `test/fixtures/xpow-spike/rust/Cargo.lock` (154 bytes)
@@ -1198,7 +1202,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `zreflect/knobs.py` (13343 bytes)
 - `zreflect/ledger.py` (11552 bytes)
 - `zreflect/living.py` (3688 bytes)
-- `zreflect/measure_octave.py` (96813 bytes)
+- `zreflect/measure_octave.py` (99764 bytes)
 - `zreflect/registry.py` (26659 bytes)
 - `zreflect/render.py` (6408 bytes)
 - `zreflect/runner.py` (5210 bytes)

@@ -26,11 +26,23 @@ echo "== [1/3] 原生 CPython（uv）"
   > "$OUT/sympy-perf-native.json"
 echo "   读数 → $OUT/sympy-perf-native.json"
 
-# ── 2) 浏览器 Pyodide（同一份 bench 源码）──
-echo "== [2/3] 浏览器 Pyodide"
-BENCH="$FIX/bench-sympy.py" sh "$REPO/test/browser/run.sh" \
+# ── 2) 浏览器 Pyodide（同一份 bench 源码；**两档轮子**：source / pyc）──
+#    WHEELS=pyc 只改 pyodide lock 指向预编轮子（字节要先跑 prepare-pyc-wheels.sh 产出）
+echo "== [2/3] 浏览器 Pyodide（源码轮子）"
+BENCH="$FIX/bench-sympy.py" WHEELS=source sh "$REPO/test/browser/run.sh" \
   "$FIX/probe-sympy-perf-pyodide.mjs" > "$OUT/sympy-perf-pyodide.log" 2>&1
 echo "   读数 → $OUT/sympy-perf-pyodide.json"
+
+if [ "${SKIP_PYC:-0}" != "1" ]; then
+  echo "== [2b/3] 浏览器 Pyodide（**.pyc 预编译轮子**）"
+  sh "$REPO/test/fixtures/sympy-pyc-ab/prepare-pyc-wheels.sh" || {
+    echo "   ⚠️ 预编失败 ⇒ 跳过 pyc 档（不算结论，如实记）" >&2; SKIP_PYC=1; }
+  if [ "${SKIP_PYC:-0}" != "1" ]; then
+    BENCH="$FIX/bench-sympy.py" WHEELS=pyc sh "$REPO/test/browser/run.sh" \
+      "$FIX/probe-sympy-perf-pyodide.mjs" > "$OUT/sympy-perf-pyodide-pyc.log" 2>&1
+    echo "   读数 → $OUT/sympy-perf-pyodide-pyc.json"
+  fi
+fi
 
 # ── 3) 原生 Octave + symbolic（两档 IPC）──
 #   前置：uv venv 装 sympy（Octave 的 symbolic 包会调它）
