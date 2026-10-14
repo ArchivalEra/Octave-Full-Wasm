@@ -4932,3 +4932,31 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 - **遗留（等用户定）**：① 旧 public 仓 `ArchivalEra/Octave-Forge-Shelf` 仍在线（归档/删除 = 对外动作）；
   ② 旧目录 `/mnt/hdd/zcode-projects/Octave-Forge-Shelf`（已等价于新仓，名字误导 ⇒ 建议删或改名）；
   ③ 站点 `assets/forge-catalog.json` 记 `shelf_commit: 980e093`（内容有效，下次装配自然更新）。
+
+## 5.x 旧货架仓：本地删除 + 远程归档（用户点令 2026-10-14）
+
+- **用户点令**："给那个仓线上线下都删掉"。
+- **删前终检（两道刹车，都做了）**：
+  ① 旧仓（GitHub）**全部 commit 在新仓可达**（`gh api .../commits` 逐个 `git cat-file -e`：
+  `980e093` ✓ / `a6ab1a8` ✓）；旧仓 **tags = 0**、分支只有 `main`；
+  ② 旧本地目录与新克隆**文件清单逐字一致**（`diff` 两边 `ls-files`：22 = 22 ✓）、
+  `git status --porcelain --ignored` 空（含被忽略文件也无独有内容）⇒ **零独有内容**。
+- **本地：已删** —— `rm -rf /mnt/hdd/zcode-projects/Octave-Forge-Shelf`（已核新目录仍在：`928317a`）。
+- **远程：★ 删不掉，改归档（如实记）**：
+  · `gh repo delete` ⇒ **HTTP 403**：*"Must have admin rights… needs the `delete_repo` scope"*；
+  · 核过 token（gh keyring 与 `git credential fill` 是**同一个**，scopes = `gist, read:org, repo, workflow`）
+  ⇒ **确无 `delete_repo`**；补它要走 `gh auth refresh -h github.com -s delete_repo`（**浏览器 OAuth
+    交互**），无人值守下不能替用户点 ⇒ **不擅自尝试**；
+  · 退而**归档**：`gh repo archive` **成功**（它只需 admin，不要 `delete_repo`）⇒
+    `isArchived: true`；**实测验证只读生效**：克隆后 `git push` ⇒
+    `remote: This repository was archived so it is read-only.`（403）。
+- **⇒ 留给用户的删除命令**（拿到 `delete_repo` scope 后一条）：
+  ```sh
+  gh auth refresh -h github.com -s delete_repo      # 交互式，浏览器点一次
+  gh repo delete ArchivalEra/Octave-Forge-Shelf --yes
+  ```
+  在删之前，归档状态**已经达到"不可再被误用"的效果**（只读 + 名字仍在，可查到去向）。
+- **引用点**：全盘扫过后，宿主 README/CONTEXT/.gitignore 里的旧名**均属"原名 `X`（升格）"这类
+  历史说明**（正确保留）；内容仓 README 的"本仓由 `X` 升格而来"同理。**HISTORY 是 append-only，
+  旧名留在那里是对的**（它就是历史）。另发现第三方仓 `isui.ren-heart/MangoMesa` 的
+  `sites.json`/`projects/index.html` 里有旧仓链接（**不是本仓管辖**，未动；归档后该链接会 403/只读）。
