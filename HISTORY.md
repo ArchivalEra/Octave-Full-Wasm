@@ -4853,3 +4853,29 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 - **边界与可改判**：本仓不改他人仓（路径铁律）；额外内容仓 = 货架仓扩容或新仓由用户定
   （端口使二者等价）；若改判，改 §8 判决与契约归属，**接缝本体 §2–§6 不受影响**
   —— 这是"缝放在记录上而非组织上"的直接收益。
+
+## 5.x 迁徙：货架仓 → **额外内容仓**（private，用户点令 2026-10-14）
+
+- **用户点令**："你先 gh cli 建立一个 private 仓来迁徙那些东西吧"。
+- **做了四件事**：
+  1. **建 private 仓 `ArchivalEra/Octave-Extra-Content`**（原 `Octave-Forge-Shelf` 是 **PUBLIC**）。
+  2. **推完整历史**（不是新建提交）⇒ 原货架 commit **仍可达**，宿主 submodule pin 值不用变。
+  3. **升格内容**（commit `7eee94d`）：README 重写为「额外内容仓」总览（组织结构图 +
+     三个生产者 + 边界"不托管站点/不装配字节/不定义引擎接口"）+ `recipes/`（LLVM-wasm 工具链
+     逐资产 sha 与首拉预算；Pyodide/SymPy 三分件 sha + ★PyPI≠pyodide-lock 字节的身份坑 +
+     实测性能表）+ `port/`（端口规范副本）。
+  4. **宿主 repoint**：`.gitmodules` + submodule remote + `.git/config`（`git submodule sync`）
+     → 新 URL；submodule gitlink `980e093` → `7eee94d`。
+- ** ★ 关键验证（决定"要不要重装配站点"）**：`git diff --quiet 980e093 7eee94d -- packages tools`
+  ⇒ **逐字节相同** ⇒ 新旧 tip 的**功能零差异**（只多文档/配方面）⇒ **站点无需重装配**，
+  8761 不动（遵守"8761 在 promote 之前一动不动"）。
+- **另两条实测**：① 从**新 URL** 能取到 pin `980e093` 与 tip `7eee94d`（`git ls-remote` 验）
+  ⇒ 迁徙不是"只有本地能跑"；② 装配器照旧：`forge-catalog.py --site <tmp>` ⇒ 12 包上架、
+  `shelf_commit` 记 `7eee94d`；闸门 `check-forge-catalog` **ok**（目录↔货架↔镜像三方一致）。
+- **如实记的后果（public 宿主 × private 子模块）**：本仓（宿主）是 public，新货架仓是 **private**
+  ⇒ **外部克隆者无法 init `shelf/`**。宿主既有门（`check-forge-catalog` 等）对"货架不在"
+  按 `SKIP` 退 0 ⇒ **不会假红**；但方向要记住：缺货架 = 能力减一（装不了货架包），不是错。
+- **遗留（等用户决定）**：旧 public 仓 `Octave-Forge-Shelf` 仍在（内容与迁徙前一致）——
+  归档/删除是**对外可见**的动作，未擅自做；旧独立克隆 `/mnt/hdd/zcode-projects/Octave-Forge-Shelf`
+  已 repoint 到新仓（不再是"推错仓"的陷阱）。站点 `assets/forge-catalog.json` 仍记
+  `shelf_commit: 980e093`（内容逐字节有效，下次装配自然更新为 7eee94d）。

@@ -2,9 +2,34 @@
  "schema": 1,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "a6ab1a8cee71044fc84c71d3a7d07fdc8bfdac1f",
+ "shelf_commit": "980e0933dd901265cd2d46cc912c84ca0afc867a",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
+  {
+   "name": "cgi",
+   "version": "0.1.2",
+   "size": 9960,
+   "sha256": "4187eb2abec69c5735527fe3d6a25b2010fccede199fe556e242677ed991cf43",
+   "url": "assets/forge/cgi-0.1.2.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/cgi-0.1.2.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m"
+   ]
+  },
+  {
+   "name": "datatypes",
+   "version": "1.4.2",
+   "size": 2091502,
+   "sha256": "86aef8eddb8f39025cc32a6a385157dc8adbc83417ca25b1e95681c7dae08b47",
+   "url": "assets/forge/datatypes-1.4.2.tar.gz",
+   "upstream_url": "https://github.com/pr0m1th3as/datatypes/releases/download/release-1.4.2/datatypes-1.4.2.tar.gz",
+   "deps": [],
+   "kinds": [
+    "m",
+    "src"
+   ]
+  },
   {
    "name": "geometry",
    "version": "4.1.0",

@@ -178,7 +178,7 @@ grep -n "sys.path.insert" build/forge-catalog.py        # ⇒ :37/:38 指向 SHE
 # 缺陷 3：版本解析三份副本
 grep -n "def vtuple\|def octave_ok\|def pick_version" \
   build/forge-catalog.py build/forge-fetch.py \
-  /mnt/hdd/zcode-projects/Octave-Forge-Shelf/tools/forge-shelf.py   # ⇒ 三处各一份
+  shelf/tools/forge-shelf.py                     # ⇒ 三处各一份（货架 = shelf/ submodule）
 
 # 四方案原文：本轮 design-it-twice 的四个子代理输出（记录在会话里；本文件是判决）
 ```

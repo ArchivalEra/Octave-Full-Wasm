@@ -83,7 +83,7 @@ UI 形态，不是概念本身** —— 无论它们叫什么名字，最终都�
 
 > ⚠️ **别读混**：`build/plugins.json` 里没有、也**不该有** Forge 包（两者的轴不同 ——
 > 构建期 vs 运行期；见 `build/113/NOTES-forge-ondemand.md` §0 的对照表）。
-> 货架仓是独立仓库 `Octave-Forge-Shelf`（本仓 `shelf/` submodule，只含档案，每包一文件）。
+> **额外内容仓**是独立仓库 `Octave-Extra-Content`（本仓 `shelf/` submodule；只含档案与供给配方，不含字节）。**private 仓** ⇒ 外部克隆者无法 init 本 submodule（本仓门按 SKIP 容忍缺货架）。原名 `Octave-Forge-Shelf`（2026-10-14 升格，历史保留）。
 > **证据：** `build/113/NOTES-forge-ondemand.md`
 
 ---

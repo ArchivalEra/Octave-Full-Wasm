@@ -37,6 +37,8 @@ binary64 —— 并经下文显式审计。
 
 该探查也写了本引擎**够不到**的那块：MATLAB 有三根轴（语言 / Simulink / Simscape），我们覆盖前两根 —— **非因果物理建模（Simscape）在本仓零覆盖**，而 **OpenModelica** 是那块最现实的答案（它的 wasm 路径**在官方主仓里**、有 Rust 重写、**已发货浏览器 FMI 仿真器**；AGPLv3/OSMC-PL）。见该文 §8。
 
+**迁徙：货架仓 → 额外内容仓（private，2026-10-14）**：原 `Octave-Forge-Shelf`（public）升格为**`Octave-Extra-Content`（private）** —— 本仓的 `shelf/` submodule 指向它。除原货架档案外，新增`recipes/`（LLVM-wasm 工具链与 Pyodide/SymPy 运行时的**供给配方**：URL + sha256 + 预算）与 `port/`（内容清单端口副本）。**org 判决落地为③去中间商**：本仓 = 核心宿主/消费适配器，额外内容仓 = 生产适配器，UI 各立契约。⚠️ **private 的后果如实记**：宿主是 public ⇒**外部克隆者无法 init `shelf/`**（只是能力减一，不影响构建；门按 SKIP 容忍）。原 public 仓未归档（对外动作等裁决）。见 `build/113/NOTES-extra-content-seam.md` §8。
+
 **WebGPU 在这里可用，已在 Worker 内实测**：`navigator.gpu` 在主线程与**无 DOM 的 Worker 内**都能拿到真 adapter/device（vendor=nvidia），且在其中跑 compute shader，`[1,1,1,1]×2` 读回 `[2,2,2,2]`。⇒ GPU 计算**不是**结构性差距；而且与 CUDA（私有栈、手机没有）相反，WebGPU 在 NVIDIA/AMD/Intel/Apple 上是同一套 API。WebSerial/USB/HID 同样原生可用。见 `test/browser/probe-webgpu-capability.mjs`。
 
 后续**实验已证实 Modelica 能在浏览器里跑**：一个第三方 OpenModelica→wasm 移植把 `BouncingBall.mo` 跑通了完整链路 `parse → 生成 C → 浏览器内 emcc+wasm-ld → 仿真 → 出图`（证据 `build/113/evidence-omc-web-demo.png`；记录 `build/113/NOTES-experiment-omc-wasm.md`）。⇒ "Modelica 上网页"是**已证**、不是设想 —— 但那条**第三方**路线的求解器覆盖窄（Euler/RK/dassl）。

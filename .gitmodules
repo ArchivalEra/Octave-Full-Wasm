@@ -58,4 +58,4 @@
 	branch = wasm/1.1.0
 [submodule "shelf"]
 	path = shelf
-	url = https://github.com/ArchivalEra/Octave-Forge-Shelf.git
+	url = https://github.com/ArchivalEra/Octave-Extra-Content.git

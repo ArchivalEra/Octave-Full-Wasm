@@ -30,7 +30,7 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 - **机制/推断**：`build/113/NOTES-*.md`（jspi/threads/webgl/wasm64/hotpath/libm/plugins/upstream）。
 - **上游**：`upstream/`（18 submodule，5 fork 的 wasm 补丁分支）+ `build/upstream-lock.json`
   （无 git 上游的 URL+sha256）+ `build/113/NOTES-upstream.md`（升级 SOP）；
-  **货架 `shelf/`**（第 19 个 submodule，`Octave-Forge-Shelf` 独立仓：只含 Forge 包档案，
+  **额外内容 `shelf/`**（第 19 个 submodule，`Octave-Extra-Content` 独立仓（private）：包档案 + 供给配方，
   每包一文件；pin 由 submodule commit 承载、字节由 sha256 承载）。
 - **两个"插件"别读混**（术语权威定义见 `CONTEXT.md`）：**部件插件**（构建期，换链进来的
   库/旗标，影响全站产物）= `build/113/NOTES-plugins.md` + `build/plugins.json` +

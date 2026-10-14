@@ -716,7 +716,7 @@ def measure():
                 _ver += 1
         facts["forge_shelf_packs"] = fact(_n,
                                           "ls shelf/packages/*.json | wc -l",
-                                          "shelf/（submodule Octave-Forge-Shelf）",
+                                          "shelf/（submodule Octave-Extra-Content）",
                                           "货架上的包档案数（每包一文件）")
         facts["forge_shelf_verified"] = fact(_ver,
                                              "grep -l '\"verified\": {' shelf/packages/*.json | wc -l",
