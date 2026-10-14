@@ -5,6 +5,18 @@
 
 ## 现在是什么（2026-10-14）
 
+- **★ 三仓统一「额外内容」接口设计已判决（2026-10-14，用户点令「大一统」）**：
+  `build/113/NOTES-extra-content-seam.md` —— **缝在「记录」上，不在「方法」上**：
+  一种记录（`form`=投送形态 / `content`=内容构成，两轴各自命名，收编今天 `kind`/`kinds` 的同名两义）
+  + 能力层（Pyodide/clang）作 `form:"tree"` 的**普通条目折进同一张依赖图**
+  + 宿主返回 **Verdict 四态值**（ok/failed/not-found/cannot-know 不可塌陷）
+  + **端口产地**在 `build/extra-content/`（schema + 纯 stdlib 校验器 + golden/bad 夹具，
+  生产者自证不需宿主在场）+ 一条协商规则（未知轴默认 fail-closed）。
+  方法 = design-it-twice 四子代理（极简/最大灵活/常见调用者/端口-适配器）独立出方案 → 判决取
+  「极简骨架 + 常见调用者返回值 + 端口产地 + 一条协商规则」。**修的是三条实测缺陷**：
+  `kind`/`kinds` 同名两义（实测取值 4 种 vs 2 种）、`forge-catalog.py:37` import 生产者内部、
+  版本解析三份副本（复跑见该文 §7）。**未落实现** —— 增量五步在 §5，每步独立验收。
+
 - **★ Pyodide 是否性能承重件 —— 定论（用户点令三边实测，2026-10-14）**：
   同一份 `bench-sympy.py`（15 个 CAS op，同 sympy 1.14.0、同 ground types）三边跑：
   **原生 CPython（uv）= 1×** / **浏览器 Pyodide = [[sympy_perf_pyodide_over_native]]×** /

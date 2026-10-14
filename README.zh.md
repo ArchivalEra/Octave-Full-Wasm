@@ -57,6 +57,8 @@ MATLAB 语义那块的桥，**在接口层面也已经存在**：OM 的脚本 AP
 
 **符号计算在「额外内容」里的归属**：`symbolic` 包本身是**普通货架条目**，而 Pyodide 运行时（约 27 MB）是**基础设施、不是货架条目** —— 与 clang 工具链同一类：同源托管、`upstream-lock.json` 钉 URL+sha256、可重建的供给产物，由多个包共用。而且货架现有的 `kinds` 字段**对它说了谎**：实测 `detect_kinds('symbolic-3.2.2.tar.gz')` 返回 `['m']`，与真·开箱即用的 `cgi` 判得一模一样 —— 而它的 `DESCRIPTION` 明写 `SystemRequirements: python, sympy, mpmath` ⇒ 装上之后跑不动。⇒ 货架加新轴（`needs: ["pyodide"]`）；规模实测：144 个上游包里**只有 2 个**需要（`symbolic`、`pythonic`）。商店式界面里这一条要显示「按需拉取约 27 MB 运行时」。见 `REQUIREMENTS-store-and-matlab.md` §A4b。
 
+**三仓统一「额外内容」接口（2026-10-14 判决）**：Octave-Full-Wasm 与 LLVM-wasm、货架仓之间定了一条接缝 —— **缝在「记录」上，不在「方法」上**：一种记录（`form`=投送形态、`content`=内容构成，两轴各自命名，收编今天 `kind`/`kinds` 的同名两义）+ 能力层（Pyodide/clang）作 `form:"tree"` 的**普通条目折进同一张依赖图** + 宿主返回**四态值**（ok/failed/not-found/cannot-know，不可塌陷成布尔 —— 把 T4 那次「读不到≠不存在」的实测教训钉成类型级不变量）+ 端口产地 `build/extra-content/`（schema + 纯 stdlib 校验器 + golden/bad 夹具，生产者自证不需要宿主在场）。设计 = `build/113/NOTES-extra-content-seam.md`（含三条实测缺陷与增量五步）。
+
 **框法（用户点令 2026-10-14）："插件市场 / 商店"只是「额外内容」的一种 UI 形态，不是概念本身。**无论它们叫什么名字，最终都只是这个 Octave 网页版的能力拓展 —— 概念层统一叫**额外内容**（权威定义见 `CONTEXT.md`）：随站资产 / 货架包 / **共享能力层**（工具链、Pyodide 运行时）/ 构建期部件插件。"货架"是它的元数据载体，"按需拉取"是它的获取机制。⇒ 写能力时用"额外内容"，只有写界面时才用"商店"。
 
 

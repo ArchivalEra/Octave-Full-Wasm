@@ -62,6 +62,8 @@ Die Brücke zur MATLAB-Semantik existiert auf der Schnittstellenebene ebenfalls 
 
 **Rahmung (Nutzervorgabe 2026-10-14): "Plugin-Markt / Store" ist nur eine UI-Form von **Zusatzinhalten** (extra content), nicht das Konzept selbst.** Wie diese Dinge auch heißen mögen — sie sind letztlich nur Fähigkeitserweiterungen dieser Web-Version von Octave; der Begriff auf Konzeptebene ist **Zusatzinhalte** (maßgebliche Definition in `CONTEXT.md`): mitgelieferte Assets / Shelf-Pakete / **gemeinsame Fähigkeitsschichten** (clang-Toolchain, Pyodide-Laufzeit) / Build-Zeit-Komponenten-Plugins. Das "Shelf" ist ihr Metadatenträger, "On-Demand-Pull" ihr Beschaffungsmechanismus. => Bei Fähigkeiten "Zusatzinhalte" schreiben; "Store" nur für die Oberfläche.
 
+**Vereinheitlichte "Zusatzinhalte"-Schnittstelle über die drei Repos (entschieden 2026-10-14)**: eine Naht zwischen Octave-Full-Wasm, LLVM-wasm und dem Shelf-Repo — **die Naht liegt am Datensatz, nicht an der Methode**: ein Satztyp (`form` = Auslieferungsform, `content` = Inhalt — zwei getrennt benannte Achsen, Schluss mit der `kind`/`kinds`-Überladung) + Fähigkeitsschichten (Pyodide/clang) als gewöhnliche `form:"tree"`-Einträge im SELBEN Abhängigkeitsgraphen + ein Host-Rückgabewert mit **vier Zuständen** (ok/failed/not-found/cannot-know, nicht zu einem Boolean kollabierbar — die T4-Lehre "nicht gelesen ist nicht abwesend" als typisierte Invariante) + der Port in `build/extra-content/`. Siehe `build/113/NOTES-extra-content-seam.md`.
+
 
 **Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
 
