@@ -4714,3 +4714,29 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   各带实测现状 + 复跑命令 + 验收与反向断言；库厚度实测：货架 12 包 vs 上游索引
   **144 全兼容**（纯候选 102）。
 - 台账 +10 键（`sympy_*` 族），149 → 159 条。
+
+## 5.x 定论：Pyodide 是性能承重件吗（三边实测，2026-10-14）
+
+- **用户点令**："我需要你给我个明确的答案，pyodide 是不是性能承重件，你可以用原生
+  octave+uv 跑下对比，如果性能接近我们以后就不讨论了。"
+- **三边同跑**（同一份 `test/fixtures/sympy-perf/bench-sympy.py`，15 个 CAS op；
+  同 sympy **1.14.0**；ground types 都钉 `python`——Pyodide 无 gmpy2，若原生侧有它会
+  "免费"快一截，那就不是在比 Pyodide）：
+  | 档 | 几何均值 vs 原生 CPython |
+  |---|---|
+  | 原生 CPython（uv 3.14.7） | 1.00× |
+  | **浏览器 Pyodide（3.14.2）** | **2.04×** |
+  | 原生 Octave + symbolic（popen2 持久 IPC） | 7.54× |
+  | 原生 Octave + symbolic（system 一次性 IPC） | 171.9×（**量的是进程启动费**，不可比档） |
+- **明确答案**：**是承重件，但承的是 ≈2× 这个量级，不是数量级**；逐项 1.6–3.2×。
+  且**浏览器档比"原生 Octave + symbolic"还快 3.69×** —— 因为 symbolic 的
+  Octave↔Python 边界每步都要做变量编组，而 Pyodide 档是进程内直调。
+  冷启动 = Pyodide 装载 + 装包 ≈ 2.3 s（懒加载即可）。⇒ 满足"性能接近"，
+  **2× 不改变架构选择**。
+- **口径纪律（三条，写进 run-perf.sh 头）**：① 同一份 bench 源码（浏览器侧 fetch 它，
+  不复制逻辑）；② 同 sympy 版本 + 同 ground types；③ Octave 侧两档 IPC 分开报
+  （popen2 持久才与"浏览器里常驻一个 Pyodide"语义对齐）。
+- **两处探针自身瑕疵（实测抓到，已修）**：① `runPythonAsync` 里 `__name__=='__main__'`
+  让 bench **跑两遍**（第二遍全热 ⇒ `import_s` 读出 0.0）；② compare.py 的首行
+  regex 没容忍 `OCT|` 前缀 ⇒ 第一列缺失。两条都留注释。
+- 台账 +2 键（`sympy_perf_pyodide_over_native` / `sympy_perf_cold_start_ms`），159 → 161。

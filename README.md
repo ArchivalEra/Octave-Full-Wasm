@@ -39,6 +39,9 @@ That also settles the repo plan: a separate "block-diagram repo" is **not** need
 The MATLAB-semantics bridge also already exists at the interface level: OM's script API (`sendExpression`, used by its official `OMMatlab` MATLAB client over ZeroMQ) is exposed in the browser as **`omc_eval`** — same command protocol, different transport. So an Octave-side `omc_*` function family (build a script, call `omc_eval`, read back `.mat`) is all that is missing; OMMatlab itself cannot run in a browser (it needs a local process socket). See §10.
 
 **Symbolic computation — the route's premise is now measured, not assumed**: `sym` is 0 in this build, and Forge's `symbolic` package is pure `.m` (zero `.cc`) yet drives everything through Python/SymPy — while this build's wasm has **zero** `pyexec`/`pyeval`/`pycall` bytes and no shell. So the package cannot run as-is; the only route is a real Python runtime in the browser. Measured: **Pyodide + SymPy works** — `diff(sin(x),x)` returns exactly `cos(x)`, in a COI worker **and** without COOP/COEP (so the base lane has it too), plus a loud-failure reverse test (`test/browser/probe-pyodide-sympy.mjs`, 5/0). On the "precompile Python" question: static compilation to JS (Transcrypt-style) is **infeasible**, not merely slower (Transcrypt's own README: "No eval and exec of Python code"; SymPy, measured, has 340 `eval(` / 61 `exec(` call sites). Precompiled **bytecode** (`.pyc`) is feasible and currently not done at all; the measured A/B is **7.26×** on `import sympy` (2757 → 380 ms, compile calls 472 → 0), at 3.28× the wheel bytes. See `build/113/PLAN-matlab-gaps.md`.
+
+**Verdict on "is Pyodide a performance burden"** (three-way measurement, same bench, same SymPy 1.14.0, same ground types): native CPython (uv 3.14) = 1.00×; **browser Pyodide = 2.04×** (geometric mean over 15 CAS ops, per-op range 1.6–3.2×); native Octave + `symbolic` with a persistent IPC = 7.54× (the browser lane is actually **3.69× faster** than that, because `symbolic` marshals variables across a pipe on every op). Cold start = Pyodide load + sympy package ≈ 2.3 s (lazy-loadable, never on the boot path). So: yes it costs something, but **≈2× is not a magnitude change** — it does not alter the architecture choice. Rerun: `sh test/fixtures/sympy-perf/run-perf.sh`.
+
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -173,7 +176,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.githooks/update-readme.py` (2270 bytes)
 - `.githooks/update-state.py` (5884 bytes)
 - `.githooks/witness-upstream-pin.py` (11252 bytes)
-- `.gitignore` (6425 bytes)
+- `.gitignore` (6453 bytes)
 - `.gitmodules` (2029 bytes)
 - `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
 - `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
@@ -254,11 +257,11 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (22754 bytes)
 - `CONTEXT.md` (12515 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (387786 bytes)
+- `HISTORY.md` (389742 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (19668 bytes)
-- `README.zh.md` (17585 bytes)
-- `STATE.md` (50916 bytes)
+- `README.de.md` (20342 bytes)
+- `README.zh.md` (18194 bytes)
+- `STATE.md` (52174 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -313,7 +316,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-webgl.md` (59320 bytes)
 - `build/113/PLAN-arch.md` (58795 bytes)
 - `build/113/PLAN-jspi.md` (21638 bytes)
-- `build/113/PLAN-matlab-gaps.md` (14463 bytes)
+- `build/113/PLAN-matlab-gaps.md` (16796 bytes)
 - `build/113/PLAN-next.md` (16370 bytes)
 - `build/113/PLAN-threads.md` (31770 bytes)
 - `build/113/PLAN-wasm64.md` (14664 bytes)
@@ -453,7 +456,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
 - `build/CLIBS.md` (91292 bytes)
-- `build/FACTS.json` (58294 bytes)
+- `build/FACTS.json` (59190 bytes)
 - `build/GAPS-2.md` (28532 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
@@ -1098,6 +1101,10 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `test/fixtures/libm-spike/driver.mjs` (4411 bytes)
 - `test/fixtures/libm-spike/shim.c` (494 bytes)
 - `test/fixtures/relaxed_madd_min.wasm` (794 bytes)
+- `test/fixtures/sympy-perf/bench-sympy.py` (5314 bytes)
+- `test/fixtures/sympy-perf/compare.py` (5617 bytes)
+- `test/fixtures/sympy-perf/probe-sympy-perf-pyodide.mjs` (4650 bytes)
+- `test/fixtures/sympy-perf/run-perf.sh` (3716 bytes)
 - `test/fixtures/sympy-pyc-ab/probe-sympy-pyc-ab.mjs` (9197 bytes)
 - `test/fixtures/sympy-pyc-ab/repack-wheel.py` (2255 bytes)
 - `test/fixtures/sympy-pyc-ab/run-ab.sh` (4030 bytes)
@@ -1191,7 +1198,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `zreflect/knobs.py` (13343 bytes)
 - `zreflect/ledger.py` (11552 bytes)
 - `zreflect/living.py` (3688 bytes)
-- `zreflect/measure_octave.py` (94299 bytes)
+- `zreflect/measure_octave.py` (96813 bytes)
 - `zreflect/registry.py` (26659 bytes)
 - `zreflect/render.py` (6408 bytes)
 - `zreflect/runner.py` (5210 bytes)

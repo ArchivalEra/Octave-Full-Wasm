@@ -1278,6 +1278,40 @@ def measure():
                     "w64-logs/sympy-pyc-ab.json",
                     "交付字节代价：.pyc 轮子 ÷ 源码轮子（**速度不是免费的**）")
 
+    # ── ★ 用户定论之问（2026-10-14）：**Pyodide 是不是性能承重件** ──────────────
+    #   用户点令原文："我需要你给我个明确的答案，pyodide 是不是性能承重件，你可以用
+    #   原生 octave+uv 跑下对比，如果性能接近我们以后就不讨论了"
+    #   ⇒ 三边同跑 15 个 CAS op（同一份 `bench-sympy.py`，同 sympy 1.14.0，
+    #     ground_types 都钉 python）：原生 CPython（uv 3.14）/ 浏览器 Pyodide /
+    #     原生 Octave+symbolic（两档 IPC 分开报 —— popen2 持久才是可比档）。
+    #   结论看 `sympy_perf_pyodide_over_native`（几何均值）：**2.04×** ⇒ 判得"接近"，
+    #   且**浏览器侧比原生 Octave+symbolic 还快 3.69×**（后者每 op 要过管道做变量编组）。
+    _perf = os.path.join(W64LOGD, "sympy-perf-pyodide.json")
+    _nat = os.path.join(W64LOGD, "sympy-perf-native.json")
+    if os.path.exists(_perf) and os.path.exists(_nat):
+        # geo 用 compare.py 的算法（跳过 <0.5ms 的噪声项；两侧 ops 交集）
+        try:
+            import math
+            _p = json.load(open(_perf, encoding="utf-8"))["bench"]["ops"]
+            _n = json.load(open(_nat, encoding="utf-8"))["bench"]["ops"]
+            _rs = [_p[k]["min_ms"] / _n[k]["min_ms"]
+                   for k in _p if k in _n and _n[k]["min_ms"] > 0.5]
+            _geo = math.exp(sum(math.log(x) for x in _rs) / len(_rs)) if _rs else None
+        except Exception:
+            _geo = None
+        if _geo:
+            facts["sympy_perf_pyodide_over_native"] = fact(
+                round(_geo, 2),
+                "python3 test/fixtures/sympy-perf/compare.py（读最后一行 JSON 的 geo）",
+                "w64-logs/sympy-perf-{native,pyodide}.json",
+                "**用户定论之问**：Pyodide ÷ 原生 CPython 的 CAS 几何均值（≈2× ⇒ 判『接近』）")
+            facts["sympy_perf_cold_start_ms"] = fact(
+                round(json.load(open(_perf, encoding="utf-8"))["timings"]["load"]
+                      + json.load(open(_perf, encoding="utf-8"))["timings"]["pkg"]),
+                "python3 -c \"import json;d=json.load(open('%s'))['timings'];print(round(d['load']+d['pkg']))\"" % _perf,
+                "w64-logs/sympy-perf-pyodide.json",
+                "浏览器侧**冷启动**（Pyodide 装载 + 装 sympy 包）—— 与稳态倍数分开读")
+
     # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
     #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
     #   · 重活（浏览器/容器/构建/基准）与派生/散文式复跑方式显式 `replay=False`
@@ -1293,6 +1327,7 @@ def measure():
         "sympy_pyodide_ok", "sympy_pyodide_diff", "sympy_pyodide_nocoi_ok",
         "sympy_pyodide_break_fails_loud", "sympy_import_ms_source", "sympy_import_ms_pyc",
         "sympy_pyc_speedup", "sympy_pyc_compile_calls",
+        "sympy_perf_pyodide_over_native", "sympy_perf_cold_start_ms",
         "probe_lane_pass", "e2_threaded_oct_rc", "w64_mem_5g_bytes", "w64_mem_8g_bytes",
         "w64_mem_shared_5g_bytes", "w64_ob_lib_wasm64_members", "w64_ob_lib_wasm32_members",
         "w64_ob_matmul500_s",

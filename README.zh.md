@@ -51,6 +51,9 @@ MATLAB 语义那块的桥，**在接口层面也已经存在**：OM 的脚本 AP
 
 **符号计算 —— 路线前提已实测（不是推断）**：本构建 `sym` = 0，而 Forge 的 `symbolic` 包是**纯 `.m`**（0 个 `.cc`）却全靠 Python/SymPy 干活；本构建 wasm 里 `pyexec`/`pyeval`/`pycall` 字节数**全 = 0**、也无 shell。⇒ 包原样跑不了，唯一出路是浏览器里有一个真 Python 运行时。实测：**Pyodide + SymPy 可用** —— `diff(sin(x),x)` 恰好返回 `cos(x)`，**COI Worker 与无 COOP/COEP 两种模式都算对**（基础档用户也有份），并带"响亮失败"反向断言（`test/browser/probe-pyodide-sympy.mjs`，5/0）。关于"预编译 Python"之问：**静态编译成 JS（Transcrypt 那类）不可行**，不是慢几倍（Transcrypt 官方 README 原文 *"No eval and exec of Python code"*；SymPy 实测有 **340** 处 `eval(` / **61** 处 `exec(`）。**预编译字节码（`.pyc`）可行且现在完全没做**；实测 A/B = **7.26×**（`import sympy` 2757→380 ms，编译 472→0 次），代价 = 轮子字节 3.28×。见 `build/113/PLAN-matlab-gaps.md`。
 
+**定论：Pyodide 是不是性能承重件**（三边实测，同一份基准、同 SymPy 1.14.0、同 ground types）：原生 CPython（uv 3.14）= 1.00×；**浏览器 Pyodide = 2.04×**（15 个 CAS op 的几何均值，逐项 1.6–3.2×）；原生 Octave+`symbolic`（持久 IPC）= 7.54× —— 浏览器档反而**比它快 3.69×**（`symbolic` 每步都要过管道编组变量）。冷启动 = Pyodide 装载 + 装 sympy 包 ≈ 2.3 s（可懒加载，不进开机路径）。⇒ **≈2× 不是数量级变化，不改变架构选择**。复跑：`sh test/fixtures/sympy-perf/run-perf.sh`。
+
+
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
 站点资产包**逐批审计**：用 `build/<名>/` 源重生成 `site/assets/m/*.js` 并比 sha（挂载点逐字读 `build/assets-meta.json`，**不许猜**）。

@@ -87,6 +87,39 @@ test/browser/probe-pyodide-sympy.mjs（三种模式，同一探针）
 - 必须 **hash 校验模式**（timestamp 模式 mtime 对不上 ⇒ CPython **静默拒绝** `.pyc` 回落现编
   ⇒ A/B 看起来"没差别" = 假阴性）。
 
+### 1.3b ★ 定论：**Pyodide 是性能承重件吗**（用户点令的三边实测，2026-10-14）
+
+用户原话："我需要你给我个明确的答案，pyodide 是不是性能承重件，你可以用原生 octave+uv
+跑下对比，如果性能接近我们以后就不讨论了"。
+
+**三边同跑 15 个 CAS op**（同一份 `bench-sympy.py`；同 sympy **1.14.0**；ground types
+都钉 `python`——Pyodide 无 gmpy2，若原生侧有它会"免费"快一截）：
+
+| 档 | 语义 | 几何均值（vs 原生 CPython） |
+|---|---|---|
+| **原生 CPython**（uv 3.14.7） | 基线 | 1.00× |
+| **浏览器 Pyodide**（3.14.2） | 我们要用的那一档 | **[[sympy_perf_pyodide_over_native]]×** |
+| 原生 Octave + `symbolic`（popen2 **持久** IPC） | 用户说的"原生 octave" | 7.54×（**每 op 要过管道做变量编组**） |
+| 原生 Octave + `symbolic`（system 一次性 IPC） | 对照（不可比档） | 171.9×（量的是**进程启动费**） |
+
+**结论（明确答案）**：**是承重件，但承的是"≈2×"这个量级，不是数量级**。
+- 逐项 1.6–3.2×（多数在 2× 上下；`simplify`/`expand`/`lambdify` 略偏 3×，
+  因为它们是纯 Python 解释循环）；
+- **浏览器侧比"原生 Octave + symbolic"还快**（3.69×，几何均值）——因为 `symbolic`
+  的 Octave↔Python 边界每步都要序列化变量，而 Pyodide 档是**进程内直调**；
+- **冷启动**是另一笔账：Pyodide 装载 + 装 sympy = **[[sympy_perf_cold_start_ms]] ms**
+  （≈2.3 s，懒加载即可，不进开机路径）。
+
+⇒ **判据满足"性能接近"**：如果你关心的是"值不值得用"，答 = 值得，代价是 2×（稳态）
++ 2.3 s（首次）；如果你关心的是"要不要为它重写引擎"，答 = **不要**（2× 不改变架构选择）。
+`.pyc` 预编译（§1.3，7.26×）可以把首拉后的 `import sympy` 再压到 0.38 s —— 与这里的
+"稳态 2×"是两笔不同的账。
+
+**复跑**：`sh test/fixtures/sympy-perf/run-perf.sh`（一键三边 + 出表）。
+**读数**：`w64-logs/sympy-perf-{native,pyodide}.json` + `/tmp/oct-{popen2,system}.log`。
+⚠️ **口径纪律（三条，见 run-perf.sh 头）**：同一份 bench 源码（不复制逻辑）；同 sympy
+版本 + 同 ground types；Octave 侧**两档 IPC 分开报**。
+
 ### 1.4 v1 批次（建议形状，每步独立验收）
 
 ```

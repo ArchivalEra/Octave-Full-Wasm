@@ -136,6 +136,7 @@
 !test/fixtures/xpow-spike/rust/src/*
 !test/fixtures/xpow-spike/rust/.cargo/*
 !test/fixtures/sympy-pyc-ab/*
+!test/fixtures/sympy-perf/*
 !bridge/p5canvas.js
 !bridge/octave-worker.js
 !bridge/octave-core.js
