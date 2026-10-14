@@ -112,6 +112,13 @@
    "why": "工单 62 的第一假说，被 equiv2 对照实验推翻：CCACHE_DISABLE=1 无缓存干净重编同样 53 条（B5 55 条，核心集合逐条相同）。真根因 = f77-fcn.h 的 F77_CHAR_ARG_LEN_TYPE 未收编手改（供给树按 long(i64) 传 Fortran 隐藏长度，与 /usr/local-w64 的 i32 f2c ABI 归档分叉）。",
    "evidence": "CCACHE_DISABLE=1 供给树重编：w64-logs/relink-upstream-equiv2.log（53 条）；fork 修复后 equiv3.log（1 条 zdotu_，wasm-opt 绿）",
    "fixed_in": ".scratch/open-questions/issues/62-full-rebuild-abi-divergence.md 的 ## Answer；HISTORY §5.89"
+  },
+  {
+   "id": "R-015",
+   "text": "货架要加 `needs` 新轴",
+   "why": "接缝 §2 的判决是『能力层 = `form:\"tree\"` 的普通条目、进同一张 deps 图、**不引入新字段**』。而 PLAN-matlab-gaps.md §1.4 与 REQUIREMENTS-store-and-matlab.md §A4b 曾写『建议加 `needs` 轴』——那是设计判决改后散文没跟的漂移（额外内容仓管理者在翻案台账 R-002 里先抓到）。实测判据：`grep needs build/113/NOTES-extra-content-seam.md` 返回空（接缝无此轴）；宿主无任何代码读 `needs`。",
+   "evidence": "grep -n needs /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/NOTES-extra-content-seam.md（空）；grep -rn '\"needs\"' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/*.py（空）",
+   "fixed_in": "build/113/PLAN-matlab-gaps.md §1.4（正文 + 批次③）与 build/113/REQUIREMENTS-store-and-matlab.md §A4b 已改为『form:tree 普通条目 + 依赖边』；交叉引用额外内容仓 build/retractions.json R-002"
   }
  ]
 }

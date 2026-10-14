@@ -161,10 +161,16 @@ test/browser/probe-pyodide-sympy.mjs（三种模式，同一探针）
 > ⚠️ **货架的现有字段会说谎（实测）**：`forge-shelf.py detect_kinds('symbolic-3.2.2.tar.gz')` 返回
 > **`['m']`** —— 与真·开箱即用的 `cgi` **判得一模一样**。而 `symbolic` 的 `DESCRIPTION` 明写
 > `SystemRequirements: python, sympy (>= 1.5.1), mpmath (>= 1.0)` ⇒ **`['m']` 这个字段在本构建里是假的**
-> （能装上、装完调不动）。⇒ 货架要加**新轴**（建议 `needs: ["pyodide"]`，空 = 无特殊需求），
-> 并给 `detect_kinds` 配一条"看 DESCRIPTION 的 SystemRequirements"的旁路。
-> **这条新轴的规模也是实测的**：144 个上游包里只有 **2 个**需要 Python 生态
-> （`symbolic`、`pythonic`）⇒ 加这一轴是**个例处理**，不是给全部包加负担。
+> （能装上、装完调不动）。
+> ⇒ **表示法以接缝 §2 判决为准（2026-10-14 更正，翻案 R-002）**：**不加新字段**，
+> 能力层 = **一条 `form:"tree"` 的普通条目**，靠**依赖边**把 `symbolic` 连到它
+> （`NOTES-extra-content-seam.md` §2：「客户端只有一种遍历；从数据推出，不需要新字段」）。
+> ⚠️ **本文先前写"加 `needs` 新轴"是漂移** —— 接缝文档里没有 `needs` 这个轴、
+> 宿主也无代码读它（`grep needs` 该文件 = 空）；额外内容仓的翻案台账 R-002 抓到了它。
+> **规模仍是实测的**：144 个上游包里只有 **2 个**需要 Python 生态（`symbolic`、`pythonic`）
+> ⇒ 这是**个例**（两条边），不是给全部包加负担。
+> 另：`detect_kinds` 的"看 DESCRIPTION 的 SystemRequirements"旁路仍需要（它是**发现**这条边的手段），
+> 只是**产出**不是新轴而是那条依赖边。
 >
 > ⇒ **UI 侧的含义**：商店式界面里 `symbolic` 这一条要显示"**约 27 MB 运行时按需拉取**",
 > 而不是像 `cgi` 那样显示"开箱可用"。这正是需求单 §2.A4 那条"`kinds` 要如实标注"的延伸
@@ -180,8 +186,9 @@ test/browser/probe-pyodide-sympy.mjs（三种模式，同一探针）
    我们的原语 = `__web_run_js__`（点火）+ `__web_pause_ms__`（挂起等 Promise —— JSPI 已实测可用）。
    ⚠️ 铁律（T4 实测教训）：**同步入口挂起会抛 SuspendError 且 Octave 侧抓不住** ⇒
    这条缝必须走 eval_async/页面队列，且**不许放在开机路径**。
-③ 货架新轴（与 ① ② 可并行，纯元数据）
-   shelf/packages/symbolic.json 加 `needs: ["pyodide"]`；detect_kinds 旁路读 SystemRequirements
+③ 能力层表示法（与 ① ② 可并行，纯元数据）——**按接缝 §2 判决：不加新字段**
+   一条 `form:"tree"` 的能力层条目（Pyodide）+ 一条从 `symbolic` 指向它的**依赖边**；
+   detect_kinds 旁路读 SystemRequirements 用于**发现**这条边（不是产出新轴）
    ⇒ 判据（可证伪）：干净站 `pkg load symbolic` ⇒ 先拉运行时（有进度）⇒ 装上可用；
    **反向**：不拉运行时就直接 load ⇒ 清晰报错点名"需要 Python 运行时"，不许静默半死。
 ④ 验收（三档）
