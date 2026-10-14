@@ -44,6 +44,8 @@ The MATLAB-semantics bridge also already exists at the interface level: OM's scr
 
 **Follow-up: how much does precompiled `.pyc` actually buy?** (four-way breakdown — measuring only `import` would mislead): `import sympy` **2.71 s → 0.37 s (7.40×)**; per-op **first call** geometric mean **1.29×** (SymPy lazily imports submodules on first use); **steady state 0.99× — unchanged, as it must be** (the control showing precompilation is no panacea). The key finding is in the fourth number: a second `import sympy` in the same session still costs 2.73 s on source wheels — i.e. **the browser has no implicit bytecode cache** (native CPython writes `__pycache__`; site-packages is read-only here), so every cold start recompiles those 472 modules. `.pyc` wheels therefore buy one thing: **the per-session startup constant drops ~85%**, for 3.28× the bytes. `test/fixtures/sympy-perf/compare-pyc.py`.
 
+**Where symbolic computation lives in the plugin market**: the `symbolic` package is an ordinary shelf entry, but the Pyodide runtime (~27 MB) is **infrastructure, not a shelf entry** — same class as the clang toolchain: same-origin hosting, pinned by URL+sha256 in `upstream-lock.json`, a rebuildable provision artifact shared by several packages. And the shelf's current `kinds` field **lies about it**: measured, `detect_kinds('symbolic-3.2.2.tar.gz')` returns `['m']` — identical to the truly out-of-the-box `cgi` — while its `DESCRIPTION` says `SystemRequirements: python, sympy, mpmath`, so it installs and then cannot run. Hence a new shelf axis (`needs: ["pyodide"]`); scale measured: only **2 of 144** upstream packages need it (`symbolic`, `pythonic`). For the store UI that means this row must say "pulls ~27 MB runtime on demand". See `REQUIREMENTS-store-and-matlab.md` §A4b.
+
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -261,8 +263,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (393701 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (21217 bytes)
-- `README.zh.md` (18962 bytes)
+- `README.de.md` (22216 bytes)
+- `README.zh.md` (19809 bytes)
 - `STATE.md` (53580 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)

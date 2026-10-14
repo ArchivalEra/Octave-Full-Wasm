@@ -55,6 +55,8 @@ MATLAB 语义那块的桥，**在接口层面也已经存在**：OM 的脚本 AP
 
 **追问：预编译 `.pyc` 到底快多少**（四段口径 —— 只看 `import` 会答错）：`import sympy` **2.71 s → 0.37 s（7.40×）**；每个 op 的**首次调用**几何均值 **1.29×**（SymPy 是惰性导入子模块的）；**稳态 0.99× —— 如预期不变**（这条对照说明预编译不是万能药）。最关键是第四个数：源码档**同会话二次 import 仍要 2.73 s**，即**浏览器里没有隐式字节码缓存**（原生 CPython 会写 `__pycache__`，而浏览器里 site-packages 只读）⇒ 每次冷启动都要重编那 472 个模块。⇒ `.pyc` 轮子买到的其实是**一件事**：**每次会话的启动固定成本降约 85%**，代价是 3.28× 字节。见 `test/fixtures/sympy-perf/compare-pyc.py`。
 
+**符号计算在插件市场里的归属**：`symbolic` 包本身是**普通货架条目**，而 Pyodide 运行时（约 27 MB）是**基础设施、不是货架条目** —— 与 clang 工具链同一类：同源托管、`upstream-lock.json` 钉 URL+sha256、可重建的供给产物，由多个包共用。而且货架现有的 `kinds` 字段**对它说了谎**：实测 `detect_kinds('symbolic-3.2.2.tar.gz')` 返回 `['m']`，与真·开箱即用的 `cgi` 判得一模一样 —— 而它的 `DESCRIPTION` 明写 `SystemRequirements: python, sympy, mpmath` ⇒ 装上之后跑不动。⇒ 货架加新轴（`needs: ["pyodide"]`）；规模实测：144 个上游包里**只有 2 个**需要（`symbolic`、`pythonic`）。商店 UI 里这一条要显示「按需拉取约 27 MB 运行时」。见 `REQUIREMENTS-store-and-matlab.md` §A4b。
+
 
 **一线一架构**（用户点令 2026-10-12）：`master` 线产物 wasm64、只编 wasm64；wasm32 线产物 wasm32、只编 wasm32。判据 = `build/113/check-lane-purity.py`（宿主 / 车道 `.oct` / 本档专属站点目录三处同档）。
 
