@@ -37,6 +37,8 @@ And it can share the **same page** — measured, not assumed: this engine solves
 That also settles the repo plan: a separate "block-diagram repo" is **not** needed — MSL `Blocks` already provides the causal block library and OMEdit already ships a Qt-for-WebAssembly graphical editor, so OpenModelica is a **peer upstream** (its AGPLv3/OSMC-PL licence matches), i.e. a 20th submodule alongside Octave, feeding a second engine lane on the same page. See §9.
 
 The MATLAB-semantics bridge also already exists at the interface level: OM's script API (`sendExpression`, used by its official `OMMatlab` MATLAB client over ZeroMQ) is exposed in the browser as **`omc_eval`** — same command protocol, different transport. So an Octave-side `omc_*` function family (build a script, call `omc_eval`, read back `.mat`) is all that is missing; OMMatlab itself cannot run in a browser (it needs a local process socket). See §10.
+
+**Symbolic computation — the route's premise is now measured, not assumed**: `sym` is 0 in this build, and Forge's `symbolic` package is pure `.m` (zero `.cc`) yet drives everything through Python/SymPy — while this build's wasm has **zero** `pyexec`/`pyeval`/`pycall` bytes and no shell. So the package cannot run as-is; the only route is a real Python runtime in the browser. Measured: **Pyodide + SymPy works** — `diff(sin(x),x)` returns exactly `cos(x)`, in a COI worker **and** without COOP/COEP (so the base lane has it too), plus a loud-failure reverse test (`test/browser/probe-pyodide-sympy.mjs`, 5/0). On the "precompile Python" question: static compilation to JS (Transcrypt-style) is **infeasible**, not merely slower (Transcrypt's own README: "No eval and exec of Python code"; SymPy, measured, has 340 `eval(` / 61 `exec(` call sites). Precompiled **bytecode** (`.pyc`) is feasible and currently not done at all; the measured A/B is **7.26×** on `import sympy` (2757 → 380 ms, compile calls 472 → 0), at 3.28× the wheel bytes. See `build/113/PLAN-matlab-gaps.md`.
 frozen `wasm32-final` archive line rebuilt but not promoted).
 
 All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
@@ -254,8 +256,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (387786 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (18472 bytes)
-- `README.zh.md` (16526 bytes)
+- `README.de.md` (19668 bytes)
+- `README.zh.md` (17585 bytes)
 - `STATE.md` (50916 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (29011 bytes)
