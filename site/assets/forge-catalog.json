@@ -2,7 +2,7 @@
  "schema": 2,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "928317a0eefc12853796524efeb108d1f760c5e9",
+ "shelf_commit": "f6d38c924093b2bfed4f360b5afb14dafc4851cb",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
   {
@@ -133,6 +133,20 @@
    ]
   },
   {
+   "name": "pyodide",
+   "version": "314.0.7",
+   "form": "tree",
+   "content": [],
+   "consumer": [
+    "octave"
+   ],
+   "sha256": "cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6",
+   "url": "assets/pyodide/pyodide/pyodide.asm.wasm",
+   "size": 22013349,
+   "deps": [],
+   "note": "共享能力层（符号计算等需要真 Python 的包靠 deps 边指向它）；字节由 build/113/provision-pyodide.sh 供给，sha 见 upstream-lock.json + 该脚本"
+  },
+  {
    "name": "quaternion",
    "version": "2.4.2",
    "size": 47838,
@@ -198,6 +212,24 @@
    "kinds": [
     "m",
     "src"
+   ]
+  },
+  {
+   "name": "symbolic",
+   "version": "3.2.2",
+   "size": 276452,
+   "sha256": "8eb492408ec5aafe4e196ec5bdbd2298e0ac068d2b754948f34b9082b9126b37",
+   "url": "assets/forge/symbolic-3.2.2.tar.gz",
+   "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/symbolic-3.2.2.tar.gz",
+   "deps": [
+    "pyodide"
+   ],
+   "form": "pkg",
+   "content": [
+    "m"
+   ],
+   "kinds": [
+    "m"
    ]
   },
   {
