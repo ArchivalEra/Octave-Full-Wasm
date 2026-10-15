@@ -5161,3 +5161,51 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 - **回归**：`accept-catalog-load` 27/0、`accept-forge-ondemand` 15/0、`accept-capability-layer` 12/0；
   `accept-install-verdict` **12/0**（在 8771 上；8761 上因缺篡改子路径 ⇒ V3 如实 SKIP ⇒ 10/0，
   **不是回归** —— 已给该套件加**前提探测**：缺子路径报 `SKIP` 而不是 fail）。
+
+## 5.x ★ 符号计算真跑通：symbolic 的 IPC 缝（零补丁，2026-10-15）
+
+- **用户点令**："你开始下一阶段的活"（接缝 §5 之后的下一阶段 = 让 Octave 的 `.m` 真能调 Python）。
+- **外部调研先做**（用户点令："出小需求我找 claude 网络搜索"）：结论 = **Q2/Q5 没有现成桥**
+  （"emscripten 里的 C 同步调浏览器 Python"无现成库、Pyodide 官方也无此说法）⇒ 不重复搓轮子，
+  但要自建。Claude 给的**推论**（wasm 经 JS 同步调 `runPython`，不用 JSPI/Asyncify/Atomics）。
+- **★ 决定性实测（把推论变成事实）**：`test/browser/probe-pyodide-sync.mjs` **4/0** ——
+  wasm 里的 C 经 `EM_JS` 同步调 `globalThis.pyodide.runPython`：
+  `sympy.__version__` ⇒ `1.14.0`、`diff(sin(x),x)` ⇒ **`cos(x)`**，**全程无 JSPI/Asyncify/Atomics**，
+  Pyodide+sympy 在 C 启动前装载（冷启动 ~2.1 s）。一键复跑 `sh test/fixtures/pyodide-sync/build.sh`
+  + `node test/browser/probe-pyodide-sync.mjs`。
+- **★ 设计判决：零补丁接缝**（包一个字节不改）。判据链（都实测/读码）：
+  · `python_ipc_*` 后端在包的 `private/` 里，**path 级 shim 遮不住**（实测：包内 private 赢）；
+  · 但**后端真跑时调的是全局名 `system`**（`python_ipc_system.m`），而包内**没有** `private/system.m`
+    ⇒ 那个调用**落到我们的 webshim** ⇒ **零补丁**；
+  · 且该后端走**纯文本进出**（`<output_block>` XML），编组/错误/类型转换全留上游
+    （`extractblock.m` / `python_copy_vars_*.m` / `python_header.py`）⇒ 宿主只做"**字符串进、字符串出**"。
+  · 对比另外两条（子代理实测）：改包内 `private/`（要打补丁，违反铁律）；自实现 `pyexec/pycall`
+    那套（对象图编组，要搬 1113 行）⇒ 都不如这条浅。
+- **实现（四处，全在宿主侧；**零重链、零重编** —— wasm 三件套 sha 不变）**：
+  · `bridge/octave-core.js`：桥函数 `global.__octaveRunPython(srcPath, outPath)` —— 读源码文件、
+    `py.setStdout({batched})` 收 stdout、跑 `runPython`、写输出文件。**数据通道 = MEMFS 文件**
+    （复用已有 `__web_run_js__` = `emscripten_run_script`，它是 void 拿不回返回值 ⇒ 必须落盘）。
+    运行时不在 ⇒ 写**哨兵** `__OCTAVE_PY_NO_RUNTIME__`（`.m` 侧据它报清晰错，不静默）。
+  · `build/webshims/system.m`：加 python 分支（`python3 -c "…"` 形态 ⇒ 走桥；否则保持"无 shell"清晰报错）。
+  · `build/webshims/__webshim_python_cmd__.m`（★新，纯函数）：识别 + **精确反转义**
+    （上游两步 `\`→`\\`、`"`→`\"` ⇒ 逆序两步还原）。**5/5 `%!test`**，含三类往返夹具
+    （单个反斜杠 / 双引号 / 「反斜杠+引号」组合 —— 顺序错就挂）。独立成文件因为 `system.m`
+    的 subfunction 外部不可见（照 `__webshim_strip_texinfo__` 先例）。
+  · `build/webshims/pkg.m`：装完 `symbolic` 后钉 `sympref('ipc','system')` —— **必须显式设**
+    （包自动探测看 `exist('popen2')>1`，本构建 popen2 是内建（exist==5）⇒ 自动选 popen2 必败）。
+  · `bridge/assets-loader.js` 的 `installLayer`：从"只验可达"改为**真起 Pyodide**
+    （symbolic 经桥**同步**调它 ⇒ 必须先在 `global.pyodide` 起好）。
+- **★ 端到端验收 `test/browser/accept-symbolic-seam.mjs` 9/0**：P1 能力层边 / P2 先拉能力层 /
+  P3 `ipc==system` / P4 桥就位（`which system` 指向 webshim）/ **P5 `diff(sin(x),x)` == `cos(x)`** /
+  **P6 `double(sym(3)/2)` == 1.5（类型往返）** / **R1 反向**（非 python 的 system 不被桥吞）/
+  **R2 反向**（桥缺失 ⇒ 清晰报错点名运行时，不静默空）。
+- **★ 三个真 bug（实测抓到，全修）**：
+  1. **`import()` 相对说明符被浏览器拒**（`Failed to resolve module specifier 'assets/…'`）⇒ 用绝对 URL；
+  2. **`pkg.m` 里 `names` 未定义**（它只在另一个分支定义）⇒ `catch` 静默吞掉 ⇒ `ipc` 没设上；
+     改用 `__web_pkg_names__` 现算；
+  3. **我"撤改动"时 Python 切片算错**，误删了 `webjslib.js` 的 `web_sleep_ms`（承重！）与
+     `webpause.cc` 2 行 —— `git diff --stat` 逮到，`git checkout` 还原。教训：**撤改动后必须看一眼 diff**。
+- **诚实边界（本批未做）**：
+  · `symbolic` 真跑 `diff` 已通，但**上游 46 条 `%!test` 未在浏览器里全跑**（子代理在原生侧验过 46/46）；
+  · **矩阵不位精确**（上游 `mat2str` 15 位有效数字，是包的行为，接缝不改）；
+  · 每轮往返重跑 header（~13 ms 量级，未优化）。

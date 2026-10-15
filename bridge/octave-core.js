@@ -302,6 +302,45 @@
       if (isDefault) global.__octaveSyncSoon = syncSoon;
       Module.__syncSoon = syncSoon;      // 宿主自己的 ev() 包装也用它（页面 ?bench=1 走别名）
 
+      // ── 浏览器 Python 桥（symbolic 的 IPC 缝，2026-10-15）────────────────────
+      //   为什么在这里而不是新 `.oct`：**实测**（test/browser/probe-pyodide-sync.mjs
+      //   **4/0**）wasm → JS → `pyodide.runPython` **全同步** ⇒ 复用**已有**的
+      //   `__web_run_js__`（= `emscripten_run_script`）就够了 ⇒ **零重链、零重编**。
+      //   数据通道 = MEMFS 文件（与 webnet 同步 XHR 同款）：`.m` 侧写源码、读输出。
+      //   ⚠️ 运行时不在 ⇒ 写**哨兵**让 `.m` 侧报清晰错（不静默、不伪装成 Python 异常）。
+      //   ⚠️ 只收 **stdout**（上游 `python_ipc_system` 拿的就是 `system()` 的 stdout；
+      //      stderr 留给控制台，语义与原生 system() 一致）。
+      //   ⚠️ **必须同线程**（不能用 Worker，见调研结论）—— 页面与 worker 各自一份实例，
+      //      都指 `global.pyodide`（由 assets-loader 的 installLayer 起好）。
+      global.__octaveRunPython = function (srcPath, outPath) {
+        var out;
+        try {
+          var py = global.pyodide;
+          if (!py || typeof py.runPython !== 'function') {
+            out = '__OCTAVE_PY_NO_RUNTIME__';
+          } else {
+            var code = Module.FS.readFile(srcPath, { encoding: 'utf8' });
+            var chunks = [];
+            var push = function (s) { chunks.push(String(s)); };
+            var prevOut = null;
+            try { prevOut = py.setStdout({ batched: push }); } catch (e) { prevOut = null; }
+            try {
+              py.runPython(code);
+            } catch (e) {
+              // 异常本身也要可见（上游 header 的 try/except 通常已把块写进 stdout；
+              //   走到这里的多半是 header 阶段就炸 ⇒ 补一句，别静默空返回）
+              if (!chunks.length) chunks.push(String(e && e.message ? e.message : e));
+            } finally {
+              try { if (prevOut) py.setStdout(prevOut); } catch (e) { /* 还原失败不影响结果 */ }
+            }
+            out = chunks.join('');
+          }
+        } catch (e) {
+          out = 'BRIDGE_ERR: ' + String(e && e.message ? e.message : e);
+        }
+        try { Module.FS.writeFile(outPath, out); } catch (e) { /* 写不进 ⇒ .m 侧读不到会报 */ }
+      };
+
       // ── JSPI 能力门（G0，2026-09-24）─────────────────────────────────────────
       // **两个独立 gate**（GPT 复审的要求：只看 `typeof WebAssembly.Suspending` 不够 ——
       // Pyodide 至今仍有 JSPI 稳定性 issue、还提供"禁用 JSPI"的 workaround）：

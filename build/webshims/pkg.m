@@ -84,6 +84,28 @@ function varargout = pkg (varargin)
     else
       pkg (varargin{:});
     endif
+    ## ★ 浏览器侧 IPC 后端选择（2026-10-15，symbolic 的 IPC 缝）：装完 `symbolic` 后，
+    ##   把它的 IPC 后端钉到 `system` —— 那条后端调的是**全局名 `system`**，而全局名
+    ##   会落到我们的 webshim（本构建里那个 shim 把 Python 调用接到 Pyodide）。
+    ##   ⚠️ 为什么必须显式设（不是可选优化）：包自己的 autodetect（`python_ipc_driver.m`）
+    ##      看 `exist('popen2') > 1` —— 本构建里 popen2 是**内建**（exist==5）⇒ 自动选
+    ##      `popen2`，而它 fork 必失败（无 shell）⇒ **必须**替它选一条真能跑的路。
+    ##   ⚠️ 用 `try`（不是硬设）：`symbolic` 不在路径上 / `sympref` 签名变了都不该**炸装载**；
+    ##      设失败的后果是"用户调符号计算时报清晰错"，比"pkg load 本身报错"好。
+    ## ⚠️ 只在装 `symbolic` 时做（别对每个包都调 sympref —— 那是它的私有偏好）。
+    ##   ⚠️ **别引用 `names`**：它只在上面那个 `if (… __web_pkg_can_fire__ ())` 分支里定义
+    ##      （实测踩到：另一条分支进来 `names` 未定义 ⇒ 被 catch 静默吞掉 ⇒ 设置没做）。
+    ##      用 `__web_pkg_names__` 现算（任何分支都可用）。
+    if (nargin >= 2 && strcmpi (varargin{1}, 'load') && ...
+        any (strcmpi (__web_pkg_names__ (varargin{2:end}), 'symbolic')))
+      try
+        if (exist ('sympref') == 2)
+          sympref ('ipc', 'system');
+        endif
+      catch
+        ## 静默：`symbolic` 可用性由它自己的函数在**用时**判（本 shim 不抢答）
+      end_try_catch
+    endif
     newp = path ();
   unwind_protect_cleanup
     path (oldp);                        # 恢复原路径（含本 shim）

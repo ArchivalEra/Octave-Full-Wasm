@@ -5,6 +5,19 @@
 
 ## 现在是什么（2026-10-14）
 
+- **★★ 符号计算在浏览器里真跑通了（2026-10-15，用户点令的下一阶段）**：`symbolic` 包
+  **一个字节没改**，靠一条**零补丁接缝**接上 Pyodide：`diff(sin(x),x)` ⇒ **`cos(x)`**、
+  `double(sym(3)/2)` ⇒ `1.5`（验收 `accept-symbolic-seam` **9/0**，含两条反向断言）。
+  · **机制**：包的 `python_ipc_system` 后端调**全局名 `system`**（包内没有 `private/system.m`）
+    ⇒ 落到本仓 webshim ⇒ 转页面桥 `__octaveRunPython` ⇒ **同步**调浏览器 Pyodide
+    （决定性实测 `probe-pyodide-sync` **4/0**：不必 JSPI/Asyncify/Atomics）。
+  · **四处宿主侧改动（零重链、零重编，wasm 三件套 sha 不变）**：`octave-core.js` 桥函数、
+    `webshims/system.m` python 分支、`webshims/__webshim_python_cmd__.m`（纯函数 5/5 `%!test`，
+    转义精确互逆）、`webshims/pkg.m` 钉 `sympref('ipc','system')` + `assets-loader.js` 真起 Pyodide。
+  · **外部调研**：wasm 宿主同步调浏览器 Python **无现成桥**（Q2/Q5 没找到）⇒ 这条是自建；
+    但调研结论决定了「自建，且不必 JSPI」——不是重复搓轮子。
+  · **诚实边界**：上游 46 条 `%!test` 未在浏览器全跑（原生侧验过 46/46）；矩阵非位精确（上游行为）。
+
 - **★ 接缝 §5 第①②③步已落地（2026-10-14 无人值守批）**：
   **① 端口产地**（`build/extra-content/`：schema + 校验器自证 22 条 + golden×3 + bad×5 + 闸门 6/0）；
   **② 表升 schema 2**（`form`/`content` 两轴，`kinds` 留兼容视图；闸门加 R5；**判据 = 老 loader 照装**：`accept-forge-ondemand` 15/0、`accept-catalog-load` 27/0 不变）；
