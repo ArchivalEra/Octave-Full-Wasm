@@ -1351,6 +1351,50 @@ def measure():
                 "w64-logs/sympy-perf-pyodide{,-pyc}.json",
                 "**稳态对照**：≈1.0 = 如预期 .pyc 不改执行（预编译不是万能药）")
 
+    # ── ★ 符号计算接缝（2026-10-15，下一阶段）：**零补丁**接 Pyodide 的那条路 ──────
+    #   为什么要它进台账：这是"上一阶段之后的下一阶段"的**成果本身** ——
+    #   浏览器版 Octave 从"`sym`=0"变成"**真能算符号**"。三条读数各自独立：
+    #   ① 前提（wasm 的 C 能否**同步**调浏览器 Python）—— 决定"要不要 JSPI/Worker"；
+    #   ② 端到端（接缝在真浏览器里算对）—— `accept-symbolic-seam` 的 PASS/FAIL；
+    #   ③ 冷启动耗时（Pyodide+sympy 装载，用户首次调用要等多久）。
+    _syncp = os.path.join(W64LOGD, "probe-pyodide-sync.json")
+    if os.path.exists(_syncp):
+        try:
+            _sd = json.load(open(_syncp, encoding="utf-8"))
+        except Exception:
+            _sd = None
+        if _sd:
+            facts["pyodide_sync_probe_pass"] = fact(
+                _sd.get("pass"),
+                "python3 -c \"import json;print(json.load(open('%s'))['pass'])\"" % _syncp,
+                "w64-logs/probe-pyodide-sync.json",
+                "**前提实测**：wasm 里的 C 同步调 Pyodide（4 条：装载/版本/真算对/耗时）")
+            _pd = _sd.get("result") or {}
+            facts["pyodide_sync_ready_ms"] = fact(
+                _pd.get("pyodideReadyMs"),
+                "python3 -c \"import json;print(json.load(open('%s'))['result']['pyodideReadyMs'])\"" % _syncp,
+                "w64-logs/probe-pyodide-sync.json",
+                "Pyodide+sympy 冷启动（必须在 wasm 启动**之前**完成 —— 同步调用等不了 Promise）")
+
+    _seam = os.path.join(W64LOGD, "accept-symbolic-seam.log")
+    if os.path.exists(_seam):
+        try:
+            _txt = open(_seam, encoding="utf-8", errors="replace").read()
+            import re as _re
+            _m2 = _re.findall(r"=== (\d+) PASS / (\d+) FAIL ===", _txt)
+            if _m2:
+                _p2, _f2 = int(_m2[-1][0]), int(_m2[-1][1])
+                facts["symbolic_seam_pass"] = fact(
+                    _p2, "awk '/=== [0-9]+ PASS/{p=$2} END{print p}' %s" % _seam,
+                    "w64-logs/accept-symbolic-seam.log",
+                    "★ **符号计算端到端**：`diff(sin(x),x)`=cos(x) + 类型往返 + 两条反向（真浏览器）")
+                facts["symbolic_seam_fail"] = fact(
+                    _f2, "awk '/=== [0-9]+ PASS/{f=$5} END{print f}' %s" % _seam,
+                    "w64-logs/accept-symbolic-seam.log",
+                    "同上（**必须 0** —— 这条接缝的判据是「真算对」）")
+        except OSError:
+            pass
+
     # ★ replay 契约的首轮标注（Einfacht #4 ④⑤，2026-10-02 移植，工单 37）：
     #   · sha256sum 族补字段提取 —— 裸值契约要求 stdout == 值，`sha256sum` 默认带路径列；
     #   · 重活（浏览器/容器/构建/基准）与派生/散文式复跑方式显式 `replay=False`
@@ -1369,6 +1413,8 @@ def measure():
         "sympy_perf_pyodide_over_native", "sympy_perf_cold_start_ms",
         "sympy_pyc_import_speedup_pyodide", "sympy_pyc_cold_geo_speedup",
         "sympy_pyc_steady_geo_ratio",
+        "pyodide_sync_probe_pass", "pyodide_sync_ready_ms",
+        "symbolic_seam_pass", "symbolic_seam_fail",
         "probe_lane_pass", "e2_threaded_oct_rc", "w64_mem_5g_bytes", "w64_mem_8g_bytes",
         "w64_mem_shared_5g_bytes", "w64_ob_lib_wasm64_members", "w64_ob_lib_wasm32_members",
         "w64_ob_matmul500_s",
