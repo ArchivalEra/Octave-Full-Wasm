@@ -1076,7 +1076,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `test/browser/fixtures/internal-props-probe.m` (3762 bytes)
 - `test/browser/fixtures/p5-graphics-probe.m` (3048 bytes)
 - `test/browser/fixtures/t2-graphics-probe.m` (2587 bytes)
-- `test/browser/manifest.json` (9900 bytes)
+- `test/browser/manifest.json` (10594 bytes)
 - `test/browser/probe-artifact-sha.mjs` (4705 bytes)
 - `test/browser/probe-blas-threads.mjs` (7423 bytes)
 - `test/browser/probe-blockdiag-backend.mjs` (5685 bytes)

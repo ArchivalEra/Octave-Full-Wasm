@@ -230,6 +230,22 @@
     "value": "/mnt/hdd/octave-wasm-build/site-verdict/verdict-tamper",
     "why": "V3（sha-mismatch）需要**同源子路径** `/verdict-tamper/`（篡改 catalog 的 sha、字节不动）；由 `sh build/113/prep-verdict-site.sh` 造 + 用 serve-coi 起站。缺此项 ⇒ 按清单跳过 V3（V1/V2/V4/planOnly 仍可在普通站跑）。同源是硬约束（COEP 拦跨域，实测）。"
    }
+  ],
+  "accept-capability-layer": [
+   {
+    "kind": "path",
+    "env": "PYODIDE_SITE_ASSETS",
+    "value": "/mnt/hdd/octave-wasm-build/site/assets/pyodide",
+    "why": "能力层进图验收需要站点供 Pyodide 资产（build/113/provision-pyodide.sh fetch 产出）。缺它 ⇒ 按清单**跳过**（不是假红）：该站根本没能力层，验不了。"
+   }
+  ],
+  "accept-symbolic-seam": [
+   {
+    "kind": "path",
+    "env": "PYODIDE_SITE_ASSETS",
+    "value": "/mnt/hdd/octave-wasm-build/site/assets/pyodide",
+    "why": "符号计算端到端需要站点同时有 Pyodide 资产 + 货架上的 symbolic 包（都靠 provision/装配）。缺它 ⇒ 按清单**跳过**。"
+   }
   ]
  }
 }
