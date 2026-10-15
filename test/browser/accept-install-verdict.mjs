@@ -104,6 +104,17 @@ check(!v2.ok && v2.verdict && !/读不到/.test(v2.verdict.why || ''),
 //   临时站点由宿主侧准备好（prep-verdict-site.sh），路径经 window.__verdictSiteBase 传入；
 //   没有它时如实 SKIP（不假绿）。
 const v3base = '/verdict-tamper/';    // 同源子路径（prep-verdict-site.sh 造）
+// ★ 前提探测（2026-10-15）：篡改站是 prep 脚本造的**临时子路径** ⇒ 站点重建/重启后可能不在。
+//   缺它 ⇒ **如实 SKIP**（不是 fail，也不是静默漏跑）—— 本仓纪律：缺输入要报出来。
+const v3前提 = await page.evaluate(async (base) => {
+  try {
+    const r = await fetch(base + 'assets/forge-catalog.json');
+    return r.ok;
+  } catch (e) { return false; }
+}, v3base);
+if (!v3前提) {
+  console.log(`SKIP | V3 sha-mismatch：缺篡改子路径 ${v3base}（跑 sh build/113/prep-verdict-site.sh 后再来）`);
+} else {
 const v3 = await page.evaluate(async (base) => {
   const bad = window.createOctaveAssets(window.Module, base, () => window.__octaveReady === true);
   try {
@@ -121,6 +132,7 @@ check(!v3.ok && v3.verdict && v3.verdict.state === 'failed'
 check(!v3.ok && v3.verdict && v3.verdict.state === 'failed',
   '★ V3 反向：sha 不符是 failed，**不是** not-found/cannot-know',
   v3.verdict ? v3.verdict.state : v3.err);
+}
 
 // ── V4 cannot-know（货架读不到）—— 用一个**指向不存在 catalog 的**实例 ──
 //   本页的 OctaveAssets 默认实例 catalog 已读成功 ⇒ 无法在同一实例上重现"读不到"。

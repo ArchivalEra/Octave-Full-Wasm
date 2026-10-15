@@ -18,6 +18,10 @@
 #      （仓库镜像 = 入库的可部署物 ⇒ "目录说有什么"必须与"committed 的字节"对上）
 #   R4 `kinds` 与实际 tarball 内容一致：不含 'oct' 的包 ⇒ tarball 里**不许有 `*.oct`**
 #      （v1 只卖纯 .m / m+src；带了预编译件就该在货架上被划成 'oct' 形态）
+#   R6（接缝 §5④，2026-10-14）：**能力层条目**（`form:"tree"`）形状合法 —— 必须 `content:[]`
+#      （裁决①）、必须有 `consumer`（裁决②）、且它的 `url` 必须在站点里**真在**。
+#      判据来源：能力层条目由 `forge-catalog.py` 产出（不在货架档案里）⇒ R2 不管它，
+#      本闸门必须自己盯（否则"能力层写了个不存在的 URL"没人拦）。
 #   R5（端口 schema 2，接缝 §2/§5②）：`form`/`content` 两轴与 `kinds` **一致**
 #      （`content` == `kinds` 兼容视图；`form` 由 `kinds` 派生 —— 货架包恒 `pkg`）。
 #      这是 R4 的推广：R4 查"kinds 与字节"，R5 查"新两轴与 kinds"（防两处各写一份漂移）
@@ -121,27 +125,38 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
 
     for p in packs:
         name = p.get("name", "?")
-        # R2：货架档案对账（pin 承载者）
-        why = shelf_has(p, shelf_dir)
-        if why:
-            problems.append("R2 %s" % why)
-        # R3：字节在仓库镜像里、且 sha 相符
+        # ★ 能力层条目（form:"tree"）**不走 R2/R3**（2026-10-14，接缝 §5④）：
+        #   它不在货架档案里（不是包）、也不在 assets/forge/ 下（是共享运行时）
+        #   ⇒ 对它跑 R2/R3 是**假红**（实测抓到：R2"货架上没有 cap"+R3"url 前缀"）。
+        #   它的规则 = R6（形状 + consumer + 字节在站点）。
+        if p.get("form") == "tree":
+            pass          # 交给下面的 R6
+        else:
+            # R2：货架档案对账（pin 承载者）
+            why = shelf_has(p, shelf_dir)
+            if why:
+                problems.append("R2 %s" % why)
+        # R3：字节在仓库镜像里、且 sha 相符（**包**的规则；能力层由 R6 查）
         url = p.get("url") or ""
-        if not url.startswith("assets/forge/"):
+        if p.get("form") != "tree" and not url.startswith("assets/forge/"):
             problems.append("R3 %s 的 url 不是同源 assets/forge/ 前缀：%r" % (name, url))
             continue
-        blob = os.path.join(site_dir, url)
-        if not os.path.isfile(blob):
-            problems.append("R3 %s 的字节不在仓库镜像里：%s" % (name, url))
-            continue
-        got = sha_of(blob)
-        if got != p.get("sha256"):
-            problems.append("R3 %s 字节 sha=%s ≠ 目录 sha=%s（目录改了字节没换？）"
-                            % (name, got[:12], str(p.get("sha256"))[:12]))
-            continue
+        if p.get("form") == "tree":
+            got, blob = None, None          # 能力层：字节由 R6 查（此处不重复）
+        else:
+            blob = os.path.join(site_dir, url)
+            if not os.path.isfile(blob):
+                problems.append("R3 %s 的字节不在仓库镜像里：%s" % (name, url))
+                continue
+            got = sha_of(blob)
+            if got != p.get("sha256"):
+                problems.append("R3 %s 字节 sha=%s ≠ 目录 sha=%s（目录改了字节没换？）"
+                                % (name, got[:12], str(p.get("sha256"))[:12]))
+                continue
         # R4：kinds 与实际内容一致（无 'oct' ⇒ tarball 里不许有 .oct）
+        #   能力层（form:tree）不是包、没有 tarball ⇒ 跳过
         kinds = p.get("kinds") or []
-        if "oct" not in kinds:
+        if p.get("form") != "tree" and "oct" not in kinds:
             try:
                 has, first = has_oct(blob)
             except (OSError, tarfile.TarError) as e:
@@ -153,10 +168,21 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
         # R5（端口 schema 2）：两轴与 kinds 一致（content == kinds；form 派生 = pkg）
         content = p.get("content")
         form = p.get("form")
-        if content is not None and list(content) != list(kinds):
+        if content is not None and form != "tree" and list(content) != list(kinds):
             problems.append("R5 %s content=%s ≠ kinds=%s（兼容视图必须同值）"
                             % (name, content, kinds))
-        if form is not None and form != "pkg":
+        # R6：能力层条目（form:"tree"）—— 与包走**不同**的断言（见头注）
+        if form == "tree":
+            if content:                                  # 裁决①：能力层 content 必须空
+                problems.append("R6 %s 能力层（form:tree）的 content 必须为空 []：得到 %r"
+                                % (name, content))
+            if not p.get("consumer"):                    # 裁决②：能力层应声明消费面
+                problems.append("R6 %s 能力层缺 consumer（裁决②：至少一条消费面）" % name)
+            u = p.get("url") or ""
+            blob2 = os.path.join(site_dir, u)
+            if not os.path.isfile(blob2):
+                problems.append("R6 %s 能力层的字节不在站点：%s" % (name, u))
+        elif form is not None and form != "pkg":
             problems.append("R5 %s form=%r —— 货架装配的包恒为 \"pkg\"（能力层走 form:\"tree\" 的另一条）"
                             % (name, form))
     return problems, []
@@ -282,11 +308,46 @@ def _selftest():
                         [_pack(sha=good_sha, kinds=("m",))], blob_sha=data)
         _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
         _d0 = json.load(open(_cat))
-        _d0["packs"][0]["form"] = "tree"             # ≠ pkg ⇒ 必须报
+        # ★ 翻面（2026-10-14，接缝 §5④）：`form:"tree"` 现在**合法**（能力层条目的形态，
+        #   由 R6 管形状）⇒ 旧断言"form!=pkg ⇒ 必报"**已不成立**。改为断言：
+        #   包**不许**用 tree 之外的其他非 pkg 值（那才是错的），且 tree 必须过 R6 形状。
+        _d0["packs"][0]["form"] = "octdir"           # 包形态里没有 octdir（那是 manifest 的投送形态）
         _d0["packs"][0]["content"] = ["m"]
         json.dump(_d0, open(_cat, "w"))
-        cases.append(("★ R5：form 不是 pkg ⇒ 必须报（能力层走另一条）",
+        cases.append(("★ R5：包的 form 不是 pkg（且不是合法能力层 tree）⇒ 必须报",
                       lambda d=d: any("R5" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        # R6（接缝 §5④）：能力层条目的形状 —— 正常 / 三条反向
+        def _mk_cap(d2, mutate=None):
+            """造一个带能力层条目的夹具站：包（demo）+ 能力层（cap）。"""
+            dd = _mk_fixture(d2, [_pack(sha=good_sha)], blob_sha=data)
+            blob = os.path.join(dd, "site", "assets", "cap", "cap.wasm")
+            os.makedirs(os.path.dirname(blob), exist_ok=True)
+            open(blob, "wb").write(data)
+            catp = os.path.join(dd, "site", "assets", "forge-catalog.json")
+            doc = json.load(open(catp))
+            doc["packs"].append({"name": "cap", "version": "1", "sha256": "e" * 64,
+                                 "url": "assets/cap/cap.wasm", "form": "tree",
+                                 "content": [], "consumer": ["octave"], "deps": []})
+            if mutate:
+                mutate(doc["packs"][-1])
+            json.dump(doc, open(catp, "w"))
+            return dd
+        d = _mk_cap(os.path.join(tmp, "cap_ok"))
+        cases.append(("R6：能力层（form:tree, content=[], consumer, 字节在）⇒ 不报",
+                      lambda d=d: check("site", "shelf", repo=d, sha_of=real_sha_of(data),
+                                        has_oct=no_oct)[0] == []))
+        d = _mk_cap(os.path.join(tmp, "cap_content"), lambda c: c.update(content=["wasm"]))
+        cases.append(("★ R6 反向：能力层带非空 content ⇒ 必须报（裁决①）",
+                      lambda d=d: any("R6" in p and "content" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        d = _mk_cap(os.path.join(tmp, "cap_noconsumer"), lambda c: c.pop("consumer"))
+        cases.append(("★ R6 反向：能力层缺 consumer ⇒ 必须报（裁决②）",
+                      lambda d=d: any("R6" in p and "consumer" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        d = _mk_cap(os.path.join(tmp, "cap_noblob"), lambda c: c.update(url="assets/cap/nope.wasm"))
+        cases.append(("★ R6 反向：能力层的字节不在站点 ⇒ 必须报",
+                      lambda d=d: any("R6" in p and "字节不在" in p for p in check(
                           "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
         d = _mk_fixture(os.path.join(tmp, "bad_missing"), [_pack(sha=good_sha)], blob_sha=data)
         os.remove(os.path.join(d, "site", "assets", "forge", "demo-1.0.0.tar.gz"))

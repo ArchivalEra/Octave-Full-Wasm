@@ -74,6 +74,16 @@
    "file": "zreflect",
    "form": "dir",
    "note": "事实系统机制层（vendored 进 zreflect/；**本仓数据层** = zreflect/measure_octave.py，不随上游覆盖）。version = 上游 commit（2026-10-10 追平 C1–C5；此前 vendored 版 = ae2b82a）。升级法：从上游取 zreflect/*.py + reflect-hooks/* + gates-selftest.sh，**除 measure 数据层**；然后跑 sh gates-selftest.sh（它会抓出接线不齐，如 env 旋钮与夹具的冲突）。"
+  },
+  {
+   "name": "pyodide",
+   "version": "314.0.7",
+   "url": "https://github.com/pyodide/pyodide/releases/download/314.0.7/pyodide-core-314.0.7.tar.bz2",
+   "file": "third_party/pyodide/pyodide-core-314.0.7.tar.bz2",
+   "form": "文件",
+   "sha256": "2abdcc2e35208af406e07724cffa85bc582ced97e9028383ecf5462541393f95",
+   "optional": true,
+   "note": "符号计算的**共享能力层**（接缝 §5 第④步）。本仓 third_party/ 从不入仓（同 glpk/lapack 一族：字节在持久盘，本 lock 只钉 URL+sha）⇒ 本机缺席即 SKIP，不是缺陷。⚠️ 本 lock 只钉 **core**；两个轮子（sympy 1.14.0 / mpmath 1.4.1）的 sha 在 provision-pyodide.sh 里（它们来自 PyPI，且 pyodide-lock 记的是重打包字节 —— 那个身份坑记在该脚本头注）。optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说"
   }
  ]
 }

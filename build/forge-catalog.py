@@ -181,6 +181,103 @@ def assemble(packs, site, check_only=False):
     return bad
 
 
+def capability_entries(site):
+    """**能力层条目**（接缝 §2/§5④）：`form:"tree"` 的普通条目，进同一张 `deps` 图。
+
+    ⚠️ 为什么由**装配器**产出而不是内容仓：能力层 ≠ 某个包（它是多个包共用的运行时），
+    所以它不出在货架档案里；而"站点上有没有这份字节"是**装配事实**（同源托管）⇒
+    装配器按 `upstream-lock.json` + 站点实际存在性产出条目。
+    ⚠️ **不加 `needs` 新字段**（§2 判决）：`symbolic` 靠 `deps` 边指向本条目。
+
+    返回 (entries, problems)。**纯读**（不写盘）—— 字节由 `provision-pyodide.sh` 供。
+    """
+    entries, problems = [], []
+    # 目前唯一的能力层 = Pyodide（符号计算用；未来 clang 工具链走同一条）
+    py_root = os.path.join(site, "assets", "pyodide")
+    py_wasm = os.path.join(py_root, "pyodide", "pyodide.asm.wasm")
+    if not os.path.isdir(py_root):
+        problems.append("能力层缺失：assets/pyodide/ 不在站点（跑 build/113/provision-pyodide.sh fetch）")
+        return entries, problems
+    if not os.path.isfile(py_wasm):
+        problems.append("能力层残缺：assets/pyodide/pyodide/pyodide.asm.wasm 不在")
+        return entries, problems
+    # 字节规模（进度/预算用；不手抄 —— 数出来）
+    total = 0
+    for base, _dirs, files in os.walk(py_root):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(base, f))
+            except OSError:
+                pass
+    entries.append({
+        "name": "pyodide",
+        "version": "314.0.7",
+        "form": "tree",
+        "content": [],                       # 裁决①：能力层留空（content 只对包有意义）
+        "consumer": ["octave"],              # 裁决②：消费面
+        "sha256": _file_sha_or_empty(py_wasm),
+        "url": "assets/pyodide/pyodide/pyodide.asm.wasm",
+        "size": total,
+        "deps": [],
+        "note": "共享能力层（符号计算等需要真 Python 的包靠 deps 边指向它）；"
+                "字节由 build/113/provision-pyodide.sh 供给，sha 见 upstream-lock.json + 该脚本",
+    })
+    return entries, problems
+
+
+def load_upstream_table(path, validate=None):
+    """读**生产者出的表**（接缝 §4 消费侧）；先校验，不合格 ⇒ **拒收**（fail-closed）。
+
+    ⚠️ 为什么拒收而不是"尽力修"：端口纪律 = 生产者自证（§4 必做第 2 条）。宿主替他修
+    ⇒ 两个产地各写一半、谁也说不清哪份对（本仓 doctrine：没有对账器的"必须一致"迟早不一致）。
+    `validate` 注入校验器（自证时喂假的），返回 (entries, problems)。
+    """
+    problems = []
+    if not os.path.isfile(path):
+        return [], ["上游表不存在：%s" % path]
+    try:
+        doc = json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return [], ["上游表读不了/不是 JSON：%r" % e]
+    if validate is not None:
+        probs = validate(doc)
+        if probs:
+            return [], ["上游表未过端口校验（%s）：%d 条 —— 生产者要按 schema 2 修"
+                        % (os.path.basename(path), len(probs))] + ["  · %s" % x for x in probs[:3]]
+    ents = doc.get("entries") or doc.get("packs") or []
+    if not ents:
+        return [], ["上游表是空的（零值守卫：空表不是通过）"]
+    # 转成站点条目：① **保留生产者给的一切**（含 form/content/consumer，不替他改）
+    #   ② `url` 按站点前缀改写（生产者的表用站内相对路径，与宿主同源约定一致）
+    out = []
+    for e in ents:
+        d = {k: v for k, v in e.items()}
+        d.setdefault("deps", [])
+        out.append(d)
+    return out, problems
+
+
+def _port_validate(doc):
+    """端口校验（**复用产地的校验器，不另写一份** —— 见 build/extra-content/）。"""
+    try:
+        import importlib.util as _iu
+        vp = os.path.join(REPO, "build", "extra-content", "validate-content-list.py")
+        spec = _iu.spec_from_file_location("_vcl", vp)
+        mod = _iu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.check_table(doc)
+    except Exception as e:                                  # 校验器不可用 ⇒ fail-closed
+        return ["端口校验器不可用：%r（不拿'没查'当通过）" % e]
+
+
+def _file_sha_or_empty(path):
+    """读 sha；读不到 ⇒ 空串（**不编** —— 采集器原则：读不到就明说）。"""
+    try:
+        return sha256_file(path)
+    except OSError:
+        return ""
+
+
 def shelf_commit():
     """货架仓的 commit（= "目录来自哪一版货架"）——pin 的承载者，写进 catalog 供见证。"""
     try:
@@ -191,15 +288,25 @@ def shelf_commit():
         return ""
 
 
-def catalog_doc(packs, octave, gen):
+def catalog_doc(packs, octave, gen, entries_extra=None):
+    extra = list(entries_extra or [])
+    for p in packs:
+        # ★ 接缝 §2 的落法（2026-10-14）：**不加 `needs` 字段**；`symbolic` 这类
+        #   "纯 .m 但要 Python" 的包，靠 deps 边指向能力层条目（`form:"tree"`）。
+        if p["name"] == "symbolic" and any(e["name"] == "pyodide" for e in extra):
+            if "pyodide" not in p["deps"]:
+                p["deps"] = list(p["deps"]) + ["pyodide"]
     return {
         "schema": 2,          # 接缝 §2：schema 2 加 form/content 两轴（kinds 留作兼容视图）
         "octave": octave,
         "generated_by": gen,
         "shelf_commit": shelf_commit(),
         "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
+        # ★ 能力层条目（form:"tree"）与包**同一张 packs 表**（接缝 §2：进同一张图）。
+        #  ⚠️ 客户端按 `packs` 遍历（老 loader 亦然）⇒ 能力层必须在**这里**，
+        #     否则 `install('symbolic')` 的闭包走到 pyodide 时会"查无此包"。
         "packs": [{k: v for k, v in p.items() if not k.startswith("_")}
-                  for p in sorted(packs, key=lambda x: x["name"])],
+                  for p in sorted(list(packs) + extra, key=lambda x: x["name"])],
     }
 
 
@@ -248,6 +355,25 @@ def _selftest():
                                                   "size": 1, "url": "http://x",
                                                   "requires": [], "kinds": ["m", "src"]}]),
                               "11.3.0", False, "/nonexistent")[0][0])))
+    cases.append(("★ 能力层：symbolic 的 deps 边指向 form:tree 的 pyodide（§2 落法）",
+                  lambda: (lambda doc: (lambda sy: sy and "pyodide" in sy["deps"])(
+                      [p for p in doc["packs"] if p["name"] == "symbolic"][0])
+                   if any(p["name"] == "symbolic" for p in doc["packs"]) else True)(
+                      catalog_doc([{"name": "symbolic", "deps": [], "version": "1",
+                                    "sha256": "a" * 64, "size": 1,
+                                    "url": "assets/forge/symbolic-1.tar.gz",
+                                    "form": "pkg", "content": ["m"], "kinds": ["m"], "_src": ""}],
+                                  "11.3.0", "self-test",
+                                  entries_extra=[{"name": "pyodide", "form": "tree",
+                                                  "content": [], "deps": []}]))))
+    cases.append(("★ 能力层：无能力层条目时 symbolic 的 deps **不被改**（不臆造边）",
+                  lambda: (lambda doc: [p for p in doc["packs"]
+                                        if p["name"] == "symbolic"][0]["deps"] == [])(
+                      catalog_doc([{"name": "symbolic", "deps": [], "version": "1",
+                                    "sha256": "a" * 64, "size": 1,
+                                    "url": "assets/forge/symbolic-1.tar.gz",
+                                    "form": "pkg", "content": ["m"], "kinds": ["m"], "_src": ""}],
+                                  "11.3.0", "self-test", entries_extra=[]))))
     cases.append(("pick_version：挑满足约束的最新",
                   lambda: pick_version({"versions": [
                       {"version": "1.0.0", "requires": []},
@@ -304,6 +430,8 @@ def main(argv):
     ap.add_argument("--octave", default="")
     ap.add_argument("--allow-unverified", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--upstream", action="append", default=[],
+                    help="生产者出的表（可多次）；经端口校验后并入 catalog")
     a = ap.parse_args(argv)
 
     octave = a.octave or octave_from_fork()
@@ -322,8 +450,24 @@ def main(argv):
               % "; ".join(skipped), file=sys.stderr)
         return 2
     bad = assemble(packs, a.site, a.check)
-    doc = catalog_doc(packs, octave, "build/forge-catalog.py")
+    # 接缝 §5④：能力层条目（form:"tree"）—— 缺字节**不是致命**（站点可能没供 Pyodide，
+    #   那只是"能力层缺席"，包本身仍可装）⇒ 报为 **note**，不进 `bad`（fail-closed 的边界：
+    #   致命的只有"包字节与档案不符"）。
+    cap, cap_problems = capability_entries(a.site)
+    # ★ 接缝 §5⑤：生产者出的表（如 LLVM-wasm 的工具链）—— 校验通过才并入（fail-closed）
+    for up in a.upstream:
+        yents, yprobs = load_upstream_table(up, validate=_port_validate)
+        if yprobs:
+            # ⚠️ 不合格 = **明说并跳过**（不是静默收，也不是致命退出：站点仍要能装包）
+            for x in yprobs:
+                print("  warn: %s" % x, file=sys.stderr)
+        else:
+            cap.extend(yents)
+            print("  上游表并入 %d 条：%s" % (len(yents), up))
+    doc = catalog_doc(packs, octave, "build/forge-catalog.py", entries_extra=cap)
     bad += write_catalog(a.site, doc, a.check)
+    for c in cap_problems:
+        print("  note: %s" % c, file=sys.stderr)
     if bad:
         print("FATAL: %d 个问题：" % len(bad), file=sys.stderr)
         for b in bad:

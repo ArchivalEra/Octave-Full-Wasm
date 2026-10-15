@@ -63,6 +63,7 @@ build/promote-w64-lane.sh --selftest
 build/gen-lanes.sh --selftest
 build/make-dist.sh --selftest
 build/113/provision-emsdk.sh --selftest
+build/113/provision-pyodide.sh --selftest
 build/113/build-libs.sh --selftest
 EOF
 

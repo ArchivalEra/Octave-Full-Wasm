@@ -189,6 +189,34 @@
       if (M && M.eval_string) { try { M.eval_string(expr); } catch (e) {} }
     }
 
+    // ── 能力层装载器（接缝 §5④）──────────────────────────────────────────────
+    //   两种可能的形态：① Pyodide（起一个 Python 运行时，供 symbolic 用）；
+    //   ② 未来的其他能力层（按 name 分派，别在调用点硬编码）。
+    //   ⚠️ 诚实边界：本函数**只负责把运行时备好 + 记账**；"Octave 的 symbolic 包怎么跟它说话"
+    //      是 IPC 缝的事（`.m` 侧 python_ipc_* 那条）—— 那是下一批（本批 §5④ 的判据只是
+    //      "install('symbolic') 能把能力层拉进来且不报错"，见验收套件）。
+    var layers = {};        // name → { ready:true, kind, base, info }
+    function installLayer(p) {
+      if (p.name === 'pyodide') {
+        // 站点上资产在 <base>/assets/pyodide/pyodide/（provision-pyodide.sh 装配）
+        // ⚠️ **别写 `var base = base + …`**：`var` 提升会让右边那个 `base` 也是本地的 ⇒
+        //    `undefinedassets/pyodide/`（实测抓到）。用局部名 `pBase`。
+        var pBase = withBase('assets/pyodide/');
+        if (layers.pyodide && layers.pyodide.ready) return Promise.resolve(layers.pyodide);
+        return fetchJSON('assets/pyodide/pyodide/pyodide-lock.json').then(function () {
+          // 只**验证可达**（lock 读得到 = 树在）—— 真正起 Python 实例由页面侧按需做
+          //   （起 22MB 运行时不该在 install() 里偷偷做；见验收套件对"层就位"的定义）。
+          layers.pyodide = { ready: true, kind: 'python', base: pBase,
+                             version: p.version, bytes: p.size };
+          return layers.pyodide;
+        }, function (e) {
+          throw new Error('能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
+                          + (e && e.message ? e.message : e));
+        });
+      }
+      return Promise.reject(new Error('未知的能力层：' + p.name + '（本构建只实现了 pyodide）'));
+    }
+
     function loadOne(name, seen) {
       if (loaded[name]) return Promise.resolve(loaded[name]);
       if (inflight[name]) return inflight[name];
@@ -391,6 +419,8 @@
       describe: function (name) { return byName[name] || null; },
       isLoaded: function (name) { return !!loaded[name]; },
       loaded: function () { return Object.keys(loaded); },
+      // ★ 能力层查询（接缝 §5④）：`{pyodide:{ready:true,kind:'python',version,bytes}}`
+      layers: function () { return layers; },
       onLoad: function (f) { listeners.push(f); },
       load: function (names) {
         var list = Array.isArray(names) ? names : [names];
@@ -487,8 +517,23 @@
           return API.load(['webio', 'webshell', 'webfile', 'forge']).catch(function () { return null; })
             .then(function () { return plan.reduce(function (chain, p) {
               return chain.then(function (acc) {
-                var key = 'forge:' + p.name;
+                var key = (p.form === 'tree' ? 'layer:' : 'forge:') + p.name;
                 if (loaded[key]) { acc.push(p.name); return acc; }
+                // ★ 能力层（form:"tree"，接缝 §5④）：**不是包** ⇒ 不走 __forge_install__ 布局，
+                //   而是把运行时**挂进页面**（Pyodide 起实例），并记一个可用标记供 `.m` 侧查询。
+                //   为什么不做"解包到 FS"：Pyodide 是个**宿主侧运行时**（要 fetch 自己的
+                //   .wasm/.whl、要跨 worker），它的生命周期属于页面，不属于 Octave 的 MEMFS。
+                if (p.form === 'tree') {
+                  onProgress({ phase: 'layer', name: p.name, size: p.size });
+                  return installLayer(p).then(function (info) {
+                    loaded[key] = info;
+                    delete installError[p.name];
+                    onProgress({ phase: 'installed', name: p.name, layer: true });
+                    publish();
+                    acc.push(p.name);
+                    return acc;
+                  });
+                }
                 onProgress({ phase: 'fetch', name: p.name, size: p.size });
                 return fetchBinary(p.url).then(function (buf) {
                   return sha256Hex(buf).then(function (hex) {

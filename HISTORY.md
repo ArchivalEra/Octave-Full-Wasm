@@ -5115,3 +5115,49 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
     `measure_octave.py` 的原生基线出处）⇒ 删了会让后来人不知道那些魔数从哪来。
 - ⇒ **清理的判据**（值得记）：**不是"看起来旧就删"，而是"它指向的东西还在不在"** ——
   删前逐条核目标（goal 的 4 项全完成 ⇒ 删；PLAN/perf-max 有活引用 ⇒ 留）。
+
+## 5.x 接缝 §5 第④⑤步：能力层进图（Pyodide）+ 工具链表收口（2026-10-15）
+
+- **用户点令**："把剩下你这侧的全干完"（接缝 §5 的 ④⑤）。
+- **开工预检**：机器重启后容器 `o113` 与 8761 全 DOWN（第 N 次同款）⇒ `docker start` + `serve-coi`
+  恢复，`doctor` ok、`BOOT OK` —— **预检先行**这一步又逮到一次环境死。
+- **④a 供给**：`build/113/provision-pyodide.sh`（`fetch`/`verify`/`--selftest`）：
+  · 三件资产 = Pyodide core（GitHub Release）+ sympy/mpmath 轮子（**PyPI 官方字节**）；
+  · **身份坑实测**：`pyodide-lock.json` 记的字节 ≠ PyPI 字节（pyodide 去测试重打包）⇒
+    供给走 PyPI + **改写托管 lock 的两条 sha**（否则 `loadPackage` 自己校验自己会 404）；
+  · fail-closed：下载后核 sha、装配后再核、`verify` 复核；自证三类齐备；
+  · `upstream-lock.json` 加一条（`pyodide 314.0.7`，optional 同 glpk 一族：字节在持久盘，
+    本机缺席 ⇒ SKIP 明说）；自证台登记（**42 个闸门**全绿）。
+  · ⚠️ 装配路径踩了一下：先写成 `$SITE/pyodide`（缺 `assets/`）⇒ 实测发现，修正为
+    `$SITE/assets/pyodide/`。
+- **④b 装配**：`forge-catalog.py` 新增 `capability_entries()` —— 能力层条目（现唯一 = Pyodide）
+  由**装配器**产出（它不在货架档案里：是共享运行时，不是包）；`catalog_doc` 把能力层**并入同一张
+  `packs`**（客户端遍历靠 `packs`，老 loader 亦然）。
+  **§2 判决落地**：`symbolic` **不加 `needs` 字段**，而是 `deps` 边指向 `pyodide`。
+  装配结果：catalog **14 条 = 13 包 + 1 能力层**（`form:"tree"`、`content:[]`、`consumer:["octave"]`）。
+  · 自证 12→**14**（+能力层两条：有边 / 无能力层时不臆造边）。
+- **④b2 闸门**：`check-forge-catalog` 加 **R6**（能力层形状：`form:tree` ⇒ `content` 必空（裁决①）、
+  必须有 `consumer`（裁决②）、字节必须在站点）**四条自证**（正常 + 三条反向）。
+  · ⚠️ **实测抓到假红**：R2/R3/R4 对能力层条目**不适用**（它不在货架、不在 `assets/forge/` 前缀、
+    没有 tarball）⇒ 加了让路（`form=="tree"` 跳过 R2/R3/R4，交给 R6）。
+  · ⚠️ **一条旧断言翻面**（本仓纪律）：R5 原先断言"`form != pkg` ⇒ 必报"，而 `form:"tree"`
+    现在**合法** ⇒ 改为"包的 form 不许是 pkg/tree 之外的值"。自证 12→**16**。
+- **④c 端到端**：新套件 `test/browser/accept-capability-layer.mjs` **12/0**：
+  L1 目录形状（tree/空 content/consumer/字节规模）；L2 `deps` 边 + **反向**（无 `needs` 字段）；
+  L3 **装载序列 `["pyodide","symbolic"]`（拓扑正确）**；L4 `layers().pyodide.ready`；
+  L5 Verdict 仍 `ok`；**反向**（能力层没被当包去拉 tarball）。
+  · `bridge/assets-loader.js`：新增 `installLayer()`（能力层不做 `__forge_install__` 布局 ——
+    Pyodide 是**宿主侧运行时**，生命周期属页面不属于 Octave 的 MEMFS）+ `layers()` 查询 + 分派。
+  · ⚠️ **实测修掉一个真 bug**：`var base = base + 'assets/pyodide/'` —— `var` 提升让右侧也是
+    局部 ⇒ `undefinedassets/pyodide/`。改为 `var pBase = withBase(...)`。
+- **⑤ 工具链表收口**（宿主侧机制）：`forge-catalog.py` 加 `--upstream <表>` +
+  `load_upstream_table()` + `_port_validate()`（**复用产地的校验器**，不另写一份）：
+  · **合格收**：造一份合规的表 ⇒ 13 条并入（站点 14→27，实测后**回退**，见下）；
+  · **不合格拒**：LLVM-wasm 现在的真表（19 条 PROBLEM：`content` 填 `wasm`/`module`）⇒
+    **拒收 + 点名前三条**，站点不被污染（14 条不变）⇒ **fail-closed 双向都验过**。
+  · ⚠️ **诚实边界**：LLVM-wasm 的表要**它自己**按 schema 2 修（内容仓是推广方，我不是 ——
+    路径铁律：不改他人仓）。宿主这侧只保证"合格就收、不合格就拒"。
+  · ⚠️ **验证用的临时表没留在生产站**：造合规范例验完即回退（8761 回 14 条）+ `BOOT OK`。
+- **回归**：`accept-catalog-load` 27/0、`accept-forge-ondemand` 15/0、`accept-capability-layer` 12/0；
+  `accept-install-verdict` **12/0**（在 8771 上；8761 上因缺篡改子路径 ⇒ V3 如实 SKIP ⇒ 10/0，
+  **不是回归** —— 已给该套件加**前提探测**：缺子路径报 `SKIP` 而不是 fail）。
