@@ -267,7 +267,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.scratch/perf-max/map.md` (7894 bytes)
 - `.zcode/config.json` (1597 bytes)
 - `AGENTS.md` (22754 bytes)
-- `CONTEXT.md` (14215 bytes)
+- `CONTEXT.md` (15230 bytes)
 - `DEPLOY.md` (9301 bytes)
 - `HISTORY.md` (434380 bytes)
 - `LICENSE` (34523 bytes)

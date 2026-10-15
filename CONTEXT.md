@@ -64,6 +64,23 @@ UI 形态，不是概念本身** —— 无论它们叫什么名字，最终都�
 
 ---
 
+## Python 桥（别名：IPC 缝 / symbolic 接缝）
+
+**让本构建里 Octave 的 `.m` 真能调 Python 的机制**（2026-10-15 起）。形状 =
+**"全局名 `system` 截获"**：Forge 的 `symbolic` 包用 `python_ipc_system` 后端时调的是
+**全局名 `system`**（包内没有 `private/system.m`）⇒ 那个调用落到本仓 webshim
+（`build/webshims/system.m` 的 python 分支）⇒ 转页面桥 `__octaveRunPython`
+（`bridge/octave-core.js`）⇒ **同步**调浏览器 Pyodide。
+
+**为什么是零补丁**：包**一个字节不改**（路径级 shim 遮不住 `private/`，但 `private/` 里的
+**全局名调用**会被 path 级遮蔽拦到）。**为什么不必 JSPI**：实测（`probe-pyodide-sync`）
+wasm 里的 C 经 `EM_JS` 同步调 `pyodide.runPython` 即可 ⇒ 数据通道 = **MEMFS 文件**
+（`__web_run_js__` 是 void，拿不回返回值）。
+**证据：** `build/webshims/system.m` + `build/webshims/__webshim_python_cmd__.m` +
+`test/browser/accept-symbolic-seam.mjs`
+
+---
+
 ## 多义词"插件"拆成两个具名术语
 
 > 这两个具名术语是"**额外内容**"在**构建期 / 运行期**两个时机的形态（不构成独立概念）。
