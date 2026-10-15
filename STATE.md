@@ -5,6 +5,15 @@
 
 ## 现在是什么（2026-10-14）
 
+- **★ mail 边界立规：本仓补上收件箱 + 收信侧闸门（2026-10-15，用户点令「各家只读自己的 mail」）**：
+  起因是**一次越界实测** —— 本仓去 `LLVM-wasm/mail/`、`OpenModelica-Full-Wasm/mail/` 里找
+  "写给我的信"，而那两份是**内容仓发给 LLVM 和 OM** 的私人往来。**根因 = 本仓曾是四仓里
+  唯一没有 `mail/` 的** ⇒ 写给我的信无处可投、只能落回发信仓 ⇒ 逼我去翻别人目录。
+  ⇒ **补 `mail/`（收件箱）+ 三条边界**（投递落点=收信方 / 只读自己仓 / `**To:**` 指名本仓），
+  由新闸门 `.githooks/check-mail-boundary.py` 守（自证 5/0，含反向：`To:` 别的仓 ⇒ 必红）。
+  规则详版 = `mail/README.md`（含 5 封历史信路由表）；铁律 = `AGENTS.md`「mail 边界」；
+  术语 = `CONTEXT.md`「mail 边界（收件箱制）」。
+
 - **★★ 符号计算在浏览器里真跑通了（2026-10-15，用户点令的下一阶段）**：`symbolic` 包
   **一个字节没改**，靠一条**零补丁接缝**接上 Pyodide：`diff(sin(x),x)` ⇒ **`cos(x)`**、
   `double(sym(3)/2)` ⇒ `1.5`（验收 `accept-symbolic-seam` **[[symbolic_seam_pass]]/[[symbolic_seam_fail]]**，含两条反向断言）。

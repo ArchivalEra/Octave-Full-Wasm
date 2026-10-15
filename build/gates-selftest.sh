@@ -28,6 +28,7 @@ cat >"$LIST" <<'EOF'
 .githooks/check-state.py --selftest
 .githooks/check-consistency.py --selftest
 .githooks/check-readiness-pattern.py --selftest
+.githooks/check-mail-boundary.py --selftest
 build/check-site-parity.sh --selftest
 build/check_m.py --selftest
 build/serve-coi.py --selftest

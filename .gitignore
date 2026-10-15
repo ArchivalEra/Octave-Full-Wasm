@@ -20,6 +20,9 @@
 !.githooks/state_facts.py
 !.githooks/gate.py
 !.githooks/check_readme_sync.py
+!.githooks/check-mail-boundary.py
+!mail/
+!mail/*.md
 !README.zh.md
 !README.de.md
 !docs/charts/*

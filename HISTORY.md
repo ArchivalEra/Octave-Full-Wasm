@@ -5277,3 +5277,44 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
 - 站点闸门 `check-forge-catalog` 自证 16→**20 PASS / 0 fail**（R6→R7 翻面 + R7b/R8 各两条反向）；
 - 装配器 `forge-catalog.py` 自证 14→**19 PASS / 0 fail**（+5 stage 用例）；
 - 实时站点 `check-forge-catalog` **`ok`**（未退化）；四键进台账（168→**172 条事实**）。
+
+## 5.x mail 边界立规：本仓补收件箱 + 收信侧闸门（2026-10-15，用户点令）
+
+**用户点令**："各家只读自己的 mail 文件夹的信，不然就会像你刚刚那样读了并不是写给你的信"。
+
+### 事故（实测，用户当场点出）
+
+上一批收尾我"读新信"时，去 **`LLVM-wasm/mail/`** 与 **`OpenModelica-Full-Wasm/mail/`**
+里找"给我的信" —— 读了 `006-re-final.md`（内容仓→**LLVM**）与 `005-re-rulings-2.md`
+（内容仓→**OM**）。那两封**不是写给我的**，是内容仓发给另外两家的转达信。**这是越界**：
+即使 LLVM-wasm 是 public 仓，它的 `mail/` 也是**别人的**私人通信，不该当自己的信读。
+
+### 根因（不在"读错"，在"没有收件箱"）
+
+实测四仓拓扑：
+
+| 仓 | 可见性 | `mail/` |
+|---|---|---|
+| Octave-Full-Wasm（host，本仓） | PUBLIC | **当时没有** ← 根因 |
+| Octave-Extra-Content | PRIVATE | 有（混装 host↔content 双向） |
+| LLVM-wasm | PUBLIC | 有（content↔LLVM 双向） |
+| OpenModelica-Full-Wasm | PRIVATE | 有（content↔OM 双向） |
+
+四个 `mail/README.md` 都自称"本仓的**收件箱**"，但 de-facto 投递约定其实是
+"**写给我的信留在发信方自己仓**"（content/mail 里 `To: host` 的那些）——因为**本仓没有收件箱**，
+信无处可投。⇒ 收信方要收信就得去翻**发信仓**的目录，一翻就越界。
+
+### 修法：补收件箱 + 三条边界 + 收信侧闸门
+
+1. **补 `Octave-Full-Wasm/mail/`** 并迁入 5 封**确实写给我**的历史信
+   （`003/006/007/009/011`，`To:` 全是 host）；
+2. **三条边界**（写进 `mail/README.md` / `AGENTS.md` / `CONTEXT.md`）：
+   ① **投递落点 = 收信方的 `mail/`**；② **只读自己仓的 `mail/`**；③ 本仓收件箱 `**To:**` 必须指名 host；
+3. **新闸门 `.githooks/check-mail-boundary.py`**（收信侧不变量）：本仓 `mail/*.md`（除 README）
+   的 `**To:**` 必须指名 host，一封 `To:` 别的仓 ⇒ 红。自证 **5/0**（反向：喂
+   `To: OpenModelica` ⇒ 必红；只有 README ⇒ 零值守卫必红；缺 `To:` 行 ⇒ 必红）。
+   已登记进 `build/gates-selftest.sh`（43 个闸门）+ `reflect-hooks/pre-commit` + `.gitignore` 白名单。
+
+> **纪律要点**：闸门守的是**收信侧**不变量（"我的箱子里只有我的信"），它**不能**替代
+> 投递侧纪律（发信方要给每个收件方各投一份）—— 但收信侧可验证，投递侧不可（跨仓）。
+> 这是"能查的那一半先查"，另一半写进规则靠对话。**判据可证伪**：`--selftest` 的反例档。

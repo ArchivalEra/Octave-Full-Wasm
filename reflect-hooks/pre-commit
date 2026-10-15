@@ -53,6 +53,10 @@ python3 "$GH/check-consistency.py"      # 挂载点/启动清单/车道路径一
 python3 "$GH/check-wants.py"            # 验收套件断言的可证伪性
 python3 "$GH/check-whitelist.py"        # 白名单覆盖
 python3 "$GH/check-readiness-pattern.py"  # 就绪反模式（工单 40/42）
+# ★ mail 边界闸门（2026-10-15，用户点令）：本仓收件箱里只许有**写给本仓**的信
+#   （`**To:**` 必须指名 host）。实测事故：host 曾翻 LLVM/OM 的 mail/ 找信 ⇒ 越界；
+#   根因是"本仓没有收件箱" ⇒ 补上后再立此闸门守收信侧不变量。
+python3 "$GH/check-mail-boundary.py"
 # ★ 上游 pin 见证（仓库架构批 B4）：容器树 == submodule pin；读不到容器 ⇒ SKIP 明说。
 python3 "$GH/witness-upstream-pin.py"
 # ★ 部件插件登记闸门（工单 61）：登记表 ↔ 现役产物 declared 双向一致；站点读不到 ⇒ SKIP 明说。
