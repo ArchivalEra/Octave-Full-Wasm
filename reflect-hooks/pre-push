@@ -29,8 +29,16 @@ python3 "$GH/check-consistency.py"
 
 # ── ④ 三语 README：**每次推送必须三份同批更新**（缺一份 ⇒ 拒推）───────────────
 #    判据住在 check_readme_sync.py 的 --changed 模式；这里只做 git 的簿记。
-#    ⚠️ 诚实边界：`git push --no-verify` 能跳过本 hook —— git 的原生出口拦不住；
-#    所以 CI（.github/workflows/readme-sync.yml）跑**同一条判据**。
+#    ⚠️ **诚实边界（2026-10-15 更正一处假声明）**：此前这里写"CI（.github/workflows/
+#       readme-sync.yml）跑同一条判据" —— **该文件从未存在，且 `.github/` 整体未被 git
+#       跟踪**（`.gitignore` 的 `*` 默认拒绝、无放行规则）⇒ 那句是**空头**，已删。
+#       ⇒ 现实：本判据**只有本地 pre-push 一道**（`--no-verify` 可跳过，那是 git 原生出口）；
+#       要有 CI 正面兜底，得先给 `.github/` 加白名单并把 workflow 入库（今日未做，见待办）。
+#    ⚠️ **判据的适用面（2026-10-15 澄清，回应内容仓 mail/014）**：它按"改动集"判，
+#       **不区分内容** —— 只要这批推送没同时改三份 README 就拒。实测：只新增**一个**跟踪
+#       文件（`docs/newthing.md` 或 `mail/014.md`，判据一模一样）⇒ 必红。这不是 mail 特殊，
+#       而是"新增文件只改得了英文 README 的 AUTO:FILES 块（zh/de 无该块）"。
+#       **正确用法**：这类推送应与其 README 更新**同批**（本仓批次收尾本就改三语 README）。
 ZERO=0000000000000000000000000000000000000000
 CHANGED=$(mktemp)
 trap 'rm -f "$CHANGED"' EXIT

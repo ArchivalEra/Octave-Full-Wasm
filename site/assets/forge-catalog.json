@@ -2,7 +2,7 @@
  "schema": 2,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "f6d38c924093b2bfed4f360b5afb14dafc4851cb",
+ "shelf_commit": "922736ae62938efd662deb7a3a59fea56d8bf634",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
   {

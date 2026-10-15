@@ -117,6 +117,7 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
         return [], ["仓库镜像里没有 %s（Forge 尚未装配或镜像未同步）" % cat_path]
 
     problems = []
+    skips = []
     try:
         with open(cat_path, encoding="utf-8") as fh:
             doc = json.load(fh)
@@ -213,7 +214,45 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
                                     % (name, p["size"], real))
             elif p["size"] != real:
                 problems.append("R8 %s 单文件 size=%d ≠ 字节 %d" % (name, p["size"], real))
+
+    # R9（deps 闭合，**装配态全表俱在** —— 2026-10-15，回应内容仓 mail/012/014）：
+    #   内容仓能做的是**部分闭合**（它的 `--emit` 按设计是部分视图：能力层条目由本仓产出、
+    #   不在它的表里），且它已拦 typo/未知名（目标 ∈ {货架包} ∪ {recipes/*.md 名}）。
+    #   本闸门在**装配态**做**完整闭合**：全表俱在 ⇒ 能判"真·表内解析"。
+    #   三档（★ 关键：把"合法缺席"与"缺陷"分开 —— 内容仓 mail/014 点名要求）：
+    #     ① 目标在**同表**里有条目 ⇒ 闭合，OK；
+    #     ② 目标不在表里，但**是已知能力层名**（`shelf/recipes/*.md` basename 派生）⇒
+    #        **合法的"本站没供该能力层"**（install 时响亮失败 = 裁定过的正确行为）⇒ **note，不报**；
+    #     ③ 目标既不在表里、又不是已知能力层名 ⇒ **typo / 未知目标 ⇒ 必红**。
+    #   ⚠️ 诚实边界：③ 不证明"这个包真需要它"（那是 `depends` 作者的主张，同 sha256 不证明字节对）。
+    table_names = {p.get("name") for p in packs if p.get("name")}
+    caps = capability_names(os.path.join(shelf_dir, "recipes"))
+    for p in packs:
+        who = p.get("name", "?")
+        for tgt in (p.get("deps") or []):
+            if tgt in table_names:
+                continue                                   # ① 表内闭合
+            if tgt in caps:
+                # ② 合法缺席：是已知能力层名，只是本站/本表没供它 —— 不是缺陷。
+                #    ⚠️ 走 **stderr 的 note**，**不挤进 `skips`**（那个通道专指"环境缺件、
+                #    这道闸门查不了"；R9② 是"查了、结论合法"，两者不该混）。
+                print("note: R9 %s 的 deps 指向能力层 `%s`，本表未供该条目 ⇒ 合法缺席"
+                      "（install 时响亮失败，非缺陷）" % (who, tgt), file=sys.stderr)
+                continue                                   # ② 合法缺席
+            problems.append("R9 %s 的 deps 指向 `%s` —— 既不在**同表**（%d 个条目）也不是"
+                            "已知能力层名（%s）⇒ typo / 未知目标"
+                            % (who, tgt, len(table_names),
+                               ", ".join(sorted(caps)) or "无"))
     return problems, []
+
+
+def capability_names(recipes_dir):
+    """已知能力层名 = `recipes/*.md` 的 basename（与内容仓同款产地：**每家能力层必须有一份配方**）。
+    读不到目录 ⇒ []（宁缺勿假 —— 那会让 R9 的 ② 档失效，退化成"能力层边全是 typo"的严判）。"""
+    try:
+        return {n[:-3] for n in os.listdir(recipes_dir) if n.endswith(".md")}
+    except OSError:
+        return set()
 
 
 def main(argv):
@@ -239,13 +278,18 @@ def main(argv):
 
 # ── 三档自证（F1：正常不报 / 该报的必须报 / 空输入必须报）──────────────────────
 def _mk_fixture(tmp, packs, octave="11.3.0", shelf_sha=None, blob_sha=None,
-                shelf_versions=None, ac_init="11.3.0"):
+                shelf_versions=None, ac_init="11.3.0", recipes=None):
     """造最小夹具：repo/upstream/octave/configure.ac + repo/shelf + repo/site。"""
     os.makedirs(os.path.join(tmp, "upstream", "octave"))
     with open(os.path.join(tmp, "upstream", "octave", "configure.ac"), "w") as fh:
         fh.write("AC_INIT([GNU Octave], [%s], [bugs])\n" % ac_init)
     shelf_dir = os.path.join(tmp, "shelf", "packages")
     os.makedirs(shelf_dir)
+    if recipes:
+        rec_dir = os.path.join(tmp, "shelf", "recipes")
+        os.makedirs(rec_dir)
+        for r in recipes:
+            open(os.path.join(rec_dir, r + ".md"), "w").write("# %s\n" % r)
     blob_dir = os.path.join(tmp, "site", "assets", "forge")
     os.makedirs(blob_dir)
     for p in packs:
@@ -411,6 +455,42 @@ def _selftest():
         cases.append(("★ R3：目录说有的字节镜像里没有 ⇒ 必须报",
                       lambda d=d: any("不在仓库镜像里" in p for p in check(
                           "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        # R9（完整闭合，2026-10-15，回应内容仓 mail/012/014）—— 三档：
+        #   ① 表内闭合 / ② 合法缺席（已知能力层名）/ ③ typo ⇒ 必红
+        def _r9_probs(d):
+            return check("site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0]
+        # ① 正常：deps 指向同表内条目 ⇒ 不报
+        d = _mk_fixture(os.path.join(tmp, "r9_ok"), [
+            _pack(name="a", sha=good_sha), _pack(name="b", sha=good_sha)], blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat)); _d0["packs"][0]["deps"] = ["b"]
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("R9：deps 指向**同表**条目 ⇒ 不报（表内闭合）",
+                      lambda d=d: _r9_probs(d) == []))
+        # ② 合法缺席：deps 指向**已知能力层名**（recipes/pyodide.md 声明）⇒ 不报
+        d = _mk_fixture(os.path.join(tmp, "r9_cap"), [_pack(name="a", sha=good_sha)],
+                        blob_sha=data, recipes=["pyodide"])
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat)); _d0["packs"][0]["deps"] = ["pyodide"]
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R9 ②：deps 指向**已知能力层名**（未供）⇒ 不报（合法缺席，非缺陷）",
+                      lambda d=d: _r9_probs(d) == []))
+        # ③ typo：deps 指向既不在表、又不是能力层名的东西 ⇒ 必红
+        d = _mk_fixture(os.path.join(tmp, "r9_typo"), [_pack(name="a", sha=good_sha)],
+                        blob_sha=data, recipes=["pyodide"])
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat)); _d0["packs"][0]["deps"] = ["pyodid"]
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R9 ③ 反向：deps 是 typo / 未知名 ⇒ 必须报（这正是 R9 要抓的）",
+                      lambda d=d: any("R9" in p for p in _r9_probs(d))))
+        # ③b 反面：没有 recipes 目录（能力层名集为空）⇒ 同一 typo 仍必红（② 档不假阳）
+        d = _mk_fixture(os.path.join(tmp, "r9_norec"), [_pack(name="a", sha=good_sha)],
+                        blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat)); _d0["packs"][0]["deps"] = ["pyodide"]
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R9 ③b：无 recipes 目录 ⇒ 能力层名集空 ⇒ 该 dep 判 typo 必红（不拿空当合法）",
+                      lambda d=d: any("R9" in p for p in _r9_probs(d))))
         # ③ 空输入必须报 / 未启用如实说
         d = _mk_fixture(os.path.join(tmp, "empty"), [_pack(sha=good_sha)], blob_sha=data)
         with open(os.path.join(d, "site", "assets", "forge-catalog.json"), "w") as fh:

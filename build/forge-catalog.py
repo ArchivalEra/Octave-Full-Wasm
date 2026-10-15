@@ -350,12 +350,14 @@ def shelf_commit():
 
 def catalog_doc(packs, octave, gen, entries_extra=None):
     extra = list(entries_extra or [])
-    for p in packs:
-        # ★ 接缝 §2 的落法（2026-10-14）：**不加 `needs` 字段**；`symbolic` 这类
-        #   "纯 .m 但要 Python" 的包，靠 deps 边指向能力层条目（`form:"tree"`）。
-        if p["name"] == "symbolic" and any(e["name"] == "pyodide" for e in extra):
-            if "pyodide" not in p["deps"]:
-                p["deps"] = list(p["deps"]) + ["pyodide"]
+    # ★ 依赖边**全部来自数据**（接缝 §2 的落法，2026-10-15 内容仓 mail/011 起）：
+    #   能力层需求由**生产者**在货架档案的 `depends` 里声明（如 `symbolic` 的
+    #   `depends: ["pyodide"]`），`resolve()` 读它 ⇒ 这里**不再按包名硬编码**。
+    #   ⚠️ 为什么删（实测教训）：旧代码 `if p["name"] == "symbolic" and …: p["deps"] += ["pyodide"]`
+    #   是**按包名硬编码** —— 下一个"纯 .m 但要运行时"的包（`pythonic`）落地时得回来改代码，
+    #   而"加内容 = 加一行数据、不改代码"正是本协议的全部意义（内容仓 mail/011）。
+    #   ⚠️ 前置（内容仓 mail/012 认下）：边在**新 pin** 里才有，所以删硬编码必须与 bump
+    #   `shelf/` pin **同批** —— 否则 `resolve()` 从旧 pin 读到空 `depends` ⇒ 静默断。
     return {
         "schema": 2,          # 接缝 §2：schema 2 加 form/content 两轴（kinds 留作兼容视图）
         "octave": octave,
@@ -415,18 +417,21 @@ def _selftest():
                                                   "size": 1, "url": "http://x",
                                                   "requires": [], "kinds": ["m", "src"]}]),
                               "11.3.0", False, "/nonexistent")[0][0])))
-    cases.append(("★ 能力层：symbolic 的 deps 边指向 form:tree 的 pyodide（§2 落法）",
+    # ★ 翻面（2026-10-15，内容仓 mail/011：删掉按包名硬编码的边）——
+    #   旧用例断的是"硬编码造边"，行为变了 ⇒ 按纪律**改断言、不改检查器**：
+    #   现在断的是"**来自货架档案的 `depends` 边流过** `catalog_doc()`"。
+    cases.append(("★ 能力层的边来自货架档案的 `depends`（§2 落法：加内容=加数据，不改代码）",
                   lambda: (lambda doc: (lambda sy: sy and "pyodide" in sy["deps"])(
                       [p for p in doc["packs"] if p["name"] == "symbolic"][0])
                    if any(p["name"] == "symbolic" for p in doc["packs"]) else True)(
-                      catalog_doc([{"name": "symbolic", "deps": [], "version": "1",
+                      catalog_doc([{"name": "symbolic", "deps": ["pyodide"], "version": "1",
                                     "sha256": "a" * 64, "size": 1,
                                     "url": "assets/forge/symbolic-1.tar.gz",
                                     "form": "pkg", "content": ["m"], "kinds": ["m"], "_src": ""}],
                                   "11.3.0", "self-test",
                                   entries_extra=[{"name": "pyodide", "form": "tree",
                                                   "content": [], "deps": []}]))))
-    cases.append(("★ 能力层：无能力层条目时 symbolic 的 deps **不被改**（不臆造边）",
+    cases.append(("★ 无 `depends` 时 deps 保持空 —— `catalog_doc()` 不臆造边",
                   lambda: (lambda doc: [p for p in doc["packs"]
                                         if p["name"] == "symbolic"][0]["deps"] == [])(
                       catalog_doc([{"name": "symbolic", "deps": [], "version": "1",
@@ -434,6 +439,9 @@ def _selftest():
                                     "url": "assets/forge/symbolic-1.tar.gz",
                                     "form": "pkg", "content": ["m"], "kinds": ["m"], "_src": ""}],
                                   "11.3.0", "self-test", entries_extra=[]))))
+    cases.append(("★ 翻面关键：**货架的 `depends` 流过 resolve()**（删硬编码后边仍到得了目录）",
+                  lambda: (lambda p: p["deps"] == ["pyodide"])(
+                      resolve(mk_shelf(depends=["pyodide"]), "11.3.0", False, "/nonexistent")[0][0])))
     cases.append(("pick_version：挑满足约束的最新",
                   lambda: pick_version({"versions": [
                       {"version": "1.0.0", "requires": []},
