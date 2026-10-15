@@ -5209,3 +5209,16 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   · `symbolic` 真跑 `diff` 已通，但**上游 46 条 `%!test` 未在浏览器里全跑**（子代理在原生侧验过 46/46）；
   · **矩阵不位精确**（上游 `mat2str` 15 位有效数字，是包的行为，接缝不改）；
   · 每轮往返重跑 header（~13 ms 量级，未优化）。
+
+### 5.x.y IPC 缝的偶发竞态（2026-10-15，全量 sweep 抓到）
+
+- **形状**：全量 8768 sweep = **51 套 / 1192 PASS / 3 FAIL**，3 FAIL 全在 `accept-symbolic-seam`
+  （P3 `ipc==system` / P5 diff / P6 double）。**单跑 9/0，连跑 3 次里第 3 次转红** ⇒ **偶发**。
+- **根因**：`python_ipc_driver` 的 autodetect 看 `exist('popen2')>1` —— 本构建 popen2 **是内建**
+  （`exist==5`）⇒ 一旦 `sympref('ipc')` 停在 `default`（我那次 `pkg load` 的设置有竞态没生效），
+  包就选 `popen2` ⇒ fork ⇒ **`Function not implemented`**（ENOSYS，无 shell）。
+- **修法**：`pkg.m` 里钉 ipc 的条件从"**参数里含 `symbolic`**"改成"**`exist('sympref')==2`**
+  （即 symbolic 已在路径上）"，且**移到 `unwind_protect` 之外**（path 已恢复）。理由：
+  · 按参数判会漏路径（"包已在路径上再来一次 pkg"等）；`sympref` 幂等 ⇒ 宽判无副作用；
+  · 放在 `unwind_protect` 内、核心 `pkg()` 之后，若核心抛错就跳过设置（清理路径吃掉）。
+- **判据**：连跑 **8 次** 全 9/0（修前是 2-3 绿后必红）+ **sweep 并发**复验（见下）。

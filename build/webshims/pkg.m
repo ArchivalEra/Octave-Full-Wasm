@@ -84,6 +84,16 @@ function varargout = pkg (varargin)
     else
       pkg (varargin{:});
     endif
+    newp = path ();
+  unwind_protect_cleanup
+    path (oldp);                        # 恢复原路径（含本 shim）
+    ## 核心新加进来的目录（如 pkg load 的包目录）按原顺序补回
+    adddirs = setdiff (strsplit (newp, ':'), strsplit (oldp, ':'), 'stable');
+    for k2 = numel (adddirs):-1:1       # addpath 前置 ⇒ 逆序遍历保持核心的顺序
+      addpath (adddirs{k2});
+    endfor
+  end_unwind_protect
+
     ## ★ 浏览器侧 IPC 后端选择（2026-10-15，symbolic 的 IPC 缝）：装完 `symbolic` 后，
     ##   把它的 IPC 后端钉到 `system` —— 那条后端调的是**全局名 `system`**，而全局名
     ##   会落到我们的 webshim（本构建里那个 shim 把 Python 调用接到 Pyodide）。
@@ -96,25 +106,17 @@ function varargout = pkg (varargin)
     ##   ⚠️ **别引用 `names`**：它只在上面那个 `if (… __web_pkg_can_fire__ ())` 分支里定义
     ##      （实测踩到：另一条分支进来 `names` 未定义 ⇒ 被 catch 静默吞掉 ⇒ 设置没做）。
     ##      用 `__web_pkg_names__` 现算（任何分支都可用）。
-    if (nargin >= 2 && strcmpi (varargin{1}, 'load') && ...
-        any (strcmpi (__web_pkg_names__ (varargin{2:end}), 'symbolic')))
+    ##   ⚠️ 判据 = **"`sympref` 现在可解析"**（即 symbolic 在路径上），**不**依赖
+    ##      参数里有没有 `symbolic`：实测竞态（2026-10-15，sweep 并发下偶发 `ipc=default`）——
+    ##      只按参数判会漏掉"包已在路径上再来一次 pkg"等路径。`sympref` 幂等，宽判无副作用；
+    ##      但它**不能早于包进路径**（那会 `exist==0`，只是不设，不报错）。
+    if (exist ('sympref') == 2)
       try
-        if (exist ('sympref') == 2)
-          sympref ('ipc', 'system');
-        endif
+        sympref ('ipc', 'system');
       catch
         ## 静默：`symbolic` 可用性由它自己的函数在**用时**判（本 shim 不抢答）
       end_try_catch
     endif
-    newp = path ();
-  unwind_protect_cleanup
-    path (oldp);                        # 恢复原路径（含本 shim）
-    ## 核心新加进来的目录（如 pkg load 的包目录）按原顺序补回
-    adddirs = setdiff (strsplit (newp, ':'), strsplit (oldp, ':'), 'stable');
-    for k2 = numel (adddirs):-1:1       # addpath 前置 ⇒ 逆序遍历保持核心的顺序
-      addpath (adddirs{k2});
-    endfor
-  end_unwind_protect
 
 endfunction
 
