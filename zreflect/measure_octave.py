@@ -38,6 +38,22 @@ def sha256sum(path, chunk=1 << 20):
     return h.hexdigest()
 
 
+def _selftest_pass_count(script):
+    """跑一个闸门/校验器的 `--selftest`，从它自己的汇总行里数 PASS（**不手抄计数**）。
+
+    值必须与复跑命令的 stdout **逐字相等**（裸值契约）⇒ 复跑命令 = 同一条 grep 管道。
+    读不到 ⇒ 返回 None（**不编 0** —— 0 是个数字，会被当结果引用）。
+    """
+    import re as _re
+    try:
+        r = subprocess.run([sys.executable or "python3", script, "--selftest"],
+                           capture_output=True, text=True, cwd=REPO, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = _re.search(r"自证：(\d+) PASS", r.stdout)
+    return int(m.group(1)) if m else None
+
+
 def measure():
     """量一遍全部事实（本仓的策略/数据）。守卫与写盘由 zreflect/facts.py 的平台负责。"""
     facts = {}
@@ -750,6 +766,28 @@ def measure():
                                                      "货架按哪个 Octave 版本过滤（应从 fork 的 configure.ac 读）")
         except (OSError, ValueError) as _e:
             print("⚠ 读不到站点 catalog（%s）：%s" % (_cat, _e), file=sys.stderr)
+
+    # ★ **额外内容端口 + 闸门自证计数**（2026-10-15，回应内容仓 mail/009 的裁决批）：
+    #   活状态文档不许手抄这些计数（裸数字会被 check_facts 拦）⇒ 记进台账，文档引用键。
+    #   软依赖：脚本不在（换了机器）⇒ **不写键**（缺键会让文档引用报出来，不静默）。
+    for _key, _script, _label in (
+        ("port_validator_selftest_pass", "build/extra-content/validate-content-list.py",
+         "content-list 端口校验器自证 PASS 数（形状/词表/协商规则/裁决①②/license 类型）"),
+        ("port_gate_selftest_pass", "build/extra-content/check-content-port.py",
+         "端口闸门自证 PASS 数（golden 全过 + bad 全红 + 词表单一产地 + pkg/tree 两形态覆盖）"),
+        ("forge_gate_selftest_pass", "build/113/check-forge-catalog.py",
+         "站点货架闸门自证 PASS 数（R1–R8：含非货架域 R7 + size sanity R8）"),
+        ("forge_catalog_selftest_pass", "build/forge-catalog.py",
+         "货架装配器自证 PASS 数（含上游表 stage 的 fail-closed 用例）"),
+    ):
+        if os.path.exists(os.path.join(REPO, _script)):
+            _n = _selftest_pass_count(_script)
+            if _n is not None:
+                facts[_key] = fact(
+                    _n,
+                    "python3 %s --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'"
+                    % _script,
+                    _script, _label)
 
     # ★ **libm spike**（工单 60，2026-10-04）：链接期标量 libm 替换的实测判决。
     #   门槛 = 每调用几何均值 ≥1.5（热点压降 ≥1/3 的操作化）；实测 0.991 两轮一致 ⇒ 否决。

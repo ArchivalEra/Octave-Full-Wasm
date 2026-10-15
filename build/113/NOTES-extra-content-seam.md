@@ -146,6 +146,38 @@ bad/*.json                   反向夹具（sha 缺失 / 未知 form / 未知 op
 ⑤ 工具链条目（clang 进同一张表）—— 与 client-compile 设计（NOTES-client-compile-design §9）合流
 ```
 
+### §5.1 裁决②批（2026-10-15，回应内容仓 `mail/009` 三问 + 两附件）
+
+**三条待确认 + 一处独立发现，全部落产地（`build/extra-content/`）。**
+
+| 议题 | 裁决 | 为什么 |
+|---|---|---|
+| `license` 自由串 vs SPDX 枚举 | **保持自由字符串/对象** | 真实产物**逐文件混合**（clang/lld = Apache-2.0 WITH LLVM-exception、glue = MIT OR NCSA、driver = AGPL）⇒ 枚举会逼生产者**说谎或拆条**；许可台账的价值恰在"如实"。校验器只查**类型**。"写对了没"**无机器判据**（不假称有） |
+| 「普通条目」限不限条数 | **不限** | "普通" = 它**不特殊**（同一套遍历、同一张图），**不是"物理上只能一条"**。LLVM 13 条合法：逐文件许可三档（一条必然对两档说谎）+ 逐文件 sha 才让两档 sysroot 复用可见 |
+| `--upstream` 重跑 | **LLVM 修后表并入干净** | 表 sha `8bbafa5f…`（`release/content-list.json` ≡ `release/out/`），生产者态/站点态**双 `ok`**；`v0.1.2` 经 `gh release list` **已真发布** |
+| `size`/`url` 口径（独立发现） | **由 `form` 决定** | 单文件 = `url` 文件字节；`form:"tree"` = 整树预算（`url` 只是个锚）。pyodide：size 22,013,349 = 目录和，url 指树里主 wasm 9,598,218 —— **不是同一个对象、都是有意的**；`size` 不参与 fail-closed |
+
+**并入才暴露的宿主自身两处债（已修）**：
+
+1. **站点闸门对非货架条目跑货架口径** —— `check-forge-catalog.py` 的 R2（货架档案对账）/R4
+   （kinds↔tarball）对能力层与 `--upstream` 并入的生产者表**都不适用**。实测：并入 LLVM 13 条
+   ⇒ **26 条 PROBLEM 全是误判**。⇒ 改为**按 `url` 前缀分域**：货架包（`assets/forge/`）走 R2–R5，
+   非货架条目走 **R7**（形状 + 字节在站点 + sha）。
+2. **旧 R6 把 consumer 当必需** —— 与裁决②原文"**可选**、缺省 octave"**自相矛盾**，对 LLVM 的
+   sysroot 条目假红。⇒ **翻面**：consumer 改为"若存在则须是数组"。
+
+**新增 `--upstream-bytes`**（`forge-catalog.py`）：只并表不 stage ⇒ 目录指着 **404**（R7b 拦）。
+端到端证明 = 并入 LLVM 真表 + stage 真字节 ⇒ 站点闸门 **`ok`**（catalog 26 条）；未 stage 时
+**13 条 R7b 全红**（判据反过来验过）。⇒ 薄处 2（工具链一致性没闭合）现在**有了对账路径**：
+宿主的 `--upstream-bytes` + R7b 把"表引用的字节真在站点且 sha 相符"变成可跑判据。
+
+**新增闸门判据 R7/R8 + 四个自证计数进台账**（键名，见 `build/FACTS.json`，各有复跑命令）：
+`port_validator_selftest_pass`（26）/ `port_gate_selftest_pass`（6）/
+`forge_gate_selftest_pass`（20）/ `forge_catalog_selftest_pass`（19）。
+复跑：`python3 <脚本> --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'`。
+
+**回信**：`Octave-Extra-Content/mail/010-host-rulings-2.md`（三答 + 两附件 + 一处字面量）。
+
 ---
 
 ## §6 明确不做 / 诚实的薄处

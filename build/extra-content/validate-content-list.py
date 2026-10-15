@@ -122,6 +122,11 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
             for c in e["consumer"]:
                 if c not in consumer_enum:
                     probs.append("%s consumer 含未知值 %r（词表 %s）" % (tag, c, consumer_enum))
+        # license（裁决 2026-10-15）：**自由字符串，只查类型** —— 混合许可要如实记
+        #   （枚举会逼生产者说谎或拆条）；「写对了没」没有机器判据，不假称有。
+        if "license" in e and not isinstance(e["license"], (str, dict)):
+            probs.append("%s license 必须是字符串或对象（自由文本即可 —— 裁决① 2026-10-15："
+                         "不收紧成 SPDX 枚举）：得到 %s" % (tag, type(e["license"]).__name__))
         # 站点态：url 必须同源相对（COEP 拦跨域）
         if site and isinstance(e.get("url"), str) and re.match(r"^[a-z]+://", e["url"]):
             probs.append("%s 站点态 url 是绝对地址（%s…）⇒ 必须同源相对"
@@ -180,6 +185,29 @@ def selftest():
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "x", "version": "1", "sha256": "c" * 64,
              "url": "assets/x.tar", "consumer": ["wat"]}]}, schema=schema), False)
+    # 裁决 2026-10-15（回应内容仓 mail/009 待确认②）：**「普通条目」不限制条数**
+    add("★ 能力层可以有多条（LLVM 13 条形态）⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "llvm-clang.wasm", "version": "6.0.12", "sha256": "d" * 64,
+             "url": "assets/llvm-wasm/clang.wasm", "form": "file"},
+            {"name": "llvm-clang.js", "version": "6.0.12", "sha256": "e" * 64,
+             "url": "assets/llvm-wasm/clang.js", "form": "js"},
+            {"name": "llvm-sysroot.tar", "version": "6.0.12", "sha256": "f" * 64,
+             "url": "assets/llvm-wasm/sysroot.tar", "form": "tree"}]}, schema=schema), True)
+    add("★ 能力层缺 consumer ⇒ 不报（裁决②：consumer 可选、缺省 octave）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "cap", "version": "1", "sha256": "b" * 64,
+             "url": "assets/cap/x.tar", "form": "tree", "content": []}]}, schema=schema), True)
+    # 裁决 2026-10-15（回应内容仓 mail/009 待确认①）：license 保持自由字符串
+    add("★ license 混合许可自由文本（LLVM 形态）⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "tar", "version": "1", "sha256": "a" * 64, "url": "u", "form": "tree",
+             "license": "mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)"}]},
+        schema=schema), True)
+    add("★ license 是数字（类型错）⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "license": 42}]}, schema=schema), False)
 
     # ② 该报的必须报
     add("★ 空表 ⇒ 必须报", lambda: check_table(

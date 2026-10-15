@@ -19,12 +19,25 @@
 #   R4 `kinds` 与实际 tarball 内容一致：不含 'oct' 的包 ⇒ tarball 里**不许有 `*.oct`**
 #      （v1 只卖纯 .m / m+src；带了预编译件就该在货架上被划成 'oct' 形态）
 #   R6（接缝 §5④，2026-10-14）：**能力层条目**（`form:"tree"`）形状合法 —— 必须 `content:[]`
-#      （裁决①）、必须有 `consumer`（裁决②）、且它的 `url` 必须在站点里**真在**。
-#      判据来源：能力层条目由 `forge-catalog.py` 产出（不在货架档案里）⇒ R2 不管它，
-#      本闸门必须自己盯（否则"能力层写了个不存在的 URL"没人拦）。
+#      （裁决①）、且它的 `url` 必须在站点里**真在**。判据来源：能力层条目由 `forge-catalog.py`
+#      产出（不在货架档案里）⇒ R2 不管它，本闸门必须自己盯（否则"能力层写了个不存在的 URL"没人拦）。
+#      ★ **2026-10-15 翻面**：旧 R6 还要求"能力层必须有 `consumer`"—— 这与裁决②原文
+#      （consumer **可选**、缺省 octave）**自相矛盾**，对 LLVM 并入的 sysroot 条目**假红**。
+#      ⇒ consumer 由"必需"改为"**若存在则须是数组**"，缺省合法（见 R7a）。
 #   R5（端口 schema 2，接缝 §2/§5②）：`form`/`content` 两轴与 `kinds` **一致**
 #      （`content` == `kinds` 兼容视图；`form` 由 `kinds` 派生 —— 货架包恒 `pkg`）。
 #      这是 R4 的推广：R4 查"kinds 与字节"，R5 查"新两轴与 kinds"（防两处各写一份漂移）
+#   ★ **来源域**（2026-10-15，回应内容仓 mail/009 待确认③）：目录里住**两类**条目 ——
+#      ① **货架包**（`url` 在 `assets/forge/` 下）⇒ 走 R2/R3/R4/R5；
+#      ② **非货架条目**（能力层 / `--upstream` 并入的生产者表，如 LLVM 工具链）⇒ 走 **R7**。
+#      按 `url` 前缀分域（域判据 = 同一条事实：字节从哪来）。旧版对非货架条目跑 R2/R4 是
+#      **假红**（实测：并入 LLVM 13 条 ⇒ 26 条 PROBLEM 全是误判）。
+#   R7（非货架条目，2026-10-15）：**R7a 形状** —— `form:"tree"` 的 `content` 必须空（裁决①）；
+#      `consumer` 可选但若在须是数组（裁决②）。**R7b 字节** —— `url` 在站点里真在且 sha 相符
+#      （fail-closed 的唯一依据；**并入生产者的表后，字节必须 stage**，否则目录指着 404）。
+#   R8（跨域，全部条目，2026-10-15）：`size` 口径 sanity（裁决 2026-10-15，回应 mail/009）——
+#      单文件形态 `size` == 该文件字节；`form:"tree"` 的 `size` = 整树预算 ⇒ 必须 ≥ `url` 锚。
+#      `size` 不参与 fail-closed（schema 明说），本判据只拦"树比其中一件还小"这种自相矛盾。
 #
 # stdout 裸值契约（平台闸门惯例）：`ok` / `PROBLEM: <哪条>`；SKIP 明说退 0。
 #   · 货架不在（submodule 未初始化）⇒ `SKIP:` 退 0（换机器不是错，同 plugin-check）
@@ -125,27 +138,25 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
 
     for p in packs:
         name = p.get("name", "?")
-        # ★ 能力层条目（form:"tree"）**不走 R2/R3**（2026-10-14，接缝 §5④）：
-        #   它不在货架档案里（不是包）、也不在 assets/forge/ 下（是共享运行时）
-        #   ⇒ 对它跑 R2/R3 是**假红**（实测抓到：R2"货架上没有 cap"+R3"url 前缀"）。
-        #   它的规则 = R6（形状 + consumer + 字节在站点）。
-        if p.get("form") == "tree":
-            pass          # 交给下面的 R6
-        else:
+        url = p.get("url") or ""
+        form = p.get("form")
+        # ★ **来源域**（2026-10-15 裁决，回应内容仓 mail/009）：目录里住着**两类**条目 ——
+        #   ① **货架包**（`url` 在 `assets/forge/` 下，恒 `form:"pkg"`）；
+        #   ② **非货架条目**：能力层（Pyodide 运行时）+ `--upstream` 并入的生产者表（LLVM 工具链）。
+        #   后者的"货架档案对账"(R2)、"kinds↔tarball"(R4)、"content==kinds"(R5) **都不适用** ——
+        #   对它们跑 R2/R4 是**假红**（实测：并入 LLVM 13 条后 26 条 PROBLEM，全是误判）。
+        #   ⇒ 按 `url` 前缀分域，各走各的断言（域判据 = 同一条事实：字节从哪来）。
+        is_shelf = url.startswith("assets/forge/")
+        blob = os.path.join(site_dir, url) if url else ""
+        exists = bool(url) and os.path.isfile(blob)
+
+        if is_shelf:
             # R2：货架档案对账（pin 承载者）
             why = shelf_has(p, shelf_dir)
             if why:
                 problems.append("R2 %s" % why)
-        # R3：字节在仓库镜像里、且 sha 相符（**包**的规则；能力层由 R6 查）
-        url = p.get("url") or ""
-        if p.get("form") != "tree" and not url.startswith("assets/forge/"):
-            problems.append("R3 %s 的 url 不是同源 assets/forge/ 前缀：%r" % (name, url))
-            continue
-        if p.get("form") == "tree":
-            got, blob = None, None          # 能力层：字节由 R6 查（此处不重复）
-        else:
-            blob = os.path.join(site_dir, url)
-            if not os.path.isfile(blob):
+            # R3：字节在仓库镜像里、且 sha 相符
+            if not exists:
                 problems.append("R3 %s 的字节不在仓库镜像里：%s" % (name, url))
                 continue
             got = sha_of(blob)
@@ -153,38 +164,55 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
                 problems.append("R3 %s 字节 sha=%s ≠ 目录 sha=%s（目录改了字节没换？）"
                                 % (name, got[:12], str(p.get("sha256"))[:12]))
                 continue
-        # R4：kinds 与实际内容一致（无 'oct' ⇒ tarball 里不许有 .oct）
-        #   能力层（form:tree）不是包、没有 tarball ⇒ 跳过
-        kinds = p.get("kinds") or []
-        if p.get("form") != "tree" and "oct" not in kinds:
-            try:
-                has, first = has_oct(blob)
-            except (OSError, tarfile.TarError) as e:
-                problems.append("R4 %s 读不了 tarball：%r" % (name, e))
+            # R4：kinds 与实际内容一致（无 'oct' ⇒ tarball 里不许有 .oct）
+            kinds = p.get("kinds") or []
+            if "oct" not in kinds:
+                try:
+                    has, first = has_oct(blob)
+                except (OSError, tarfile.TarError) as e:
+                    problems.append("R4 %s 读不了 tarball：%r" % (name, e))
+                    continue
+                if has:
+                    problems.append("R4 %s kinds=%s 却说没有编译件，tarball 里躺着 %s"
+                                    % (name, kinds, first))
+            # R5：两轴与 kinds 一致（content == kinds；货架包恒 form=pkg）
+            content = p.get("content")
+            if content is not None and list(content) != list(kinds):
+                problems.append("R5 %s content=%s ≠ kinds=%s（兼容视图必须同值）"
+                                % (name, content, kinds))
+            if form is not None and form != "pkg":
+                problems.append("R5 %s form=%r —— 货架装配的包恒为 \"pkg\"" % (name, form))
+        else:
+            # R7（非货架条目：能力层 / 生产者表并入）—— 与包走**不同**的断言。
+            #   R7a 形状：`form:"tree"` 的 content 必须空（裁决①）；consumer **可选**
+            #       （裁决②：缺省 octave。★ 翻面 2026-10-15：旧 R6 把 consumer 当**必需**，
+            #        与裁决②原文"可选"自相矛盾，对 LLVM 的 sysroot 条目假红）。
+            #   R7b 字节：`url` 在站点里真在、且 sha 相符（fail-closed 的唯一依据）。
+            if form == "tree" and p.get("content"):
+                problems.append("R7 %s 能力层（form:tree）的 content 必须为空 []：得到 %r"
+                                % (name, p.get("content")))
+            if "consumer" in p and not isinstance(p["consumer"], list):
+                problems.append("R7 %s consumer 必须是数组：得到 %r" % (name, p["consumer"]))
+            if not exists:
+                problems.append("R7 %s 非货架条目的字节不在站点：%s（生产者的表并进来了，"
+                                "但字节没 stage ⇒ 目录指着 404）" % (name, url))
                 continue
-            if has:
-                problems.append("R4 %s kinds=%s 却说没有编译件，tarball 里躺着 %s"
-                                % (name, kinds, first))
-        # R5（端口 schema 2）：两轴与 kinds 一致（content == kinds；form 派生 = pkg）
-        content = p.get("content")
-        form = p.get("form")
-        if content is not None and form != "tree" and list(content) != list(kinds):
-            problems.append("R5 %s content=%s ≠ kinds=%s（兼容视图必须同值）"
-                            % (name, content, kinds))
-        # R6：能力层条目（form:"tree"）—— 与包走**不同**的断言（见头注）
-        if form == "tree":
-            if content:                                  # 裁决①：能力层 content 必须空
-                problems.append("R6 %s 能力层（form:tree）的 content 必须为空 []：得到 %r"
-                                % (name, content))
-            if not p.get("consumer"):                    # 裁决②：能力层应声明消费面
-                problems.append("R6 %s 能力层缺 consumer（裁决②：至少一条消费面）" % name)
-            u = p.get("url") or ""
-            blob2 = os.path.join(site_dir, u)
-            if not os.path.isfile(blob2):
-                problems.append("R6 %s 能力层的字节不在站点：%s" % (name, u))
-        elif form is not None and form != "pkg":
-            problems.append("R5 %s form=%r —— 货架装配的包恒为 \"pkg\"（能力层走 form:\"tree\" 的另一条）"
-                            % (name, form))
+            got = sha_of(blob)
+            if p.get("sha256") and got != p["sha256"]:
+                problems.append("R7 %s 字节 sha=%s ≠ 目录 sha=%s"
+                                % (name, got[:12], str(p.get("sha256"))[:12]))
+
+        # R8（跨域，全部条目）：`size` 口径 sanity（裁决 2026-10-15）——
+        #   单文件形态 size == 该文件字节；`form:"tree"` 的 size = 整树预算 ⇒ **必须 ≥ url 锚**。
+        #   `size` 本身不是第二断言（schema 明说），这条只拦"明显自相矛盾"（树比锚还小）。
+        if exists and isinstance(p.get("size"), int):
+            real = os.path.getsize(blob)
+            if form == "tree":
+                if p["size"] < real:
+                    problems.append("R8 %s tree 的 size=%d < url 锚字节 %d（整树不可能比其中一件小）"
+                                    % (name, p["size"], real))
+            elif p["size"] != real:
+                problems.append("R8 %s 单文件 size=%d ≠ 字节 %d" % (name, p["size"], real))
     return problems, []
 
 
@@ -317,16 +345,16 @@ def _selftest():
         cases.append(("★ R5：包的 form 不是 pkg（且不是合法能力层 tree）⇒ 必须报",
                       lambda d=d: any("R5" in p for p in check(
                           "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
-        # R6（接缝 §5④）：能力层条目的形状 —— 正常 / 三条反向
+        # R6/R7（接缝 §5④ + 2026-10-15 分域）：能力层/非货架条目的形状 —— 正常 / 四条反向
         def _mk_cap(d2, mutate=None):
-            """造一个带能力层条目的夹具站：包（demo）+ 能力层（cap）。"""
+            """造一个带能力层条目的夹具站：包（demo）+ 能力层（cap，url 在 assets/cap/）。"""
             dd = _mk_fixture(d2, [_pack(sha=good_sha)], blob_sha=data)
             blob = os.path.join(dd, "site", "assets", "cap", "cap.wasm")
             os.makedirs(os.path.dirname(blob), exist_ok=True)
             open(blob, "wb").write(data)
             catp = os.path.join(dd, "site", "assets", "forge-catalog.json")
             doc = json.load(open(catp))
-            doc["packs"].append({"name": "cap", "version": "1", "sha256": "e" * 64,
+            doc["packs"].append({"name": "cap", "version": "1", "sha256": good_sha,
                                  "url": "assets/cap/cap.wasm", "form": "tree",
                                  "content": [], "consumer": ["octave"], "deps": []})
             if mutate:
@@ -334,21 +362,50 @@ def _selftest():
             json.dump(doc, open(catp, "w"))
             return dd
         d = _mk_cap(os.path.join(tmp, "cap_ok"))
-        cases.append(("R6：能力层（form:tree, content=[], consumer, 字节在）⇒ 不报",
-                      lambda d=d: check("site", "shelf", repo=d, sha_of=real_sha_of(data),
+        cases.append(("R7：能力层（form:tree, content=[], consumer, 字节+sha 对）⇒ 不报",
+                      lambda d=d: check("site", "shelf", repo=d, sha_of=sha256_file,
                                         has_oct=no_oct)[0] == []))
-        d = _mk_cap(os.path.join(tmp, "cap_content"), lambda c: c.update(content=["wasm"]))
-        cases.append(("★ R6 反向：能力层带非空 content ⇒ 必须报（裁决①）",
-                      lambda d=d: any("R6" in p and "content" in p for p in check(
-                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        # ★ 翻面（2026-10-15，回应 mail/009 待确认②）：consumer **可选**（缺省 octave）
         d = _mk_cap(os.path.join(tmp, "cap_noconsumer"), lambda c: c.pop("consumer"))
-        cases.append(("★ R6 反向：能力层缺 consumer ⇒ 必须报（裁决②）",
-                      lambda d=d: any("R6" in p and "consumer" in p for p in check(
-                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        cases.append(("★ R7 翻面：能力层**缺 consumer 不算错**（裁决②：可选、缺省 octave）",
+                      lambda d=d: check("site", "shelf", repo=d, sha_of=sha256_file,
+                                        has_oct=no_oct)[0] == []))
+        d = _mk_cap(os.path.join(tmp, "cap_badcontent"), lambda c: c.update(content=["wasm"]))
+        cases.append(("★ R7a 反向：能力层带非空 content ⇒ 必须报（裁决①）",
+                      lambda d=d: any("R7" in p and "content" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        d = _mk_cap(os.path.join(tmp, "cap_nonlist"), lambda c: c.update(consumer="octave"))
+        cases.append(("★ R7a 反向：consumer 不是数组 ⇒ 必须报",
+                      lambda d=d: any("R7" in p and "consumer" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        # ★ R7b：非货架条目字节不在站点 ⇒ 必须报（这是"并入生产者的表但字节没 stage"的真形状）
         d = _mk_cap(os.path.join(tmp, "cap_noblob"), lambda c: c.update(url="assets/cap/nope.wasm"))
-        cases.append(("★ R6 反向：能力层的字节不在站点 ⇒ 必须报",
-                      lambda d=d: any("R6" in p and "字节不在" in p for p in check(
-                          "site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct)[0])))
+        cases.append(("★ R7b 反向：非货架条目的字节不在站点 ⇒ 必须报（并入表指着 404）",
+                      lambda d=d: any("R7" in p and "字节不在" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        # ★ R7b：非货架条目字节被改（sha 不符）⇒ 必须报
+        def _tamper_cap(d2):
+            dd = _mk_cap(d2)
+            open(os.path.join(dd, "site", "assets", "cap", "cap.wasm"), "wb").write(b"TAMPER!")
+            return dd
+        d = _tamper_cap(os.path.join(tmp, "cap_tampered"))
+        cases.append(("★ R7b 反向：非货架条目字节 sha 不符 ⇒ 必须报",
+                      lambda d=d: any("R7" in p and "字节 sha" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        # ★ R8：size 口径 sanity（tree 的 size ≥ url 锚；单文件 size == 字节）
+        d = _mk_cap(os.path.join(tmp, "cap_small_size"),
+                    lambda c: c.update(size=1))            # tree 但 size < 锚字节
+        cases.append(("★ R8 反向：tree 的 size < url 锚字节 ⇒ 必须报",
+                      lambda d=d: any("R8" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        d = _mk_fixture(os.path.join(tmp, "bad_size"), [_pack(sha=good_sha)], blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat))
+        _d0["packs"][0]["size"] = 999999                     # 单文件但 size ≠ 字节
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R8 反向：单文件 size ≠ 字节 ⇒ 必须报",
+                      lambda d=d: any("R8" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
         d = _mk_fixture(os.path.join(tmp, "bad_missing"), [_pack(sha=good_sha)], blob_sha=data)
         os.remove(os.path.join(d, "site", "assets", "forge", "demo-1.0.0.tar.gz"))
         cases.append(("★ R3：目录说有的字节镜像里没有 ⇒ 必须报",

@@ -33,7 +33,7 @@
     "entries": {
       "type": "array",
       "minItems": 1,
-      "description": "规范键。能力层（Pyodide/clang）= 一条 form:\"tree\" 的普通条目，进同一张 deps 图（接缝 §2：不引入新字段）。",
+      "description": "规范键。能力层（Pyodide/clang）= form:\"tree\" 的**普通条目**，进同一张 deps 图（接缝 §2：不引入新字段）。**「普通」= 它不特殊（同一套遍历、同一张图），不是「物理上只能一条」** —— 裁决 2026-10-15（回应内容仓 mail/009 待确认②：LLVM-wasm 的 clang 工具链出 **13 条**，逐文件许可三档 + 逐文件 sha256 才让两档 sysroot 复用可见；统一成一条必然对两档之一说谎）。条数与形态限制由**消费者遍历**决定，不由 schema 条数决定。",
       "items": {
         "$ref": "#/$defs/entry"
       }
@@ -110,7 +110,7 @@
         "size": {
           "type": "integer",
           "minimum": 0,
-          "description": "可选（进度条；不作为第二断言）"
+          "description": "可选（进度条；**不作为第二断言** —— fail-closed 的唯一依据是 sha256）。**口径由 `form` 决定**（裁决 2026-10-15，回应内容仓 mail/009 的独立发现）：单文件形态（pkg/oct/file/js）= **`url` 指向的那个文件的字节**；**`form:\"tree\"` 的 `size` = 整棵树的字节预算**（= `url` 所在目录所有文件的字节和）—— 因为能力层要回答的是「闭包还要拉多少」这个**总量**问题，而 `url` 只是树里的一个锚（现役 pyodide 即此形态：size 22,013,349 = `assets/pyodide/` 整目录，url 指树里的主 wasm 9,598,218，两者**不是同一个对象，都是有意的**）。⇒ 站点闸门据此判 sanity：单文件 `size` 必须 == 字节数；`tree` 的 `size` 必须 ≥ `url` 锚的字节数（整树不可能小于其中一件）。"
         },
         "form": {
           "type": "string",
@@ -162,7 +162,7 @@
             "string",
             "object"
           ],
-          "description": "许可（spdx 串或对象）"
+          "description": "许可（spdx 串或对象）。**裁决 2026-10-15（回应内容仓 mail/009 待确认①：LLVM-wasm 的混合许可 `\"mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)\"`）：保持自由字符串，不收紧成 SPDX 枚举**。判据：枚举只能表达「单一 SPDX 标识」，而真实发布的产物**逐文件混合**（clang/lld = Apache-2.0 WITH LLVM-exception、glue js = MIT OR NCSA、driver = AGPL）⇒ 收紧会逼生产者**说谎或拆条**，而许可台账的价值恰在「如实」。⚠️ 诚实边界：因此**没有机器判据能核「许可写对了没」**——它是记账字段，不参与 fail-closed（唯一 fail-closed 依据是 sha256）；机器只查**类型**（string | object，拒数字/数组，见校验器）。将来若要有判据，方向是**另加可选结构**（如 `license_files: [url…]` 指到许可原文）而不是改本字段的词表。"
         },
         "note": {
           "type": "string"

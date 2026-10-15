@@ -13,9 +13,11 @@
 ```
 content-list.schema.json     唯一权威形状（枚举的单一产地 —— 校验器从这里读词表）
 validate-content-list.py     纯 stdlib 校验器：--list F [--producer ID] [--site] ／ --selftest
-golden/                      三个真样件（**必须过**校验）
+golden/                      真样件（**必须过**校验）
   shelf.json                 货架（内容仓 `--emit` 的**真输出**，13 包）
-  toolchain.json             LLVM-wasm 工具链（能力层 = form:"tree"）
+  toolchain.json             LLVM-wasm 工具链样件（能力层 = form:"tree"，单条示意）
+  toolchain-llvm.json        ★ LLVM-wasm 的**真输出**（release/content-list.json，13 条，2026-10-15）
+                             —— 把「能力层可以多条」「license 自由字符串」两裁决钉在真数据上
   runtime.json               Pyodide 运行时（能力层 = form:"tree"，symbolic 靠 deps 边指向它）
 bad/                         反向夹具（**必须红**；每类一条）
   sha-missing.json           sha256 缺失
@@ -40,8 +42,17 @@ check-content-port.py        ★ 闸门：golden 全过 + bad 全红 + schema/�
 - **`entries`** 是规范键；**`packs`** 是兼容别名（现役站点目录用 `packs`）——**只许出现一个**。
 - **`form`** = 投送形态（`pkg`/`tree`/`oct`/`octdir`/`file`/`js`）；**`content`** = 内容构成（`m`/`src`/`oct`）；
   `kinds` 保留为兼容视图（= `content` 的旧名）。
-- **能力层（Pyodide / clang）= 一条 `form:"tree"` 的普通条目**，进同一张 `deps` 图
+- **能力层（Pyodide / clang）= `form:"tree"` 的普通条目**，进同一张 `deps` 图
   —— **不加新字段**（接缝 §2 判决；翻案 `R-015`/`R-016` 记着这条曾被我写错）。
+  ★ **「普通」= 它不特殊（同一套遍历、同一张图），不是「物理上只能一条」**（2026-10-15 裁决）：
+  LLVM 的 clang 工具链出 **13 条**合法（逐文件许可三档 + 逐文件 sha 才让两档 sysroot 复用可见）。
+  `golden/toolchain-llvm.json` 就是那份真输出。
+- **`license` = 自由字符串/对象**（2026-10-15 裁决）：真实产物**逐文件混合**（Apache-2.0 WITH
+  LLVM-exception / MIT OR NCSA / AGPL）⇒ 不收紧成 SPDX 枚举（枚举会逼生产者说谎或拆条）。
+  校验器只查**类型**；「写对了没」**没有机器判据**（如实记，不假称有）。
+- **`size` 口径由 `form` 决定**（2026-10-15 裁决）：单文件 = `url` 指的那个文件的字节；
+  **`form:"tree"` = 整树字节预算**（`url` 只是树里的一个锚；两者**不是同一个对象，都是有意的**）。
+  站点闸门 R8 据此判 sanity；`size` **不参与 fail-closed**（唯一依据是 `sha256`）。
 
 ## 两条纪律
 
@@ -76,10 +87,26 @@ python3 build/extra-content/check-content-port.py --selftest
 > 缺口③ 的实测背景：LLVM-wasm 的表写 `pin:"v0.1.2"` 而该版本**四处皆无**
 > （本地 tag / 远端 tag / `gh release` / 磁盘 bundle）—— 形状合法但**无判据可拦**。
 
+## 三裁决②（2026-10-15，回应内容仓 `mail/009` 的三个待确认）
+
+| 待确认 | 裁决 | 落地 |
+|---|---|---|
+| ① `license` 保持自由字符串还是收紧成枚举 | **保持自由字符串/对象**（逐文件混合许可表达不成枚举；枚举会逼生产者说谎或拆条） | schema 描述 + 校验器**类型检查**（string\|object）；"写对了没"**无机器判据**（如实记） |
+| ② 「能力层 = 普通条目」的"普通"限不限条数 | **不限**（"普通"= 它不特殊，不是"物理上只能一条"）；LLVM 13 条合法 | schema 描述 + 校验器"多条能力层⇒不报"正向断言 + `golden/toolchain-llvm.json`（真数据） |
+| ③ 用 LLVM 修后的表重跑 `--upstream` | **已重跑，并入干净**（双模式 `ok`，13 条；`v0.1.2` 实测已真发布） | 隔离站端到端：并入+stage ⇒ 站点闸门 `ok`；**新增 `--upstream-bytes`**（stage 字节，R7b 拦 404） |
+
+> 附件裁决（内容仓独立发现的 `size`/`url` 不一致）：**由 `form` 决定** —— 单文件 = 该文件字节；
+> `form:"tree"` = 整树字节预算（pyodide：size 22,013,349 = 整目录，url 指树里主 wasm 9,598,218，
+> **两者不是同一个对象、都是有意的**）。站点闸门加 **R8** sanity（`size` 不参与 fail-closed）。
+>
+> **顺手修了宿主自己两处门里的债**（并入 LLVM 才暴露）：站点闸门对非货架条目跑货架口径（R2/R4）
+> ⇒ **26 条假红** ⇒ 改为**按 `url` 前缀分域**（货架包走 R2–R5；能力层/生产者表走 **R7**）；
+> 旧 R6 要求"能力层**必需** consumer"与裁决②"**可选**"**自相矛盾** ⇒ **翻面**。
+
 ## 待办（本产地）
 
 - [ ] **核 `pin` 的 `release:` 存在性**（要网络 + 各生产者仓可达性；新活，未做）
-- [ ] 生产者推广进度（内容仓在做）：LLVM-wasm 已出表待修两处；OM 缺席（合法）
+- [x] 生产者推广进度（内容仓在做）：**LLVM-wasm 两处必修已修、宿主复跑并入 `ok`**；OM 缺席（合法）
 
 ## 与内容仓的关系（2026-10-14 裁决后）
 

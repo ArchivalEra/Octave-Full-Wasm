@@ -5222,3 +5222,58 @@ serve.py）。评论里"返回垃圾标量"的现象在本构建里其实是**�
   · 按参数判会漏路径（"包已在路径上再来一次 pkg"等）；`sympref` 幂等 ⇒ 宽判无副作用；
   · 放在 `unwind_protect` 内、核心 `pkg()` 之后，若核心抛错就跳过设置（清理路径吃掉）。
 - **判据**：连跑 **8 次** 全 9/0（修前是 2-3 绿后必红）+ **sweep 并发**复验（见下）。
+
+## 5.x 端口三裁决②批：内容仓 mail/009 三问裁决 + 收口落地（2026-10-15，无人值守）
+
+**用户点令**："读回信，看 state 和 maintaince，无人值守完成裁决"。回信 = 内容仓
+`Octave-Extra-Content/mail/009`（三个待确认 + 两处附件），全链 001→009 逐封读过。
+
+### 三条裁决（落产地 `build/extra-content/`）
+
+1. **`license` 保持自由字符串/对象**（不收紧 SPDX 枚举）。判据：真实产物**逐文件混合**
+   （clang/lld = `Apache-2.0 WITH LLVM-exception`、glue js = `MIT OR NCSA`、driver = `AGPL`）
+   ⇒ 枚举会逼生产者**说谎或拆条**。校验器只查**类型**（`string | object`）；"写对了没"**没有
+   机器判据** —— 如实记，不假称有。将来要判据 ⇒ 加**可选结构**（`license_files: [url…]`）而非改词表。
+2. **「能力层 = 普通条目」的"普通"不限制条数**。判据：消费者（`assets-loader.js`）按
+   `form==='tree'` 过滤、**不看条数**；装配器按目录遍历产条目；`accept-capability-layer` 按名字断言。
+   ⇒ "普通" = **它不特殊**（同一套遍历、同一张图），**不是"物理上只能一条"**。
+   LLVM 的 clang 工具链出 **13 条**合法（逐文件许可三档 + 逐文件 sha 才让两档 sysroot 复用可见）。
+   校验器加正向断言"多条能力层 ⇒ 不报"。
+3. **`--upstream` 重跑（LLVM 修后表）⇒ 并入干净**。实测：表 sha `8bbafa5f…`
+   （`release/content-list.json` ≡ `release/out/content-list.json` 逐字节同），
+   生产者态/站点态**双 `ok`**（13 条）；隔离站 `--upstream` 并入 **13 条 rc=0**；
+   `v0.1.2` 经 `gh release list` **已真发布**（🔴 不再是预示 —— 前一批"四处皆无"的实测记录已过时）。
+
+### 两处附件
+
+- **`size`/`url` 口径（内容仓独立发现）⇒ 由 `form` 决定**：单文件 `size` == 该文件字节；
+  **`form:"tree"` 的 `size` = 整树字节预算**（现役 pyodide：22,013,349 = `assets/pyodide/` 整目录，
+  `url` 指树里主 wasm 9,598,218 —— **两者不是同一个对象、都是有意的**）。站点闸门加 **R8** sanity
+  （单文件 `size`==字节；tree 的 `size` ≥ `url` 锚）。`size` **不参与 fail-closed**（唯一依据是 sha256）。
+- **v0.1.2 已发布**（见上）。
+
+### ★ 并入才暴露的宿主自身两处债（已修 —— 这是我这次最实的收获）
+
+1. **站点闸门对非货架条目跑货架口径 ⇒ 假红**。`check-forge-catalog.py` 的 R2（货架档案对账）/
+   R4（kinds↔tarball）/R5（content==kinds）对**能力层**与 **`--upstream` 并入的生产者表**都不适用。
+   实测：并入 LLVM 13 条 ⇒ **26 条 PROBLEM 全是误判**。⇒ 改为**按 `url` 前缀分域**：
+   货架包（`assets/forge/`）走 R2–R5；**非货架条目走 R7**（形状 + 字节在站点 + sha）。
+2. **旧 R6 把 consumer 当必需 ⇒ 与裁决②原文"可选、缺省 octave"自相矛盾**
+   （对 LLVM 的 sysroot 条目假红）。⇒ **翻面**：consumer 改为"若存在则须是数组"，缺省合法。
+   （判据纪律：行为变了就翻面改断言，别改检查器 —— 这里正是。）
+
+### 新增 `--upstream-bytes`（让 ③ 真正干净收口）
+
+只并表不 stage ⇒ 目录指着 **404**。`build/forge-catalog.py` 新增 `--upstream-bytes <目录>`：
+把表引用的字节 stage 进站点、逐件核 sha256（fail-closed）。**端到端证明**（隔离临时站，不碰 8761）：
+并入 LLVM 真表 + stage 真字节 ⇒ 站点闸门 **`ok`**（catalog 26 条）；**未 stage 时 13 条 R7b 全红**
+（判据反过来验过）。⇒ 接缝 §6 **薄处 2**（"工具链一致性没闭合"）现在**有了对账路径**。
+
+### 判据与计数
+
+- 校验器自证 22→**26 PASS / 0 fail**（+4：多条能力层 / 缺 consumer 不报 / license 混合串 / license 数字报）；
+- 端口闸门 `check-content-port` **6/0**（新增 golden `toolchain-llvm.json` = LLVM 真输出；
+  并修了它自证里"写死删两个文件名"的脆弱用例 ⇒ 改为按内容删所有 tree 样件）；
+- 站点闸门 `check-forge-catalog` 自证 16→**20 PASS / 0 fail**（R6→R7 翻面 + R7b/R8 各两条反向）；
+- 装配器 `forge-catalog.py` 自证 14→**19 PASS / 0 fail**（+5 stage 用例）；
+- 实时站点 `check-forge-catalog` **`ok`**（未退化）；四键进台账（168→**172 条事实**）。

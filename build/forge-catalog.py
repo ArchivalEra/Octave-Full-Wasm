@@ -278,6 +278,66 @@ def _file_sha_or_empty(path):
         return ""
 
 
+def _common_dir_prefix(urls):
+    """一组站内相对 url 的**公共目录前缀**（stage 映射用；如全是 assets/llvm-wasm/… ⇒ 该前缀）。"""
+    dirs = [os.path.dirname(u) for u in urls if u]
+    if not dirs:
+        return ""
+    try:
+        return os.path.commonpath(dirs)
+    except ValueError:
+        return ""
+
+
+def stage_upstream_bytes(site, entries, bytes_dir, check_only=False):
+    """把**生产者表**引用的字节从本地目录 stage 进站点，逐件核 sha256（fail-closed）。
+
+    ⚠️ **为什么必须 stage**（2026-10-15，回应内容仓 mail/009 待确认③ 的落地）：生产者的表用
+    **站内相对 url** 指字节（如 `assets/llvm-wasm/clang.wasm`），而 COEP 拦跨域 ⇒ 字节必须
+    **同源在站点上**。只并表不 stage ⇒ 目录指着 **404** —— 站点闸门 R7b 会拦
+    （实测：并入 LLVM 13 条未 stage ⇒ 13 条 R7b 全红，见 `check-forge-catalog.py`）。
+
+    映射：去掉所有 url 的**公共目录前缀**后，从 `bytes_dir` 找同名文件（保子目录）；
+    前缀推断失败时退回 basename。返回问题清单（[] = 全部 stage 成功）。
+    """
+    problems = []
+    if not entries:
+        return problems
+    prefix = _common_dir_prefix([e.get("url") or "" for e in entries])
+    for e in entries:
+        u = e.get("url") or ""
+        if not u:
+            problems.append("stage %s：条目没有 url（无从 stage）" % e.get("name"))
+            continue
+        tail = u[len(prefix):].lstrip("/") if prefix and u.startswith(prefix) else os.path.basename(u)
+        src = os.path.join(bytes_dir, tail)
+        if not os.path.isfile(src):
+            alt = os.path.join(bytes_dir, os.path.basename(u))     # 退一步：按 basename 找
+            if os.path.isfile(alt):
+                src = alt
+            else:
+                problems.append("stage %s：bytes_dir 里找不到 %s（试过 %s）"
+                                % (e.get("name"), tail, src))
+                continue
+        want = e.get("sha256")
+        got = sha256_file(src)
+        if want and got != want:
+            problems.append("stage %s：字节 sha=%s ≠ 表 sha=%s（拒绝 stage）"
+                            % (e.get("name"), got[:12], str(want)[:12]))
+            continue
+        dst = os.path.join(site, u)
+        if check_only:
+            if not os.path.isfile(dst) or sha256_file(dst) != (want or got):
+                problems.append("stage %s：站点上没有 %s 或 sha 不符（未 stage）" % (e.get("name"), u))
+            continue
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if not os.path.isfile(dst) or sha256_file(dst) != (want or got):
+            shutil.copy2(src, dst)
+        if sha256_file(dst) != (want or got):                      # 拷完再核一次（fail-closed）
+            problems.append("stage %s：写盘后 sha 不符" % (e.get("name")))
+    return problems
+
+
 def shelf_commit():
     """货架仓的 commit（= "目录来自哪一版货架"）——pin 的承载者，写进 catalog 供见证。"""
     try:
@@ -409,6 +469,50 @@ def _selftest():
     cases.append(("★ resolve：空货架 ⇒ 上架清单为空（调用方按零值守卫报）",
                   lambda: resolve({}, "11.3.0", False, "/x") == ([], [])))
 
+    # 上游表字节 stage（接缝 §5⑤ 收口；2026-10-15）—— 形状齐备：正常 / 该报 / 空输入
+    import hashlib as _hl
+    _bytes = b"LLVM-BLOB-CONTENT"
+    _bsha = _hl.sha256(_bytes).hexdigest()
+
+    def _stage_fixture(with_bytes=True, sha=None, url="assets/llvm-wasm/clang.wasm",
+                       tail="clang.wasm"):
+        bd = tempfile.mkdtemp()
+        if with_bytes:
+            os.makedirs(os.path.join(bd, os.path.dirname(tail)), exist_ok=True)
+            open(os.path.join(bd, tail), "wb").write(_bytes)
+        site = tempfile.mkdtemp()
+        ent = [{"name": "llvm-clang", "version": "1", "form": "file",
+                "url": url, "sha256": sha or _bsha}]
+        return bd, site, ent
+
+    def _stage_ok():
+        bd, site, ent = _stage_fixture()
+        probs = stage_upstream_bytes(site, ent, bd, check_only=False)
+        dst = os.path.join(site, "assets/llvm-wasm/clang.wasm")
+        return probs == [] and os.path.isfile(dst) and _hl.sha256(open(dst, "rb").read()).hexdigest() == _bsha
+    cases.append(("stage：字节 stage 进站点 + sha 相符 ⇒ 无问题", _stage_ok))
+
+    def _stage_missing():
+        bd, site, ent = _stage_fixture(with_bytes=False)
+        return len(stage_upstream_bytes(site, ent, bd, check_only=False)) == 1
+    cases.append(("★ stage：bytes_dir 缺该文件 ⇒ 报", _stage_missing))
+
+    def _stage_badsha():
+        bd, site, ent = _stage_fixture(sha="f" * 64)
+        return len(stage_upstream_bytes(site, ent, bd, check_only=False)) == 1
+    cases.append(("★ stage：本地字节 sha ≠ 表 sha ⇒ 拒绝并报（fail-closed）", _stage_badsha))
+
+    def _stage_checkonly():
+        bd, site, ent = _stage_fixture()
+        # check_only 且站点没 stage ⇒ 报（且**不写盘**）
+        probs = stage_upstream_bytes(site, ent, bd, check_only=True)
+        return len(probs) == 1 and not os.path.isfile(
+            os.path.join(site, "assets/llvm-wasm/clang.wasm"))
+    cases.append(("★ stage：--check 且站点未 stage ⇒ 报，且不写盘", _stage_checkonly))
+
+    cases.append(("★ stage：空条目 ⇒ 无问题（零值不报错，由调用方 guard）",
+                  lambda: stage_upstream_bytes(tempfile.mkdtemp(), [], tempfile.mkdtemp()) == []))
+
     bad = 0
     for label, fn in cases:
         try:
@@ -432,6 +536,8 @@ def main(argv):
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--upstream", action="append", default=[],
                     help="生产者出的表（可多次）；经端口校验后并入 catalog")
+    ap.add_argument("--upstream-bytes", action="append", default=[],
+                    help="该表的**字节本地目录**（与上一次 --upstream 配对）；给了就 stage 进站点")
     a = ap.parse_args(argv)
 
     octave = a.octave or octave_from_fork()
@@ -455,6 +561,9 @@ def main(argv):
     #   致命的只有"包字节与档案不符"）。
     cap, cap_problems = capability_entries(a.site)
     # ★ 接缝 §5⑤：生产者出的表（如 LLVM-wasm 的工具链）—— 校验通过才并入（fail-closed）
+    #   `--upstream-bytes <目录>`（可选，与 --upstream 配对应）：把表引用的字节 stage 进站点
+    #   ⇒ 目录不指着 404（R7b）。缺字节目录 ⇒ 明说"未 stage"，不静默（站点闸门会拦）。
+    bytes_dir = a.upstream_bytes[0] if a.upstream_bytes else None
     for up in a.upstream:
         yents, yprobs = load_upstream_table(up, validate=_port_validate)
         if yprobs:
@@ -462,6 +571,15 @@ def main(argv):
             for x in yprobs:
                 print("  warn: %s" % x, file=sys.stderr)
         else:
+            if bytes_dir:
+                sb = stage_upstream_bytes(a.site, yents, bytes_dir, check_only=a.check)
+                if sb:
+                    bad += sb
+                else:
+                    print("  上游表 stage 字节 %d 件：%s" % (len(yents), bytes_dir))
+            else:
+                print("  note: 上游表并入 %d 条，**未给 --upstream-bytes ⇒ 未 stage 字节**"
+                      "（站点闸门 R7b 会拦 404）；%s" % (len(yents), up), file=sys.stderr)
             cap.extend(yents)
             print("  上游表并入 %d 条：%s" % (len(yents), up))
     doc = catalog_doc(packs, octave, "build/forge-catalog.py", entries_extra=cap)

@@ -116,9 +116,18 @@ def selftest():
                 return check(schema_path=SCHEMA, validator=VALIDATOR, golden=g, bad=b)
         return fn
 
-    def drop_tree(g, b):            # 删掉唯一的 tree 样件 ⇒ R4 必须报
-        os.remove(os.path.join(g, "runtime.json"))
-        os.remove(os.path.join(g, "toolchain.json"))
+    def drop_tree(g, b):            # 删掉**所有带 form:tree 的** golden ⇒ R4 必须报
+        # ★ 2026-10-15：不许写死文件名 —— 新增 golden（toolchain-llvm.json 也带 tree）会让
+        #   "只删两个名字"的用例静默失效（实测：R4 该报没报 ⇒ 1 fail）。按**内容**判定。
+        for f in list(os.listdir(g)):
+            p = os.path.join(g, f)
+            try:
+                doc = json.load(open(p, encoding="utf-8"))
+            except Exception:
+                continue
+            if any(e.get("form") == "tree"
+                   for e in doc.get("entries", doc.get("packs", []))):
+                os.remove(p)
     add("★ golden 缺 tree 形态 ⇒ 必须报（R4）", with_tmp(drop_tree), False)
 
     def make_bad_green(g, b):       # 把 bad 换成 golden 的内容 ⇒ bad 竟合规 ⇒ R2 必须报

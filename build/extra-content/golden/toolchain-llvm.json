@@ -1,0 +1,167 @@
+{
+ "schema": 2,
+ "octave": "11.3.0",
+ "producer": {
+  "id": "llvm-wasm",
+  "pin": "v0.1.2"
+ },
+ "note": "★ 样件（golden）：LLVM-wasm 的**真输出**（release/content-list.json，2026-10-15，sha256=8bbafa5fd34d035ad46ad2f09622ecb9aec964b4bdb21ef96164d6c2f3617c3b）。13 条 = clang/lld/sysroot×2/glue js/driver×4/三份许可见证。它把**裁决②（能力层可以多条）**与**裁决①2026-10-15（license 自由字符串）**同时钉在真数据上：逐文件许可三档（Apache-2.0 WITH LLVM-exception / mixed / MIT OR NCSA / AGPL）无法表达成一条。",
+ "entries": [
+  {
+   "name": "llvm-wasm-clang.wasm",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/clang.wasm",
+   "sha256": "198e84c4baeb3ce4c8d11cbbef75f072ec61db1b527df0ee2c90c9a4ffc72a85",
+   "size": 48069274,
+   "form": "file",
+   "content": [],
+   "license": "Apache-2.0 WITH LLVM-exception",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-lld-wasm-only.wasm",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/lld-wasm-only.wasm",
+   "sha256": "8d3b6a2dcca07f07f4a68bf55cc08e744369dffcad27b198e0e79179c0b71879",
+   "size": 33358910,
+   "form": "file",
+   "content": [],
+   "license": "Apache-2.0 WITH LLVM-exception",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-sysroot-headers.tar",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/sysroot-headers.tar",
+   "sha256": "5b9a8d2cd528f3f6c4d3752b153a4aa4495d2416ccb28655a63b9a268d0efa0e",
+   "size": 20654080,
+   "form": "tree",
+   "content": [],
+   "license": "mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-sysroot-headers.wasm64.tar",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/sysroot-headers.wasm64.tar",
+   "sha256": "8d82242177651dc4c1108c1aae61a704a9f01c409cfd5b24eb6ba79a1cff0c97",
+   "size": 20654080,
+   "form": "tree",
+   "content": [],
+   "license": "mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-clang.js",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/clang.js",
+   "sha256": "2871ad1c25ddd163de68c6d0129cb9455f804d1d854f70522bea1ad662bc04af",
+   "size": 76240,
+   "form": "js",
+   "content": [],
+   "license": "MIT OR NCSA (Emscripten)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-lld-wasm-only.js",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/lld-wasm-only.js",
+   "sha256": "2813588e461162e231a1e80593228b36fffd517792f2439348e9421f8e5cd2e5",
+   "size": 72686,
+   "form": "js",
+   "content": [],
+   "license": "MIT OR NCSA (Emscripten)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-driver-toolchain.mjs",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/driver/toolchain.mjs",
+   "sha256": "0d3559e96e77ad3cfbbe24de6a7833686c0e81ccf81bacc97ee3e52fd94e6327",
+   "size": 13092,
+   "form": "file",
+   "content": [],
+   "license": "AGPL-3.0-or-later (this repo)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-driver-abi.mjs",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/driver/abi.mjs",
+   "sha256": "dd9a76ef660b901c38c8424711335e590949e0843f039a844db861749b2fec85",
+   "size": 7209,
+   "form": "file",
+   "content": [],
+   "license": "AGPL-3.0-or-later (this repo)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-driver-tar-reader.mjs",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/driver/tar-reader.mjs",
+   "sha256": "3e6a7f25fef18c3b78801a773f0603b7ccc1c713e5a90b33c63c6d8a2eb08951",
+   "size": 1782,
+   "form": "file",
+   "content": [],
+   "license": "AGPL-3.0-or-later (this repo)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-driver-sysroot-bundle.mjs",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/driver/sysroot-bundle.mjs",
+   "sha256": "ad7649a73d9d91c4fbfd89b2ba417c2037595f6500b5e05fbf1f760051843a78",
+   "size": 2621,
+   "form": "file",
+   "content": [],
+   "license": "AGPL-3.0-or-later (this repo)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-LICENSE",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/LICENSE",
+   "sha256": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+   "size": 34523,
+   "form": "file",
+   "content": [],
+   "license": "AGPL-3.0-or-later (this repo)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-LICENSE-LLVM.txt",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/LICENSE-LLVM.txt",
+   "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+   "size": 15141,
+   "form": "file",
+   "content": [],
+   "license": "Apache-2.0 WITH LLVM-exception",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  },
+  {
+   "name": "llvm-wasm-LICENSE-EMSCRIPTEN.txt",
+   "version": "6.0.12",
+   "url": "assets/llvm-wasm/LICENSE-EMSCRIPTEN.txt",
+   "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86",
+   "size": 5093,
+   "form": "file",
+   "content": [],
+   "license": "MIT OR NCSA (Emscripten)",
+   "upstream_url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.2/llvm-wasm-bundle-v0.1.2.tar.gz",
+   "deps": []
+  }
+ ]
+}
