@@ -201,14 +201,35 @@
         // 站点上资产在 <base>/assets/pyodide/pyodide/（provision-pyodide.sh 装配）
         // ⚠️ **别写 `var base = base + …`**：`var` 提升会让右边那个 `base` 也是本地的 ⇒
         //    `undefinedassets/pyodide/`（实测抓到）。用局部名 `pBase`。
-        var pBase = withBase('assets/pyodide/');
+        var pBase = withBase('assets/pyodide/pyodide/');
         if (layers.pyodide && layers.pyodide.ready) return Promise.resolve(layers.pyodide);
-        return fetchJSON('assets/pyodide/pyodide/pyodide-lock.json').then(function () {
-          // 只**验证可达**（lock 读得到 = 树在）—— 真正起 Python 实例由页面侧按需做
-          //   （起 22MB 运行时不该在 install() 里偷偷做；见验收套件对"层就位"的定义）。
-          layers.pyodide = { ready: true, kind: 'python', base: pBase,
-                             version: p.version, bytes: p.size };
-          return layers.pyodide;
+        // ★ 真起运行时（2026-10-15，IPC 缝的前提）：symbolic 的 `.m` 经 `__web_run_js__`
+        //   → `__octaveRunPython`（octave-core.js）**同步**调 Pyodide ⇒ 运行时必须
+        //   **已经**起好并挂在 `global.pyodide`（同步调用点等不了 Promise）。
+        //   起实例是异步的 ⇒ 在本函数里 await 掉（install 本来就是 Promise 语义）。
+        //   ⚠️ 失败必须响亮（不静默降级成"层就位"）。
+        return fetchJSON(pBase + 'pyodide-lock.json').then(function () {
+          if (global.pyodide && typeof global.pyodide.runPython === 'function') {
+            layers.pyodide = { ready: true, kind: 'python', base: pBase,
+                               version: p.version, bytes: p.size };
+            return layers.pyodide;
+          }
+          // ⚠️ 动态 import() 收**模块说明符**，浏览器要求它可解析为 URL —— 相对串会被拒
+          //   （实测：`Failed to resolve module specifier 'assets/...'`）。用基于当前文档的绝对 URL。
+          var pyUrl = new URL(pBase + 'pyodide.mjs', global.location.href).href;
+          return import(pyUrl).then(function (mod) {
+            return mod.loadPyodide({ indexURL: pBase });
+          }).then(function (py) {
+            // sympy 是 symbolic 的硬依赖（纯 Python）⇒ 装它是"能力层就绪"的一部分
+            return py.loadPackage(['sympy']).then(function () { return py; });
+          }).then(function (py) {
+            global.pyodide = py;             // ← 桥函数按名找它（同步调用点）
+            layers.pyodide = { ready: true, kind: 'python', base: pBase,
+                               version: py.version, bytes: p.size };
+            log('能力层就绪：pyodide ' + py.version + '（含 sympy）');
+            publish();
+            return layers.pyodide;
+          });
         }, function (e) {
           throw new Error('能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
                           + (e && e.message ? e.message : e));
