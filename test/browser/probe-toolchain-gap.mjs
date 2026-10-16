@@ -98,25 +98,41 @@ console.log(`   lane=${throwing.lane} dlopen=${throwing.dlopen} probe_f(22)=${JS
             + `err=${throwing.err}`);
 await browser.close();
 
+// ── 计分（给 sweep 的汇总行 —— 两个缺口各算一条断言；rc 契约照旧）──────────────
+//   ⚠️ 为什么加：本探针此前**不产汇总行** ⇒ sweep 把它记成"有问题的套件"（实测抓到）。
+//   它的 rc 契约（工单 65 头部）**保留不变**；汇总行只是让 sweep 能如实记分（不是改判据）。
+let _pass = 0, _fail = 0;
+const _score = (ok, label, detail) => {
+  ok ? _pass++ : _fail++;
+  console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${String(detail).slice(0, 180)}`);
+};
+
 // ── 判据（严格按工单 65 的四条；形态与 ISSUE-1-verify-comment.md 同款）────────
 const errOf = (o) => String(o.err || '');
 const tlsHit = (o) => /tlsInitFunc|_emscripten_tls_init/i.test(errOf(o));
 const tiHit = (o) => /reading 'value'|_ZTIi|GOT\.mem/i.test(errOf(o));
 
+_score(!tlsHit(nothrow) && nothrow.ok,
+  '缺口 1（TLS 入口）：模块 dlopen 且真调用 probe_f(22)==22',
+  `dlopen=${nothrow.dlopen} val=${JSON.stringify(nothrow.val)} err=${errOf(nothrow)}`);
+_score(throwing.ok, '缺口 2（基本类型 typeinfo）',
+  `dlopen=${throwing.dlopen} val=${JSON.stringify(throwing.val)} err=${errOf(throwing)}`);
+console.log(`\n=== ${_pass} PASS / ${_fail} FAIL ===`);
+
 if (nothrow.ok && throwing.ok) {
-  console.log('\n=== rc 0 === 两条缺口都已修（两个模块都 dlopen OK 且 probe_f(22)==22）');
+  console.log('=== rc 0 === 两条缺口都已修（两个模块都 dlopen OK 且 probe_f(22)==22）');
   process.exit(0);
 }
 if (nothrow.lane === null) {
-  console.log('\n=== rc 3 === 环境问题（页面没起来 / 拿不到档信息）—— 不是缺口结论');
+  console.log('=== rc 3 === 环境问题（页面没起来 / 拿不到档信息）—— 不是缺口结论');
   process.exit(3);
 }
 if (tlsHit(nothrow)) {
-  console.log('\n=== rc 1 === 缺口 1 仍在（TLS 入口未定义）');
+  console.log('=== rc 1 === 缺口 1 仍在（TLS 入口未定义）');
   process.exit(1);
 }
 if (tiHit(throwing)) {
-  console.log('\n=== rc 2 === 缺口 2 仍在（基本类型 typeinfo 不可解析）');
+  console.log('=== rc 2 === 缺口 2 仍在（基本类型 typeinfo 不可解析）');
   process.exit(2);
 }
 console.log(`\n=== rc 3 === 两个模块都没到"可断言"的状态（非已知缺口形态）⇒ 环境/夹具问题，不是缺口结论`

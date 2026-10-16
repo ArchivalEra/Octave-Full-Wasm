@@ -1148,7 +1148,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `test/browser/probe-text-render.mjs` (5372 bytes)
 - `test/browser/probe-threads-coi.mjs` (5066 bytes)
 - `test/browser/probe-threads.mjs` (4584 bytes)
-- `test/browser/probe-toolchain-gap.mjs` (6600 bytes)
+- `test/browser/probe-toolchain-gap.mjs` (7581 bytes)
 - `test/browser/probe-toolkit-print.mjs` (2474 bytes)
 - `test/browser/probe-umfpack-trap.mjs` (3409 bytes)
 - `test/browser/probe-unimplemented-msg.mjs` (3947 bytes)
