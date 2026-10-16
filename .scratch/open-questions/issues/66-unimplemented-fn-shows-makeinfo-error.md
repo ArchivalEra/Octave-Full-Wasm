@@ -1,6 +1,7 @@
 # 66 · 未实现函数给出 `makeinfo` 子进程错误（应给"未实现"的可读信息）
 
-**Status:** ready-for-agent
+**Status:** resolved
+**结案凭据**（2026-10-16）：复跑结算件 **6/0**；修法 ① 已落 `build/webshims/__makeinfo__.m`（见文末 §结案）。
 **Settling:** `node test/browser/probe-unimplemented-msg.mjs <URL>` —— rc=0 ⇒ 两类名字都给出可读信息
 （未实现的核心 MATLAB 名字 ⇒ 含 "not yet implemented" 且**不含** `makeinfo`/`system:`；真正不存在的名字 ⇒
 含 "undefined"）；rc=1 ⇒ 仍在报 `makeinfo` 子进程错误；rc=3 ⇒ 环境问题（页面没起来），不是结论。
@@ -75,3 +76,25 @@ Octave 内置一张"MATLAB 有、我们没实现"的名单（`missing_functions(
   既有设计**，本仓只是第一个在"无 shell"环境下撞到它的。
 - 与 `build/GAPS.md` §2「能力级缺口」同族：那张表记的是"能不能用"，本工单记的是
   "**不能用时给的信息对不对**"。
+
+
+---
+
+## ★ 结案（2026-10-16）
+
+**结算件已存在**（`test/browser/probe-unimplemented-msg.mjs`，2026-10-13 造），**复跑 6/0**：
+
+```
+sh test/browser/run.sh test/browser/probe-unimplemented-msg.mjs http://127.0.0.1:8761/
+  ⇒ ① table/datetime/duration/string ⇒ 报错**不含** makeinfo/system（可读）
+     ② zzz_abc_9f / zzz_def_7q ⇒ 仍报 `undefined`（"真不存在"没说成"未实现"）
+=== 6 PASS / 0 FAIL ===  结论：工单 66 已修
+```
+
+**修法 = 本工单建议的 ①**（零重链）：`build/webshims/__makeinfo__.m` 覆写已落（2026-10-13）。
+
+**一处如实记的变化**（不影响判据，但读者会注意到）：现在这些名字报的是
+**`The 'table' function belongs to the 'datatypes' package indexed in…`** —— 因为
+`datatypes` 已进**货架**（`OctaveAssets.install('datatypes')` 可装，见 `accept-forge`）⇒
+报错比"not yet implemented"**更准**（它告诉用户**怎么拿到**）。判据两条仍成立
+（不含 makeinfo/system；"真不存在"仍报 undefined）。

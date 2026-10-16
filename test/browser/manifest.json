@@ -246,6 +246,14 @@
     "value": "/mnt/hdd/octave-wasm-build/site/assets/pyodide",
     "why": "符号计算端到端需要站点同时有 Pyodide 资产 + 货架上的 symbolic 包（都靠 provision/装配）。缺它 ⇒ 按清单**跳过**。"
    }
+  ],
+  "probe-octc-spike": [
+   {
+    "kind": "path",
+    "env": "OCTC_SPIKE_SITE_FILE",
+    "value": "/mnt/hdd/octave-wasm-build/siteWebGL/zzspike-minioct-bare.oct",
+    "why": "octc spike 实验（NOTES-octc-spike.md，2026-10-10 已结案）要**被测站点根**上有 stage 过的 `zzspike-*.oct` 三件（`cp /mnt/hdd/octave-wasm-build/octc-spike/<name>.oct <站点>/zzspike-<name>.oct`，见 NOTES §5）。**实验件用后已从站点移除是有意的**（NOTES 头注：全部在 8768 实验站做、不碰 8761）⇒ 缺这件按清单**跳过并点名**，不是失败。2026-10-16 登记：此前未登记 ⇒ 每轮 PROBES=1 被记成 12 条假红（同 probe-output-cost 的先例）。要真跑：stage 三件后传 `OCTC_SPIKE_SITE_FILE=<该站点>/zzspike-minioct-bare.oct`。"
+   }
   ]
  }
 }

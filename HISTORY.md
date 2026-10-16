@@ -5384,3 +5384,71 @@ git 跟踪**（`.gitignore:4` 的 `*` 默认拒绝、无放行规则）⇒ 那�
 判据**只有本地 pre-push 一道**；要有 CI 正面兜底得先给 `.github/` 加白名单把 workflow 入库
 （**今日未做，记待办**）。这是 AGENTS 记过的"白名单盲区"的又一实例（忽略 + 从未 `git add`
 的文件，`check-whitelist.py` 看不见）。
+
+## 5.x 悬案收口三件：工单 65 结算件 + 工单 66 结案 + 工单 67 新开（2026-10-16）
+
+**背景**：新一天开工 —— `doctor` 报 DOWN（机器重启杀掉 8761 服务与 `o113` 容器，HISTORY §5.86
+同款）⇒ 起回容器与两条服务（`doctor` 复跑 `ok`）。收件箱**无新信**（通信循环 `014`→`015` 已闭合）。
+⇒ 本批清**悬案台账里真正的未结件**（而不是造新活）。
+
+### ① 工单 65（clang-wasm 工具链 ↔ 宿主接入缺口）—— 结算件造出，判决两半
+
+**结算件 = `test/browser/probe-toolchain-gap.mjs`**（工单原写"尚未存在——本工单的第一交付物
+就是造它"）。四档 rc 契约照工单头部实现。实跑（8761 w64 档）：
+
+```
+── ① 不带 throw（p-nothrow.oct）—— 只看缺口 1（TLS 入口）──
+   lane=w64 dlopen=OK probe_f(22)=22 err=null                      ← ✅ 缺口 1 消
+── ② 带 throw（p-throw.oct）—— 走缺口 2（typeinfo）──
+   lane=w64 dlopen=null err=Cannot read properties of undefined (reading 'value')   ← ❌ 缺口 2 仍在
+=== rc 2 ===
+```
+
+**缺口 1 已修（两条独立证据）**：
+1. **邻仓换了形态**：驱动现在**拒绝**用单 tar 编 wasm64 ——
+   `sysroot for wasm64 is missing … Refusing rather than linking a module without the
+   TLS init entry`（= 工单建议的"响亮失败"方向，邻仓 v0.1.1 已采纳，见
+   `build/113/ISSUE-1-verify-comment.md` 的下游复验）。**正确用法 = per-arch sysroot**
+   （`{tars:{wasm32:…,wasm64:…}}`）⇒ 模块带上 `_emscripten_tls_init`（`llvm-readobj` 实测）。
+2. **端到端真调用**：新编 nothrow 模块在 8761 w64 宿主上 `dlopen=OK` 且 `probe_f(22)==22`。
+
+**缺口 2 仍开**：`build/113/check-oct-imports.py` 对新编 throw 探针报 `★ 新缺导出: _ZTIi`
+（宿主 750 导出里没有基本类型 typeinfo）；浏览器侧报 `reading 'value'`。
+**⇒ 工单 65 状态改 `needs-info`**（口径归属待邻仓：宿主 keep-list 加 ／ 工具链把 typeinfo
+打进 side module —— 后者要确认 wasm 下 `_ZTIi` 能否静态进 side，`-fno-rtti` 会改 ABI 语义）。
+
+**★ 三处夹具教训（写进工单，防下次重踩）**：
+- **导出名必须与文件名对应**（Octave 按「函数名.oct」找模块）：第一版导出 `f` 而非 `probe_f`
+  ⇒ `exist==3` 但调用报 `undefined`。
+- **取导出的正确姿势**（本轮实测）：`Module.loadDynamicLibrary` 返回**布尔**（不是模块实例）；
+  导出在**第三个参数 `localScope`**（`{global:false}` 时 emscripten 把 `dso.exports` 赋进它）。
+  `global:true` 走 `mergeLibSymbols`（本构建取不到 `probe_f`）—— 这一条本轮试了四种姿势才定。
+- **一个模块 = 一次全新页面**（工单原纪律，结算件照做）。
+
+### ② 工单 66（未实现函数报 `makeinfo` 子进程错）—— **结案**
+
+结算件（`test/browser/probe-unimplemented-msg.mjs`，2026-10-13 造）**复跑 6/0**：
+两类名字（`table`/`datetime`/`duration`/`string` vs `zzz_abc_9f`/`zzz_def_7q`）都有可读信息、
+且**不含** `makeinfo`/`system:`；"真不存在"仍报 `undefined`（**没说成**"未实现"）。
+修法 = 工单建议的 ①（`build/webshims/__makeinfo__.m` 覆写，零重链），**已落**。
+**一处如实记的变化**：现在这些名字报的是 `The 'table' function belongs to the 'datatypes'
+package indexed in…` —— 因为 `datatypes` 已进**货架**（可 `install`）⇒ 比"not yet implemented"
+**更准**（告诉用户**怎么拿到**）。判据两条仍成立。工单状态改 `resolved`。
+
+### ③ 新工单 67（CI 兜底从未入库）—— 由内容仓 `mail/014` 的投递实测逼出
+
+`reflect-hooks/pre-push` 注释曾写"CI（`.github/workflows/readme-sync.yml`）跑同一条判据"。
+**实测两处证伪**：① `git log --all -- .github/workflows/readme-sync.yml` **空**（全历史无此文件）；
+② `git ls-files .github/ | wc -l` = **0**（`.github/` 整体未跟踪，被 `.gitignore:4` 的 `*` 拒绝、
+无放行规则）—— 而磁盘上**真有** `gates.yml` + `pages-deploy.yml`（`find` 实测）。
+⇒ 这是 **AGENTS 记过的"白名单盲区"第三例**：不是忘 `git add` 一个文件，而是**整个目录从未能进库**，
+而注释按"它存在"写了很久。**本批只改注释（改成实话：判据只有本地一道）**；
+**真把 CI 立起来 = 工单 67**（要动白名单 + 核实 runner 可达判据集，独立一批）。
+
+### ④ `probe-octc-spike` 假红登记（顺带，非本批核心）
+
+`NOTES-octc-spike.md` 明说那是**已结案的实验**（"全部在 8768 实验站做、不碰 8761；
+**实验件用后已从站点移除**"），但它没登记进 `test/browser/manifest.json` 的 `inputs`
+⇒ 每轮 `PROBES=1` 被记成 **12 条假红**（同 `probe-output-cost` 的先例）。已登记：
+判据 = 站点根上有没有 staged 的 `zzspike-minioct-bare.oct`（**源目录存在不够** —— 第一版
+登记指了源目录，输入"满足" ⇒ 探针照跑照红；**改指站点文件**才对）⇒ 现在**点名跳过**。

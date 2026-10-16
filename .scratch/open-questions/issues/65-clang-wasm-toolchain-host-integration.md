@@ -1,7 +1,9 @@
 # 65 · clang-wasm 工具链 ↔ 本仓宿主的接入缺口（DELIVERY §4 的实测复核）
 
-**Status:** ready-for-agent
-**Settling:** node test/browser/probe-toolchain-gap.mjs <URL> <模块目录> —— rc=0 ⇒ 两条缺口都已修（模块 dlopen 成功且 probe_add(20,22)==42）；rc=1 ⇒ 缺口 1（TLS `_emscripten_tls_init` 未定义）仍在；rc=2 ⇒ 缺口 2（基本类型 typeinfo `_ZTIi` 不可解析）仍在；rc=3 ⇒ 环境问题（宿主自带 w64 夹具都装不上 / 页面没起来），不是缺口结论。结算件尚未存在 —— **本工单的第一交付物就是造它**（四条判据已按上表写在工单里）。
+**Status:** needs-info
+**为什么 needs-info**（2026-10-16）：缺口 1 已修并复验；缺口 2（`_ZTIi`）仍开，
+且**归属待邻仓确认**（宿主 keep-list 加 ／ 工具链把 typeinfo 打进 side module）—— 见文末 §实测复核。
+**Settling:** `sh test/browser/run.sh test/browser/probe-toolchain-gap.mjs <URL> <模块目录>` —— rc=0 ⇒ 两条缺口都已修（两模块 dlopen + `probe_f(22)==22`）；rc=1 ⇒ 缺口 1（TLS）仍在；rc=2 ⇒ 缺口 2（typeinfo `_ZTIi`）仍在；rc=3 ⇒ 环境问题（页面没起来 / 夹具缺失）。**结算件已存在**（2026-10-16 造）；**当前判决 = rc=2**（见下 §实测复核）。
 
 ## 背景
 
@@ -80,3 +82,67 @@ node -e "import('./driver/toolchain.mjs').then(async ({Toolchain})=>{
   仍在 `/mnt/hdd/octave-wasm-build/site/` 与 `site-6012-w32/` 供复跑（**试验件，非部署资产**）。
 - ⚠️ 复跑时**每次用全新页面**：同一页连续 `loadDynamicLibrary` 两次会因加载器状态
   给出不一致结果（本轮先踩到：第二次误报 OK）。
+
+
+---
+
+## ★ 实测复核（2026-10-16，结算件已造 + 实跑）
+
+**结算件 = `test/browser/probe-toolchain-gap.mjs`**（本工单的第一交付物，已落）。
+复跑（**必须 per-arch sysroot** 编夹具，见下）：
+
+```bash
+# 编夹具（**per-arch 形态**：单 tar 会被驱动 precheck 拒 —— 那是 issue #1 之后的正当行为）
+cd /mnt/hdd/zcode-projects/LLVM-wasm && R=$PWD/release/out
+node -e "import('./driver/toolchain.mjs').then(async ({Toolchain})=>{
+  const tc=new Toolchain({clangBin:'$R',clangJs:'clang.js',lldBin:'$R',lldJs:'lld-wasm-only.js',
+    bundle:{tars:{wasm32:{tarPath:'$R/sysroot-headers.tar',manifestPath:'$R/manifest.json'},
+                  wasm64:{tarPath:'$R/sysroot-headers.wasm64.tar',manifestPath:'$R/manifest.json'}}}});
+  const fs=require('fs');
+  for (const [n,src] of [['throw','extern \"C\" int probe_f(int x){ if(x<0) throw 42; return x; }'],
+                         ['nothrow','extern \"C\" int probe_f(int x){ return x; }']]) {
+    const r=await tc.compile({source:src,target:'wasm64',abi:{exceptions:'wasm-legacy',pthread:true,memory64:true}});
+    if(r.ok) fs.writeFileSync('/tmp/p-'+n+'.oct',Buffer.from(r.moduleBytes));
+  }})"
+# 跑判据（宿主 = 8761 的 w64 档）
+cd /mnt/hdd/zcode-projects/Octave-Full-Wasm
+sh test/browser/run.sh test/browser/probe-toolchain-gap.mjs http://127.0.0.1:8761/ /tmp
+```
+
+### 结果：**缺口 1 已修（复验通过）** / **缺口 2 仍开**
+
+```
+── ① 不带 throw（p-nothrow.oct）—— 只看缺口 1（TLS 入口）──
+   lane=w64 dlopen=OK probe_f(22)=22 err=null          ← ✅ 缺口 1 消
+── ② 带 throw（p-throw.oct）—— 走缺口 2（typeinfo）──
+   lane=w64 dlopen=null err=Cannot read properties of undefined (reading 'value')   ← ❌ 缺口 2 仍在
+=== rc 2 ===
+```
+
+**缺口 1 为什么是"已修"（两处独立证据）**：
+1. **形态变了**：驱动现在**拒绝**用单 tar 编 wasm64（`Refusing rather than linking a module
+   without the TLS init entry`）—— 即本工单建议的"响亮失败"方向已被邻仓采纳（v0.1.1，
+   见 `build/113/ISSUE-1-verify-comment.md` 的下游复验）。**per-arch sysroot 是正确用法**：
+   `{tars:{wasm32:…,wasm64:…}}` ⇒ 模块带上了 `_emscripten_tls_init`（`llvm-readobj` 实测 1 个）。
+2. **端到端**：新编 nothrow 模块在 8761 w64 宿主上 **`dlopen=OK` 且 `probe_f(22)==22`**
+   （真调用，非"装上了"）。⇒ 本工单缺口 1 **结案（已修）**。
+
+**缺口 2 为什么仍开**（判据两条，都是本轮实测）：
+- `build/113/check-oct-imports.py` 对**新编的** throw 探针：`★ 新缺导出: _ZTIi`（宿主 750 导出里没有）；
+- 浏览器侧 `dlopen` 报 `reading 'value'`（= 本仓 NOTES 记录的 `reportUndefinedSymbols()` 形态）。
+
+**⇒ 归属待邻仓确认（`needs-info` 的由来）**：工单原列两口径 —— (a) 宿主 keep-list 加基本类型
+typeinfo（只对自家宿主有效）／(b) 工具链侧把 typeinfo 定义打进 side module（下游零改）。
+**本轮实测偏向 (b) 的可行性待定**：`throw 42` 会引用 `_ZTIi`（int 的 typeinfo），它是
+**libc++abi 的一部分**，而 side module 用 `--unresolved-symbols=import-dynamic` 把它**留给宿主**。
+要 (b) 成立得确认 wasm/emscripten 下 `_ZTIi` 的定义能否静态进 side（`-fno-rtti` 会改 ABI 语义 ⇒ 需邻仓判断）。
+**⇒ 请邻仓确认口径**（这是 `needs-info`，不是缺证据）。
+
+### 夹具注意事项（本轮踩到，写给下次）
+
+- **导出名必须与文件名对应**（`Octave` 按「函数名.oct」找模块）：夹具导出的符号名要能被消费侧
+  按预期取到 —— 本轮第一版导出 `f` 而不是 `probe_f`，`exist==3` 但调用报 `undefined`。
+- **取导出的正确姿势**（实测）：`loadDynamicLibrary` 返回**布尔**（不是模块实例）；
+  导出在**第三个参数 `localScope`**（`{global:false}` 时 emscripten 把 `dso.exports` 赋进它）。
+  `global:true` 走 `mergeLibSymbols`（本构建下取不到 `probe_f`）。
+- **一个模块 = 一次全新页面**（工单原纪律，本轮结算件照做）。

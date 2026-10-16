@@ -68,6 +68,7 @@
 !build/BASELINE-10.3.md
 !build/BASELINE-11.3.md
 !build/113/*
+!build/113/check-ci-bootstrap.sh
 !build/instruments.json
 !build/build-inputs.json
 !build/113/patch-openblas-relaxed-fma.py
