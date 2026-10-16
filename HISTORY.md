@@ -5764,3 +5764,57 @@ versions[] 三条不变量）。
 `--upstream-bytes` 对**绝对 URL** 的 stage 映射缺口：生产者表的 `url` 带 query
 （`…download.php?package=optim-1.6.3.tar.gz`）⇒ 映射不到本地缓存文件名。
 今天用不上（货架路径不经过它），**登记待办**。
+
+## 5.x 022 回信：optim 的 query URL 缺口（它说"今天就发生"）+ 端到端又抓两处宿主真缺陷（2026-10-16）
+
+**用户**：「回信了」。内容仓 `022` 回 `021`：**它把我上封里写"今天用不上"的待办纠正成
+"今天就是真问题"**（`optim` 那条带 query 的 URL **已在表里**）；并要 withheld 候选保留
+`upstream_url`；附一条观察（四类"文件里对、装配态才见真章"的形状）。
+
+### 我亲验它的两个断言（都成立）
+
+```
+① optim 的 url = https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz
+   os.path.basename(u) ⇒ 'download.php?package=optim-1.6.3.tar.gz'（❌）而缓存真名 = optim-1.6.3.tar.gz
+② 站点态 withheld 候选确实没带 upstream_url（我上一批的写法漏了）
+```
+
+**我判 (a)**（采纳它的倾向）：`url` 是**重取入口**（上游给什么记什么，`FORK-PIPELINE.md` §3），
+**不改它仓的 emit**；宿主侧加 fallback。**但把它的建议做得更稳**：它建议 `query` 里最后一个 `=`，
+我做成 `byte_name_candidates()` —— 逐条试（路径末段 / query 值 / query 各段），且**判序按
+"路径末段像不像归档名"**（实测教训：`download.php` 是脚本名，先给它会找错文件）。
+
+### ★ 端到端实测又抓出**两处**宿主真缺陷（它没报，是我 stage 真表时暴露的）
+
+1. **假目录树**：`stage_upstream_bytes` 的落点用 `os.path.join(site, u)` —— 而生产者表的 `u`
+   是**绝对 URL** ⇒ 造出 `site/https:/github.com/…` 一棵**假目录树**；而验证查的也
+   `join(site,u)` ⇒ **"看起来成功"**（字节在，但铺错位置，页面取不到）。
+   **修**：落点恒 `assets/forge/<字节名>`（`byte_name_candidates` 定名）。
+2. **上游条目缺同源改写**：条目级 `url` 的同源改写此前**只做在货架路径**（`resolve()`）上，
+   `--upstream` 路径漏了 ⇒ 并进来的条目 `url` 是绝对地址 ⇒ 端口校验器站点态必红 +
+   不变量②（顶层标量≠候选）对不上。**修**：`load_upstream_table` 里做条目级改写
+   （`upstream_url` 保上游真形状、`url` 归同源相对）。
+3. **顺带**：`size` 补真值（生产者表的 `size` 可能为 0 —— 它没本地字节量不了；
+   站点态**有**字节 ⇒ 装配器按站内字节补，与站点闸门 R8 同口径）。
+
+### 判据（全部可复跑）
+
+```
+python3 build/forge-catalog.py --selftest ⇒ 28 PASS / 0 fail（20→28：+fallback 正反 + 改写正反）
+rm -rf /tmp/up-v9 && python3 build/forge-catalog.py --site /tmp/up-v9 \
+  --upstream /tmp/emit-versions-06af4ea.json --upstream-bytes <缓存>
+⇒ stage 13 件；validate-content-list.py --site ⇒ ok；check-forge-catalog.py ⇒ ok
+现役三站 --check ⇒ 仍 ok（货架路径零影响）
+```
+
+**四条断言翻面**（行为变了改断言、不改检查器）：两条 stage 用例的落点从 `join(site,url)`
+改成 `assets/forge/<名>`。
+
+### 它那条观察我收下并转成我们这边的纪律
+
+> 从 `012` 到今天，四类"文件里对、装配态才见真章"：① R-002 假引用 ② 硬编码边 ③ pin 未 bump
+> ④ `resolve()` 不消费 `versions`。**共同点 = "某处的声明" 与 "某处的消费" 之间没有对账器。**
+> ⇒ 跨仓面要再加一档：**"我这侧对" ≠ "你那侧吃到"**。
+
+本批的两处新缺陷（假目录树 / 上游改写漏做）正是**同一形状的第五、第六例**：声明（生产者表的 url
+是绝对 URL）与消费（stage 落点 / 站点态契约）之间没有对账器。

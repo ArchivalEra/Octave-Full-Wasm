@@ -224,8 +224,15 @@ def resolve(shelf, octave, allow_unverified, cache=None):
                                "form": derive_form(_vk), "content": list(_vk),
                                "upstream_url": _v2.get("url", "")})
             else:
+                # ★ withheld 候选**保留 `upstream_url`**（内容仓 mail/022 §②：`withheld` 的语义
+                #   正是"字节不在站点" ⇒ 那一刻最需要"从哪能重取"的记录；而"会 404"的顾虑
+                #   是 `url`（交付路径）的，不是 `upstream_url`（出处）的 —— 两段式正是为此分的。
+                #   ⚠️ 反向判据（它给的）：若既无 url 又无 upstream_url，则"这一版存在过"只剩
+                #   `version` 一个字符串 —— "这一版从哪来"无处可查。
                 _cd = {"version": _v2["version"], "sha256": _v2["sha256"],
                        "stage": "withheld", "withheld_cause": "bytes-not-staged"}
+                if _v2.get("url"):
+                    _cd["upstream_url"] = _v2["url"]
                 if _v2.get("requires"):
                     _cd["requires"] = list(_v2["requires"])
                 _cands.append(_cd)
@@ -332,7 +339,7 @@ def capability_entries(site):
     return entries, problems
 
 
-def load_upstream_table(path, validate=None):
+def load_upstream_table(path, validate=None, site=None):
     """读**生产者出的表**（接缝 §4 消费侧）；先校验，不合格 ⇒ **拒收**（fail-closed）。
 
     ⚠️ 为什么拒收而不是"尽力修"：端口纪律 = 生产者自证（§4 必做第 2 条）。宿主替他修
@@ -360,6 +367,27 @@ def load_upstream_table(path, validate=None):
     for e in ents:
         d = {k: v for k, v in e.items()}
         d.setdefault("deps", [])
+        # ★ 条目级同源改写（2026-10-16，端到端实测抓到）：生产者态的 `url` 是**上游绝对地址**
+        #   （重取入口语义，两段式），而站点态必须**同源相对**。此前这条改写**只做在货架路径
+        #   （`resolve()`）**上，上游路径漏了 ⇒ 并进来的条目 url 是绝对地址 ⇒ 端口校验器
+        #   站点态必红 + 顶层标量对不上候选（不变量②）。⇒ 与原 url 分开记：
+        #   `upstream_url` 保上游真形状，`url` 归同源相对。
+        if "://" in (d.get("url") or ""):
+            d["upstream_url"] = d.get("url", "")
+            _nm = byte_name_candidates(d["url"])
+            d["url"] = "assets/forge/%s" % (_nm[0] if _nm
+                                            else os.path.basename(d["url"].split("?")[0]))
+        # ★ `size` 补真值（2026-10-16，端到端实测）：生产者表的 `size` 可能缺/为 0
+        #   （它没有本地字节 ⇒ 量不了），而站点态**有**字节 ⇒ 由装配器按站内字节补。
+        #   判据（与站点闸门 R8 同口径）：单文件 size == 该文件字节；能力层（tree）不动
+        #   （它的 size 是整树预算，由它自己的装配器给）。
+        if site:
+            try:
+                _blob = os.path.join(site, d.get("url") or "")
+                if os.path.isfile(_blob) and d.get("form") != "tree":
+                    d["size"] = os.path.getsize(_blob)
+            except OSError:
+                pass
         out.append(d)
     return out, problems
 
@@ -384,6 +412,62 @@ def _file_sha_or_empty(path):
     except OSError:
         return ""
 
+
+
+def byte_name_candidates(url):
+    """从一条 url 推出它在本地字节目录里的**可能文件名**（按可能性排序，去重）。
+
+    ★ 为什么需要它（内容仓 `mail/022` §① 实测）：生产者表的 `url` 是**重取入口**
+    （`url` 从上游原样记 —— `docs/FORK-PIPELINE.md` §3 的两段式），所以形状是上游给的，
+    可能是**带 query 的下载脚本**：
+        `https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz`
+      `os.path.basename(u)`  ⇒ `download.php?package=optim-1.6.3.tar.gz`（❌ 含 query）
+      `basename(urlparse(u).path)` ⇒ `download.php`（❌ 也是错的）
+      query 里最后一个 `=` 之后才是真文件名 ⇒ `optim-1.6.3.tar.gz`（✅）
+    **这条今天就有实例**（`optim`），不是"将来可能" —— 我 `021` 曾误判为待办，`022` 纠正。
+
+    **判据顺序**（逐条试，命中即用；都命中不了 ⇒ 由调用方报"找不到"）：
+      1. 路径末段（**无 query** 时就是它 —— 覆盖绝大多数）；
+      2. query 里最后一个 `=` 之后的值（`?package=optim-1.6.3.tar.gz` 形态）；
+      3. query 里任一段末段（`?a=1&file=optim-1.6.3.tar.gz` 之类的兜底）。
+    **不猜内容**：只从 URL 自身推名字，逐条用 `os.path.isfile` 验（不造文件名）。
+    """
+    from urllib.parse import urlparse, parse_qsl
+    out = []
+    try:
+        pr = urlparse(url)
+    except ValueError:
+        pr = None
+    if pr is not None:
+        p_last = os.path.basename(pr.path or "")
+        q = pr.query or ""
+        # ★ 顺序（实测教训）：**query 里带文件名的，真名在 query**（`download.php?package=x.tar.gz`
+        #   的路径末段是脚本名 `download.php` —— 先给它会 stage 找错文件）。
+        #   判据：路径末段**像归档名**（有已知扩展）时才排前面；否则 query 优先。
+        _ARCHIVE_EXT = (".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".zip", ".tar", ".whl", ".gz", ".bz2")
+        p_is_archive = p_last.endswith(_ARCHIVE_EXT)
+        q_names = []
+        if q:
+            pairs = parse_qsl(q, keep_blank_values=True)
+            for _k, v in reversed(pairs):
+                b = os.path.basename(v or "")
+                if b:
+                    q_names.append(b)
+        if p_is_archive and p_last:
+            out.append(p_last)
+        out.extend(q_names)
+        if p_last and not p_is_archive:
+            out.append(p_last)
+    if not out:                                  # urlparse 失败/相对路径：退回 basename
+        b = os.path.basename(url or "")
+        if b:
+            out.append(b)
+    seen, uniq = set(), []
+    for n in out:
+        if n and n not in seen:
+            seen.add(n)
+            uniq.append(n)
+    return uniq
 
 def _common_dir_prefix(urls):
     """一组站内相对 url 的**公共目录前缀**（stage 映射用；如全是 assets/llvm-wasm/… ⇒ 该前缀）。"""
@@ -419,12 +503,22 @@ def stage_upstream_bytes(site, entries, bytes_dir, check_only=False):
         tail = u[len(prefix):].lstrip("/") if prefix and u.startswith(prefix) else os.path.basename(u)
         src = os.path.join(bytes_dir, tail)
         if not os.path.isfile(src):
-            alt = os.path.join(bytes_dir, os.path.basename(u))     # 退一步：按 basename 找
-            if os.path.isfile(alt):
-                src = alt
+            # ★ 逐条试 byte_name_candidates（覆盖"url 带 query 的下载脚本" —— mail/022 §①）
+            tried = [src]
+            found = None
+            for cand in byte_name_candidates(u):
+                p2 = os.path.join(bytes_dir, cand)
+                if p2 in tried:
+                    continue
+                tried.append(p2)
+                if os.path.isfile(p2):
+                    found = p2
+                    break
+            if found:
+                src = found
             else:
-                problems.append("stage %s：bytes_dir 里找不到 %s（试过 %s）"
-                                % (e.get("name"), tail, src))
+                problems.append("stage %s：bytes_dir 里找不到字件（url=%s；试过 %s）"
+                                % (e.get("name"), u[:60], "; ".join(os.path.basename(t) for t in tried)))
                 continue
         want = e.get("sha256")
         got = sha256_file(src)
@@ -432,7 +526,22 @@ def stage_upstream_bytes(site, entries, bytes_dir, check_only=False):
             problems.append("stage %s：字节 sha=%s ≠ 表 sha=%s（拒绝 stage）"
                             % (e.get("name"), got[:12], str(want)[:12]))
             continue
-        dst = os.path.join(site, u)
+        # ★ 交付路径的推导（2026-10-16，实测抓到"假目录树"）：生产者的表用**上游绝对 URL**
+        #   （它有重取入口语义），而站点态必须**同源相对** ⇒ 落点不能 `join(site, 绝对URL)`
+        #   （实测：那会造出一棵 `site/https:/github.com/…` 的**假目录树**，而验证只查
+        #   `join(site, u)` 于是"看起来成功" —— 字节在，但铺错位置，页面取不到）。
+        #   ⇒ 与非上游路径同款：落点恒 `assets/forge/<该版本末段名>`（与生产者态的
+        #   `download.php?package=x.tar.gz` 形态无关 —— 名字由 `byte_name_candidates` 定）。
+        _name = None
+        if os.path.isabs(u) or "://" in u:
+            cands = byte_name_candidates(u)
+            _name = cands[0] if cands else None
+        if _name is None:
+            _name = os.path.basename(u.split("?")[0] or u)
+        if not _name:
+            problems.append("stage %s：从 url 推不出落点文件名（url=%s）" % (e.get("name"), u[:60]))
+            continue
+        dst = os.path.join(site, "assets", "forge", _name)
         if check_only:
             if not os.path.isfile(dst) or sha256_file(dst) != (want or got):
                 problems.append("stage %s：站点上没有 %s 或 sha 不符（未 stage）" % (e.get("name"), u))
@@ -652,7 +761,9 @@ def _selftest():
     def _stage_ok():
         bd, site, ent = _stage_fixture()
         probs = stage_upstream_bytes(site, ent, bd, check_only=False)
-        dst = os.path.join(site, "assets/llvm-wasm/clang.wasm")
+        # ★ 翻面（2026-10-16）：落点恒 `assets/forge/<字节名>`（同源规范位），**不**再照 url 原路径
+        #   —— 实测抓到旧行为会给绝对 URL 造出 `site/https:/github.com/…` 假目录树。
+        dst = os.path.join(site, "assets", "forge", "clang.wasm")
         return probs == [] and os.path.isfile(dst) and _hl.sha256(open(dst, "rb").read()).hexdigest() == _bsha
     cases.append(("stage：字节 stage 进站点 + sha 相符 ⇒ 无问题", _stage_ok))
 
@@ -674,6 +785,65 @@ def _selftest():
             os.path.join(site, "assets/llvm-wasm/clang.wasm"))
     cases.append(("★ stage：--check 且站点未 stage ⇒ 报，且不写盘", _stage_checkonly))
 
+    # ★ 上游条目级同源改写（2026-10-16 实测：此前只做在货架路径上，上游路径漏了）
+    def _up_rewrite():
+        import tempfile as _t, json as _j
+        d = _t.mkdtemp()
+        p_ = os.path.join(d, "t.json")
+        _j.dump({"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "optim", "version": "1.6.3", "sha256": "a" * 64,
+             "url": "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz"}]},
+            open(p_, "w"))
+        ents, probs = load_upstream_table(p_, validate=None)
+        e0 = ents[0]
+        return ("://" not in e0["url"]                      # 出去必须同源相对
+                and e0["url"] == "assets/forge/optim-1.6.3.tar.gz"
+                and e0.get("upstream_url", "").startswith("https://"))  # 上游真形状留在 upstream_url
+    cases.append(("★ 上游条目级：绝对 URL 进来 ⇒ url 同源相对 + upstream_url 保真形状", _up_rewrite))
+    def _up_rewrite_reverse():
+        import tempfile as _t, json as _j
+        d = _t.mkdtemp()
+        p_ = os.path.join(d, "t.json")
+        _j.dump({"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "x", "version": "1", "sha256": "a" * 64,
+             "url": "https://example.com/weird-no-extension"}]}, open(p_, "w"))
+        ents, probs = load_upstream_table(p_, validate=None)
+        # 反例：URL 里没有归档名 ⇒ 不许编（明说/留原始末段），且不得留下绝对 URL
+        e0 = ents[0]
+        return "://" not in e0["url"]
+    cases.append(("★ 上游条目级反向：URL 无可辨归档名 ⇒ 仍不许留绝对 URL", _up_rewrite_reverse))
+
+    # ★ stage 的文件名映射 fallback（内容仓 mail/022 §① 的真例：optim 带 query）
+    cases.append(("★ byte_name_candidates：无 query 的 url ⇒ 路径末段",
+                  lambda: byte_name_candidates("assets/forge/optim-1.6.3.tar.gz")[0] == "optim-1.6.3.tar.gz"))
+    cases.append(("★ byte_name_candidates：**带 query 的下载脚本**（optim 真形状）⇒ 命中真文件名",
+                  lambda: "optim-1.6.3.tar.gz" in byte_name_candidates(
+                      "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz")))
+    cases.append(("★ byte_name_candidates：basename 本身不是真名（download.php）⇒ 真名在候选里",
+                  lambda: byte_name_candidates(
+                      "https://x/download.php?package=a-1.0.tar.gz")[0] != "download.php?package=a-1.0.tar.gz"))
+    cases.append(("★ byte_name_candidates：空 url ⇒ 空列表（零值守卫，不编）",
+                  lambda: byte_name_candidates("") == []))
+    # stage 端到端：带 query 的 url + bytes_dir 里是真名 ⇒ 必须 stage 成功（反向：名字不对 ⇒ 报）
+    def _stage_query_url(with_bytes=True):
+        bd = tempfile.mkdtemp()
+        if with_bytes:
+            open(os.path.join(bd, "optim-1.6.3.tar.gz"), "wb").write(_bytes)
+        site = tempfile.mkdtemp()
+        ent = [{"name": "optim", "version": "1.6.3", "form": "pkg",
+                "url": "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz",
+                "sha256": _bsha}]
+        return bd, site, ent
+    def _stage_query_ok():
+        bd, site, ent = _stage_query_url()
+        probs = stage_upstream_bytes(site, ent, bd, check_only=False)
+        return probs == [] and os.path.isfile(
+            os.path.join(site, "assets", "forge", "optim-1.6.3.tar.gz"))
+    cases.append(("★ stage：url 带 query ⇒ 仍能 stage（fallback 生效）", _stage_query_ok))
+    def _stage_query_missing():
+        bd, site, ent = _stage_query_url(with_bytes=False)
+        return len(stage_upstream_bytes(site, ent, bd, check_only=False)) == 1
+    cases.append(("★ stage 反向：带 query 且真名字节不在 ⇒ 仍必报（不静默）", _stage_query_missing))
     cases.append(("★ stage：空条目 ⇒ 无问题（零值不报错，由调用方 guard）",
                   lambda: stage_upstream_bytes(tempfile.mkdtemp(), [], tempfile.mkdtemp()) == []))
 
@@ -729,7 +899,7 @@ def main(argv):
     #   ⇒ 目录不指着 404（R7b）。缺字节目录 ⇒ 明说"未 stage"，不静默（站点闸门会拦）。
     bytes_dir = a.upstream_bytes[0] if a.upstream_bytes else None
     for up in a.upstream:
-        yents, yprobs = load_upstream_table(up, validate=_port_validate)
+        yents, yprobs = load_upstream_table(up, validate=_port_validate, site=a.site)
         if yprobs:
             # ⚠️ 不合格 = **明说并跳过**（不是静默收，也不是致命退出：站点仍要能装包）
             for x in yprobs:
