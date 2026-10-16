@@ -5581,3 +5581,30 @@ S3a/S3b  装 cgi 之前 installed=false → 之后 **true**（会话态真的会
          —— 两个属性对**同一条事实**给一致的答案（这才是"不塌陷"的正面证据）
 ★ S5/S5b fromSource 反向（不含 src ⇒ false）/ 正向对照（含 src ⇒ true）—— 判据有判别力
 ```
+
+### 补记：上站（promote-pages）时抓到**受管辖入口自身**一处自建以来的缺陷
+
+三属性落地后按用户「先试试吧」把它**上站**（否则 8761 上 `statusOf` 不存在，试不了）。
+走 `build/promote-pages.sh`（页面批的受管辖入口）——**dry-run 干净，真跑后 `--verify` 却红**：
+
+```
+✗ /mnt/hdd/octave-wasm-build/siteWebGL/assets-loader.js 与仓库不一致
+❌ 1 处不一致 ⇒ 别提交（先修）
+```
+
+**根因**：`--verify` 比的是**四处**（仓库 bridge/ · 8761 · 8768 · 仓库镜像），
+而**真同步循环只写 `$SITE` + `$REPO_MIRROR`，从建起就漏了 `$SITE_EXP`（8768）**
+⇒ **任何一次真同步之后，`--verify` 都不可能绿**。实测证据：`git log -S'SITE_EXP/$f'` 显示
+自 `e26a80d`（工具诞生那批）起就没有过写 8768 的版本。
+
+⇒ **修**：同步循环改成写三处（`$SITE` / `$SITE_EXP` / `$REPO_MIRROR`）；
+**并加一条会抓到这个形状的自证用例**（①b：把仓库文件改成新内容、真跑一次，
+**断言 8768 也被写上** —— 不是只验、是真写）。`promote-pages` 自证 4→**5 PASS / 0 fail**。
+
+> 这条值得记：**闸门比它守的东西多要求一处**（verify 四处 vs sync 两处）是
+> "自建以来一直不可能通过"的形状 —— 它的自证当时只造了"一致夹具 ⇒ 不报"，
+> 而**没造"真跑一次之后**"的夹具 ⇒ 漏。修完的 ①b 正是补这个缺口。
+
+**上站结果**：四处一致（`assets-loader.js` sha `51adb98ff2c7`）、三大件逐字节未动
+（`1ed3e528561e`/`caac68bf6201`/`f250530ae5ab`）、`--verify` 绿、8761 `BOOT OK: 1.1s`；
+**真站点 8761 上 `accept-content-attributes` 11/0**（含 ★S4/★S5 两条反向）。

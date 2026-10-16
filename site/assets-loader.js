@@ -53,6 +53,7 @@
     var _catalog = null;        // 已读到的货架目录（缓存）
     var _catalogP = null;       // 读取中的 promise（去重）
     var _catalogByName = {};    // name → pack 条目
+    var _catalogSourceOverride = null;   // ★ 测试注入面（见 catalog() 上方注释）
     var installSeen = {};       // 安装去重（同实例内）
     // ── 给 `.m` 侧观察的**安装结果账**（T4，2026-10-12）──────────────────────────
     //   为什么需要：`pkg load <货架上的包>` 在 `.m` 侧只能"点火"（`__web_run_js__` 即返），
@@ -68,6 +69,22 @@
     var listeners = [];
 
     function log(msg) { if (global.console) console.log('[assets] ' + msg); }
+
+    // ── 宿主架构（单一产地；install 的架构界与 statusOf 的 compatible 都用它）────────
+    // 判据 = **选档结果**（`octaveLaneState.lane`，`w64*` ⇒ wasm64），与 `bridge/lane.js` 同源
+    // —— 不新增第二处判据。老宿主/测试（不传 lane）⇒ ''（不表态 ⇒ 不拦，向后兼容）。
+    function hostArchOf(opts) {
+      try {
+        var lane = '';
+        var st = (typeof window !== 'undefined' && window.octaveLaneState)
+               || (typeof self !== 'undefined' && self.octaveLaneState);
+        if (st && st.lane) lane = st.lane;
+        if (!lane && opts && opts.lane && opts.lane.lane) lane = opts.lane.lane;
+        if (/^w64/.test(lane)) return 'wasm64';   // w64 / w64-base / w64-threads
+        if (lane) return 'wasm32';                // base / threads
+        return '';
+      } catch (e) { return ''; }
+    }
 
     function fs() {
       var M = module || global.Module;
@@ -439,6 +456,55 @@
       list: function () { return Object.keys(byName); },
       describe: function (name) { return byName[name] || null; },
       isLoaded: function (name) { return !!loaded[name]; },
+      // ★ **三属性状态**（2026-10-16 用户点令「一个内容应该有三个属性」）：
+      //   fromSource（是否从源码构建）· compatible（是否兼容本宿主）· installed（是否已安装）。
+      //   三条**各自独立**、**全部派生**（不手写、不新增目录字段）——判据如下：
+      //     · fromSource：包**带 `src`**（`content`/`kinds` 含 src）⇒ 加速件是"源码"
+      //       ⇒ 本构建**不编**（无 mkoctfile）⇒ 值 = true 表示"要用源码才有加速件/或有源码未编"。
+      //       ⚠️ 与 `content` 同源（`m`/`src`/`oct` 是包内源的构成）——**不是**第二份真值。
+      //     · compatible：**架构界**（`arch` 与宿主档一致；无 arch ⇒ 无架构概念 ⇒ 兼容）+
+      //       **Octave 版本约束**（`requires`，若目录带）。不兼容 ⇒ install 会响亮拒绝。
+      //     · installed：**会话态**（`loaded[name]`）—— 就是"这次会话装没装"。
+      //   返回对象；查无此包 ⇒ null（不编一个"全 false"的假状态）。
+      statusOf: function (name) {
+        // ⚠️ 取数优先级（实测踩到）：**目录条目优先** —— 随站清单（`byName`）里的条目用
+        //   `kind`（单值）而不是 `content`（多值数组），先取它会得到 `content: []`。
+        //   ⚠️ 目录还没读（`_catalogByName` 空，例如刚起的实例 / 注入实例）⇒ 回退随站清单，
+        //   且**该条目也在货架上时**以货架那条为准（货架才带 content/arch/requires）。
+        //   两边都没有 ⇒ null（查无此内容，不编假状态）。
+        var p = _catalogByName[name] || byName[name] || null;
+        if (!p) return null;
+        // ⚠️ 随站条目（`byName`）与货架条目（`_catalogByName`）形状不同：前者的 `kind` 是
+        //   **投送形态**（js/oct），不是内容构成 ⇒ 对它**不能**用 kind 冒充 content
+        //   （实测：`statusOf('__delaunayn__').detail.content` 曾拿到 ['oct'] 形态值）。
+        //   ⇒ 只认真正的 content/kinds；两边都没有 ⇒ 空数组（"不知道装的是什么源"如实记）。
+        var content = p.content || p.kinds || [];
+        var fromSource = content.indexOf('src') >= 0;
+        // compatible：架构（有 arch 才判）+ 版本约束（有 requires 才判）
+        var compatible = true, why = [];
+        var ha = hostArchOf(null);
+        if (p.arch && ha && p.arch !== ha) {
+          compatible = false; why.push('arch ' + p.arch + ' ≠ 宿主 ' + ha);
+        }
+        var reqs = p.requires || [];
+        if (reqs.length) {
+          // 版本判据交回目录装配期（R1 已按 fork 版本过滤）⇒ 这里只记"有约束"
+          why.push('requires: ' + reqs.join(','));
+        }
+        return {
+          name: name,
+          fromSource: fromSource,
+          compatible: compatible,
+          // installed 三处都要查：货架包 `forge:<n>`、能力层 `layer:<n>`、**随站资产** `<n>`
+          //   （三种装载路径的键不同 —— 只查前两种会让随站包永远显示"没装"，实测抓到）。
+          installed: !!(loaded['forge:' + name] || loaded['layer:' + name] || loaded[name]),
+          // 派生细节（诊断用；UI 不必读）
+          detail: { arch: p.arch || null, hostArch: ha || null,
+                    content: content, form: p.form || null,
+                    acceleration: fromSource ? 'not-built' : 'none-needed',
+                    why: why }
+        };
+      },
       loaded: function () { return Object.keys(loaded); },
       // ★ 能力层查询（接缝 §5④）：`{pyodide:{ready:true,kind:'python',version,bytes}}`
       layers: function () { return layers; },
@@ -467,9 +533,31 @@
       // 「货架」= 站点上的 `assets/forge-catalog.json`（构建期由 build/forge-catalog.py
       // 从货架仓 `shelf/` 生成；版本按 **fork 的 Octave 版本**过滤、字节 sha 逐条核过）。
       // 客户端**读它但不下载任何包字节** —— 谁 install 谁才拉。
+      // ★ **测试注入面**（2026-10-16，架构界套件要它）：让测试**在不碰站点**的前提下
+      //   把一份合成目录喂进来（`accept-arch-boundary` 的 A3/A4 靠它验"arch 不符 ⇒ 响亮拒绝"）。
+      //   为什么是公开方法而不是"内部钩子"：判据做在客户端，而客户端的输入就是目录 ⇒
+      //   "能换目录来源"是这个模块**本就该有的缝**（accept-install-verdict 的 V3/V4 也只差它）。
+      //   ⚠️ 只影响**本实例**（与 manifest/loaded 同款：全部状态收进工厂闭包）。
+      __catalogSource: function (src) { _catalogSourceOverride = src || null; },
       catalog: function () {
         if (_catalog) return Promise.resolve(_catalog);
         if (_catalogP) return _catalogP;
+        if (typeof _catalogSourceOverride === 'function') {
+          // 注入路径：本源直接给一份目录对象（不 fetch）——同样走"填缓存 + 记账"两步，
+          // 这样注入目录与真目录在**后续所有判据**上同权（不是旁路）。
+          _catalogP = Promise.resolve()
+            .then(function () { return _catalogSourceOverride(); })
+            .then(function (c) {
+              _catalog = c || { packs: [] };
+              var byName3 = {};
+              (_catalog.packs || []).forEach(function (p) { byName3[p.name] = p; });
+              _catalogByName = byName3;
+              catalogState = 'ok';
+              publish();
+              return _catalog;
+            });
+          return _catalogP;
+        }
         // ⚠️ 传**裸路径**（fetchJSON 内部会 withBase）—— 曾经这里又 withBase 一次，
         //    base 为空时无害、非空时双拼（`/base//base/assets/…` ⇒ 404）。
         //    由 accept-install-verdict 的 V3（同源子路径 base）首次暴露。
@@ -497,10 +585,16 @@
       // ⚠️ 为什么不调核心 `pkg install`：本构建下它坏（`dirlist(3): out of bound 2`，T0 spike
       //    实测）⇒ 由本函数**直写**（正是布局复现那条路；对拍断见验收套件）。
       // ⚠️ 只支持 kinds 里没有 'oct' 的包（纯 .m）：含预编译 .oct 的包要宿主预编 ⇒ v2。
+      //     ★ 2026-10-16 起：**含 .oct 的条目进目录时带 `arch`**，且这里会先判它与宿主档是否
+      //     一致（不一致 ⇒ 立即响亮拒绝，cause='arch-mismatch'）。判据见下面的 hostArch()。
       install: function (name, opts) {
         opts = opts || {};
         var onProgress = opts.onProgress || function () {};
         installSeen = installSeen || {};
+        // ★ 架构界（裁决 2026-10-16 用户点令「楚河汉界」）：「要 dlopen 进宿主的东西」必须与
+        //   宿主**同架构**，否则立即响亮拒绝（早失败优于"装上了跑不了" —— 与
+        //   symbolic→pyodide 的硬依赖同款裁决）。只在两边都有值时才判（老站点/老宿主不拦）。
+        var hostArch = hostArchOf(opts);      // ← 单一产地（闭包级函数，statusOf 也用它）
         var chain = API.catalog().then(function (cat) {
           var plan = [], seen = {};
           (function walk (n) {
@@ -517,6 +611,20 @@
             plan.push(p);
           })(name);
           onProgress({ phase: 'plan', plan: plan.map(function (p) { return p.name; }) });
+          // ★ 架构检查（含在闭包里，覆盖 deps 闭包里的每一条 —— 能力层条目不带 arch ⇒ 自然豁免）
+          if (hostArch) {
+            for (var _pi = 0; _pi < plan.length; _pi++) {
+              var _pa = plan[_pi].arch;
+              if (_pa && _pa !== hostArch) {
+                var _m = '架构不匹配：' + plan[_pi].name + ' 需要 ' + _pa
+                       + '，当前宿主是 ' + hostArch + ' 档（它带要在宿主里 dlopen 的 .oct，必须同架构）';
+                var _err = new Error(_m);
+                _err.__verdict__ = { state: 'failed', name: plan[_pi].name,
+                                     cause: 'arch-mismatch', why: _m, retriable: false };
+                throw _err;
+              }
+            }
+          }
           // ★ planOnly（©5 第③步）：**只算账不下载**（UI 预演"要拉多少"）。零网络字节。
           //   判据：page.on('response') 在该调用期间**没有任何**对 assets/pkg|assets/forge 的响应。
           if (opts.planOnly) {
@@ -609,6 +717,7 @@
           installError[name] = msg;
           publish();
           var st = 'failed', why = msg, cause = 'unknown';
+          if (/^架构不匹配：/.test(msg))               { st = 'failed';       cause = 'arch-mismatch'; }
           if (/^货架上没有包：/.test(msg))              { st = 'not-found';    cause = 'not-in-any-list'; }
           else if (/^读不到 Forge 货架/.test(msg))      { st = 'cannot-know';  cause = 'catalog-unreadable'; }
           else if (/包校验失败/.test(msg))             { st = 'failed';       cause = 'sha-mismatch'; }

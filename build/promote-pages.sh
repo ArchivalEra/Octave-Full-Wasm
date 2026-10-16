@@ -89,6 +89,24 @@ if [ "$MODE" = "selftest" ]; then
   # ① 正常不报
   n=$((n+1)); if ! REPO="$tmp/repo" SITE="$tmp/site" SITE_EXP="$tmp/siteexp" REPO_MIRROR="$tmp/repomirror" \
       bash "$0" --verify >/dev/null 2>&1; then echo "fail | promote-pages/一致的夹具竟红"; bad=1; else echo "PASS | promote-pages/一致的夹具 ⇒ 不报"; fi
+  # ①b ★ **真同步必须写三处**（2026-10-16 加；本批实测抓到自建以来的缺陷：
+  #     真同步循环只写 $SITE + $REPO_MIRROR，**漏 $SITE_EXP** ⇒ `--verify` 比四处，
+  #     于是"任何一次真同步后 verify 都不可能绿"。这条用例专锁那个形状：把仓库文件改成
+  #     新内容、再真跑一次，**8768 也必须跟上**（不是只验、是真写）。
+  n=$((n+1))
+  for d in "$tmp/site2" "$tmp/siteexp2" "$tmp/repomirror2"; do mkdir -p "$d"; done
+  for f in $(page_files); do printf 'y' > "$tmp/site2/$f"; cp "$tmp/site2/$f" "$tmp/siteexp2/$f"; cp "$tmp/site2/$f" "$tmp/repomirror2/$f"; done
+  for a in $ARTIFACTS; do printf 'A' > "$tmp/site2/$a"; cp "$tmp/site2/$a" "$tmp/siteexp2/$a"; done
+  for d in "$tmp/site2" "$tmp/siteexp2"; do printf '(function(g){g.__octaveLanes = ["base"];})(self);\n' > "$d/lanes.js"; done
+  printf 'NEW' > "$tmp/repo/bridge/assets-loader.js"
+  if REPO="$tmp/repo" SITE="$tmp/site2" SITE_EXP="$tmp/siteexp2" REPO_MIRROR="$tmp/repomirror2" \
+      bash "$0" >/dev/null 2>&1 || true; then :; fi
+  if diff -q "$tmp/repo/bridge/assets-loader.js" "$tmp/siteexp2/assets-loader.js" >/dev/null 2>&1; then
+    echo "PASS | ★ 真同步写三处：8768（$SITE_EXP）也被写上"
+  else
+    echo "fail | promote-pages/**真同步漏写 8768**（--verify 比四处而同步只写两处）"; bad=1
+  fi
+
   # ② 三大件被动过 ⇒ 必须红（页面批夹带产物）
   n=$((n+1)); printf 'B' > "$tmp/site/octave.wasm"
   if REPO="$tmp/repo" SITE="$tmp/site" SITE_EXP="$tmp/siteexp" REPO_MIRROR="$tmp/repomirror" \
@@ -207,10 +225,15 @@ mkdir -p "$bak"
 for f in $(page_files); do [ -f "$SITE/$f" ] && cp -p "$SITE/$f" "$bak/" ; done
 echo ""
 echo "── ③ 已备份被覆盖的页面文件 → $bak"
+# ⚠️ **三处都要写**（2026-10-16 修一处自建以来的缺陷）：`--verify` 比的是**四处**
+#   （仓库 bridge/ · 8761 · 8768 · 仓库镜像），而真同步循环此前只写 `$SITE` + `$REPO_MIRROR`
+#   ⇒ **`--verify` 在任何一次真同步后都不可能绿**（8768 永远落后）。实测抓到：
+#   本批同步后 `--verify` 报 "siteWebGL/assets-loader.js 与仓库不一致"（8768 从未被写过）。
 for f in $(page_files); do
-  cp -p "$REPO/bridge/$f" "$SITE/$f" && cp -p "$REPO/bridge/$f" "$REPO_MIRROR/$f"
+  cp -p "$REPO/bridge/$f" "$SITE/$f" && cp -p "$REPO/bridge/$f" "$SITE_EXP/$f" \
+    && cp -p "$REPO/bridge/$f" "$REPO_MIRROR/$f"
 done
-echo "   已同步 $(page_files | wc -l) 个文件到 8761 与仓库镜像"
+echo "   已同步 $(page_files | wc -l) 个文件到 8761 / 8768 / 仓库镜像"
 
 # ── m 资产（`M_ASSETS` 非空时）：重打包 + 刷 sha + 重生成车道清单 ──────────────
 # ⚠️ 放在**页面文件之后**：`$bak` 在上面才建好（第一版把这步写在前面 ⇒ `cp` 到不存在的
