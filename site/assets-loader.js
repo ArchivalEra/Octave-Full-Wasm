@@ -703,9 +703,21 @@
               // ★ Verdict（©5 第③步）：四态返回值是**值**，不是布尔。
               //   旧字段 `name`/`installed` **逐一保留**（老套件/老代码在用）；
               //   新键 = `state`（四态之一）+ `layers`（要拉的能力层）+ `bytes`。
+              // ★ N6 修复（2026-10-16，工单 68 / design-it-twice 的 ④ 方案发现）：
+              //   此前三字段是**字面量**（layers:[] / bytes:0 / acceleration:'not-built'）⇒
+              //   装 symbolic（闭包含 22 MB 的 Pyodide）也报 bytes:0；而 statusOf(:504) 与
+              //   planOnly(:630) 对同一事实**真算** —— 同一条事实两个出口两个答案。
+              //   ⇒ 复用 planOnly 的同一算法（闭包里的 plan 与真下载的字节一致）。
+              var _fetchedLayers = plan.filter(function (p) { return p.form === 'tree'; })
+                                       .map(function (p) { return { name: p.name, form: p.form, bytes: p.size }; });
+              var _fetchedBytes = plan.reduce(function (a, p) { return a + (p.size || 0); }, 0);
+              // acceleration 与 statusOf 走**同一个判据**（content 含 src ⇒ not-built，否则 none-needed）
+              var _entry = _catalogByName[name];
+              var _content = (_entry && (_entry.content || _entry.kinds)) || [];
+              var _accel = (_content.indexOf('src') >= 0) ? 'not-built' : 'none-needed';
               return { state: 'ok', name: name, installed: names,
-                       layers: [], bytes: 0,
-                       acceleration: 'not-built' };
+                       layers: _fetchedLayers, bytes: _fetchedBytes,
+                       acceleration: _accel };
             });
         });
         // T4：**整条链**的失败都要落账（含"货架读不到"这种在 catalog() 就炸掉的路径）——

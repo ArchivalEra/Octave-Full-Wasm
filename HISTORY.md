@@ -5672,3 +5672,48 @@ verified.tarball_sha = cef3c090…              ← = 1.7.7 的 sha ⇒ 1.7.3 �
   该包并说明（活体验证：`statistics 1.7.3` 那类现在**响亮报错**，而真包 1.7.7 不受影响）。
 - 自证：`check-forge-catalog` **27→30 PASS / 0 fail**；三站 `--check` 仍 `ok`（向后兼容）。
 - 工单 68 登记四条（N1/N2 已修 + N5/N6 待做，各配结算件与反向断言）。
+
+## 5.x 回信收口：内容仓 018（N5 它修完了）+ 我兑现 versions[] 进 schema + N6 修复上站（2026-10-16）
+
+**背景**：用户点令「看回信」。收件箱到了内容仓 `018`（按新投递规矩：只落文件、不提交）。
+这是一封全面回复：六件事全接，其中三件它**已做**（N5 修完 / arch 副本同步 / 空 kinds 补齐）、
+两件**裁了**（versions 轴"出+只出已 stage"、三属性"现名确认"）、一件**待我**（schema 落
+versions[] 三条不变量）。
+
+### 复核（不照抄它的信 —— 逐条独立验）
+
+| 它说的 | 我复跑 | 结果 |
+|---|---|---|
+| N5 修完：`statistics 1.7.3` 改 `['m','src']` | 读 `packages/statistics.json` | ✔ 两版本均真值 |
+| 38 条空 kinds 补齐 | `sum(… if not v.get('kinds'))` | ✔ **0 条空** |
+| `--emit` 过宿主校验器 | 出表 + `validate --producer` | ✔ `ok`（pin=ef5cd71） |
+| `--selftest` 36/0 | 跑它 | ✔ 36/0 |
+| arch 副本同步 | `grep -c arch port/README.md` | ✔ 5 处（修前 0） |
+| kinds 抽查 vs 真字节 | datatypes/symbolic 各 2 版 | ✔ 4/4 一致 |
+| 投递规则更新 | `mail/README.md` | ✔ "投递=落文件；提交=收信方做" |
+
+### 我兑现的（018 §待我项 + 顺手 N6）
+
+1. **`versions[]` 轴进 schema**（它明确"不动你的 schema"等我落）：`$defs/candidate` +
+   三条不变量（① 非空不重 ② 顶层标量=某候选逐字 ③ staged 必带派生轴 / withheld 必带
+   cause 且**不带**派生轴——不许编）。校验器正反各钉：自证 **33→41 PASS / 0 fail**（+8）；
+   新 golden `versions.json`（staged + withheld 两候选示范）；**现役三处 `--check` 仍 `ok`**
+   （未写 versions 的表零影响 —— 向后兼容）。
+2. **N6 修复**（判决书第 2 步，顺手做）：`install()` 成功路径三字段改**真算**
+   （复用 planOnly 同一算法）—— 修前 `layers:[]/bytes:0/acceleration:'not-built'` 是
+   字面量（装 symbolic 含 22 MB Pyodide 也报 0）。`accept-content-attributes`
+   **11→14/0**（+N6a/b/c 三断言）；**promote 上站后真站点 8761 上 14/0**：
+   `layers=[pyodide 22013349]`、`bytes=22289801`、tsa⇒`not-built`、quaternion⇒`none-needed`
+   —— 与 `statusOf` **同一判据同一答案**。
+
+### 工单 68 结案
+
+四缺陷全收口：N1/N2（宿主 `a31e1c7`）、N5（内容仓）、N6（本批）+ versions[] 轴落地。
+**仍开放**（非本工单范围）：内容仓 `--emit` 侧 versions[] 实现（它说与 `--probe` 逐版探同批）、
+客户端 `browse()`（判决书第 5 步）。
+
+### 边界记录
+
+- 它按 **015 的裁法**投递（只落文件）⇒ 018 由我收编进 git（本批提交）；
+- 它**认了**投递≠提交的对称面（把我提的统一规则写进了它仓 `mail/README.md`）；
+- 三属性命名权它用掉了：**现名确认**（`fromSource/compatible/installed` 不改）。

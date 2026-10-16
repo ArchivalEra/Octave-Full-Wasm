@@ -164,6 +164,28 @@ if (s45.skip) {
     JSON.stringify(s45.src));
 }
 
+// ── N6（工单 68 的结算断言，2026-10-16 加）：install() 成功路径三字段必须**真算** ──
+//   背景（design-it-twice 的 ④ 方案发现）：此前 layers:[]/bytes:0/acceleration:'not-built'
+//   是**字面量** ⇒ 装 symbolic（闭包含 22 MB Pyodide）也报 bytes:0；而 statusOf 真算。
+//   修复后三个字段与 planOnly/statusOf 同一算法/同一判据。
+const S3 = await page.evaluate(async () => {
+  const out = {};
+  try { out.symbolic = await window.OctaveAssets.install('symbolic'); }
+  catch (e) { out.symbolicErr = String(e.message).slice(0, 150); }
+  try { out.tsa = await window.OctaveAssets.install('tsa'); }
+  catch (e) { out.tsaErr = String(e.message).slice(0, 150); }
+  return out;
+});
+const sy = S3.symbolic || {};
+check(Array.isArray(sy.layers) && sy.layers.some(x => x.name === 'pyodide'),
+  '★ N6a 装 symbolic ⇒ layers 真算（含 pyodide，不再是字面量 []）',
+  JSON.stringify(sy.layers).slice(0, 140));
+check(typeof sy.bytes === 'number' && sy.bytes > 0,
+  '★ N6b bytes 真算 > 0（不再是字面量 0）', sy.bytes);
+check((S3.tsa || {}).acceleration === 'not-built' && (sy.acceleration === 'none-needed'),
+  '★ N6c acceleration 与 statusOf 同一判据（tsa=m+src ⇒ not-built；symbolic=纯 m ⇒ none-needed）',
+  `tsa=${(S3.tsa || {}).acceleration} symbolic=${sy.acceleration}`);
+
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(fail === 0 ? 0 : 1);

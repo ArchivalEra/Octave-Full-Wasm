@@ -1,6 +1,7 @@
 # 68 · 「市场」架构的四个实测缺陷（design-it-twice 发现；N1/N2 已修，N5/N6 待做）
 
-**Status:** ready-for-agent
+**Status:** resolved
+**结案凭据**（2026-10-16）：N1/N2/N6 宿主侧已修并上站；N5 内容仓已修（mail/018）；versions[] 轴已进 schema —— 见文末 §结案。
 **Settling:** `python3 build/113/check-forge-catalog.py --selftest && python3 build/forge-catalog.py --selftest` —— 两条自证全绿 ⇒ N1/N2 的判据在位（含各自的反向断言）；N5/N6 的结算件见各自小节（**尚未存在**）。
 **N5 的结算件**：`python3 build/113/check-forge-catalog.py`（逐候选 —— 待第 3 步实现；今天只查被选中的那一版）；
 **N6 的结算件**：新套件 `accept-content-attributes` 扩一条（装 `symbolic` ⇒ `layers` 含 pyodide 且 `bytes>0`）—— **尚未存在**。
@@ -80,3 +81,19 @@ $ OctaveAssets.statusOf('symbolic').detail.acceleration
 
 `build/113/NOTES-market-design.md`（四方案对比 / 判决 / 9 步迁移路径 / 诚实的"无对账器"清单）。
 **本批只做第 0、1 步**（零客户端改动、各自独立可验收、直接关掉 N1/N2）。
+
+
+---
+
+## ★ 结案（2026-10-16，内容仓 `mail/018` 回信后收口）
+
+| 缺陷 | 谁修的 | 凭据（我复跑） |
+|---|---|---|
+| N1 宿主后门 | 宿主（`a31e1c7`） | R11 + 自证 27→30/0 |
+| N2 R4 单向 | 宿主（`a31e1c7`） | R4 双向 + `derive_arch` 守卫；活体：claim-vs-bytes 矛盾 ⇒ 必红 |
+| **N5 逐版本声明漂移** | **内容仓**（52/52 重探；38 条空 `kinds` 全补真值；`statistics 1.7.3` 改 `['m','src']`） | 我抽查 4/4 与字节一致；空 kinds=**0**；其 `--emit` 过我校验器 `ok`；其 `--selftest` 36/0 |
+| **N6 三字段字面量** | **宿主**（本批） | `accept-content-attributes` **11→14/0**（+N6a/b/c 三断言）；真站点 8761 上实测：装 symbolic ⇒ `layers=[pyodide 22013349]`、`bytes=22289801`；tsa⇒`not-built`、quaternion⇒`none-needed` |
+| **versions[] 轴进 schema** | **宿主**（本批；兑现 `016` 的承诺） | schema + `$defs/candidate`；校验器三条不变量正反各钉（自证 33→**41/0**）；golden/versions.json 示范（staged+withheld 两候选）；现役三处 `--check` 仍 `ok`（向后兼容） |
+
+**仍开放（非本工单范围）**：内容仓 `--emit` 侧的 `versions[]` 实现（它 `018` 说与 `--probe` 逐版探同批做）；
+客户端 `browse()` 与版本解析（判决书 §5 第 5 步）。

@@ -185,6 +185,96 @@
             ]
           },
           "description": "消费面：这条内容交给哪个引擎消费（裁决 2026-10-14，回应内容仓 mail/007 缺口②，源自 OpenModelica）。**为什么进数据不进文档**：UI 拿到混合表要知道 `optim` 交 Octave、`Modelica` 交 omc —— 这类判断放数据里才能被机器查；放文档里就回到手抄（本仓 doctrine）。取值：`octave`（pkg install + addpath 那套）/ `omc`（omc_vfs_load_zip → MODELICAPATH → loadModel）。**可选**（旧表没有它 ⇒ 默认归 `octave`，因为现役全是 Octave 侧内容）。"
+        },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "description": "★ 版本候选集（裁决 2026-10-16，用户点令「每个版本各自带一个是否兼容的属性」；内容仓 mail/018 §② 裁『出，且只出已 stage 字节的版本』）。**同一 name 的多个版本各为一条候选**，三属性（fromSource/compatible/installed）按候选求值 —— 不引入第四个属性、不存储每版 compatible 布尔（会漂：实测 statistics 1.7.3 曾声明 ['m','oct'] 而真字节 0 个 .oct）。**三条不变量**（校验器逐条判）：① 非空且 version 两两不重复；② 条目顶层标量（version/sha256/url）必须**恰好等于某个候选**（逐字 —— 防两处各写一份漂移）；③ `stage:\"staged\"` 的候选**必须带派生轴**（form/content；content 含 oct ⇒ 必带 arch），派生不出来 ⇒ 只能以 `stage:\"withheld\"` + `withheld_cause` 出现（**不许编**）。**兼容礼遇**：旧消费者可经 `optional_keys` 忽略本键（本仓既有协商规则）；未声明 ⇒ fail-closed 撤条目。",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "version",
+        "sha256",
+        "url"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "候选版本（条目内唯一）"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "fail-closed 唯一依据（同条目级语义）"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "交付路径（站点态必同源相对）"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "可选（进度条；不作为第二断言）"
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "staged",
+            "withheld"
+          ],
+          "description": "staged=字节已在站点；withheld=字节未 stage（须带 withheld_cause；**不带派生轴**）"
+        },
+        "withheld_cause": {
+          "type": "string",
+          "description": "withheld 的原因（如 bytes-not-staged）"
+        },
+        "form": {
+          "type": "string",
+          "enum": [
+            "pkg",
+            "tree",
+            "oct",
+            "octdir",
+            "file",
+            "js"
+          ],
+          "description": "派生轴（仅 staged 候选）：同条目级 form 语义"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "m",
+              "src",
+              "oct"
+            ]
+          },
+          "description": "派生轴（仅 staged 候选）：同条目级 content 语义（三档 arch 语义同条目级）"
+        },
+        "arch": {
+          "type": "string",
+          "enum": [
+            "wasm32",
+            "wasm64"
+          ],
+          "description": "派生轴（仅 staged 且 content 含 oct 的候选）：同条目级 arch 三档语义"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "版本约束串（如 'octave (>= 8.1.0)'）—— 逐候选"
         }
       },
       "additionalProperties": true

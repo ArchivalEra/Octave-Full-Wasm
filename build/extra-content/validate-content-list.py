@@ -128,6 +128,46 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
         if "license" in e and not isinstance(e["license"], (str, dict)):
             probs.append("%s license 必须是字符串或对象（自由文本即可 —— 裁决① 2026-10-15："
                          "不收紧成 SPDX 枚举）：得到 %s" % (tag, type(e["license"]).__name__))
+        # versions[]（裁决 2026-10-16，内容仓 mail/018 §②「出，且只出已 stage 字节的版本」）：
+        #   三条不变量逐条判（schema 的 versions 描述里也有全文）。
+        if "versions" in e:
+            vs = e["versions"]
+            if not isinstance(vs, list) or not vs:
+                probs.append("%s versions 必须是非空数组（零值守卫：空候选集不是通过）" % tag)
+            else:
+                seen_v, seen_vs = set(), set()
+                for c in vs:
+                    cv = c.get("version")
+                    if not cv:
+                        probs.append("%s 的候选缺 version" % tag)
+                    elif cv in seen_v:
+                        probs.append("%s 候选 version %r 重复（不变量 ①）" % (tag, cv))
+                    seen_v.add(cv)
+                    cs = c.get("sha256")
+                    if isinstance(cs, str) and not re.fullmatch(r"[0-9a-f]{64}", cs):
+                        probs.append("%s 候选 %s 的 sha256 不是 64 位小写 hex" % (tag, cv))
+                    if (cv, cs) in seen_vs:
+                        probs.append("%s 候选 (version,sha256) (%s,%s…) 重复（不变量 ①）" % (tag, cv, str(cs)[:8]))
+                    seen_vs.add((cv, cs))
+                    stage = c.get("stage", "staged")
+                    if stage == "withheld":
+                        if not c.get("withheld_cause"):
+                            probs.append("%s 候选 %s 是 withheld 却没写 withheld_cause（不许白 withheld）" % (tag, cv))
+                        if c.get("form") is not None or c.get("content") is not None or c.get("arch") is not None:
+                            probs.append("%s 候选 %s 是 withheld 却带了派生轴（不变量 ③：派生不出 ⇒ 不许编）" % (tag, cv))
+                    else:
+                        if c.get("form") is None or c.get("content") is None:
+                            probs.append("%s 候选 %s 是 staged 却缺派生轴 form/content（不变量 ③）" % (tag, cv))
+                        cc = c.get("content") or []
+                        if "oct" in cc and not c.get("arch"):
+                            probs.append("%s 候选 %s 含 oct 却没带 arch（条目级三档语义对候选同样成立）" % (tag, cv))
+                        if c.get("form") == "tree" and c.get("arch"):
+                            probs.append("%s 候选 %s 是能力层（tree）却带 arch（架构与宿主无关）" % (tag, cv))
+                hit = any(c.get("version") == e.get("version") and c.get("sha256") == e.get("sha256")
+                          and c.get("url") == e.get("url") for c in vs)
+                if not hit:
+                    probs.append("%s 顶层标量 (version/sha256/url) 不等于任何候选（不变量 ②：兼容视图必须"
+                                 "恰好是候选之一 —— 防两处各写一份漂移）" % tag)
         # arch（裁决 2026-10-16，用户点令「楚河汉界」）：**只在"要 dlopen 进宿主的东西"上标**。
         #   三档语义（schema 的 arch 描述里也有全文）：
         #     ① 纯 .m（content 不含 oct，且 form 不是 oct/octdir）⇒ **不许带** arch（无架构概念）
@@ -253,6 +293,45 @@ def selftest():
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "cap", "version": "1", "sha256": "a" * 64, "url": "u",
              "form": "tree", "content": [], "arch": "wasm32"}]}, schema=schema), False)
+    # versions[]（裁决 2026-10-16，内容仓 mail/018）：三条不变量正反各钉住
+    def _mkent(**over):
+        base = {"name": "p", "version": "1.0.0", "sha256": "a" * 64, "url": "u",
+                "form": "pkg", "content": ["m"]}
+        base.update(over); return base
+    def _mkcand(**over):
+        base = {"version": "1.0.0", "sha256": "a" * 64, "url": "u",
+                "stage": "staged", "form": "pkg", "content": ["m"]}
+        base.update(over); return base
+    add("★ versions ①：候选 version 重复 ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(versions=[_mkcand(), _mkcand()])]}, schema=schema), False)
+    add("★ versions ①b：空候选集 ⇒ 必须报（零值守卫）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(versions=[])]}, schema=schema), False)
+    add("★ versions ②：顶层标量不等于任何候选 ⇒ 必须报（防两处漂移）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(version="9.9.9", versions=[_mkcand()])]}, schema=schema), False)
+    add("★ versions ②正向：顶层标量恰等于候选 ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(versions=[_mkcand(), _mkcand(version="0.9.0", stage="withheld",
+                                                withheld_cause="bytes-not-staged",
+                                                form=None, content=None)])]},
+        schema=schema), True)
+    add("★ versions ③：staged 候选缺派生轴 ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(versions=[_mkcand(form=None, content=None)])]}, schema=schema), False)
+    add("★ versions ③：withheld 却带派生轴 ⇒ 必须报（不许编）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(versions=[_mkcand(stage="withheld", withheld_cause="bytes-not-staged")])]},
+        schema=schema), False)
+    add("★ versions ③：withheld 没写 cause ⇒ 必须报（不许白 withheld）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(versions=[_mkcand(stage="withheld", form=None, content=None)])]},
+        schema=schema), False)
+    add("★ versions：staged 候选含 oct 必带 arch（条目级三档同判）⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            _mkent(content=["m", "oct"], versions=[_mkcand(content=["m", "oct"])])]},
+        schema=schema), False)
     add("★ arch 词表：wasm128 未知 ⇒ 必须报", lambda: check_table(
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",

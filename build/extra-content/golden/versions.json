@@ -1,0 +1,53 @@
+{
+ "schema": 2,
+ "octave": "11.3.0",
+ "producer": {
+  "id": "octave-extra-content",
+  "pin": "submodule:<sha>"
+ },
+ "note": "★ 样件（golden）：versions[] 版本候选集（裁决 2026-10-16，内容仓 mail/018 §②）——三属性按候选求值；三条不变量：① 非空不重 ② 顶层标量=某候选逐字 ③ staged 必带派生轴 / withheld 必带 cause 且不带派生轴（不许编）。statistics 的两条真值来自 N5 修复后的实测。",
+ "entries": [
+  {
+   "name": "statistics",
+   "consumer": [
+    "octave"
+   ],
+   "version": "1.7.7",
+   "sha256": "cef3c090aee13eaad50b4b9beb2f003e8756cbf018d2be7233326de9696cdf7e",
+   "url": "assets/forge/statistics-1.7.7.tar.gz",
+   "form": "pkg",
+   "content": [
+    "m",
+    "src"
+   ],
+   "versions": [
+    {
+     "version": "1.7.7",
+     "sha256": "cef3c090aee13eaad50b4b9beb2f003e8756cbf018d2be7233326de9696cdf7e",
+     "url": "assets/forge/statistics-1.7.7.tar.gz",
+     "size": 1437955,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "requires": [
+      "octave (>= 8.1.0)"
+     ]
+    },
+    {
+     "version": "1.7.3",
+     "sha256": "570d52af00000000000000000000000000000000000000000000000000000000",
+     "url": "assets/forge/statistics-1.7.3.tar.gz",
+     "size": 1302283,
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged",
+     "requires": [
+      "octave (>= 7.2.0)"
+     ]
+    }
+   ]
+  }
+ ]
+}
