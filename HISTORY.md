@@ -5528,3 +5528,56 @@ A5 站点上的 assets-loader.js 带 arch-mismatch 判据（词表在产物里�
   "宿主/`.oct`/站点资产三处同档"（实测 w64 档 `三处同档 ✔`）—— 本轮补的是
   **目录侧**（catalog 携带 arch）与**客户端侧**（install 期拒绝），两处此前都缺。
 - 闸门自证台 44→**45**（新登记 `oct-arch.py --selftest`）。
+
+## 5.x 内容三属性：fromSource / compatible / installed（2026-10-16 用户点令）
+
+**用户点令**：「现在一个内容应该有三个属性，是否从源码构建与是否兼容与是否已安装」。
+
+### 设计：三条**各自独立、全部派生**（不手写字段）
+
+这是上一批「架构界」的**自然续**：`compatible` 就是那条界在客户端侧的**查询面**
+（此前只有"装的时候会拒绝"，没有"先问一句兼不兼容"）。三条的判据：
+
+| 属性 | 判据 | 为什么是这个判据 |
+|---|---|---|
+| `fromSource` | `content` 含 `src` | `content` 的语义就是"包里有什么源"（`m`/`src`/`oct`）——**同一份真值**，不是第二份 |
+| `compatible` | `arch` vs 宿主档（+ `requires`） | 架构界的机制已在上一批落地（`oct-arch.py` 派生 + R10 闸门 + install 拒绝） |
+| `installed`  | 会话态 `loaded[…]` | "装了没"**天然是会话事实**（刷新页面就没了），不是目录事实 |
+
+**为什么必须分开（不许塌陷）**：三者可自由组合 —— 现役 8 个包**带 src 且兼容但没编**
+（`fromSource=true, compatible=true`）；不兼容的条目**装了也没用**（`compatible=false` 时
+`installed` 无意义）；能力层可以"不涉源码但已装"。一根轴答不了这三件事。
+
+### API 与契约
+
+`OctaveAssets.statusOf(name)` → `{name, fromSource, compatible, installed, detail}`；
+**查无此内容 ⇒ `null`**（不编一个"全 false"的假状态 —— 零值守卫，与 `OctaveAssets` 其它查询一致）。
+⚠️ **调用契约**：`statusOf` 读的是**目录缓存** ⇒ 调用方先 `await catalog()`（与 `install()` 同款：
+它也先读目录）。这条**写进套件注释**，因为它是真实契约而不是实现细节。
+
+### ★ 顺手修两个**真 bug**（都是本轮实测抓到的，不是测试问题）
+
+1. **随站条目的 `kind` 被当成 `content` 冒充**：随站清单（`assets/manifest.json`）里条目的
+   `kind` 是**投送形态**（`js`/`oct`），而货架条目的 `content` 是**内容构成**（`m`/`src`/`oct`）
+   —— 这正是接缝 §2 收编过的"同名两义"（`kind` vs `kinds`）**在客户端又冒了一次头**。
+   实测症状：`statusOf('__delaunayn__').detail.content` 拿到 `['oct']`（形态值当内容值）。
+   ⇒ 只认真正的 `content`/`kinds`，两边都没有 ⇒ 空数组（"不知道装的是什么源"如实记）。
+2. **`installed` 只查 `forge:`/`layer:` 两个键** ⇒ **随站包永远显示"没装"**。
+   三种装载路径的键不同：货架包 `forge:<n>`、能力层 `layer:<n>`、**随站资产 `<n>`**（裸名）。
+   实测症状：`optim` 装完仍 `installed=false`。⇒ 三键都查。
+
+> 两个 bug 都是**先写判据、再被真实数据打脸**抓到的 —— 这正是"三属性"这件事的价值：
+> 把散在各处的隐含状态**逼成一个要正面回答的接口**，答不出来就暴露了。
+
+### 验收 `accept-content-attributes` **11 PASS / 0 FAIL**（隔离站点副本，**8761 未动**）
+
+```
+S1/S1b  statusOf 在产物里 + 返回带三属性
+S2a      带 src 的 7 个（可解析）条目 fromSource 全 true
+S2b      三属性不塌陷：存在 fromSource=true 且 compatible=true 的条目（两轴独立）
+S2c      查无此内容 ⇒ null（零值守卫）
+S3a/S3b  装 cgi 之前 installed=false → 之后 **true**（会话态真的会翻）
+★ S4     注入 arch 不符的条目 ⇒ compatible=false **且** install 拒（cause='arch-mismatch'）
+         —— 两个属性对**同一条事实**给一致的答案（这才是"不塌陷"的正面证据）
+★ S5/S5b fromSource 反向（不含 src ⇒ false）/ 正向对照（含 src ⇒ true）—— 判据有判别力
+```

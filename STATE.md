@@ -5,6 +5,21 @@
 
 ## 现在是什么（2026-10-14）
 
+- **★ 内容三属性：`fromSource` / `compatible` / `installed`（2026-10-16 用户点令「一个内容应该有三个属性」）**：
+  三条**各自独立、全部派生**（不手写、不加目录字段），统一入口 = `OctaveAssets.statusOf(name)`
+  （查无此内容 ⇒ **`null`**，不编假状态）：
+  · `fromSource` = `content` 含 `src`（加速件是源码，本构建无 mkoctfile 不编）—— 现役 **8 个包**为 true；
+  · `compatible` = 架构界（`arch` vs 宿主档）+ `requires`（若目录带）；
+  · `installed` = **会话态**（`loaded[…]`，三种装载键都查）。
+  **为什么分开**：三者可自由组合（带 src 的包"兼容但没编"；不兼容的条目**装了也没用**）——
+  塌陷成一根轴就答不了"能用吗 / 编了吗 / 装了吗"这三件不同的事。
+  **验收 `accept-content-attributes` 11/0**（S3b：`installed` 装前 false → 装后 true 真会翻；
+  ★ S4：同一条 arch 不符事实下 `compatible===false` **且** `install` 拒绝 `cause='arch-mismatch'`；
+  ★ S5/S5b：`fromSource` 正反都有判别力；S2c 查无 ⇒ null）。
+  **顺手修两个真 bug**（实测抓到的，非测试问题）：① 随站条目的 `kind`（投送形态）曾被当
+  `content`（内容构成）冒充；② `installed` 只查 `forge:`/`layer:` 键 ⇒ **随站包永远显示"没装"**。
+  术语 = `CONTEXT.md`「内容三属性」。
+
 - **★ 架构界落地（「楚河汉界」，2026-10-16 用户点令）**：**要 dlopen 进宿主的东西必须与宿主档
   同架构**。用户原话「wasm32 引擎只能装 32 的额外内容，IP 线和 64 线都要兼容 64 的额外内容」——
   **实测修正一处**：这条界**不是**"w64 档只收 wasm64 内容"（反例：**Pyodide 是 wasm32，却在 w64 档

@@ -255,6 +255,23 @@ JSPI 的"挂起"= wasm 栈整体让出，页面定时器照常跑（验收判据
 已经踩过多次，每次都是 SHA 一查就现形。
 **证据：** `build/check-deploy-sha.sh`
 
+### 内容三属性（fromSource / compatible / installed）
+
+**一条额外内容有三个**互不重叠**的属性**（用户点令 2026-10-16：「现在一个内容应该有三个属性，
+是否从源码构建与是否兼容与是否已安装」）。三条**各自独立、全部派生**（不手写、不加目录字段）：
+
+| 属性 | 问什么 | 判据 | 例子 |
+|---|---|---|---|
+| `fromSource` | 加速件是不是**源码**（本构建不编） | `content` 含 `src` | 现役 8 个包带 src（`optim`/`statistics`…）⇒ true |
+| `compatible` | 在**本宿主**上能不能用 | 架构界（`arch` vs 宿主档）+ `requires` | `arch:wasm64` 的条目在 wasm32 档 ⇒ false |
+| `installed`  | **这次会话**装没装 | 会话态（`loaded[…]` 三键） | 装 `cgi` 前 false → 后 true |
+
+**API**：`OctaveAssets.statusOf(name)` → `{fromSource, compatible, installed, detail}`；
+**查无此内容 ⇒ `null`**（不编一个"全 false"的假状态）。
+**为什么分开**（不许塌陷成一根轴）：三者可自由组合 —— 带 src 的包可以"兼容但没编"
+（8 个包就是这样）；能力层可以"不涉源码但已装"；不兼容的条目**装了也没用**。
+**证据：** `test/browser/accept-content-attributes.mjs`
+
 ### 架构界（「楚河汉界」）
 
 **要 dlopen 进宿主的东西，必须与宿主档同架构**（用户点令 2026-10-16：「wasm32 引擎只能装 32 的

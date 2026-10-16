@@ -70,6 +70,22 @@
 
     function log(msg) { if (global.console) console.log('[assets] ' + msg); }
 
+    // ── 宿主架构（单一产地；install 的架构界与 statusOf 的 compatible 都用它）────────
+    // 判据 = **选档结果**（`octaveLaneState.lane`，`w64*` ⇒ wasm64），与 `bridge/lane.js` 同源
+    // —— 不新增第二处判据。老宿主/测试（不传 lane）⇒ ''（不表态 ⇒ 不拦，向后兼容）。
+    function hostArchOf(opts) {
+      try {
+        var lane = '';
+        var st = (typeof window !== 'undefined' && window.octaveLaneState)
+               || (typeof self !== 'undefined' && self.octaveLaneState);
+        if (st && st.lane) lane = st.lane;
+        if (!lane && opts && opts.lane && opts.lane.lane) lane = opts.lane.lane;
+        if (/^w64/.test(lane)) return 'wasm64';   // w64 / w64-base / w64-threads
+        if (lane) return 'wasm32';                // base / threads
+        return '';
+      } catch (e) { return ''; }
+    }
+
     function fs() {
       var M = module || global.Module;
       if (!M || !M.FS) throw new Error('Module.FS 尚未就绪（Octave 还没起来？）');
@@ -440,6 +456,55 @@
       list: function () { return Object.keys(byName); },
       describe: function (name) { return byName[name] || null; },
       isLoaded: function (name) { return !!loaded[name]; },
+      // ★ **三属性状态**（2026-10-16 用户点令「一个内容应该有三个属性」）：
+      //   fromSource（是否从源码构建）· compatible（是否兼容本宿主）· installed（是否已安装）。
+      //   三条**各自独立**、**全部派生**（不手写、不新增目录字段）——判据如下：
+      //     · fromSource：包**带 `src`**（`content`/`kinds` 含 src）⇒ 加速件是"源码"
+      //       ⇒ 本构建**不编**（无 mkoctfile）⇒ 值 = true 表示"要用源码才有加速件/或有源码未编"。
+      //       ⚠️ 与 `content` 同源（`m`/`src`/`oct` 是包内源的构成）——**不是**第二份真值。
+      //     · compatible：**架构界**（`arch` 与宿主档一致；无 arch ⇒ 无架构概念 ⇒ 兼容）+
+      //       **Octave 版本约束**（`requires`，若目录带）。不兼容 ⇒ install 会响亮拒绝。
+      //     · installed：**会话态**（`loaded[name]`）—— 就是"这次会话装没装"。
+      //   返回对象；查无此包 ⇒ null（不编一个"全 false"的假状态）。
+      statusOf: function (name) {
+        // ⚠️ 取数优先级（实测踩到）：**目录条目优先** —— 随站清单（`byName`）里的条目用
+        //   `kind`（单值）而不是 `content`（多值数组），先取它会得到 `content: []`。
+        //   ⚠️ 目录还没读（`_catalogByName` 空，例如刚起的实例 / 注入实例）⇒ 回退随站清单，
+        //   且**该条目也在货架上时**以货架那条为准（货架才带 content/arch/requires）。
+        //   两边都没有 ⇒ null（查无此内容，不编假状态）。
+        var p = _catalogByName[name] || byName[name] || null;
+        if (!p) return null;
+        // ⚠️ 随站条目（`byName`）与货架条目（`_catalogByName`）形状不同：前者的 `kind` 是
+        //   **投送形态**（js/oct），不是内容构成 ⇒ 对它**不能**用 kind 冒充 content
+        //   （实测：`statusOf('__delaunayn__').detail.content` 曾拿到 ['oct'] 形态值）。
+        //   ⇒ 只认真正的 content/kinds；两边都没有 ⇒ 空数组（"不知道装的是什么源"如实记）。
+        var content = p.content || p.kinds || [];
+        var fromSource = content.indexOf('src') >= 0;
+        // compatible：架构（有 arch 才判）+ 版本约束（有 requires 才判）
+        var compatible = true, why = [];
+        var ha = hostArchOf(null);
+        if (p.arch && ha && p.arch !== ha) {
+          compatible = false; why.push('arch ' + p.arch + ' ≠ 宿主 ' + ha);
+        }
+        var reqs = p.requires || [];
+        if (reqs.length) {
+          // 版本判据交回目录装配期（R1 已按 fork 版本过滤）⇒ 这里只记"有约束"
+          why.push('requires: ' + reqs.join(','));
+        }
+        return {
+          name: name,
+          fromSource: fromSource,
+          compatible: compatible,
+          // installed 三处都要查：货架包 `forge:<n>`、能力层 `layer:<n>`、**随站资产** `<n>`
+          //   （三种装载路径的键不同 —— 只查前两种会让随站包永远显示"没装"，实测抓到）。
+          installed: !!(loaded['forge:' + name] || loaded['layer:' + name] || loaded[name]),
+          // 派生细节（诊断用；UI 不必读）
+          detail: { arch: p.arch || null, hostArch: ha || null,
+                    content: content, form: p.form || null,
+                    acceleration: fromSource ? 'not-built' : 'none-needed',
+                    why: why }
+        };
+      },
       loaded: function () { return Object.keys(loaded); },
       // ★ 能力层查询（接缝 §5④）：`{pyodide:{ready:true,kind:'python',version,bytes}}`
       layers: function () { return layers; },
@@ -529,18 +594,7 @@
         // ★ 架构界（裁决 2026-10-16 用户点令「楚河汉界」）：「要 dlopen 进宿主的东西」必须与
         //   宿主**同架构**，否则立即响亮拒绝（早失败优于"装上了跑不了" —— 与
         //   symbolic→pyodide 的硬依赖同款裁决）。只在两边都有值时才判（老站点/老宿主不拦）。
-        var hostArch = (function () {
-          try {
-            var lane = '';
-            var st = (typeof window !== 'undefined' && window.octaveLaneState)
-                   || (typeof self !== 'undefined' && self.octaveLaneState);
-            if (st && st.lane) lane = st.lane;
-            if (!lane && opts && opts.lane && opts.lane.lane) lane = opts.lane.lane;
-            if (/^w64/.test(lane)) return 'wasm64';   // w64 / w64-base / w64-threads
-            if (lane) return 'wasm32';                // base / threads
-            return '';                                // 不表态 ⇒ 不拦（向后兼容）
-          } catch (e) { return ''; }
-        })();
+        var hostArch = hostArchOf(opts);      // ← 单一产地（闭包级函数，statusOf 也用它）
         var chain = API.catalog().then(function (cat) {
           var plan = [], seen = {};
           (function walk (n) {
