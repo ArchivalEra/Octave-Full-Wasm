@@ -167,15 +167,23 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
                 continue
             # R4：kinds 与实际内容一致（无 'oct' ⇒ tarball 里不许有 .oct）
             kinds = p.get("kinds") or []
-            if "oct" not in kinds:
-                try:
-                    has, first = has_oct(blob)
-                except (OSError, tarfile.TarError) as e:
-                    problems.append("R4 %s 读不了 tarball：%r" % (name, e))
-                    continue
-                if has:
-                    problems.append("R4 %s kinds=%s 却说没有编译件，tarball 里躺着 %s"
-                                    % (name, kinds, first))
+            # R4 ★ **双向**（2026-10-16 补反方向，关 N2）：此前只有"声明无 oct ⇒ 字节不许有"，
+            #   反向（"声明**含** oct ⇒ 字节里**必须**有"）不存在 ⇒ 声明可以永久说谎。
+            #   实测活体：伪造一条 claim 说含 oct、字节里 0 个 .oct 的条目 ⇒ 旧闸门**放行**。
+            #   而真例就在货架上：`statistics 1.7.3` 声明 `kinds:['m','oct']` 而真字节 0 个 .oct
+            #   （13 个 src 文件；生产者自己的 `detect_kinds` 也判 `['m','src']`）。
+            try:
+                has, first = has_oct(blob)
+            except (OSError, tarfile.TarError) as e:
+                problems.append("R4 %s 读不了 tarball：%r" % (name, e))
+                continue
+            if "oct" not in kinds and has:
+                problems.append("R4 %s kinds=%s 却说没有编译件，tarball 里躺着 %s"
+                                % (name, kinds, first))
+            if "oct" in kinds and not has:
+                problems.append("R4 %s kinds=%s 说**含**编译件，但 tarball 里一个 `*.oct` 都没有"
+                                "（声明与字节矛盾 —— 判据：判别看包内实际带什么，不看主张）"
+                                % (name, kinds))
             # R5：两轴与 kinds 一致（content == kinds；货架包恒 form=pkg）
             content = p.get("content")
             if content is not None and list(content) != list(kinds):
@@ -255,6 +263,27 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
         a = arch_probe(d)
         if a:
             site_arch[lane_dir] = a
+    # R11（★ 2026-10-16，design-it-twice 的 ④ 方案发现 N1）：**宿主自己产出的目录也必须
+    #   过端口校验器**。为什么单列一条：在此之前，端口校验器只被用在**生产者表**（
+    #   `forge-catalog.py --upstream`）上 —— 宿主**豁免了自己**（`grep validate-content-list
+    #   check-forge-catalog.py` 此前为空）。⇒ 现役目录"恰好合规"是**巧合**而非判据：
+    #   同一个文件在"生产者身份"下会被查、在"宿主自产"下不查。
+    #   本判据复用产地的校验器（`build/extra-content/validate-content-list.py`，**不另写一份**），
+    #   以 `--site` 模式跑（站点态：url 必须同源相对）。
+    #   反向可证伪：把任意条目的 `arch` 改成 ""（或改成词表外的值）⇒ 必红（自证里有）。
+    try:
+        import importlib.util as _iu11
+        _vp = os.path.join(REPO, "build", "extra-content", "validate-content-list.py")
+        _spec11 = _iu11.spec_from_file_location("_vcl11", _vp)
+        _mod11 = _iu11.module_from_spec(_spec11)
+        _spec11.loader.exec_module(_mod11)
+        port_probs = _mod11.check_table(doc, site=True)
+        for _pp in port_probs[:8]:
+            problems.append("R11 宿主自产目录未过端口校验（%s）" % _pp)
+        if len(port_probs) > 8:
+            problems.append("R11 …还有 %d 条（共 %d）" % (len(port_probs) - 8, len(port_probs)))
+    except Exception as _e11:                       # 校验器不可用 ⇒ fail-closed
+        problems.append("R11 端口校验器不可用：%r（不拿'没查'当通过）" % (_e11,))
     for p_ in packs:
         want = p_.get("arch")
         if not want:
@@ -545,6 +574,34 @@ def _selftest():
         json.dump(_d0, open(_cat, "w"))
         cases.append(("★ R9 ③b：无 recipes 目录 ⇒ 能力层名集空 ⇒ 该 dep 判 typo 必红（不拿空当合法）",
                       lambda d=d: any("R9" in p for p in _r9_probs(d))))
+
+        # ★ R4 反方向（N2，2026-10-16）：claim 含 oct 而字节里 0 个 ⇒ 必红
+        def _r4_rev(d2):
+            import io as _io4, tarfile as _tf4
+            buf = _io4.BytesIO()
+            with _tf4.open(fileobj=buf, mode="w:gz") as tf:
+                b = b"function y=f(); end"
+                ti = _tf4.TarInfo("x/inst/f.m"); ti.size = len(b)
+                tf.addfile(ti, _io4.BytesIO(b))
+            blob = buf.getvalue()
+            return _mk_fixture(d2, [_pack(name="pkgx", sha=hashlib.sha256(blob).hexdigest(),
+                                          kinds=("m", "oct"))], blob_sha=blob)
+        d = _r4_rev(os.path.join(tmp, "r4_rev"))
+        cases.append(("★ R4 反向（N2）：kinds 说含 oct 但字节里 0 个 .oct ⇒ 必须报",
+                      lambda d=d: any("R4" in p and "含" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=tarball_has_oct)[0])))
+
+        # R11（★ N1）：宿主自产目录必须过端口校验器 —— 正反各一
+        d = _mk_fixture(os.path.join(tmp, "r11_ok"), [_pack(sha=good_sha)], blob_sha=data)
+        cases.append(("R11：宿主自产目录合规 ⇒ 不报（现役形状）",
+                      lambda d=d: _r9_probs(d) == []))
+        d = _mk_fixture(os.path.join(tmp, "r11_bad"), [_pack(sha=good_sha)], blob_sha=data)
+        _cat = os.path.join(d, "site", "assets", "forge-catalog.json")
+        _d0 = json.load(open(_cat))
+        _d0["packs"][0]["arch"] = ""            # ← 词表外的值（N2 的真形态就是空串）
+        json.dump(_d0, open(_cat, "w"))
+        cases.append(("★ R11 反向：宿主自产目录的 arch 是空串 ⇒ 必须报（关 N1 后门）",
+                      lambda d=d: any("R11" in p for p in _r9_probs(d))))
 
         # R10（架构界，2026-10-16）—— 用**真字节**造夹具（真 wasm side module）
         def _mk_oct(arch):

@@ -133,6 +133,7 @@ def derive_arch(tar_path, kinds=None):
     import tarfile
     import io as _io
     ar = None
+    n_oct = 0                      # ★ 见到几个 `.oct`（N2 守卫用）
     problems = []
     try:
         tf = tarfile.open(tar_path, "r:gz")
@@ -142,6 +143,7 @@ def derive_arch(tar_path, kinds=None):
         for m in tf.getmembers():
             if not (m.isfile() and m.name.endswith(".oct")):
                 continue
+            n_oct += 1
             try:
                 fh = tf.extractfile(m)
                 data = fh.read() if fh else b""
@@ -159,7 +161,25 @@ def derive_arch(tar_path, kinds=None):
             elif ar != a:
                 problems.append("包内 .oct 架构**混杂**：%s 是 %s，先前是 %s（不许猜一个值）"
                                 % (m.name, a, ar))
+    # ★ **N2 守卫**（2026-10-16，design-it-twice 的 ④ 方案发现）：调用方按 `kinds` 里的
+    #   `oct` 声明**要求**我们给出架构；若声明说含 oct 而字节里**一个都没有**，此前会返回
+    #   `("", [])`（问题清单空）⇒ 守卫不触发 ⇒ **空串被写进目录**（实测活体：
+    #   `statistics 1.7.3` 就是这种声明，而真字节 0 个 `.oct`）。
+    #   ⇒ 现在必须明说：声明与字节矛盾（判据同 R4：看字节，不看主张）。
+    if (kinds and "oct" in kinds) and n_oct == 0:
+        problems.append("声明含 `oct` 但包内**一个 `.oct` 都没有**（%d 个文件看过）"
+                        "⇒ 声明与字节矛盾，不许写一个猜的架构" % len(list(_all_names(tar_path))))
     return (ar or "", problems)
+
+
+def _all_names(tar_path):
+    """tar 成员名（只为上面那条报错里的计数；读不到 ⇒ 空）。"""
+    import tarfile
+    try:
+        with tarfile.open(tar_path, "r:gz") as tf:
+            return [m.name for m in tf.getmembers()]
+    except (OSError, tarfile.TarError):
+        return []
 
 def resolve(shelf, octave, allow_unverified, cache=None):
     """货架 → 上架清单。返回 (packs, skipped)。**纯函数**（自证直接喂它）。"""
