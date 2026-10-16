@@ -203,6 +203,32 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             arch_val, arch_problems = derive_arch(src, _kinds)
         elif need_arch:
             arch_problems = ["包字节不在本地缓存（%s）⇒ 派生不了架构" % src]
+        # ★ versions[] 候选集（内容仓 mail/020 兑现 --emit 侧后的宿主侧消费）：
+        #   货架档案的 `versions` 数组（全部**兼容本 Octave** 的版本）→ 站点态候选。
+        #   staged 判定 = **该版字节真在站点**（装配态的事实：staged = "字节在这"，
+        #   不是生产者态的"探过包"—— 同一版在它处已探、在我处未 stage ⇒ 站点态如实 withheld）。
+        #   派生轴（form/content）逐候选从该版**自己的** kinds 派生（判据同条目级：
+        #   看包内实际带什么）；arch 不在此处派生（含 oct 的候选需拆包，成本高 ——
+        #   当前货架无含 oct 的包；等第一个真用例再加，如实留缺口）。
+        _cands = []
+        for _v2 in (e.get("versions") or []):
+            if not octave_ok(octave, _v2.get("requires")):
+                continue                       # 不兼容本 Octave 的版本不进候选集（与 pick_version 同判据）
+            _vurl = "assets/forge/%s-%s.tar.gz" % (name, _v2["version"])
+            _vsrc = os.path.join(cache, "%s-%s.tar.gz" % (name, _v2["version"]))
+            _vk = _v2.get("kinds") or []
+            if os.path.isfile(_vsrc):
+                _cands.append({"version": _v2["version"], "sha256": _v2["sha256"],
+                               "url": _vurl, "size": _v2.get("size") or 0,
+                               "stage": "staged",
+                               "form": derive_form(_vk), "content": list(_vk),
+                               "upstream_url": _v2.get("url", "")})
+            else:
+                _cd = {"version": _v2["version"], "sha256": _v2["sha256"],
+                       "stage": "withheld", "withheld_cause": "bytes-not-staged"}
+                if _v2.get("requires"):
+                    _cd["requires"] = list(_v2["requires"])
+                _cands.append(_cd)
         packs.append({
             "name": name,
             "version": v["version"],
@@ -210,6 +236,7 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             "sha256": v["sha256"],
             "url": "assets/forge/%s-%s.tar.gz" % (name, v["version"]),  # **同源相对路径**
             "upstream_url": v.get("url", ""),
+            "versions": _cands,
             "deps": e.get("depends") or [],
             # 端口 schema 2 两轴（接缝 §2）：`form`/`content` 从字节/kinds **派生**；
             # `kinds` **保留为兼容视图**（旧 loader 与旧套件照读 —— 判据：不改它们也全绿）。
@@ -428,7 +455,47 @@ def shelf_commit():
         return ""
 
 
-def catalog_doc(packs, octave, gen, entries_extra=None):
+
+def adapt_versions_for_site(entry, site, staged_check):
+    """把生产者态的 `versions[]` 改成**站点态**（内容仓 mail/020 §④2 的"staged 语义对表"）。
+
+    两段式（与条目级同款，mail/005 裁决）：
+      · 生产者态的候选 `url` 是**上游绝对 URL**（重取入口）；
+      · 站点态必须**同源相对**（COEP 拦跨域）⇒ 逐候选改写
+        `assets/forge/<name>-<version>.tar.gz`。
+    **staged 的重算（它 020 §④2 请裁决）**：装配态的 staged = **该版字节真被 stage 进站点**
+    （`staged_check(site, url)`，与条目级 R3 同判据）——不是照抄生产者态的 staged。
+    两种态**各自如实**（生产者态 staged = "探过包"；站点态 staged = "字节在这"）——
+    同一版在它处已探、在我处未 stage ⇒ 站点态如实转 `withheld`（withheld_cause="bytes-not-staged"）。
+    生产者态是 withheld 的**直接照抄**（它没探 ⇒ 我这边也没有它的派生轴，不许编）。
+    **站点上没有该版字节却要写 staged ⇒ 是谎言** ⇒ 反向断言在 check-forge-catalog 候选化里。
+    """
+    vs = entry.get("versions")
+    if not isinstance(vs, list) or not vs:
+        return None                      # 没有 versions[] 的表（老表/货架路径）⇒ 不加键
+    out = []
+    for c in vs:
+        d = {k: v for k, v in c.items()}
+        ver = d.get("version")
+        if not ver:
+            continue
+        local_url = "assets/forge/%s-%s.tar.gz" % (entry.get("name"), ver)
+        if d.get("stage") == "staged":
+            if staged_check(site, local_url):
+                d["url"] = local_url          # 同源改写（重取入口留在 upstream_url 里，若生产者给了）
+                d.setdefault("upstream_url", c.get("url", ""))
+            else:
+                d = {"version": ver, "sha256": d.get("sha256", ""),
+                     "stage": "withheld", "withheld_cause": "bytes-not-staged"}
+                if c.get("requires"):
+                    d["requires"] = list(c["requires"])
+        else:                                  # 生产者态 withheld ⇒ 照抄（不带派生轴）
+            d.pop("form", None); d.pop("content", None); d.pop("arch", None)
+            d.pop("url", None)                  # 生产者的绝对 URL 在 withheld 上没有意义（不可取）
+        out.append(d)
+    return out or None
+
+def catalog_doc(packs, octave, gen, entries_extra=None, site=None):
     extra = list(entries_extra or [])
     # ★ 依赖边**全部来自数据**（接缝 §2 的落法，2026-10-15 内容仓 mail/011 起）：
     #   能力层需求由**生产者**在货架档案的 `depends` 里声明（如 `symbolic` 的
@@ -438,6 +505,15 @@ def catalog_doc(packs, octave, gen, entries_extra=None):
     #   而"加内容 = 加一行数据、不改代码"正是本协议的全部意义（内容仓 mail/011）。
     #   ⚠️ 前置（内容仓 mail/012 认下）：边在**新 pin** 里才有，所以删硬编码必须与 bump
     #   `shelf/` pin **同批** —— 否则 `resolve()` 从旧 pin 读到空 `depends` ⇒ 静默断。
+    # ★ versions[] 装配态（内容仓 mail/020 兑现 --emit 侧后）：条目级候选集透传进站点表，
+    #   url 同源改写、staged 按**站点字节**重算（见 adapt_versions_for_site）。老表（无 versions）
+    #   零影响 —— 键只在有候选集时出现（向后兼容）。
+    if site is not None:
+        for _p in list(packs) + extra:
+            _vs = adapt_versions_for_site(_p, site,
+                                          lambda s, u: os.path.isfile(os.path.join(s, u)))
+            if _vs is not None:
+                _p["versions"] = _vs
     return {
         "schema": 2,          # 接缝 §2：schema 2 加 form/content 两轴（kinds 留作兼容视图）
         "octave": octave,
@@ -670,7 +746,7 @@ def main(argv):
                       "（站点闸门 R7b 会拦 404）；%s" % (len(yents), up), file=sys.stderr)
             cap.extend(yents)
             print("  上游表并入 %d 条：%s" % (len(yents), up))
-    doc = catalog_doc(packs, octave, "build/forge-catalog.py", entries_extra=cap)
+    doc = catalog_doc(packs, octave, "build/forge-catalog.py", entries_extra=cap, site=a.site)
     bad += write_catalog(a.site, doc, a.check)
     for c in cap_problems:
         print("  note: %s" % c, file=sys.stderr)

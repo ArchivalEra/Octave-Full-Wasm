@@ -12,6 +12,20 @@
    "sha256": "4187eb2abec69c5735527fe3d6a25b2010fccede199fe556e242677ed991cf43",
    "url": "assets/forge/cgi-0.1.2.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/cgi-0.1.2.tar.gz",
+   "versions": [
+    {
+     "version": "0.1.2",
+     "sha256": "4187eb2abec69c5735527fe3d6a25b2010fccede199fe556e242677ed991cf43",
+     "url": "assets/forge/cgi-0.1.2.tar.gz",
+     "size": 0,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/cgi-0.1.2.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -28,6 +42,225 @@
    "sha256": "86aef8eddb8f39025cc32a6a385157dc8adbc83417ca25b1e95681c7dae08b47",
    "url": "assets/forge/datatypes-1.4.2.tar.gz",
    "upstream_url": "https://github.com/pr0m1th3as/datatypes/releases/download/release-1.4.2/datatypes-1.4.2.tar.gz",
+   "versions": [
+    {
+     "version": "1.4.2",
+     "sha256": "86aef8eddb8f39025cc32a6a385157dc8adbc83417ca25b1e95681c7dae08b47",
+     "url": "assets/forge/datatypes-1.4.2.tar.gz",
+     "size": 0,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://github.com/pr0m1th3as/datatypes/releases/download/release-1.4.2/datatypes-1.4.2.tar.gz"
+    },
+    {
+     "version": "1.4.1",
+     "sha256": "946b97a9c96183338a3aab500a3899a00f51a782638ad188d706cfae033b21f1",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.4.0",
+     "sha256": "a317404b914193c6e8568dba7aad279ab1d2b2de37e3d70e004e318226d3bb12",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.3.4",
+     "sha256": "c77bdcfad9db6562225655f442f95a6c8899381216cb42bc58c84b7e9c08d53d",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.3.3",
+     "sha256": "6c9aa5cacc2e39ceedc7a5f731a9fcb9e01e4066a97670c203e1b09b88d289eb",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.3.2",
+     "sha256": "9f89348b5ad75a2df4cac2d4ab47be35479f03ad256c9cc62aadbb534106057f",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.3.1",
+     "sha256": "c43fb535b56877bce775db0bf086d144a42aaa4c86c46e1f2604241a1d9f238b",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.3.0",
+     "sha256": "3670eedd6af6c5cefe699d6796749d7eefb73fe08cda8504f53f126fc828d6fd",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.7",
+     "sha256": "159340dc37590b4bd993978c037730bdf09161dd11dd28a3b6b76ba4ed7ad644",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.6",
+     "sha256": "08b02c9dd072c62f9c6a4061e715403b212cc327104702be78b9824c137a1f09",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.5",
+     "sha256": "632d3acd525ad4f6a971dc2daa32db4d30d4408bcff23f0bc4298f94658b51d7",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.4",
+     "sha256": "f077ab2b4d521a0631e1e9d086f9699faca4c01af93f8e2e416a278198699003",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.3",
+     "sha256": "2dbd6e0140354c069227412c495cbde975d088ca71d964117371735be4646c72",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.2",
+     "sha256": "73bd1cf57984bb0a9851f1aa1f72c7f82d05adbb9134ec5a02e415bbc7516241",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.1",
+     "sha256": "269ece90dd4115e99f4764b77313110054ad52a7145b1b905c2d7eee713ac26d",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.2.0",
+     "sha256": "f054213bfe79b604c97eab3d738624b7fdd5548b3c9631acf6222d97016e9861",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.9",
+     "sha256": "0f343bfe03267b69f696c8e964c2bea0480751c40e5c6999d419f98fbd075ef4",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.8",
+     "sha256": "83258f0a587f014f2fb7ddb477cdb4fcc25cb92bf6ebdf8c046f64178a0ed4d4",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.7",
+     "sha256": "2320c964c6f640bc07f553ba12acab602fd20c3ab805b746c419be80eeb53e0b",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.6",
+     "sha256": "cdd5679b7246d08d3d1e1ff4305c2e87d93b9dfa1ab3a6aebef726b5153620ff",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.5",
+     "sha256": "d684b9cab257b6bdaa511525bad2044e7addb0902863183ca9609a74a51cb736",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.4",
+     "sha256": "96ee22096045e8e3269d73c095b8a06172ddbfb14907bbd6dae77b278cfeab35",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.3",
+     "sha256": "9eb707cc8a3847cc62eb4ea73a93bf4d5bdd8e07045fb760c8ee614ae1c6c4eb",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.2",
+     "sha256": "73f39a59fa04ddcd664b80f0f6fb20ee3669c6311ee3d3b827d0b640903b17f1",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.1",
+     "sha256": "b9105d73abc2af3eca191c65aaaa1a8ecd27cf857c4de00c7ef2f71528a8613d",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.1.0",
+     "sha256": "5c9670352a5b3fa5f93b9b4b2bcb7ec72a09d6cdfa8fd2d1acb87f98c9652938",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.9",
+     "sha256": "56a26dc0071f596799b512c535922b6de4bd034606a787f02b64bcc8db2a3592",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.8",
+     "sha256": "9713acb33fcdb3f5c7870dbf2c3b1ecb361507a4e6cd4668af3078fff7807263",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.7",
+     "sha256": "b9c60ef0c51b4aff2f032d385d7d6797ee948e5ff29e934b178952f97b83d113",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.6",
+     "sha256": "321e6baa405538b71f0364f3376ca182f44a3ec46b2a68418d05885c1c4c62aa",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.5",
+     "sha256": "8224849361e2d758dd97a028c5dd2de3f84e70915b47741a9f27993d90ada3a3",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.4",
+     "sha256": "c8c3d2ce0a54b5a7b122628676c665444973fdc088d3a94af74204fd9162ec74",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.3",
+     "sha256": "52f204c0ec0c975c11e0f0607bf18fee3b634cca4498b927a4d5ca3827be5f01",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.2",
+     "sha256": "0cbf9171e366d2cfd067ed8089a97c3320b3475a88f63680c3ceeaaca55976f3",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "1.0.1",
+     "sha256": "098ba1e254202d6ac349bf4b095bec3162ae9241979ff04809361115a4e2eec0",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -46,6 +279,21 @@
    "sha256": "dbc1658845c97d2d6687c1490a61b43d359913d33420e475b659f335f7a34360",
    "url": "assets/forge/geometry-4.1.0.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/geometry-4.1.0.tar.gz",
+   "versions": [
+    {
+     "version": "4.1.0",
+     "sha256": "dbc1658845c97d2d6687c1490a61b43d359913d33420e475b659f335f7a34360",
+     "url": "assets/forge/geometry-4.1.0.tar.gz",
+     "size": 113949,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/geometry-4.1.0.tar.gz"
+    }
+   ],
    "deps": [
     "matgeom"
    ],
@@ -66,6 +314,20 @@
    "sha256": "6b344f870315bf2742ca88c0feb5c3da8835b4f4cbd2f8a2d793af798405f920",
    "url": "assets/forge/matgeom-1.2.4.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/matgeom-1.2.4.tar.gz",
+   "versions": [
+    {
+     "version": "1.2.4",
+     "sha256": "6b344f870315bf2742ca88c0feb5c3da8835b4f4cbd2f8a2d793af798405f920",
+     "url": "assets/forge/matgeom-1.2.4.tar.gz",
+     "size": 572364,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/matgeom-1.2.4.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -82,6 +344,21 @@
    "sha256": "da4671ee3661278330c02a59171f78e4df8a3a159a178c7c0727f3c7787118bb",
    "url": "assets/forge/miscellaneous-1.3.3.tar.gz",
    "upstream_url": "https://github.com/gnu-octave/octave-miscellaneous/releases/download/release-1.3.3/miscellaneous-1.3.3.tar.gz",
+   "versions": [
+    {
+     "version": "1.3.3",
+     "sha256": "da4671ee3661278330c02a59171f78e4df8a3a159a178c7c0727f3c7787118bb",
+     "url": "assets/forge/miscellaneous-1.3.3.tar.gz",
+     "size": 110600,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://github.com/gnu-octave/octave-miscellaneous/releases/download/release-1.3.3/miscellaneous-1.3.3.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -100,6 +377,21 @@
    "sha256": "d2d2bac3f1d790428df2f7a396c6a1ffed93e91e29ab13678f641deaf021a216",
    "url": "assets/forge/nan-3.7.2.tar.gz",
    "upstream_url": "https://pub.ista.ac.at/~schloegl/matlab/NaN/nan-3.7.2.tar.gz",
+   "versions": [
+    {
+     "version": "3.7.2",
+     "sha256": "d2d2bac3f1d790428df2f7a396c6a1ffed93e91e29ab13678f641deaf021a216",
+     "url": "assets/forge/nan-3.7.2.tar.gz",
+     "size": 257606,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://pub.ista.ac.at/~schloegl/matlab/NaN/nan-3.7.2.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -118,6 +410,21 @@
    "sha256": "59fb3771a2d2a2313447532c59a2e000a6a7bb7a677f3ef8183fbaaab5493a14",
    "url": "assets/forge/optim-1.6.3.tar.gz",
    "upstream_url": "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz",
+   "versions": [
+    {
+     "version": "1.6.3",
+     "sha256": "59fb3771a2d2a2313447532c59a2e000a6a7bb7a677f3ef8183fbaaab5493a14",
+     "url": "assets/forge/optim-1.6.3.tar.gz",
+     "size": 422679,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz"
+    }
+   ],
    "deps": [
     "statistics",
     "struct"
@@ -153,6 +460,20 @@
    "sha256": "4bcb64743972693f04ed6d2fea4906b38a9353f1b80c6e6f2d0bc0f6f8cf3a07",
    "url": "assets/forge/quaternion-2.4.2.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/quaternion-2.4.2.tar.gz",
+   "versions": [
+    {
+     "version": "2.4.2",
+     "sha256": "4bcb64743972693f04ed6d2fea4906b38a9353f1b80c6e6f2d0bc0f6f8cf3a07",
+     "url": "assets/forge/quaternion-2.4.2.tar.gz",
+     "size": 47838,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/quaternion-2.4.2.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -169,6 +490,20 @@
    "sha256": "af886877797c3a9c8a36ce7d94613c1059f79fab4883429e7b32a3b01e03d7a6",
    "url": "assets/forge/splines-1.3.5.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/splines-1.3.5.tar.gz",
+   "versions": [
+    {
+     "version": "1.3.5",
+     "sha256": "af886877797c3a9c8a36ce7d94613c1059f79fab4883429e7b32a3b01e03d7a6",
+     "url": "assets/forge/splines-1.3.5.tar.gz",
+     "size": 34053,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/splines-1.3.5.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -185,6 +520,27 @@
    "sha256": "cef3c090aee13eaad50b4b9beb2f003e8756cbf018d2be7233326de9696cdf7e",
    "url": "assets/forge/statistics-1.7.7.tar.gz",
    "upstream_url": "https://github.com/gnu-octave/statistics/releases/download/release-1.7.7/statistics-1.7.7.tar.gz",
+   "versions": [
+    {
+     "version": "1.7.7",
+     "sha256": "cef3c090aee13eaad50b4b9beb2f003e8756cbf018d2be7233326de9696cdf7e",
+     "url": "assets/forge/statistics-1.7.7.tar.gz",
+     "size": 1437955,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://github.com/gnu-octave/statistics/releases/download/release-1.7.7/statistics-1.7.7.tar.gz"
+    },
+    {
+     "version": "1.7.3",
+     "sha256": "570d52af975ea9861a6fb024c23fc0f403199e4b56d7a883ee6ca17072e26990",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -203,6 +559,21 @@
    "sha256": "fccea7dd84c1104ed3babb47a28f05e0012a89c284f39ab094090450915294ce",
    "url": "assets/forge/struct-1.0.18.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/struct-1.0.18.tar.gz",
+   "versions": [
+    {
+     "version": "1.0.18",
+     "sha256": "fccea7dd84c1104ed3babb47a28f05e0012a89c284f39ab094090450915294ce",
+     "url": "assets/forge/struct-1.0.18.tar.gz",
+     "size": 64113,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/struct-1.0.18.tar.gz"
+    }
+   ],
    "deps": [],
    "form": "pkg",
    "content": [
@@ -221,6 +592,44 @@
    "sha256": "8eb492408ec5aafe4e196ec5bdbd2298e0ac068d2b754948f34b9082b9126b37",
    "url": "assets/forge/symbolic-3.2.2.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/symbolic-3.2.2.tar.gz",
+   "versions": [
+    {
+     "version": "3.2.2",
+     "sha256": "8eb492408ec5aafe4e196ec5bdbd2298e0ac068d2b754948f34b9082b9126b37",
+     "url": "assets/forge/symbolic-3.2.2.tar.gz",
+     "size": 276452,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/symbolic-3.2.2.tar.gz"
+    },
+    {
+     "version": "3.2.1",
+     "sha256": "d1a6ef4d12c48fc4412ceec380f398a6cd5180e518c131ba12683e9eb8f75460",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "3.1.1",
+     "sha256": "988d2f356ea63488ad8d1c39434760ac24ee2af4efae896c1fd93a5df934532b",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "3.0.1",
+     "sha256": "ba99c631eb14ca51cc376e7c3e4c953ac92c060011b32f2c557354d9d0ff9ad4",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    },
+    {
+     "version": "3.0.0",
+     "sha256": "d0181ec356a87091c7fa88ab52a3430ea69e97f9eab90e28c937f2ee5fcb27a9",
+     "stage": "withheld",
+     "withheld_cause": "bytes-not-staged"
+    }
+   ],
    "deps": [
     "pyodide"
    ],
@@ -239,6 +648,21 @@
    "sha256": "54f3bce33dd439fea60e7d36252c04d6c6b313a632de6ce204f61ed6cfc17ddd",
    "url": "assets/forge/tsa-4.6.3.tar.gz",
    "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/tsa-4.6.3.tar.gz",
+   "versions": [
+    {
+     "version": "4.6.3",
+     "sha256": "54f3bce33dd439fea60e7d36252c04d6c6b313a632de6ce204f61ed6cfc17ddd",
+     "url": "assets/forge/tsa-4.6.3.tar.gz",
+     "size": 85403,
+     "stage": "staged",
+     "form": "pkg",
+     "content": [
+      "m",
+      "src"
+     ],
+     "upstream_url": "https://downloads.sourceforge.net/project/octave/Octave%20Forge%20Packages/Individual%20Package%20Releases/tsa-4.6.3.tar.gz"
+    }
+   ],
    "deps": [
     "nan"
    ],
