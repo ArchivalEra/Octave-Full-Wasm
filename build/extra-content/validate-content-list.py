@@ -56,6 +56,7 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
     form_enum = _enum(schema, "$defs", "entry", "properties", "form", "enum")
     content_enum = _enum(schema, "$defs", "entry", "properties", "content", "items", "enum")
     consumer_enum = _enum(schema, "$defs", "entry", "properties", "consumer", "items", "enum")
+    arch_enum = _enum(schema, "$defs", "entry", "properties", "arch", "enum")
     entry_keys = set(schema["$defs"]["entry"]["properties"].keys())
 
     probs = []
@@ -127,6 +128,25 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
         if "license" in e and not isinstance(e["license"], (str, dict)):
             probs.append("%s license 必须是字符串或对象（自由文本即可 —— 裁决① 2026-10-15："
                          "不收紧成 SPDX 枚举）：得到 %s" % (tag, type(e["license"]).__name__))
+        # arch（裁决 2026-10-16，用户点令「楚河汉界」）：**只在"要 dlopen 进宿主的东西"上标**。
+        #   三档语义（schema 的 arch 描述里也有全文）：
+        #     ① 纯 .m（content 不含 oct，且 form 不是 oct/octdir）⇒ **不许带** arch（无架构概念）
+        #     ② 含 .oct ⇒ **必须带**，取值 ∈ 词表
+        #     ③ 能力层（form:tree）⇒ **不许带**（自带运行时，架构与宿主无关）
+        if "arch" in e:
+            if e["arch"] not in arch_enum:
+                probs.append("%s arch=%r 不在词表 %s 里" % (tag, e["arch"], arch_enum))
+            needs_arch = ("oct" in (e.get("content") or [])) or (e.get("form") in ("oct", "octdir"))
+            if not needs_arch:
+                why = ("能力层（form:tree）自带运行时，架构与宿主无关" if e.get("form") == "tree"
+                       else "纯 .m 条目没有架构概念（任何档都能装）")
+                probs.append("%s 带了 arch=%r 但本条目**不需要架构标注** —— %s（裁决 2026-10-16）"
+                             % (tag, e["arch"], why))
+        else:
+            needs_arch = ("oct" in (e.get("content") or [])) or (e.get("form") in ("oct", "octdir"))
+            if needs_arch:
+                probs.append("%s 含 .oct（content/form 指明）却**没带 arch** —— 要 dlopen 进宿主的东西"
+                             "必须标架构（裁决 2026-10-16）" % tag)
         # 站点态：url 必须同源相对（COEP 拦跨域）
         if site and isinstance(e.get("url"), str) and re.match(r"^[a-z]+://", e["url"]):
             probs.append("%s 站点态 url 是绝对地址（%s…）⇒ 必须同源相对"
@@ -208,6 +228,35 @@ def selftest():
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
              "license": 42}]}, schema=schema), False)
+    # arch（裁决 2026-10-16「楚河汉界」）：三档语义 —— 正反各钉住
+    add("★ arch ①：纯 .m 不带 arch ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"]}]}, schema=schema), True)
+    add("★ arch ①反向：纯 .m 带 arch ⇒ 必须报（无架构概念的东西不许标）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"], "arch": "wasm32"}]}, schema=schema), False)
+    add("★ arch ②：含 .oct 且带 arch ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m", "oct"], "arch": "wasm64"}]}, schema=schema), True)
+    add("★ arch ②反向：含 .oct 却不带 arch ⇒ 必须报（要 dlopen 的必须标）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m", "oct"]}]}, schema=schema), False)
+    add("★ arch ②：form=oct 单文件带 arch ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "oct", "content": [], "arch": "wasm64"}]}, schema=schema), True)
+    add("★ arch ③反向：能力层带 arch ⇒ 必须报（自带运行时，架构与宿主无关）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "cap", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "tree", "content": [], "arch": "wasm32"}]}, schema=schema), False)
+    add("★ arch 词表：wasm128 未知 ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["oct"], "arch": "wasm128"}]}, schema=schema), False)
 
     # ② 该报的必须报
     add("★ 空表 ⇒ 必须报", lambda: check_table(

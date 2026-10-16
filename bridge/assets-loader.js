@@ -53,6 +53,7 @@
     var _catalog = null;        // 已读到的货架目录（缓存）
     var _catalogP = null;       // 读取中的 promise（去重）
     var _catalogByName = {};    // name → pack 条目
+    var _catalogSourceOverride = null;   // ★ 测试注入面（见 catalog() 上方注释）
     var installSeen = {};       // 安装去重（同实例内）
     // ── 给 `.m` 侧观察的**安装结果账**（T4，2026-10-12）──────────────────────────
     //   为什么需要：`pkg load <货架上的包>` 在 `.m` 侧只能"点火"（`__web_run_js__` 即返），
@@ -467,9 +468,31 @@
       // 「货架」= 站点上的 `assets/forge-catalog.json`（构建期由 build/forge-catalog.py
       // 从货架仓 `shelf/` 生成；版本按 **fork 的 Octave 版本**过滤、字节 sha 逐条核过）。
       // 客户端**读它但不下载任何包字节** —— 谁 install 谁才拉。
+      // ★ **测试注入面**（2026-10-16，架构界套件要它）：让测试**在不碰站点**的前提下
+      //   把一份合成目录喂进来（`accept-arch-boundary` 的 A3/A4 靠它验"arch 不符 ⇒ 响亮拒绝"）。
+      //   为什么是公开方法而不是"内部钩子"：判据做在客户端，而客户端的输入就是目录 ⇒
+      //   "能换目录来源"是这个模块**本就该有的缝**（accept-install-verdict 的 V3/V4 也只差它）。
+      //   ⚠️ 只影响**本实例**（与 manifest/loaded 同款：全部状态收进工厂闭包）。
+      __catalogSource: function (src) { _catalogSourceOverride = src || null; },
       catalog: function () {
         if (_catalog) return Promise.resolve(_catalog);
         if (_catalogP) return _catalogP;
+        if (typeof _catalogSourceOverride === 'function') {
+          // 注入路径：本源直接给一份目录对象（不 fetch）——同样走"填缓存 + 记账"两步，
+          // 这样注入目录与真目录在**后续所有判据**上同权（不是旁路）。
+          _catalogP = Promise.resolve()
+            .then(function () { return _catalogSourceOverride(); })
+            .then(function (c) {
+              _catalog = c || { packs: [] };
+              var byName3 = {};
+              (_catalog.packs || []).forEach(function (p) { byName3[p.name] = p; });
+              _catalogByName = byName3;
+              catalogState = 'ok';
+              publish();
+              return _catalog;
+            });
+          return _catalogP;
+        }
         // ⚠️ 传**裸路径**（fetchJSON 内部会 withBase）—— 曾经这里又 withBase 一次，
         //    base 为空时无害、非空时双拼（`/base//base/assets/…` ⇒ 404）。
         //    由 accept-install-verdict 的 V3（同源子路径 base）首次暴露。
@@ -497,10 +520,27 @@
       // ⚠️ 为什么不调核心 `pkg install`：本构建下它坏（`dirlist(3): out of bound 2`，T0 spike
       //    实测）⇒ 由本函数**直写**（正是布局复现那条路；对拍断见验收套件）。
       // ⚠️ 只支持 kinds 里没有 'oct' 的包（纯 .m）：含预编译 .oct 的包要宿主预编 ⇒ v2。
+      //     ★ 2026-10-16 起：**含 .oct 的条目进目录时带 `arch`**，且这里会先判它与宿主档是否
+      //     一致（不一致 ⇒ 立即响亮拒绝，cause='arch-mismatch'）。判据见下面的 hostArch()。
       install: function (name, opts) {
         opts = opts || {};
         var onProgress = opts.onProgress || function () {};
         installSeen = installSeen || {};
+        // ★ 架构界（裁决 2026-10-16 用户点令「楚河汉界」）：「要 dlopen 进宿主的东西」必须与
+        //   宿主**同架构**，否则立即响亮拒绝（早失败优于"装上了跑不了" —— 与
+        //   symbolic→pyodide 的硬依赖同款裁决）。只在两边都有值时才判（老站点/老宿主不拦）。
+        var hostArch = (function () {
+          try {
+            var lane = '';
+            var st = (typeof window !== 'undefined' && window.octaveLaneState)
+                   || (typeof self !== 'undefined' && self.octaveLaneState);
+            if (st && st.lane) lane = st.lane;
+            if (!lane && opts && opts.lane && opts.lane.lane) lane = opts.lane.lane;
+            if (/^w64/.test(lane)) return 'wasm64';   // w64 / w64-base / w64-threads
+            if (lane) return 'wasm32';                // base / threads
+            return '';                                // 不表态 ⇒ 不拦（向后兼容）
+          } catch (e) { return ''; }
+        })();
         var chain = API.catalog().then(function (cat) {
           var plan = [], seen = {};
           (function walk (n) {
@@ -517,6 +557,20 @@
             plan.push(p);
           })(name);
           onProgress({ phase: 'plan', plan: plan.map(function (p) { return p.name; }) });
+          // ★ 架构检查（含在闭包里，覆盖 deps 闭包里的每一条 —— 能力层条目不带 arch ⇒ 自然豁免）
+          if (hostArch) {
+            for (var _pi = 0; _pi < plan.length; _pi++) {
+              var _pa = plan[_pi].arch;
+              if (_pa && _pa !== hostArch) {
+                var _m = '架构不匹配：' + plan[_pi].name + ' 需要 ' + _pa
+                       + '，当前宿主是 ' + hostArch + ' 档（它带要在宿主里 dlopen 的 .oct，必须同架构）';
+                var _err = new Error(_m);
+                _err.__verdict__ = { state: 'failed', name: plan[_pi].name,
+                                     cause: 'arch-mismatch', why: _m, retriable: false };
+                throw _err;
+              }
+            }
+          }
           // ★ planOnly（©5 第③步）：**只算账不下载**（UI 预演"要拉多少"）。零网络字节。
           //   判据：page.on('response') 在该调用期间**没有任何**对 assets/pkg|assets/forge 的响应。
           if (opts.planOnly) {
@@ -609,6 +663,7 @@
           installError[name] = msg;
           publish();
           var st = 'failed', why = msg, cause = 'unknown';
+          if (/^架构不匹配：/.test(msg))               { st = 'failed';       cause = 'arch-mismatch'; }
           if (/^货架上没有包：/.test(msg))              { st = 'not-found';    cause = 'not-in-any-list'; }
           else if (/^读不到 Forge 货架/.test(msg))      { st = 'cannot-know';  cause = 'catalog-unreadable'; }
           else if (/包校验失败/.test(msg))             { st = 'failed';       cause = 'sha-mismatch'; }

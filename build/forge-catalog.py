@@ -118,6 +118,49 @@ def derive_axes(kinds):
     return derive_form(kinds), list(kinds or [])
 
 
+
+def derive_arch(tar_path, kinds=None):
+    """从**包内实际带的 `.oct`** 派生目标架构（裁决 2026-10-16「楚河汉界」）。
+
+    ⚠️ **为什么不看目录名/kinds 推**：本仓实测过「判别看包内实际带什么、不能看目录名推」
+    （NOTES-forge-ondemand §分叉：`src/` ⇒ 当"需编译"是误判）。⇒ 拆开 tarball、逐个读
+    `.oct` 的 `dylink.0` TARGET_FEATURES（`build/113/oct-arch.py` 同一判据）。
+    返回 (arch, problems)：
+      · 包内**没有** `.oct` ⇒ ("", [])（无架构概念 —— 纯 .m 包，schema 明说**不带** arch 字段）
+      · 有 `.oct` 且**全部同架构** ⇒ (该架构, [])
+      · 有 `.oct` 但架构**混杂**或读不出 ⇒ ("", [问题…])（fail-closed：不许猜一个值）
+    """
+    import tarfile
+    import io as _io
+    ar = None
+    problems = []
+    try:
+        tf = tarfile.open(tar_path, "r:gz")
+    except (OSError, tarfile.TarError) as e:
+        return "", ["读不了 tarball：%r" % (e,)]
+    with tf:
+        for m in tf.getmembers():
+            if not (m.isfile() and m.name.endswith(".oct")):
+                continue
+            try:
+                fh = tf.extractfile(m)
+                data = fh.read() if fh else b""
+            except (OSError, KeyError) as e:
+                problems.append("%s 读不出：%r" % (m.name, e))
+                continue
+            sys.path.insert(0, os.path.join(REPO, "build", "113"))
+            from oct_arch_probe import arch_of_bytes as _aob      # 见下：薄包装，避免 import 名带横线
+            a = _aob(data)
+            if a == "unknown":
+                problems.append("%s 的架构读不出（不是 side module？）" % m.name)
+                continue
+            if ar is None:
+                ar = a
+            elif ar != a:
+                problems.append("包内 .oct 架构**混杂**：%s 是 %s，先前是 %s（不许猜一个值）"
+                                % (m.name, a, ar))
+    return (ar or "", problems)
+
 def resolve(shelf, octave, allow_unverified, cache=None):
     """货架 → 上架清单。返回 (packs, skipped)。**纯函数**（自证直接喂它）。"""
     cache = cache if cache is not None else CACHE
@@ -132,6 +175,14 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             skipped.append("%s（无兼容 Octave %s 的版本）" % (name, octave))
             continue
         src = os.path.join(cache, "%s-%s.tar.gz" % (name, v["version"]))
+        # 包内有没有 .oct（kinds 说 `oct` 时才去拆包 —— 拆包有成本，且纯 .m 包无架构概念）
+        _kinds = v.get("kinds") or []
+        need_arch = "oct" in _kinds
+        arch_val, arch_problems = ("", [])
+        if need_arch and os.path.isfile(src):
+            arch_val, arch_problems = derive_arch(src, _kinds)
+        elif need_arch:
+            arch_problems = ["包字节不在本地缓存（%s）⇒ 派生不了架构" % src]
         packs.append({
             "name": name,
             "version": v["version"],
@@ -146,7 +197,16 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             "content": list(v.get("kinds") or []),
             "kinds": v.get("kinds") or [],
             "_src": src,                      # 装配时用（不进 catalog）
+            "_arch_problems": arch_problems,  # 装配时汇总（不进 catalog）
         })
+        # arch（裁决 2026-10-16）：**只在包内真带 `.oct` 时**派生并写入
+        #   （纯 .m 包**不带**该字段 —— schema 明说无架构概念；校验器也拒"纯 .m 带 arch"）
+        if need_arch:
+            if arch_problems:
+                skipped.append("%s（架构派生有问题：%s）" % (name, "; ".join(arch_problems[:2])))
+                packs.pop()
+                continue
+            packs[-1]["arch"] = arch_val
     return packs, skipped
 
 

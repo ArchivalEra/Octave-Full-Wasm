@@ -5452,3 +5452,79 @@ package indexed in…` —— 因为 `datatypes` 已进**货架**（可 `install
 ⇒ 每轮 `PROBES=1` 被记成 **12 条假红**（同 `probe-output-cost` 的先例）。已登记：
 判据 = 站点根上有没有 staged 的 `zzspike-minioct-bare.oct`（**源目录存在不够** —— 第一版
 登记指了源目录，输入"满足" ⇒ 探针照跑照红；**改指站点文件**才对）⇒ 现在**点名跳过**。
+
+## 5.x 架构界（「楚河汉界」）：wasm32/wasm64 的额外内容边界（2026-10-16 用户点令）
+
+**用户点令原文**：「是时候划一条楚河汉界，wasm32引擎只能装32的额外内容，IP线和64线都要兼容64的额外内容」。
+
+### ★ 一处**实测修正**（先摆事实再实现）
+
+这条界**不能**照字面划成"w64 档只收 wasm64 内容"——**反例是实测的**：
+**Pyodide 是 wasm32，却在 w64 档页面上跑通**（8761 上 `accept-symbolic-seam` 9/0；
+`llvm-readobj` 实测 `pyodide.asm.wasm` = `Arch: wasm32`，而宿主 `w64/octave.wasm` = `wasm64`）。
+它跑在**自己的 wasm 实例**里，架构与宿主无关。
+⇒ 真正要划的是**"要不要 dlopen 进宿主"**，据此**三档语义**（每档都有实测支撑）：
+
+| 内容类 | arch | 判据 |
+|---|---|---|
+| 纯 `.m` 包（现役货架 **10 包全属此**） | **无架构概念**（不带字段） | 任何档都能装 |
+| **含 `.oct`**（要 dlopen 进宿主） | **必须与宿主同档** | 错档 = 加载器只给 `incorrect architecture (wasm32 vs wasm64)`（AGENTS 记过） |
+| 能力层（`form:"tree"`：Pyodide/clang） | **不带**（自带运行时） | 上表的 Pyodide 反例 |
+
+### 判据：**派生，不手写**（与 `form`/`content` 同例）
+
+写了个纯 stdlib 派生器 `build/113/oct-arch.py`：读 `.oct` 的 `dylink.0` 自定义段里
+**TARGET_FEATURES 子节（type=6）**——wasm64 模块在该子节声明特性名 `wasm64`，wasm32 没有。
+**这正是 emscripten 加载器判 `incorrect architecture` 的机制**（不是子串扫 ——
+`atomics_scan.py` 头注记过"对链接后模块扫特征字符串必假"的形状）。
+**实测对照**（真站点，与容器 `llvm-readobj --file-headers` 的 `Arch:` 逐一相符）：
+`assets/oct` = wasm32（16/16）、`assets/oct-threads` = wasm32（16/16）、`assets/oct-w64` = wasm64（16/16）。
+**⚠️ 为什么不看目录名推**：本仓实测过「判别看包内实际带什么、不能看目录名推」
+（`NOTES-forge-ondemand.md`：`src/` ⇒ 当"需编译"是误判）。
+
+### 落地四处（每处都配反向断言）
+
+1. **端口 schema**（`build/extra-content/content-list.schema.json`）加 `arch` 字段（派生值）；
+   校验器加**三档正反判据**（纯 .m 带 arch ⇒ 必红／含 .oct 不带 ⇒ 必红／能力层带 ⇒ 必红／
+   未知词表 ⇒ 必红）⇒ 自证 **26→33 PASS / 0 fail**。
+2. **装配器**（`build/forge-catalog.py`）：从**包内实际 `.oct` 字节**派生（`derive_arch`）。
+   四类用例实测：wasm32 包 ⇒ `wasm32`／wasm64 包 ⇒ `wasm64`／**混杂包 ⇒ 报**
+   （"包内 .oct 架构混杂…不许猜一个值"，该条目被撤下）／纯 .m 包 ⇒ 不带字段。
+   ⚠️ 前后兼容：现役站点**无一个含 oct 的条目**（`statistics` 是 `['m','src']`，源码非预编）
+   ⇒ `--check` 对现役三站**仍 ok**、自证 20/0 不变。
+3. **站点闸门 R10**（`build/113/check-forge-catalog.py`）：条目 `arch` 必须与**站点
+   `assets/oct*/` 里实际字节**的架构一致。**不问站点"你是哪档"** —— 判据来源是**站点自己的
+   目录内容**（多档站里每档一个目录）。自证 **24→27 PASS / 0 fail**（含两条反向：条目说
+   wasm64 而站点是 wasm32 ⇒ 必红；反之 ⇒ 必红）。⚠️ 站点无 `assets/oct*` ⇒ **note 明说跳过**
+   （"没查"不是"通过"）。
+4. **客户端**（`bridge/assets-loader.js`）：`install()` 在闭包 walk 之后判 `arch` 与宿主档，
+   不符 ⇒ **立即响亮拒绝**（`verdict.cause = 'arch-mismatch'`）。宿主档的判据 = **选档结果**
+   （`octaveLaneState.lane`，`w64*` ⇒ wasm64），**不新增第二处判据**（与 `lane.js` 同源）。
+   同时**加了一个测试注入缝** `__catalogSource`（"能换目录来源"是这个模块本就该有的缝 ——
+   注入目录走与真目录**同权**的填缓存路径，不是旁路）。
+
+### 验收 `accept-arch-boundary` **5/0**（隔离站点副本上跑，**不碰 8761**）
+
+```
+A1 宿主档已知 ⇒ 推出宿主架构                :: lane=w64 arch=wasm64
+A2 纯 .m / 能力层条目一律**不带** arch      :: 带 arch 的条目 0 个（含非 oct 的 0 个）
+★ A3 反向（核心）：注入 arch 不符的条目 ⇒ 响亮拒绝且 cause=arch-mismatch
+   :: {"state":"failed","cause":"arch-mismatch",
+       "why":"架构不匹配：zzarch_probe 需要 wasm32，当前宿主是 wasm64 档（…必须同架构）"}
+★ A4 正向：arch 相符的条目**不许**被架构界拦（失败也只能是别的 cause）
+   :: {"failed":true,"cause":"unknown","msg":"…HTTP 404"}   ← 因字节缺失而失败，**不是** arch-mismatch
+A5 站点上的 assets-loader.js 带 arch-mismatch 判据（词表在产物里）
+```
+
+**做法**：造一份**隔离站点副本**（`rsync` + 拷仓库 `bridge/` 那两件）+ 起 8769 服务 ⇒
+**8761 一个字节没动**；跑完即删副本。
+
+### 诚实边界
+
+- **今天没有真实用例**（现役货架无含 `.oct` 的包）⇒ 这条界是**前瞻性的**：
+  它是 v2（含编译件的包）与第三方 `.oct` 内容的前置条件。判据**已可跑、可证伪**，
+  但"真的挡下过一次成功的安装"要等第一个含 `.oct` 的条目出现。
+- **站点侧早有闸门**：`check-lane-purity.py`（2026-10-12 用户点令）已在查
+  "宿主/`.oct`/站点资产三处同档"（实测 w64 档 `三处同档 ✔`）—— 本轮补的是
+  **目录侧**（catalog 携带 arch）与**客户端侧**（install 期拒绝），两处此前都缺。
+- 闸门自证台 44→**45**（新登记 `oct-arch.py --selftest`）。

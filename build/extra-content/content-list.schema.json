@@ -136,6 +136,14 @@
           },
           "description": "内容构成（= 旧 kinds 的语义）。**只对 `form:\"pkg\"` 有意义**（包里有什么源：m/src/oct）；**能力层（`form:\"tree\"`）与单文件形态留空数组 `[]`** —— 裁决 2026-10-14（回应内容仓 mail/007 缺口①）：`content` 的语义是『包里有哪类源』，wasm/js 不是它的同类；硬塞进枚举会让这个轴变成『什么都有』的垃圾桶。⇒ **不扩枚举**；能力层条目 `content: []`（本仓 golden/toolchain.json 即此形态，作示范）。"
         },
+        "arch": {
+          "type": "string",
+          "enum": [
+            "wasm32",
+            "wasm64"
+          ],
+          "description": "**目标架构 —— 只在「要 dlopen 进宿主的东西」上标**（裁决 2026-10-16，用户点令「楚河汉界：wasm32 引擎只能装 32 的额外内容，IP 线与 64 线都要兼容 64 的额外内容」）。**派生值，不是作者手写**（与 `form` 同例）：从 `.oct` 字节的 `dylink.0` 段 TARGET_FEATURES 子节读（`build/113/oct-arch.py`，纯 stdlib；判据 = wasm64 模块在该段声明特性名 `wasm64`，这正是 emscripten 加载器判 `incorrect architecture` 的机制）。⚠️ **不从目录名推**（`oct-w64/` ⇒ 猜 wasm64）：本仓实测过「判别看包内实际带什么、不能看目录名推」（NOTES-forge-ondemand §分叉）。**三档语义**（每档都有实测支撑）：① **纯 `.m` 包（`content` 不含 `oct`）⇒ 不带本字段**（无架构概念，任何档都能装 —— 现役货架 10 包全属此）；② **含 `.oct` 的条目（`content` 含 `oct`，或 `form` = `oct`/`octdir`）⇒ 必须带**，且必须与**宿主档**一致（错档 = `incorrect architecture (wasm32 vs wasm64)`，AGENTS 记过）；③ **能力层（`form:「tree」`，Pyodide/clang）⇒ 不带**（它**自带运行时**，那个 wasm 有自己的架构，与宿主无关 —— 实测反例：**Pyodide 是 wasm32，却在 w64 档页面上跑通**，8761 上 `accept-symbolic-seam` 9/0）。⇒ **这条界不是「w64 档只收 wasm64 内容」**：受约束的只有「要 dlopen 进宿主」的那一类。"
+        },
         "kinds": {
           "type": "array",
           "items": {

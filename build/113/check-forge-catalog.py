@@ -243,7 +243,61 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
                             "已知能力层名（%s）⇒ typo / 未知目标"
                             % (who, tgt, len(table_names),
                                ", ".join(sorted(caps)) or "无"))
+    # R10（架构界，裁决 2026-10-16 用户点令「楚河汉界」）：**含 `.oct` 的条目的 `arch`
+    #   必须与该站点**实际部署的档**一致**。判据来源 = 站点自己的 `assets/oct*` 目录里
+    #   的真 `.oct` 字节（`arch_probe`，纯 stdlib 派生）—— **不问站点"你是哪档"**，
+    #   因为站点可能部署多档（四格站），而"档"是**每档一个目录**的事实。
+    #   ⚠️ 只在**该条目指向的字节真在站点**时判（字节不在 ⇒ R7b 已经点名了，不重复报）。
+    #   反向可证伪：喂一个 arch 与站点目录相矛盾的条目 ⇒ 必红（自证里有）。
+    site_arch = {}
+    for lane_dir in ("oct", "oct-threads", "oct-w64", "oct-w64-base"):
+        d = os.path.join(site_dir, "assets", lane_dir)
+        a = arch_probe(d)
+        if a:
+            site_arch[lane_dir] = a
+    for p_ in packs:
+        want = p_.get("arch")
+        if not want:
+            continue
+        if not site_arch:
+            print("note: R10 站点没有任何 assets/oct* 目录 ⇒ 无法核 `%s` 的 arch（跳过，"
+                  "不是通过）" % p_.get("name"), file=sys.stderr)
+            break
+        # 条目带的 .oct 落在哪个档目录：看 url 前缀（站内相对）
+        u = p_.get("url") or ""
+        hit = [ld for ld in site_arch if ("assets/%s/" % ld) in u]
+        if not hit:
+            print("note: R10 `%s` 的 arch=%s 无法对档（url=%s 不在任何 assets/oct*/ 下）"
+                  % (p_.get("name"), want, u), file=sys.stderr)
+            continue
+        for ld in hit:
+            if site_arch[ld] != want:
+                problems.append("R10 %s 的 arch=%s ≠ 站点 %s/ 里实际字节的架构 %s"
+                                % (p_.get("name"), want, ld, site_arch[ld]))
     return problems, []
+
+
+def arch_probe(d):
+    """目录里 `.oct` 的架构（全部同档才返回它；目录空/混杂/读不出 ⇒ ""）。
+    判据复用 `build/113/oct-arch.py`（纯 stdlib，与装配器同一产地）。"""
+    try:
+        import importlib.util as _iu
+        vp = os.path.join(REPO, "build", "113", "oct-arch.py")
+        spec = _iu.spec_from_file_location("_oa", vp)
+        mod = _iu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except Exception:
+        return ""
+    try:
+        names = [n for n in sorted(os.listdir(d)) if n.endswith(".oct")]
+    except OSError:
+        return ""
+    if not names:
+        return ""                       # 目录空 ⇒ 不表态（不是 wasm32）
+    got = set()
+    for n in names:
+        got.add(mod.arch_of_file(os.path.join(d, n)))
+    return got.pop() if len(got) == 1 and "unknown" not in got else ""
 
 
 def capability_names(recipes_dir):
@@ -491,6 +545,48 @@ def _selftest():
         json.dump(_d0, open(_cat, "w"))
         cases.append(("★ R9 ③b：无 recipes 目录 ⇒ 能力层名集空 ⇒ 该 dep 判 typo 必红（不拿空当合法）",
                       lambda d=d: any("R9" in p for p in _r9_probs(d))))
+
+        # R10（架构界，2026-10-16）—— 用**真字节**造夹具（真 wasm side module）
+        def _mk_oct(arch):
+            import importlib.util as _iu
+            vp = os.path.join(REPO, "build", "113", "oct-arch.py")
+            spec = _iu.spec_from_file_location("_oa2", vp)
+            mod = _iu.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod._mk_side_module(arch)
+        def _r10_fixture(tmp2, oct_arch_in_site, entry_arch):
+            # ⚠️ 用**真字节 + 真 sha**：R10 读的是站点里 .oct 的实际字节，所以这条条目的
+            #   `url`/`sha256` 必须与该字节自洽（否则先被 R7 的 sha 判据拦下，测不到 R10）。
+            blob = _mk_oct(oct_arch_in_site)
+            d2 = _mk_fixture(tmp2, [_pack(name="pkgx", sha=hashlib.sha256(blob).hexdigest(),
+                                          kinds=("m", "oct"))], blob_sha=blob)
+            od = os.path.join(d2, "site", "assets", "oct-w64")
+            os.makedirs(od)
+            octp = os.path.join(od, "a.oct")
+            open(octp, "wb").write(blob)
+            catp = os.path.join(d2, "site", "assets", "forge-catalog.json")
+            doc = json.load(open(catp))
+            doc["packs"][0]["url"] = "assets/oct-w64/a.oct"
+            doc["packs"][0]["sha256"] = hashlib.sha256(blob).hexdigest()
+            doc["packs"][0]["content"] = ["m", "oct"]
+            doc["packs"][0]["kinds"] = ["m", "oct"]
+            doc["packs"][0]["arch"] = entry_arch
+            # 货架档案也要与 (version, sha) 对上（R2）—— 改名避开与 demo 碰撞
+            shelf_p = os.path.join(d2, "shelf", "packages", "pkgx.json")
+            json.dump({"name": "pkgx", "versions": [
+                {"version": doc["packs"][0]["version"],
+                 "sha256": hashlib.sha256(blob).hexdigest()}]}, open(shelf_p, "w"))
+            json.dump(doc, open(catp, "w"))
+            return d2
+        d = _r10_fixture(os.path.join(tmp, "r10_ok"), "wasm64", "wasm64")
+        cases.append(("R10：条目 arch=wasm64 且站点 oct-w64/ 里是真 wasm64 ⇒ 不报",
+                      lambda d=d: _r9_probs(d) == []))
+        d = _r10_fixture(os.path.join(tmp, "r10_bad"), "wasm32", "wasm64")
+        cases.append(("★ R10 反向：条目说 wasm64 而站点 oct-w64/ 里实际是 wasm32 ⇒ 必须报",
+                      lambda d=d: any("R10" in p for p in _r9_probs(d))))
+        d = _r10_fixture(os.path.join(tmp, "r10_bad2"), "wasm64", "wasm32")
+        cases.append(("★ R10 反向：条目说 wasm32 而站点实际是 wasm64 ⇒ 必须报",
+                      lambda d=d: any("R10" in p for p in _r9_probs(d))))
         # ③ 空输入必须报 / 未启用如实说
         d = _mk_fixture(os.path.join(tmp, "empty"), [_pack(sha=good_sha)], blob_sha=data)
         with open(os.path.join(d, "site", "assets", "forge-catalog.json"), "w") as fh:

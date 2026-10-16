@@ -255,6 +255,19 @@ JSPI 的"挂起"= wasm 栈整体让出，页面定时器照常跑（验收判据
 已经踩过多次，每次都是 SHA 一查就现形。
 **证据：** `build/check-deploy-sha.sh`
 
+### 架构界（「楚河汉界」）
+
+**要 dlopen 进宿主的东西，必须与宿主档同架构**（用户点令 2026-10-16：「wasm32 引擎只能装 32 的
+额外内容，IP 线和 64 线都要兼容 64 的额外内容」）。**三档语义**（每档都有实测支撑）：
+纯 `.m` 包 ⇒ **无架构概念**（任何档都能装）；含 `.oct` 的条目 ⇒ 带 `arch`，必须等于宿主档
+（错档 = 加载器只给 `incorrect architecture (wasm32 vs wasm64)`）；能力层（`form:"tree"`）
+⇒ **不带 arch**（**自带运行时** —— 实测反例：**Pyodide 是 wasm32，却在 w64 档页面上跑通**）。
+**判据是可派生的**（`build/113/oct-arch.py`，纯 stdlib）：读 `.oct` 的 `dylink.0` 段
+TARGET_FEATURES 子节（wasm64 模块声明特性名 `wasm64`）——**不看目录名推**（本仓实测过
+「判别看包内实际带什么」）。落地四处：端口 schema 的 `arch` 字段（派生值）、装配器从字节派生、
+站点闸门 R10（条 ↔ 站点档一致）、客户端 `install()`（不符 ⇒ 响亮拒绝 `cause='arch-mismatch'`）。
+**证据：** `build/113/oct-arch.py`、`test/browser/accept-arch-boundary.mjs`
+
 ### mail 边界（收件箱制）
 
 **跨 agent 通信是"收件箱"制**（2026-10-15 用户点令）：① 一封信投进**收信方仓**的 `mail/`
