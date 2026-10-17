@@ -70,6 +70,18 @@
 
     function log(msg) { if (global.console) console.log('[assets] ' + msg); }
 
+    // ── 结构化错误码（UI mail/028 Q1，2026-10-17）───────────────────────────────
+    // 为什么：报错的 `message` 是给人读的中文（本仓工作语言）；但 UI 的国际化层需要
+    // **机器可读的稳定代码**来选语言文案（`t('errors.' + err.code)`），AI/WebMCP Agent
+    // 也靠它做确定性决策——**正则匹配中文消息是脆弱契约**（消息改一个字，分类就错）。
+    // ⇒ 每个 throw 都带 `err.code`（稳定、闭集、与 `__verdict__.cause` 同词表扩展）；
+    // `message` 保持中文（人读不变）。⚠️ code 是**追加**字段：旧消费者读 message 照旧。
+    function errCode(code, message) {
+      var e = new Error(message);
+      e.code = code;                       // 机器可读（UI/AiM/Agent 契约）
+      return e;
+    }
+
     // ── 宿主架构（单一产地；install 的架构界与 statusOf 的 compatible 都用它）────────
     // 判据 = **选档结果**（`octaveLaneState.lane`，`w64*` ⇒ wasm64），与 `bridge/lane.js` 同源
     // —— 不新增第二处判据。老宿主/测试（不传 lane）⇒ ''（不表态 ⇒ 不拦，向后兼容）。
@@ -88,12 +100,12 @@
 
     function fs() {
       var M = module || global.Module;
-      if (!M || !M.FS) throw new Error('Module.FS 尚未就绪（Octave 还没起来？）');
+      if (!M || !M.FS) throw errCode('FS_NOT_READY', 'Module.FS 尚未就绪（Octave 还没起来？）');
       return M.FS;
     }
     function M() {
       var m = module || global.Module;
-      if (!m) throw new Error('Module 尚未就绪');
+      if (!m) throw errCode('MODULE_NOT_READY', 'Module 尚未就绪');
       return m;
     }
     function withBase(u) { return base + u; }
@@ -118,14 +130,14 @@
 
     function fetchBinary(url) {
       return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw new Error('取资产失败 ' + withBase(url) + ' → HTTP ' + r.status);
+        if (!r.ok) throw errCode('ASSET_FETCH_FAILED', '取资产失败 ' + withBase(url) + ' → HTTP ' + r.status);
         return r.arrayBuffer();
       });
     }
 
     function fetchJSON(url) {
       return fetch(withBase(url)).then(function (r) {
-        if (!r.ok) throw new Error('取清单失败 ' + withBase(url) + ' → HTTP ' + r.status);
+        if (!r.ok) throw errCode('MANIFEST_FETCH_FAILED', '取清单失败 ' + withBase(url) + ' → HTTP ' + r.status);
         return r.json();
       });
     }
@@ -248,7 +260,7 @@
             return layers.pyodide;
           });
         }, function (e) {
-          throw new Error('能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
+          throw errCode('LAYER_UNREACHABLE', '能力层 pyodide 不可达（assets/pyodide/ 没装？跑 provision-pyodide.sh）：'
                           + (e && e.message ? e.message : e));
         });
       }
@@ -275,7 +287,7 @@
           return fetchBinary(a.url).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (a.sha256 && hex && hex !== a.sha256) {
-                throw new Error('资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+                throw errCode('SHA_MISMATCH', '资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
               }
               var mount = a.mount || (OCTAVE_M + '/oct/' + name + '.oct');
               mkdirp(mount.replace(/\/[^/]*$/, ''));
@@ -340,10 +352,10 @@
           return fetchBinary(a.url).then(function (buf) {
             return sha256Hex(buf).then(function (hex) {
               if (a.sha256 && hex && hex !== a.sha256) {
-                throw new Error('资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+                throw errCode('SHA_MISMATCH', '资产校验失败 ' + name + '（期望 ' + a.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
               }
               var mount = a.mount;
-              if (!mount) throw new Error('资产 ' + name + ' 缺少 mount 路径');
+              if (!mount) throw errCode('ASSET_NO_MOUNT', '资产 ' + name + ' 缺少 mount 路径');
               mkdirp(mount.replace(/\/[^/]*$/, ''));
               fs().writeFile(mount, new Uint8Array(buf));
               loaded[name] = { files: 1, mount: mount };
@@ -356,7 +368,7 @@
         if (a.kind === 'js') {
           return loadScript(a.url).then(function () {
             var bundle = (global.__OCT_ASSETS__ || {})[name];
-            if (!bundle) throw new Error('JS 包 ' + a.url + ' 没声明 __OCT_ASSETS__["' + name + '"]');
+            if (!bundle) throw errCode('JS_BUNDLE_NO_META', 'JS 包 ' + a.url + ' 没声明 __OCT_ASSETS__["' + name + '"]');
             var n = writeFiles(bundle.files || {});
             addPaths(bundle.addpath || []);
             // 注意：**不要**在这里手动 run PKG_ADD —— Octave 在 addpath 时会自己执行
@@ -368,7 +380,7 @@
             return loaded[name];
           });
         }
-        throw new Error('未知资产类型: ' + a.kind);
+        throw errCode('UNKNOWN_ASSET_KIND', '未知资产类型: ' + a.kind);
       });
 
       inflight[name] = p.then(function (r) {
@@ -573,7 +585,7 @@
           _catalogP = null;                       // 失败不缓存（下次可重试）
           catalogState = 'fail';
           publish();                              // 读不到 ≠ 货架没这个包（两态必须可分辨）
-          throw new Error('读不到 Forge 货架（assets/forge-catalog.json）：' + e.message);
+          throw errCode('CATALOG_UNREADABLE', '读不到 Forge 货架（assets/forge-catalog.json）：' + e.message);
         });
         return _catalogP;
       },
@@ -605,7 +617,7 @@
               // T4：货架**读成功**而查无此包 ⇒ 记进账本（这是**终态**：再等也不会出现）。
               catalogMiss[n] = 1;
               publish();
-              throw new Error('货架上没有包：' + n);
+              throw errCode('NOT_IN_ANY_LIST', '货架上没有包：' + n);
             }
             (p.deps || []).forEach(walk);
             plan.push(p);
@@ -618,7 +630,7 @@
               if (_pa && _pa !== hostArch) {
                 var _m = '架构不匹配：' + plan[_pi].name + ' 需要 ' + _pa
                        + '，当前宿主是 ' + hostArch + ' 档（它带要在宿主里 dlopen 的 .oct，必须同架构）';
-                var _err = new Error(_m);
+                var _err = errCode('ARCH_MISMATCH', _m);
                 _err.__verdict__ = { state: 'failed', name: plan[_pi].name,
                                      cause: 'arch-mismatch', why: _m, retriable: false };
                 throw _err;
@@ -667,7 +679,7 @@
                 return fetchBinary(p.url).then(function (buf) {
                   return sha256Hex(buf).then(function (hex) {
                     if (p.sha256 && hex && hex !== p.sha256) {
-                      throw new Error('包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
+                      throw errCode('SHA_MISMATCH', '包校验失败 ' + p.name + '（期望 ' + p.sha256.slice(0, 12)
                                       + '… 实得 ' + hex.slice(0, 12) + '…）—— 拒绝安装');
                     }
                     var tar = '/tmp/forge-' + p.name + '-' + p.version + '.tar.gz';
@@ -677,11 +689,11 @@
                     //   —— 它内部调引擎内建 gunzip+untar（zlib/ustar，不写 JS tar 解析器），
                     //      再把 inst/ 上提 + 元数据落包根 + 拒绝异架构 .oct（设计稿 §3/§4）。
                     var M = Msafe();
-                    if (!M || !M.eval_string) throw new Error('引擎还没就绪，不能安装包');
+                    if (!M || !M.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能安装包');
                     var pkgdir = '/usr/src/octave/m/forge/' + p.name;
                     var rc = M.eval_string(
                       "n = __forge_install__ ('" + tar + "', '" + p.name + "', '/usr/src/octave/m/forge');");
-                    if (rc !== 0) throw new Error('__forge_install__ 失败（rc=' + rc + '）：'
+                    if (rc !== 0) throw errCode('UNPACK_FAILED', '__forge_install__ 失败（rc=' + rc + '）：'
                                                   + (M.last_error_message() || ''));
                     addPaths([pkgdir]);
                     // 让核心 pkg 数据库重扫（否则 `pkg list` 看不见新包 —— pkgfix 的既有机制）
@@ -729,12 +741,23 @@
           installError[name] = msg;
           publish();
           var st = 'failed', why = msg, cause = 'unknown';
-          if (/^架构不匹配：/.test(msg))               { st = 'failed';       cause = 'arch-mismatch'; }
-          if (/^货架上没有包：/.test(msg))              { st = 'not-found';    cause = 'not-in-any-list'; }
-          else if (/^读不到 Forge 货架/.test(msg))      { st = 'cannot-know';  cause = 'catalog-unreadable'; }
-          else if (/包校验失败/.test(msg))             { st = 'failed';       cause = 'sha-mismatch'; }
-          else if (/引擎还没就绪/.test(msg))           { st = 'failed';       cause = 'engine-not-ready'; }
-          else if (/__forge_install__ 失败/.test(msg)) { st = 'failed';       cause = 'unpack-failed'; }
+          // ★ 分类读 e.code（UI mail/028 Q1，2026-10-17）：正则匹配中文消息是脆弱契约
+          //   （消息改一个字分类就错）；code 是 throw 时钉死的。映射表与既有 cause 词表逐字同值
+          //   —— 旧消费者（.m 侧 pkg.m 按消息前缀分流）照读 message，不受影响。
+          var _byCode = { ARCH_MISMATCH:      ['failed',      'arch-mismatch'],
+                          NOT_IN_ANY_LIST:    ['not-found',   'not-in-any-list'],
+                          CATALOG_UNREADABLE: ['cannot-know', 'catalog-unreadable'],
+                          SHA_MISMATCH:       ['failed',      'sha-mismatch'],
+                          ENGINE_NOT_READY:   ['failed',      'engine-not-ready'],
+                          FS_NOT_READY:       ['failed',      'fs-not-ready'],
+                          UNPACK_FAILED:      ['failed',      'unpack-failed'] };
+          if (e && e.code && _byCode[e.code]) { st = _byCode[e.code][0]; cause = _byCode[e.code][1]; }
+          else if (/^架构不匹配：/.test(msg))          { st = 'failed';      cause = 'arch-mismatch'; }
+          else if (/^货架上没有包：/.test(msg))         { st = 'not-found';   cause = 'not-in-any-list'; }
+          else if (/^读不到 Forge 货架/.test(msg))     { st = 'cannot-know'; cause = 'catalog-unreadable'; }
+          else if (/包校验失败/.test(msg))            { st = 'failed';      cause = 'sha-mismatch'; }
+          else if (/引擎还没就绪/.test(msg))          { st = 'failed';      cause = 'engine-not-ready'; }
+          else if (/__forge_install__ 失败/.test(msg)) { st = 'failed';     cause = 'unpack-failed'; }
           e.__verdict__ = { state: st, name: name, cause: cause, why: why,
                             retriable: st === 'cannot-know' };
           throw e;

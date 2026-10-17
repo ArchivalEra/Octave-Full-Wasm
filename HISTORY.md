@@ -5892,3 +5892,48 @@ wasm64（`-pthread -sMEMORY64=1`，供 master/IP 线；`threads` 格与 `w64` �
 历史完好——本仓红线）。原 NEXT 定位由 master 线承接（三线模型）。
 顺带清掉 `next-base/site` 符链（8869 对照站引用，分支已删则无意义；8869 无服务在跑）。
 maintaince 分支表/换线规则、README 三语分支表同步为"已删"标记。
+
+## 5.x UI 四问落地：结构化错误码 err.code（产地修复）+ LLVM 028 收执 + 双回信（2026-10-17）
+
+**背景**：用户"你应该收到很多信了"。三封新信：LLVM `028`（裁决 A 收执）、UI→内容仓 `028`
+（四问——其中 Q1 的报错产地在本仓）、内容仓无写给本仓的新信。
+
+### UI `028` Q1 ⇒ 报错产地在本仓，当场修
+
+UI 的现场：全英文界面点安装 ⇒ 冒出裸中文 `Module.FS 尚未就绪（Octave 还没起来？）`——
+**这不是 UI 的错**（它没硬编码中文，`check_i18n.py` 闸门为 0）；报错串来自本仓
+`bridge/assets-loader.js:91`。UI 的诉求（`err.code` 机器码 + `t('errors.'+code)`）全收：
+
+- **15 处 throw 全带 `err.code`**（新 `errCode(code, message)` 帮助函数；词表闭集）；
+- **`install()` 四态分类从正则改读 `e.code`**——正则匹配中文消息是脆弱契约（消息改一个字
+  分类就错；这正是 UI 报错的同族问题）；code→cause 映射与既有词表逐字同值（旧消费者零改动，
+  `.m` 侧按消息前缀分流不受影响——正则保留为兼容兜底）；
+- `message` 保持中文（人读不变）。
+- **实测**：隔离站 2/0（NOT_IN_ANY_LIST/ARCH_MISMATCH 两 code + cause 来自 code）；
+  **promote 上站后 8761 实测 `err.code='NOT_IN_ANY_LIST'` PASS**；
+  回归 `accept-install-verdict` 10/0 不变。
+
+### Q2/Q3/Q4（宿主侧答集，内容仓 `mail/029` 转达）
+
+- **Q2（版本描述）归内容仓裁**；本仓给边界事实：方案 A 会加大开机表（6.5KB→几十KB），
+  建议拆分文件变体（`desc_url` 可选键 + `assets/forge-desc/<name>.json`）；
+- **Q3（双模式）**：默认路径 `install(name)` 已是"预编译优先按档自动"（UI 不用自建首选逻辑）；
+  同包预编译/源码不需要新字段（`versions[]` 候选 + `content` 轴已表达）；
+  `install(name,{compile:true})` 是槽位未实现（别让 UI 先接不存在的接口）；
+- **Q4（LLVM 前置）**：**规划拦截而非即时报错**（`planOnly` 闭包含能力层，机制已实测）；
+  wasm32 线技术可用（能力层架构豁免，Pyodide 先例）——UI 是否置灰是产品呈现决定；
+  工具链未装 ⇒ `LAYER_UNREACHABLE`（已进词表）；编译日志 = `compile:true` 的
+  `diagnostics`（实现批定，现在没有）。
+
+### LLVM `028` 收执（复核过）
+
+两个照办都独立复跑：`check-ztii-regression.mjs` 4 PASS（真宿主）✔；双编号说明 ✔。
+**它点名的手抄数字教训本仓也中了一处**——写给它的 `011`（宿主编号 027）第 73 行手抄了
+`oct_tag_importers 3,592/10,246`，已修为键名引用。三仓共同纪律成立。
+**判据对齐确认**：它 `check-ztii-regression` 打 "ruling A has landed" ⇔ 本仓
+`probe-toolchain-gap` `★ 缺口 2` 翻绿——同一事件两条独立判据。
+
+### 回信
+
+- 内容仓 `mail/029`（四问答集）已投已推（`488c864`）；
+- LLVM `mail/012`（收执短复 + 手抄数字已修告知）落它仓工作树（按投递规矩不提交）。
