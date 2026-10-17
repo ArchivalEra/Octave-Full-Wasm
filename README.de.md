@@ -180,7 +180,7 @@ UI-Anbindung: [Embed-API](docs/embed-api.md) und
 | Zweig | Fork-Pin (`upstream/octave`) | Rolle |
 |---|---|---|
 | `wasm32-final` | — (eingefroren) | wasm32-Archivlinie |
-| `wasm64-NEXT` | `a5a7208` (Patches + f77-Fix, **keine Rust-Naht**) | gemäßigte wasm64-Linie — verifiziert: Neuaufbau vom Fork-Pin reproduziert das deployed Artefakt byteidentisch |
+| ~~`wasm64-NEXT`~~ | ~~`a5a7208`~~ | **2026-10-17 geloescht** (Nutzeranweisung — laengst in master gemerged; 0 eigene Commits gegen master gemessen; Branch-Referenz lokal/origin/mirror entfernt, History ueber master erhalten). Seine Rolle (gemaessigte wasm64-Linie) traegt **master** (Drei-Linien-Modell) |
 | `IllegalPerformance` | `f4bf15b` (+ rust-sort-Naht) | aggressive wasm64-Linie — **ausgeliefert 2026-10-07** (8761 w64 = `f6fec91f`, IEEE-bewertet, sort 2,16× gegenüber dieser Basis) |
 
 Alle drei essen Upstream-Octave-Updates über dieselbe Fork-Pipeline

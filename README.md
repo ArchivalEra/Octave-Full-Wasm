@@ -161,7 +161,7 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 | branch | fork pin (`upstream/octave`) | role |
 |---|---|---|
 | `wasm32-final` | — (frozen) | wasm32 archive line |
-| `wasm64-NEXT` | `a5a7208` (patches + f77 fix, **no rust seam**) | moderate wasm64 line — verified: fresh rebuild from its fork pin reproduces its shipped artifact byte-for-byte |
+| ~~`wasm64-NEXT`~~ | ~~`a5a7208`~~ | **deleted 2026-10-17** (user order — merged into master long ago; measured 0 unique commits vs master; branch ref removed on local/origin/mirror, history preserved via master). Its role (moderate wasm64) is carried by **master** per the three-line model |
 | `IllegalPerformance` | `f4bf15b` (+ rust-sort seam) | aggressive wasm64 line — **shipped 2026-10-07** (8761 w64 = `f6fec91f`, IEEE-evaluated, sort 2.16× vs this line's base) |
 
 All three eat upstream Octave updates through the same fork pipeline
@@ -272,10 +272,10 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `AGENTS.md` (25007 bytes)
 - `CONTEXT.md` (18565 bytes)
 - `DEPLOY.md` (9301 bytes)
-- `HISTORY.md` (483738 bytes)
+- `HISTORY.md` (484356 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (45516 bytes)
-- `README.zh.md` (41611 bytes)
+- `README.de.md` (45639 bytes)
+- `README.zh.md` (41728 bytes)
 - `STATE.md` (81369 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (45127 bytes)
@@ -778,7 +778,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `mail/025-re-ui-adopted.md` (1966 bytes)
 - `mail/026-llvm-wasm-ticket65-gap2-ztii.md` (5014 bytes)
 - `mail/README.md` (4665 bytes)
-- `maintaince.md` (9766 bytes)
+- `maintaince.md` (10008 bytes)
 - `reflect-hooks/Einfacht.env` (2972 bytes)
 - `reflect-hooks/Einfacht.env.example` (1606 bytes)
 - `reflect-hooks/einfacht-env.sh` (4231 bytes)

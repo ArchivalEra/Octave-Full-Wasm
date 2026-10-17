@@ -5884,3 +5884,11 @@ legacy-new EH 混编编不过）采信 ✔。
 wasm64（`-pthread -sMEMORY64=1`，供 master/IP 线；`threads` 格与 `w64` 格共用 64 份？——
 **不**：实测现役 `threads(32)` 格是 wasm32+TLS 的独立产物，但其定位在终版模型下=master 线的
 32 回退 ⇒ 待确认后归并。**先按两份开工，threads 格的处置在实现批里定**。）
+
+### 补记：wasm64-NEXT 分支已删（用户点令："很久以前就让并入主线，我以为你删了"）
+
+实测 `git rev-list master..wasm64-NEXT` = **0** 个独有提交（完全被 master 包含）⇒
+删**分支引用**（本地 + origin + mirror 三处），**不删对象**（`bc3865f` 仍是 master 祖先，
+历史完好——本仓红线）。原 NEXT 定位由 master 线承接（三线模型）。
+顺带清掉 `next-base/site` 符链（8869 对照站引用，分支已删则无意义；8869 无服务在跑）。
+maintaince 分支表/换线规则、README 三语分支表同步为"已删"标记。

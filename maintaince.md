@@ -88,25 +88,28 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 
 | 分支 | fork pin（upstream/octave） | 定位 |
 |---|---|---|
-| `wasm32-final` | —（冻结） | wasm32 归档线；不做新活，需要时按 NEXT 同法接 fork |
-| `wasm64-NEXT` | `a5a7208`（平台补丁+f77 修复，**无 rust 缝**） | **中庸 wasm64 线**：8869 对照站；已验证"从 fork pin 全新重编 = 与现役产物逐字节同"（01fb52fc） |
+| `wasm32-final` | —（冻结） | wasm32 归档线；不做新活，需要时按同法接 fork |
 | `IllegalPerformance` | `f4bf15b`（+ rust-sort 源缝） | **non-free 线**（Rust 补丁 = 脱离开源社区）：8761 现役（rust-sort 2.2×、IEEE 已评估）。**主线榨干性能之前不开 IP 线** |
+
+> **`wasm64-NEXT` 已删**（2026-10-17，用户点令——"很久以前就让并入主线，我以为你删了"）：
+> 实测 `git rev-list master..wasm64-NEXT` = **0** 个独有提交（完全被 master 包含）⇒ 本地/origin/mirror
+> 三处分支引用已删，`bc3865f` 仍为 master 祖先（**历史完好，对象未删**）。原 NEXT 定位（中庸 wasm64）
+> 由 **master 线**承接——三线模型见上节。
 
 **换线规则（共享容器 o113 的代价，必须遵守）**：容器里的**树、构建脚本、印章**都跟着
 分支走——切分支后必须 ① `git submodule update upstream/octave` ② `sh build/provision-upstream.sh
 --only octave` ③ `docker cp` 该分支的 `relink.sh`/`link-web.sh` 进容器 ④ **闸门与推送的
-站点口径**：`OCTAVE_WASM_BASE` 指向**本线**的站点（IP 线 = 默认 `…/site`；NEXT 线 =
-`…/next-base/site` → site-illegalperf-baseline 符链；master 线 = 仓库 `site/`，即
+站点口径**：`OCTAVE_WASM_BASE` 指向**本线**的站点（IP 线 = 默认 `…/site`；master 线 = 仓库 `site/`，即
 `OCTAVE_WASM_BASE=$PWD`）——plugin-check/check-facts/witness 读的都是它，不指本线 =
-在别的线的部署上跑闸门（实测三次：NEXT 拣选红、master 提交红、NEXT 重编产物混入
-rust_sort）。⑤ **钩子目录**：`core.hooksPath` 是**仓库全局**的，而 IP 线（Einfacht 重构后）
+在别的线的部署上跑闸门（实测三次：拣选红、master 提交红、重编产物混入
+rust_sort）。〔NEXT 线已删（2026-10-17）——它指向的 `next-base/site` 符链亦随之作废。〕⑤ **钩子目录**：`core.hooksPath` 是**仓库全局**的，而 IP 线（Einfacht 重构后）
 用 `reflect-hooks/`、master 与 wasm32-final 仍用 `.githooks/` ⇒ 切到后两线必须
 `git config core.hooksPath .githooks`，切回 IP 线改回 `reflect-hooks`（否则拿**别的线**的
 钩子跑本线的提交/推送——实测一次：master 推送被 IP 的 reflect-hooks 三语闸门误拦）。
 五步少一步 = 在别的线的状态上构建、验收或跑钩子。
 
 **fork 更新 SOP（每条线相同）**：上游发版 → `upstream/octave` fork 分支 merge 上游 tag
-→ 该线 bump pin（NEXT = 无缝 lineage；IP = 缝随分支携带）→ provision → rebuild → 全量
+→ 该线 bump pin（master = 无缝 lineage；IP = 缝随分支携带）→ provision → rebuild → 全量
 → 发运。IP 上新增的内核缝 = fork 上的独立提交，其他线**不继承**（各线 pin 各自的 fork 点）。
 
 ## 开工与提交的顺序## 开工与提交的顺序

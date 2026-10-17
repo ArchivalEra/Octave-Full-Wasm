@@ -161,7 +161,7 @@ python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
 | 分支 | fork pin（`upstream/octave`） | 定位 |
 |---|---|---|
 | `wasm32-final` | —（冻结） | wasm32 归档线 |
-| `wasm64-NEXT` | `a5a7208`（平台补丁+f77 修复，**无 rust 缝**） | 中庸 wasm64 线——已验证：从 fork pin 全新重编 = 与现役产物逐字节同 |
+| ~~`wasm64-NEXT`~~ | ~~`a5a7208`~~ | **2026-10-17 已删**（用户点令——早已并入 master；实测对 master 独有提交 = 0；本地/origin/mirror 三处分支引用已删，历史经 master 保留）。原定位（中庸 wasm64）由 **master 线**承接（三线模型） |
 | `IllegalPerformance` | `f4bf15b`（+ rust-sort 源缝） | 激进 wasm64 线——**2026-10-07 已发运**（8761 w64 = `f6fec91f`，IEEE 已评估，对本线基线 sort 2.16×） |
 
 三条线经**同一条 fork 管线**吃上游 Octave 更新（`upstream/octave` 分支
