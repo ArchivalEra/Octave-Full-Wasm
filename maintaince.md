@@ -69,6 +69,19 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
    rebuild 可复现：1 条容忍 mismatch + wasm-opt 绿）——
    全部有数字判决，见 HISTORY 与 NOTES。
 
+## 三线模型（2026-10-17 用户点令纠偏，终版）
+
+**最终只有三条线**，横跨所有与 Octave-UI 对接的仓库：
+
+| 线 | 产物 | 用户可达性 / 许可 |
+|---|---|---|
+| **wasm32** | wasm32 单线程（无 `-pthread`） | **无 COI 要求**（一石二鸟：避开 wasm64 问题 + 免 `SharedArrayBuffer` 门槛）⇒ 任何浏览器 |
+| **master** | wasm64 **多线程** | **COI + 新浏览器内核**是踏入条件（Safari 一年前已支持 wasm64）。**不存在"单线程 wasm64"产品线**——`w64-base` 只是站点回退格 |
+| **IllegalPerformance** | wasm64 多线程 + Rust 补丁 | **non-free**（"脱离开源社区"）；主线榨干之前不开 |
+
+**分档的唯二依据 = 用户能否使用 + 是否 non-free。与性能无关**（"极限性能"是构建旋钮，不是分档依据）。
+站点四格（base/threads/w64/w64-base）是**同一站点内的选档矩阵**，不是四条产品线。
+
 ## 分支模型（三线独立，2026-10-07 定稿）
 
 三条**独立可持续维护**的产线，每条都能独立吃 fork 更新、构建、验收、发运：
@@ -77,7 +90,7 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 |---|---|---|
 | `wasm32-final` | —（冻结） | wasm32 归档线；不做新活，需要时按 NEXT 同法接 fork |
 | `wasm64-NEXT` | `a5a7208`（平台补丁+f77 修复，**无 rust 缝**） | **中庸 wasm64 线**：8869 对照站；已验证"从 fork pin 全新重编 = 与现役产物逐字节同"（01fb52fc） |
-| `IllegalPerformance` | `f4bf15b`（+ rust-sort 源缝） | **激进 wasm64 线**：8761 现役（rust-sort 2.2×、IEEE 已评估） |
+| `IllegalPerformance` | `f4bf15b`（+ rust-sort 源缝） | **non-free 线**（Rust 补丁 = 脱离开源社区）：8761 现役（rust-sort 2.2×、IEEE 已评估）。**主线榨干性能之前不开 IP 线** |
 
 **换线规则（共享容器 o113 的代价，必须遵守）**：容器里的**树、构建脚本、印章**都跟着
 分支走——切分支后必须 ① `git submodule update upstream/octave` ② `sh build/provision-upstream.sh
