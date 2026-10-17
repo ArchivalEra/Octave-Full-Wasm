@@ -2,7 +2,7 @@
  "schema": 2,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "922736ae62938efd662deb7a3a59fea56d8bf634",
+ "shelf_commit": "285af2ff20bc8b39c7fd6e26173b08fb8088636f",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
   {
@@ -27,6 +27,34 @@
     }
    ],
    "deps": [],
+   "description": "Common Gateway Interface for Octave.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-2.0-or-later",
+     "url": "https://sourceforge.net/p/octave/cgi/ci/master/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/cgi/ci/master/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/cgi/ci/master/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/cgi/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(cgi)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -47,7 +75,7 @@
      "version": "1.4.2",
      "sha256": "86aef8eddb8f39025cc32a6a385157dc8adbc83417ca25b1e95681c7dae08b47",
      "url": "assets/forge/datatypes-1.4.2.tar.gz",
-     "size": 0,
+     "size": 2091502,
      "stage": "staged",
      "form": "pkg",
      "content": [
@@ -262,6 +290,34 @@
     }
    ],
    "deps": [],
+   "description": "Extra data types for GNU Octave.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/pr0m1th3as/datatypes/blob/master/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://github.com/pr0m1th3as/datatypes/releases"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/pr0m1th3as/datatypes/"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://pr0m1th3as.github.io/datatypes/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/pr0m1th3as/datatypes/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -297,6 +353,34 @@
    "deps": [
     "matgeom"
    ],
+   "description": "Library for extending MatGeom functionality.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later and BSL-1.0",
+     "url": "https://sourceforge.net/p/octave/geometry/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/geometry/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/geometry/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/geometry/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(geometry)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -329,6 +413,39 @@
     }
    ],
    "deps": [],
+   "description": "Geometry toolbox for 2D/3D geometric computing.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "BSD-2-Clause-FreeBSD",
+     "url": "https://sourceforge.net/p/octave/matgeom/ci/master/tree/LICENSE.txt"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/matgeom/ci/master/tree/CHANGELOG.md"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/matgeom/ci/master/tree/"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository (upstream)",
+     "url": "https://github.com/mattools/matGeom/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/matgeom/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/mattools/matGeom/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -360,6 +477,34 @@
     }
    ],
    "deps": [],
+   "description": "Miscellaneous tools that don't fit somewhere else.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/gnu-octave/octave-miscellaneous/blob/main/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://gnu-octave.github.io/octave-miscellaneous/news/"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/gnu-octave/octave-miscellaneous/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://gnu-octave.github.io/octave-miscellaneous/functions/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/gnu-octave/octave-miscellaneous/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -393,6 +538,39 @@
     }
    ],
    "deps": [],
+   "description": "A statistics and machine learning toolbox for data with and w/o missing values.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/NaN/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/NaN/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/NaN/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/nan/overview.html"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://pub.ist.ac.at/~schloegl/matlab/NaN/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(nan)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -428,6 +606,39 @@
    "deps": [
     "statistics",
     "struct"
+   ],
+   "description": "Non-linear optimization toolkit.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later and BSD-3-Clause and public domain",
+     "url": "https://octave.sourceforge.io/optim/COPYING.html"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://octave.sourceforge.io/optim/NEWS.html"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://octave.sourceforge.io/pkg-repository/optim/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/optim/overview.html"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://octave.sourceforge.io/optim/package_doc/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(optim)"
+    }
    ],
    "form": "pkg",
    "content": [
@@ -475,6 +686,34 @@
     }
    ],
    "deps": [],
+   "description": "Quaternion package for GNU Octave, includes a quaternion class with overloaded operators.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/quaternion/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/quaternion/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/quaternion/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/quaternion/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(quaternion)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -505,6 +744,34 @@
     }
    ],
    "deps": [],
+   "description": "Additional spline functions",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later and public domain",
+     "url": "https://sourceforge.net/p/octave/splines/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/splines/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/splines/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/splines/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(splines)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -542,6 +809,34 @@
     }
    ],
    "deps": [],
+   "description": "The Statistics package for GNU Octave.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/gnu-octave/statistics/blob/master/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://github.com/gnu-octave/statistics/releases"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/gnu-octave/statistics/"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package documentation",
+     "url": "https://gnu-octave.github.io/statistics/"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/gnu-octave/statistics/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -575,6 +870,34 @@
     }
    ],
    "deps": [],
+   "description": "Additional structure manipulation functions.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/struct/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/struct/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/struct/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/struct/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(struct)"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m",
@@ -633,6 +956,39 @@
    "deps": [
     "pyodide"
    ],
+   "description": "Symbolic calculation features, including common Computer Algebra System tools such as algebraic operations, calculus, equation solving, Fourier and Laplace transforms, variable precision arithmetic and other features. Compatibility with other symbolic toolboxes is intended.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://github.com/gnu-octave/symbolic/blob/main/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://github.com/gnu-octave/symbolic/blob/main/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://github.com/gnu-octave/symbolic"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/symbolic/overview.html"
+    },
+    {
+     "icon": "fas fa-book",
+     "label": "package wiki",
+     "url": "https://github.com/gnu-octave/symbolic/wiki"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://github.com/gnu-octave/symbolic/issues"
+    }
+   ],
    "form": "pkg",
    "content": [
     "m"
@@ -665,6 +1021,34 @@
    ],
    "deps": [
     "nan"
+   ],
+   "description": "Stochastic concepts and maximum entropy methods for time series analysis.",
+   "links": [
+    {
+     "icon": "far fa-copyright",
+     "label": "GPL-3.0-or-later",
+     "url": "https://sourceforge.net/p/octave/tsa/ci/default/tree/COPYING"
+    },
+    {
+     "icon": "fas fa-rss",
+     "label": "news",
+     "url": "https://sourceforge.net/p/octave/tsa/ci/default/tree/NEWS"
+    },
+    {
+     "icon": "fas fa-code-branch",
+     "label": "repository",
+     "url": "https://sourceforge.net/p/octave/tsa/ci/default/tree/"
+    },
+    {
+     "icon": "fas fa-th-list",
+     "label": "function reference",
+     "url": "https://octave.sourceforge.io/tsa/overview.html"
+    },
+    {
+     "icon": "fas fa-bug",
+     "label": "report a problem",
+     "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(tsa)"
+    }
    ],
    "form": "pkg",
    "content": [

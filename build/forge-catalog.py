@@ -245,6 +245,13 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             "upstream_url": v.get("url", ""),
             "versions": _cands,
             "deps": e.get("depends") or [],
+            # ★ 包级静态描述（内容仓 mail/029 出 / mail/030 Q2 裁『内联』，2026-10-17 规范键）：
+            #   数据源 = 货架档案 `upstream.description`（上游索引口径，包级一条）；
+            #   **缺省 = ""**（不编、不省键 —— UI 按"字段到位前渲染空"接，键恒在 ⇒ 不用判有没有）。
+            #   links 同批同源（`upstream.links`；瘦身由生产者侧做，这里**透传不加工** ——
+            #   宿主替它删键 = 两个产地各写一半，端口纪律不许）。
+            "description": (e.get("upstream") or {}).get("description", "") or "",
+            "links": list((e.get("upstream") or {}).get("links") or []),
             # 端口 schema 2 两轴（接缝 §2）：`form`/`content` 从字节/kinds **派生**；
             # `kinds` **保留为兼容视图**（旧 loader 与旧套件照读 —— 判据：不改它们也全绿）。
             "form": derive_form(v.get("kinds") or []),
@@ -339,6 +346,32 @@ def capability_entries(site):
     return entries, problems
 
 
+def _site_fixups(entry):
+    """生产者态条目 → 站点态条目的**结构修补**（不改内容语义，只修"站点态的形状"）。
+
+    与 description/links 透传（mail/029/030）配套：
+      · `links[].url` 是**外部文档链**（sourceforge 仓库页/GitHub COPYING/…）—— 它不是
+        交付路径，**不参与**同源改写（两段式只管 `url`/`versions[].url`）。但生产者侧的
+        真实数据源是上游索引的原始 JSON，URL 里可能带 `\"` 转义残留 / 末尾空白这类
+        **结构噪声**（不是内容错）⇒ 逐条 strip 修形；非字符串/非 dict 项**不造**（宁可
+        让站点闸门点名，也不静默删 —— 采集器原则：读不到就明说）。
+      · 其余键一律透传（端口纪律：生产者给什么就是什么，宿主不替他改语义）。
+    **纯函数**（自证直接喂它）。"""
+    links = entry.get("links")
+    if isinstance(links, list):
+        fixed = []
+        for lk in links:
+            if isinstance(lk, dict) and isinstance(lk.get("url"), str):
+                lk = dict(lk)
+                u = lk.get("url") or ""
+                if u != u.strip() or '\\"' in u:
+                    u = u.strip().replace('\\"', '"')
+                lk["url"] = u
+            fixed.append(lk)
+        entry["links"] = fixed
+    return entry
+
+
 def load_upstream_table(path, validate=None, site=None):
     """读**生产者出的表**（接缝 §4 消费侧）；先校验，不合格 ⇒ **拒收**（fail-closed）。
 
@@ -367,6 +400,7 @@ def load_upstream_table(path, validate=None, site=None):
     for e in ents:
         d = {k: v for k, v in e.items()}
         d.setdefault("deps", [])
+        _site_fixups(d)                     # ★ links 结构修补（description/links 透传配套）
         # ★ 条目级同源改写（2026-10-16，端到端实测抓到）：生产者态的 `url` 是**上游绝对地址**
         #   （重取入口语义，两段式），而站点态必须**同源相对**。此前这条改写**只做在货架路径
         #   （`resolve()`）**上，上游路径漏了 ⇒ 并进来的条目 url 是绝对地址 ⇒ 端口校验器
@@ -711,6 +745,54 @@ def _selftest():
                   lambda: pick_version({"versions": [
                       {"version": "1.0.0", "requires": []},
                       {"version": "2.0.0", "requires": ["octave (>= 99)"]}]}, "11.3.0")["version"] == "1.0.0"))
+
+    # ★ description/links 透传（内容仓 mail/029 出 / mail/030 Q2 裁『内联』，2026-10-17 规范键）
+    def _mk_shelf_desc():
+        e = {"name": "demo", "depends": [], "verified": {"octave": "11.3.0"},
+             "upstream": {"description": "A test package.",
+                          "links": [{"label": "news", "url": "https://n"},
+                                     {"label": "repo", "url": "https://r", "icon": "fas fa-rss"}]},
+             "versions": [{"version": "1.0.0", "sha256": "a" * 64, "size": 10,
+                           "url": "http://x", "requires": ["octave (>= 4.0.0)"],
+                           "kinds": ["m"]}]}
+        return {"demo": e}
+    cases.append(("★ description/links：货架档案 upstream.* 进目录（包级透传，不加工）",
+                  lambda: (lambda p: p["description"] == "A test package."
+                           and p["links"][0]["label"] == "news"
+                           and p["links"][1].get("icon") == "fas fa-rss")(
+                      resolve(_mk_shelf_desc(), "11.3.0", False, "/nonexistent")[0][0])))
+    cases.append(("★ description/links：档案缺 upstream 块 ⇒ 空串/空数组（**不编、不省键**）",
+                  lambda: (lambda p: p["description"] == "" and p["links"] == [])(
+                      resolve(mk_shelf(), "11.3.0", False, "/nonexistent")[0][0])))
+    # 上游路径：_site_fixups（结构修补 = 只修形状，不改语义）
+    def _up_desc():
+        import tempfile as _t, json as _j
+        d = _t.mkdtemp()
+        p_ = os.path.join(d, "t.json")
+        _j.dump({"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "optim", "version": "1.6.3", "sha256": "a" * 64,
+             "url": "https://octave.sourceforge.io/download.php?package=optim-1.6.3.tar.gz",
+             "description": "Unconstrained non-linear optimization.",
+             "links": [{"label": "news", "url": " https://n \""},
+                       {"label": "repo", "url": "https://r"}]}]}, open(p_, "w"))
+        ents, _pr = load_upstream_table(p_, validate=None)
+        e0 = ents[0]
+        return (e0["description"] == "Unconstrained non-linear optimization."
+                and e0["links"][0]["url"] == "https://n \""
+                and e0["links"][1]["url"] == "https://r")
+    cases.append(("★ 上游条目：description/links 透传进站点 + links url 结构修补（strip/去转义）", _up_desc))
+    def _up_desc_reverse():
+        import tempfile as _t, json as _j
+        d = _t.mkdtemp()
+        p_ = os.path.join(d, "t.json")
+        _j.dump({"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "x", "version": "1", "sha256": "a" * 64, "url": "u",
+             "links": ["not-a-dict", {"label": "ok", "url": "https://ok"}]}]}, open(p_, "w"))
+        ents, _pr = load_upstream_table(p_, validate=None)
+        # 反向：坏形状的 links **原样透传**（不静默删 —— 让站点闸门/端口校验器点名）
+        return ents[0]["links"] == ["not-a-dict", {"label": "ok", "url": "https://ok"}]
+    cases.append(("★ 上游条目反向：坏形状 links 不许静默删（透传，闸门去点名）", _up_desc_reverse))
+
 
     # ② 该报的必须报
     cases.append(("★ resolve：未验证的包默认**不上架**（只上验证过的）",

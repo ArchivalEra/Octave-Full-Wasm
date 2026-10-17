@@ -128,6 +128,24 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
         if "license" in e and not isinstance(e["license"], (str, dict)):
             probs.append("%s license 必须是字符串或对象（自由文本即可 —— 裁决① 2026-10-15："
                          "不收紧成 SPDX 枚举）：得到 %s" % (tag, type(e["license"]).__name__))
+        # description / links（2026-10-17 规范键定稿；内容仓 mail/029 出、mail/030 Q2 裁『内联』）：
+        #   包级静态描述 + 文档链接（UI 卡片首屏数据）。**只查类型/结构** ——「写对了没」没有
+        #   机器判据（同 license 的诚实边界）。links 的规范结构 = {label, url}（Q2 裁决②瘦身
+        #   口径）；icon 等额外键是过渡期容忍（schema additionalProperties），不作承诺。
+        if "description" in e and not isinstance(e["description"], str):
+            probs.append("%s description 必须是字符串（包级一条；合法缺省空串）：得到 %s"
+                         % (tag, type(e["description"]).__name__))
+        if "links" in e:
+            if not isinstance(e["links"], list):
+                probs.append("%s links 必须是数组（合法缺省 []）：得到 %s"
+                             % (tag, type(e["links"]).__name__))
+            else:
+                for i, lk in enumerate(e["links"]):
+                    if (not isinstance(lk, dict) or not isinstance(lk.get("label"), str)
+                            or not isinstance(lk.get("url"), str)):
+                        probs.append("%s links[%d] 必须是 {label: str, url: str}（瘦身口径；"
+                                     "icon 等额外键过渡期容忍）：得到 %r" % (tag, i, lk))
+                        break
         # versions[]（裁决 2026-10-16，内容仓 mail/018 §②「出，且只出已 stage 字节的版本」）：
         #   三条不变量逐条判（schema 的 versions 描述里也有全文）。
         if "versions" in e:
@@ -336,6 +354,34 @@ def selftest():
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
              "form": "pkg", "content": ["oct"], "arch": "wasm128"}]}, schema=schema), False)
+
+    # description/links（2026-10-17 规范键定稿）：正反各钉住
+    add("★ description/links：规范形状 ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"], "description": "A test package.",
+             "links": [{"label": "news", "url": "https://n"},
+                       {"label": "repository", "url": "https://r", "icon": "fas fa-rss"}]}]},
+        schema=schema), True)
+    add("★ description/links：合法缺省（空串/空数组）⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"], "description": "", "links": []}]},
+        schema=schema), True)
+    add("★ description 反向：非字符串（数字）⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"], "description": 42}]}, schema=schema), False)
+    add("★ links 反向：不是数组 ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"], "links": {"news": "https://n"}}]},
+        schema=schema), False)
+    add("★ links 反向：缺 url 的链接项 ⇒ 必须报（瘦身口径 {label,url}）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "pkg", "content": ["m"], "links": [{"label": "news"}]}]},
+        schema=schema), False)
 
     # ② 该报的必须报
     add("★ 空表 ⇒ 必须报", lambda: check_table(

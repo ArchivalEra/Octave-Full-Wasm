@@ -303,6 +303,43 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
             if site_arch[ld] != want:
                 problems.append("R10 %s 的 arch=%s ≠ 站点 %s/ 里实际字节的架构 %s"
                                 % (p_.get("name"), want, ld, site_arch[ld]))
+    # R12（2026-10-17，内容仓 mail/029/030 —— description/links 进规范键）：
+    #   **货架条目的 description/links 必须与货架档案对账**（透传键 = 单一产地；
+    #   "我这侧对" ≠ "装配器吃到" —— 第五、六例教训之后的第七例对账器）。
+    #   判据：站点条目的 description == 档案 upstream.description（string），
+    #   links == 档案 upstream.links（逐字）。**缺省同步**：档案没有 upstream 块 ⇒
+    #   站点必须是 "" / []（不许编、也不许漏键）。
+    #   反向可证伪：站点 description 改一个字 ⇒ 必红（自证里有）。
+    #   ⚠️ 只对货架条目（url 在 assets/forge/ 下）：能力层/生产者表条目的描述
+    #   由它们自己的生产者负责（本仓货架档案不是那类条目的产地）。
+    for p in packs:
+        u = p.get("url") or ""
+        if not u.startswith("assets/forge/"):
+            continue
+        name = p.get("name", "?")
+        sp = os.path.join(shelf_dir, "packages", name + ".json")
+        try:
+            with open(sp, encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            continue                                   # R2 已报"货架档案不在/坏"，不重复
+        up = doc.get("upstream") or {}
+        want_d = up.get("description", "") or ""
+        want_l = up.get("links") or []
+        got_d = p.get("description")
+        if got_d is None:
+            problems.append("R12 %s 缺 description 键（透传键必须恒在；缺省空串）"
+                            % name)
+        elif got_d != want_d:
+            problems.append("R12 %s description 与货架档案不符（透传键 = 单一产地："
+                            "站点 %r… ≠ 档案 %r…）" % (name, str(got_d)[:40], str(want_d)[:40]))
+        got_l = p.get("links")
+        if got_l is None:
+            problems.append("R12 %s 缺 links 键（透传键必须恒在；缺省空数组）" % name)
+        elif got_l != want_l:
+            problems.append("R12 %s links 与货架档案不符（逐字对账；站点 %d 条 ≠ 档案 %d 条"
+                            "或内容有漂）" % (name, len(got_l) if isinstance(got_l, list) else -1,
+                                            len(want_l) if isinstance(want_l, list) else -1))
     return problems, []
 
 
@@ -389,7 +426,9 @@ def _mk_fixture(tmp, packs, octave="11.3.0", shelf_sha=None, blob_sha=None,
 
 def _pack(name="demo", version="1.0.0", sha="a" * 64, kinds=("m",)):
     return {"name": name, "version": version, "sha256": sha,
-            "url": "assets/forge/%s-%s.tar.gz" % (name, version), "kinds": list(kinds)}
+            "url": "assets/forge/%s-%s.tar.gz" % (name, version), "kinds": list(kinds),
+            # 2026-10-17 起 resolve() 恒产透传键（缺省空值不省键）⇒ 夹具同形（R12 对账）
+            "description": "", "links": []}
 
 
 def _selftest():
@@ -644,6 +683,43 @@ def _selftest():
         d = _r10_fixture(os.path.join(tmp, "r10_bad2"), "wasm64", "wasm32")
         cases.append(("★ R10 反向：条目说 wasm32 而站点实际是 wasm64 ⇒ 必须报",
                       lambda d=d: any("R10" in p for p in _r9_probs(d))))
+
+        # R12（2026-10-17，description/links 对账）—— 正反各钉住
+        def _r12_fixture(tmp2, site_desc, site_links, shelf_upstream=None, drop_keys=False):
+            d2 = _mk_fixture(tmp2, [_pack(sha=good_sha)], blob_sha=data)
+            if shelf_upstream is not None:
+                sp = os.path.join(d2, "shelf", "packages", "demo.json")
+                doc = json.load(open(sp))
+                doc["upstream"] = shelf_upstream
+                json.dump(doc, open(sp, "w"))
+            catp = os.path.join(d2, "site", "assets", "forge-catalog.json")
+            cd = json.load(open(catp))
+            if drop_keys:
+                cd["packs"][0].pop("description", None)
+                cd["packs"][0].pop("links", None)
+            else:
+                cd["packs"][0]["description"] = site_desc
+                cd["packs"][0]["links"] = site_links
+            json.dump(cd, open(catp, "w"))
+            return d2
+        _UP = {"description": "A demo package.",
+               "links": [{"label": "news", "url": "https://n"}]}
+        d = _r12_fixture(os.path.join(tmp, "r12_ok"),
+                         "A demo package.", _UP["links"], shelf_upstream=_UP)
+        cases.append(("R12：description/links 与货架档案逐字一致 ⇒ 不报",
+                      lambda d=d: _r9_probs(d) == []))
+        d = _r12_fixture(os.path.join(tmp, "r12_ok_empty"), "", [], shelf_upstream=None)
+        cases.append(("R12：档案无 upstream 块 ⇒ 站点是空串/空数组 ⇒ 不报（缺省同步）",
+                      lambda d=d: _r9_probs(d) == []))
+        d = _r12_fixture(os.path.join(tmp, "r12_drift"),
+                         "A demo package (drifted).", _UP["links"], shelf_upstream=_UP)
+        cases.append(("★ R12 反向：站点 description 漂了一个字 ⇒ 必须报（透传键单一产地）",
+                      lambda d=d: any("R12" in p and "description" in p for p in _r9_probs(d))))
+        d = _r12_fixture(os.path.join(tmp, "r12_drop"), None, None,
+                         shelf_upstream=_UP, drop_keys=True)
+        cases.append(("★ R12 反向：透传键整个缺失 ⇒ 必须报（缺省 = 空值，不是缺键）",
+                      lambda d=d: any("R12" in p and "缺" in p for p in _r9_probs(d))))
+
         # ③ 空输入必须报 / 未启用如实说
         d = _mk_fixture(os.path.join(tmp, "empty"), [_pack(sha=good_sha)], blob_sha=data)
         with open(os.path.join(d, "site", "assets", "forge-catalog.json"), "w") as fh:

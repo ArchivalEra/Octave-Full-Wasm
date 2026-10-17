@@ -175,6 +175,17 @@
         "note": {
           "type": "string"
         },
+        "description": {
+          "type": "string",
+          "description": "★ 包级静态描述（规范键，2026-10-17 定稿；内容仓 mail/029 出、mail/030 Q2 裁『内联』——实测 13 包共 865 字节，不构成拆分文件的理由，且它是 UI 卡片的**首屏数据**（每卡片都渲染），拆出去 = 每卡片一次额外 fetch，方向反了；`desc_url` 拆分方案不采（0.9 KB 为它引入第二个 catalog 的 schema/协商/缺件语义，复杂度远超收益；将来真出现大文本再议，判据 = 单包描述 > 若干 KB）。**包级一条**（上游索引口径；上游无逐版数据 ⇒ 逐版不编）。合法缺省 `\"\"`。数据源 = 生产者档案 `upstream.description`，`--emit` 摊平到条目级。"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          },
+          "description": "★ 包级文档链接（规范键，2026-10-17 定稿；与 `description` 同批，同裁『内联但瘦身』）。供 UI 面板『主页/新闻/仓库』链；合法缺省 `[]`。**瘦身口径**（内容仓 mail/030 Q2 裁决②）：`label`+`url` 为规范结构；`icon`（上游索引的 Font Awesome class）**非规范** —— UI 有自己的图标体系；携带它不撤条目（`additionalProperties: true`，兼容过渡期），但消费端**不作承诺**。"
+        },
         "consumer": {
           "type": "array",
           "items": {
@@ -193,6 +204,24 @@
           "items": {
             "$ref": "#/$defs/candidate"
           }
+        }
+      },
+      "additionalProperties": true
+    },
+    "link": {
+      "type": "object",
+      "required": [
+        "label",
+        "url"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "人读的链接名（如 news / repository / GPL-3.0-or-later）"
+        },
+        "url": {
+          "type": "string",
+          "description": "链接目标（外部绝对 URL；**不是**交付路径 —— 与 `url` 的两段式无关，它不参与同源改写）"
         }
       },
       "additionalProperties": true

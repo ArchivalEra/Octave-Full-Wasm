@@ -447,6 +447,66 @@
       } catch (e) { /* 记账失败不影响任何东西 */ }
     }
 
+    // ── browse/statusOf 的共享内核 ────────────────────────────────────────────
+    // 条目 → Entry（判决书 §3）：三属性 + 版本候选 + 描述。**一条产地**（statusOf 的三属性
+    // 判据与 browse 的 Entry 同源 —— 同一事实不允许两个出口两个答案，N6 的教训）。
+    function _browseEntry (p) {
+      var content = p.content || p.kinds || [];
+      var fromSource = content.indexOf('src') >= 0;
+      var ha = hostArchOf(null);
+      var archBad = !!(p.arch && ha && p.arch !== ha);
+      // 版本候选（表带 versions[] 才有；老表 ⇒ undefined，别编）
+      var versions = null;
+      if (p.versions && p.versions.length) {
+        versions = p.versions.map(function (c) {
+          var cv = { version: c.version, stage: c.stage || 'staged' };
+          if (cv.stage !== 'staged') {           // withheld（schema 词表仅两值；非 staged 一律按 withheld 形状如实带 cause）
+            cv.stage = 'withheld';
+            cv.withheld_cause = c.withheld_cause || 'unknown';
+          } else {
+            if (c.form) cv.form = c.form;
+            if (c.content) cv.content = c.content;
+            if (c.arch) cv.arch = c.arch;
+            if (c.requires) cv.requires = c.requires;
+            if (c.size) cv.size = c.size;
+          }
+          return cv;
+        });
+      }
+      // 状态聚合（按当前解析出的那一版 = 条目顶层标量）：
+      //   installed > blocked（arch 不符）> blocked（该版 withheld）> available
+      var why = [];
+      var st = 'available';
+      if (archBad) { st = 'blocked'; why.push('arch ' + p.arch + ' ≠ 宿主 ' + ha); }
+      var topCand = versions
+        ? versions.filter(function (c) { return c.version === p.version; })[0] : null;
+      if (topCand && topCand.stage === 'withheld') {
+        if (st !== 'blocked') st = 'blocked';
+        why.push('选中版本 ' + p.version + ' 未 stage（' + (topCand.withheld_cause || '?') + '）');
+      }
+      var installedKey = loaded['forge:' + p.name] || loaded['layer:' + p.name] || loaded[p.name];
+      if (installedKey) st = 'installed';
+      if (p.requires && p.requires.length) why.push('requires: ' + p.requires.join(','));
+      return {
+        name: p.name,
+        version: p.version,
+        // 三属性（与 statusOf 同一判据 —— 见上，一条产地）
+        fromSource: fromSource,
+        compatible: !archBad,
+        installed: !!installedKey,
+        // 包级透传（内容仓 mail/029/030；缺省空值不省键 ⇒ UI 恒可渲染）
+        description: p.description || '',
+        links: p.links || [],
+        // 版本候选集（逐候选如实：staged 带派生轴、withheld 只带 cause —— 不许编）
+        versions: versions,
+        state: st, why: why,
+        // 派生细节（诊断用；UI 不必读）
+        detail: { arch: p.arch || null, hostArch: ha || null,
+                  content: content, form: p.form || null,
+                  acceleration: fromSource ? 'not-built' : 'none-needed' }
+      };
+    }
+
     var API = {
       OCTAVE_M: OCTAVE_M,
       init: function (url) {
@@ -479,45 +539,36 @@
       //     · installed：**会话态**（`loaded[name]`）—— 就是"这次会话装没装"。
       //   返回对象；查无此包 ⇒ null（不编一个"全 false"的假状态）。
       statusOf: function (name) {
-        // ⚠️ 取数优先级（实测踩到）：**目录条目优先** —— 随站清单（`byName`）里的条目用
+        // ⚠️ 取数优先级（实测踩过）：**目录条目优先** —— 随站清单（`byName`）里的条目用
         //   `kind`（单值）而不是 `content`（多值数组），先取它会得到 `content: []`。
         //   ⚠️ 目录还没读（`_catalogByName` 空，例如刚起的实例 / 注入实例）⇒ 回退随站清单，
         //   且**该条目也在货架上时**以货架那条为准（货架才带 content/arch/requires）。
         //   两边都没有 ⇒ null（查无此内容，不编假状态）。
         var p = _catalogByName[name] || byName[name] || null;
         if (!p) return null;
-        // ⚠️ 随站条目（`byName`）与货架条目（`_catalogByName`）形状不同：前者的 `kind` 是
-        //   **投送形态**（js/oct），不是内容构成 ⇒ 对它**不能**用 kind 冒充 content
-        //   （实测：`statusOf('__delaunayn__').detail.content` 曾拿到 ['oct'] 形态值）。
-        //   ⇒ 只认真正的 content/kinds；两边都没有 ⇒ 空数组（"不知道装的是什么源"如实记）。
-        var content = p.content || p.kinds || [];
-        var fromSource = content.indexOf('src') >= 0;
-        // compatible：架构（有 arch 才判）+ 版本约束（有 requires 才判）
-        var compatible = true, why = [];
-        var ha = hostArchOf(null);
-        if (p.arch && ha && p.arch !== ha) {
-          compatible = false; why.push('arch ' + p.arch + ' ≠ 宿主 ' + ha);
-        }
-        var reqs = p.requires || [];
-        if (reqs.length) {
-          // 版本判据交回目录装配期（R1 已按 fork 版本过滤）⇒ 这里只记"有约束"
-          why.push('requires: ' + reqs.join(','));
-        }
-        return {
-          name: name,
-          fromSource: fromSource,
-          compatible: compatible,
-          // installed 三处都要查：货架包 `forge:<n>`、能力层 `layer:<n>`、**随站资产** `<n>`
-          //   （三种装载路径的键不同 —— 只查前两种会让随站包永远显示"没装"，实测抓到）。
-          installed: !!(loaded['forge:' + name] || loaded['layer:' + name] || loaded[name]),
-          // 派生细节（诊断用；UI 不必读）
-          detail: { arch: p.arch || null, hostArch: ha || null,
-                    content: content, form: p.form || null,
-                    acceleration: fromSource ? 'not-built' : 'none-needed',
-                    why: why }
-        };
+        // ★ 2026-10-17 起：三属性判据与 browse() 共用 `_browseEntry` 这**一条产地**
+        //   （N6 的教训：同一事实两个出口两个答案）。本方法保持同步 + 旧返回形状
+        //   （老套件/UI 在用）；多出来的键（description/links/versions/state/why）是纯增量。
+        return _browseEntry(p);
       },
       loaded: function () { return Object.keys(loaded); },
+      // ★ `browse()` —— 市场读面的**async 正门**（NOTES-market-design §3/§5 第 5 步；
+      //   内容仓 mail/028 §④ 点令上调优先级 + mail/029 请把 description/links 带出）。
+      //   为什么是它而不是 statusOf：statusOf 是**同步方法但依赖异步缓存**（接口缺陷，
+      //   设计判决点名）⇒ 读货架必须走 async 正门；statusOf 留作兼容视图（同步、目录已读时用）。
+      //   形状 = 判决书 §3 的 Entry[]：name/version + 三属性（fromSource/compatible/installed）
+      //   + versions[]（逐候选：stage/derived/withheld_cause）+ description/links（包级透传）。
+      //   状态聚合（state/why）按**当前解析出的那一版**算；解析失败（全 withheld/全不符）
+      //   ⇒ state='blocked' + why 说明，**不抛**（读面不因单包异常挂掉整个列表）。
+      browse: function () {
+        return API.catalog().then(function (cat) {
+          var out = [];
+          (cat.packs || []).forEach(function (p) {
+            try { out.push(_browseEntry(p)); } catch (e) { /* 单包异常不挂列表 */ }
+          });
+          return out;
+        });
+      },
       // ★ 能力层查询（接缝 §5④）：`{pyodide:{ready:true,kind:'python',version,bytes}}`
       layers: function () { return layers; },
       onLoad: function (f) { listeners.push(f); },
@@ -744,13 +795,26 @@
           // ★ 分类读 e.code（UI mail/028 Q1，2026-10-17）：正则匹配中文消息是脆弱契约
           //   （消息改一个字分类就错）；code 是 throw 时钉死的。映射表与既有 cause 词表逐字同值
           //   —— 旧消费者（.m 侧 pkg.m 按消息前缀分流）照读 message，不受影响。
-          var _byCode = { ARCH_MISMATCH:      ['failed',      'arch-mismatch'],
-                          NOT_IN_ANY_LIST:    ['not-found',   'not-in-any-list'],
-                          CATALOG_UNREADABLE: ['cannot-know', 'catalog-unreadable'],
-                          SHA_MISMATCH:       ['failed',      'sha-mismatch'],
-                          ENGINE_NOT_READY:   ['failed',      'engine-not-ready'],
-                          FS_NOT_READY:       ['failed',      'fs-not-ready'],
-                          UNPACK_FAILED:      ['failed',      'unpack-failed'] };
+          //   ★ 2026-10-17 补全（内容仓 mail/030 §Q1 点名）：原表只收 7 码，其余 7 码若从
+          //   install 链冒出（install 会先 API.load 基础资产 ⇒ load 路径的错也能传到这里）
+          //   会静默落 `cause:'unknown'`。⇒ 全 14 码进表 —— **每个 errCode 都有分类**
+          //   （"err.code 渲染文案 + __verdict__.cause 分类"两者不再不同源）。
+          //   状态映射口径：取字失败类 = failed（可重试的 fetch 失败，UI 可提示重试；
+          //   cannot-know 只保留给"连目录都读不到"——那是唯一真正"无从判断"的态）。
+          var _byCode = { ARCH_MISMATCH:        ['failed',      'arch-mismatch'],
+                          NOT_IN_ANY_LIST:      ['not-found',   'not-in-any-list'],
+                          CATALOG_UNREADABLE:   ['cannot-know', 'catalog-unreadable'],
+                          SHA_MISMATCH:         ['failed',      'sha-mismatch'],
+                          ENGINE_NOT_READY:     ['failed',      'engine-not-ready'],
+                          FS_NOT_READY:         ['failed',      'fs-not-ready'],
+                          UNPACK_FAILED:        ['failed',      'unpack-failed'],
+                          MODULE_NOT_READY:     ['failed',      'module-not-ready'],
+                          ASSET_FETCH_FAILED:   ['failed',      'asset-fetch-failed'],
+                          MANIFEST_FETCH_FAILED:['failed',      'manifest-fetch-failed'],
+                          LAYER_UNREACHABLE:    ['failed',      'layer-unreachable'],
+                          ASSET_NO_MOUNT:       ['failed',      'asset-no-mount'],
+                          JS_BUNDLE_NO_META:    ['failed',      'js-bundle-no-meta'],
+                          UNKNOWN_ASSET_KIND:   ['failed',      'unknown-asset-kind'] };
           if (e && e.code && _byCode[e.code]) { st = _byCode[e.code][0]; cause = _byCode[e.code][1]; }
           else if (/^架构不匹配：/.test(msg))          { st = 'failed';      cause = 'arch-mismatch'; }
           else if (/^货架上没有包：/.test(msg))         { st = 'not-found';   cause = 'not-in-any-list'; }
