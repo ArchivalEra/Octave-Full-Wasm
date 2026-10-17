@@ -1,6 +1,13 @@
 # 65 · clang-wasm 工具链 ↔ 本仓宿主的接入缺口（DELIVERY §4 的实测复核）
 
-**Status:** needs-info
+**Status:** ready-for-human
+**进展（2026-10-17，LLVM-wasm mail/026 归属答复后）**：判 **A**（支持基本类型 throw）——
+`_ZTIi` 是任何正确编译器对 `throw 42` 的必然产物（emcc 官方路径同样）、定义在宿主 sysroot
+的 `libc++abi-mt-legacyexcept.a`（D 段实测在）、`__cxa_*` 同族先例已导出。LLVM 信里的
+第三种情况成立：两边今天都不存在这个定义、现役生态零使用（11,663 个 .oct 全量 = 0）。
+**已落**：keep 生成器追加 7 条基本类型 typeinfo（+容器内现役 keep-w64.txt/keep.txt 同步补 7 条）；
+**待做 = 重链**（keep 只在终链消费；无真实用例不急于本批 —— ready-for-human 的含义：
+终链重链与否是产品决定）。
 **为什么 needs-info**（2026-10-16）：缺口 1 已修并复验；缺口 2（`_ZTIi`）仍开，
 且**归属待邻仓确认**（宿主 keep-list 加 ／ 工具链把 typeinfo 打进 side module）—— 见文末 §实测复核。
 **Settling:** `sh test/browser/run.sh test/browser/probe-toolchain-gap.mjs <URL> <模块目录>` —— rc=0 ⇒ 两条缺口都已修（两模块 dlopen + `probe_f(22)==22`）；rc=1 ⇒ 缺口 1（TLS）仍在；rc=2 ⇒ 缺口 2（typeinfo `_ZTIi`）仍在；rc=3 ⇒ 环境问题（页面没起来 / 夹具缺失）。**结算件已存在**（2026-10-16 造）；**当前判决 = rc=2**（见下 §实测复核）。

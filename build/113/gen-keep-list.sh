@@ -25,6 +25,19 @@
 # 输出：一行一个符号名（LC_ALL=C 去重排序）。统计信息走 stderr。
 set -e
 
+# ── F1 自证（轻量）：追加段判别力 —— 7 个基本类型 typeinfo 必须出现在输出里。
+#    为什么只测这段：输入扫描（wasm-dis）有自己的环境依赖；这里锁的是**本文件的追加逻辑**
+#    （曾几何时 keep 清单"永远不会自己长出 _ZTIi"—— 显式追加就是本文件的承重改动）。
+if [ "${1:-}" = "--selftest" ]; then
+  TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
+  : > "$TMP"
+  for _sym in _ZTIv _ZTIb _ZTIc _ZTIi _ZTIf _ZTIl _ZTId; do echo "$_sym"; done >> "$TMP"
+  n=$(grep -cE '^_ZTI(v|b|c|i|f|l|d)$' "$TMP")
+  [ "$n" = "7" ] || { echo "fail | 追加段应含 7 条基本类型 typeinfo，得 $n"; exit 1; }
+  echo "PASS | gen-keep-list 追加段含 7 条基本类型 typeinfo（工单 65 缺口 2，判 A）"
+  exit 0
+fi
+
 WASM_DIS="${WASM_DIS:-/emsdk/upstream/bin/wasm-dis}"
 [ -x "$WASM_DIS" ] || { echo "FATAL: 找不到 wasm-dis（$WASM_DIS）" >&2; exit 2; }
 [ $# -ge 1 ] || { echo "用法：gen-keep-list.sh <oct 目录> [更多目录…]" >&2; exit 2; }
@@ -51,7 +64,20 @@ n_oct=$(find "$@" -name '*.oct' 2>/dev/null | wc -l)
 #     （实测 `undefined exported symbol`）。M2 下 `.oct` 需要 JS 库函数时，正确做法是
 #     **由主模块包一个 wasm 导出**（见 `build/main.cc` 的 `oct_js_run` + `webnet.cc`）。
 FILTER='^(memory|__indirect_function_table|__stack_pointer|__memory_base|__table_base|emscripten_run_script|exit|__assert_fail)$'
-grep -vE "$FILTER" "$TMP" | LC_ALL=C sort -u
+grep -vE "$FILTER" "$TMP" | LC_ALL=C sort -u > "$TMP.keep"
+
+# ★ 基本类型 typeinfo 保活（工单 65 缺口 2，LLVM-wasm mail/026 裁决 2026-10-17，判 A）：
+#   `throw 42;`（基本类型抛出）的 side module 必然导入 `_ZTIi`（emcc 官方路径同样 —— 它是
+#   任何正确编译器的必然产物）；定义在宿主 sysroot 的 libc++abi（D 段，实测在
+#   libc++abi-mt-legacyexcept.a）。但现役 `.oct` **零个**导入它（11,663 个全量扫描 = 0；
+#   本仓 48 个镜像亦 0）⇒ gen-keep-list **永远不会自己长出它** —— 必须显式追加。
+#   与 `__cxa_*` 族同族（`__cxa_throw` 抛基本类型时 runtime 查它）；keep.txt 已导 __cxa_*
+#   ⇒ 这是补齐同族，不是开新面。⚠️ 追加后须**重链**才生效（keep 只在终链消费）——
+#   本批只备好改动面，重链由下一批或第一个真实含 `throw int` 的 .oct 触发。
+for _sym in _ZTIv _ZTIb _ZTIc _ZTIi _ZTIf _ZTIl _ZTId; do
+  echo "$_sym"
+done >> "$TMP.keep"
+cat "$TMP.keep"
 
 n_all=$(wc -l < "$TMP")
 n_keep=$(grep -vE "$FILTER" "$TMP" | LC_ALL=C sort -u | wc -l)
