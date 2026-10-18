@@ -219,6 +219,22 @@ def measure(argv):
     """
     facts = measure_repo()
 
+    # ★ 盲写守卫（issue #20 ②，上游 c29a33b 移植，2026-10-18）：**写盘前查目标**。
+    #   为什么必须在写之前：本仓实测代价 ≈40 分钟 —— 裸跑 `zreflect/facts.py`（未加载
+    #   Einfacht.env）时**代码默认值**接管，目标落在仓库根 `FACTS.json`（**被 .gitignore
+    #   掩盖**）⇒ 重测一直"成功"、`--accept-changes` 也过，但钩子读的是
+    #   `build/FACTS.json` ⇒ `check_facts_replay` 一直红而根因是写错地方。
+    #   两条判据（与语境无关，C3 纪律）：
+    #     · 目标被 gitignore 覆盖 ⇒ **FATAL**（写进去等于没写）；
+    #     · 仓里有 Einfacht.env 载体而本次未设 REFLECT_FACTS ⇒ **warn**（两个产地分叉）。
+    _fatal_w, _warn_w = guard.write_target_problems(
+        OUT, knob_set=bool(os.environ.get("REFLECT_FACTS", "").strip()))
+    if _warn_w:
+        print("⚠ %s" % _warn_w, file=sys.stderr)
+    if _fatal_w:
+        print("FATAL: %s" % _fatal_w, file=sys.stderr)
+        return 2
+
     old = facts_of(load(OUT)) if os.path.exists(OUT) else {}
 
     verdict, problems, notes = guard.decide(old, facts,
@@ -279,8 +295,12 @@ def _load_or_die():
     FileNotFoundError —— 那是"为本仓写死"的味道（我们那边永远有 FACTS.json）。
     语义仍是 fail-loud（空台账照样拒绝渲染），只是**把下一步写在错误里**。"""
     if not os.path.exists(OUT):
+        # ★ issue #20 ② 补充 2（上游 c29a33b）：旧提示「先在仓库根跑一遍量测」
+        #   正是**写出野文件的那个动作** —— 提示文本本身也是「默认值产地」的一部分，
+        #   不许教人踩坑。改说「先确认 REFLECT_FACTS 指向哪里」。
         print("FATAL: 还没有台账 %s\n"
-              "       先在仓库根跑一遍量测：python3 zreflect/facts.py\n"
+              "       先确认 REFLECT_FACTS 指向哪里（检查 reflect-hooks/Einfacht.env，\n"
+              "       或本仓有没有 facts 壳脚本——例如 build/facts.py）；\n"
               "       然后再 --render-doc 把机器块写进文档。" % os.path.basename(OUT),
               file=sys.stderr)
         raise SystemExit(2)

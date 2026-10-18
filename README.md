@@ -173,6 +173,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Architecture change: download/load separation (2026-10-18)**: per the user directive ("the market offers source and precompiled options; loading happens in a separate view; installed becomes downloaded"), the content repo specified a `DownloadStore` that cuts `install()`'s chain between sha verification and untar, persisting verified bytes plus a manifest into OPFS. The seam still lives on the **record** (not on a method) — it simply gains a second kind of record: the user-local one. Host rulings: (1) the engine's per-file sha comes from `<site>/<lane>/octave.build.json`'s `measured.files`, **not** `upstream-lock.json` (which is a third-party source lock); (2) `ARCH_MISMATCH` stays a load-time hard gate, decoupled from the download layer; (3) `install()` is **not** converged onto `DownloadStore` — the two chains coexist (atomic no-gap load vs across-time-gap download).
 
+**Upstream ruling on #20 (2026-10-18)**: gap (2) is **fixed upstream** (`c29a33b`, blind-write guard: a ledger target covered by `.gitignore` is refused with rc=2 and zero bytes written) and has been ported into the vendored copy here — reverse-verified, with the guard's own selftest growing 16→20. For gap (1) the upstream suggestion (retire the hand-written bench, declare every gate) was measured and rejected for this repo: 45 of the 46 entries live outside `zreflect/` and 12 are shell scripts that cannot carry a Python `GATE` declaration. The ruling taken is therefore B — keep both benches but lock the division: a new assertion requires their **intersection to be empty** (verified green, and verified to go red when an overlap is injected).
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -291,9 +293,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (52032 bytes)
-- `README.zh.md` (48378 bytes)
-- `STATE.md` (96697 bytes)
+- `README.de.md` (52658 bytes)
+- `README.zh.md` (48977 bytes)
+- `STATE.md` (98268 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (51513 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -549,7 +551,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/forge-preload/tpdf.m` (4730 bytes)
 - `build/forge-preload/ttest.m` (3147 bytes)
 - `build/forge/__forge_install__.m` (9246 bytes)
-- `build/gates-selftest.sh` (5352 bytes)
+- `build/gates-selftest.sh` (7118 bytes)
 - `build/gen-lanes.sh` (4118 bytes)
 - `build/gen-perf-charts.py` (5422 bytes)
 - `build/glue-selftest.m` (5046 bytes)
@@ -796,7 +798,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `mail/read/029-re-description-fields.md` (2210 bytes)
 - `mail/read/030-re-q2-ruling.md` (4743 bytes)
 - `mail/read/033-re-release-model-and-read-adopted.md` (3136 bytes)
-- `maintaince.md` (11655 bytes)
+- `maintaince.md` (12540 bytes)
 - `reflect-hooks/Einfacht.env` (2972 bytes)
 - `reflect-hooks/Einfacht.env.example` (1606 bytes)
 - `reflect-hooks/einfacht-env.sh` (4231 bytes)
@@ -1237,9 +1239,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `zreflect/collect.py` (5329 bytes)
 - `zreflect/doctor.json.example` (1242 bytes)
 - `zreflect/doctor.py` (15657 bytes)
-- `zreflect/facts.py` (18824 bytes)
+- `zreflect/facts.py` (20294 bytes)
 - `zreflect/gate.py` (10914 bytes)
-- `zreflect/guard.py` (9208 bytes)
+- `zreflect/guard.py` (13177 bytes)
 - `zreflect/knobs.py` (13343 bytes)
 - `zreflect/ledger.py` (11552 bytes)
 - `zreflect/living.py` (3688 bytes)

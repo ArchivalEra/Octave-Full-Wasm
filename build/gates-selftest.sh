@@ -107,6 +107,30 @@ done <"$LIST"
 rm -f "$LIST"
 
 echo "================================================================"
+# ★ 分工锁（issue #20 ① 的终局 = 方案 B，2026-10-18）：**两份自证台的交集必须为空**。
+#   为什么需要这条：本仓有两份台 —— 根 `gates-selftest.sh`（上游发现式：registry
+#   --all-runnable + --selftest-modules，覆盖 zreflect/ 平台闸门）与**本文件**（手写名单，
+#   覆盖平台无对应件的本仓专属闸门）。两份都跑（reflect-hooks/pre-commit:73,74）。
+#   上游建议方案 A（退役本文件、全部改 GATE 声明），**本仓判定 A 不成立**：
+#   46 条里 45 条在 build/ 与 .githooks/（不在 zreflect/ 发现面），且 12 个是 shell
+#   脚本（无法落 Python 的 GATE 声明）。⇒ 采用 B：**保留两份，但把分工锁死**。
+#   判据（可证伪）：同一脚本出现在两份名单里 ⇒ 职责漂移 ⇒ 必红。
+echo "── 分工锁：两份自证台的交集必须为空（issue #20 ① 终局 B）──"
+# ⚠️ 本脚本是 `sh`（dash）：**不支持** `<(...)` 进程替换 ⇒ 用临时文件（第一版踩过）。
+_t1=$(mktemp); _t2=$(mktemp)
+python3 zreflect/registry.py --all-runnable 2>/dev/null | sed 's|^\./||' | grep -v '^$' | sort > "$_t1"
+awk '/<<.EOF./{f=1;next} /^EOF$/{f=0} f' "$0" | awk '{print $1}' | sed 's|^\./||' | sort > "$_t2"
+_overlap=$(comm -12 "$_t1" "$_t2" || true)
+_root_n=$(grep -c . "$_t1" || true)
+rm -f "$_t1" "$_t2"
+if [ -n "$_overlap" ]; then
+  echo "❌ 分工漂移：以下脚本同时出现在两份自证台里（职责重叠）："
+  printf '%s\n' "$_overlap" | sed 's/^/      /'
+  echo "   修法：平台闸门（zreflect/）只归根台；本仓专属件只归本文件。"
+  exit 1
+fi
+echo "   ✓ 无交集（根台 ${_root_n:-0} 个平台闸门 / 本台 $n 个本仓专属）"
+
 if [ "$bad" != "0" ]; then
   echo "★ 闸门自证不通过：$bad / $n 个闸门**证明不了自己会红**：$badlist"
   # ⚠️ 别在 echo 里写反引号 —— 那会被 shell 当命令替换（本行第一版就踩了：--selftest: not found）
