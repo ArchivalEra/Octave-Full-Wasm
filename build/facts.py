@@ -22,9 +22,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENTRY = os.path.join(REPO, "zreflect", "facts.py")
 
 # 本仓默认口径（reflect-hooks/Einfacht.env 是钩子的权威来源；这里给手工直跑兜底）
+# ★ 2026-10-18 整层升级：加 REFLECT_MEASURE_MODULE（上游 #15 C3 的 _measure() 分派读它；
+#   不带它 ⇒ 回落占位 measure_example + 响亮警告 —— 本仓数据层就丢了）。
 DEFAULTS = {
     "REFLECT_FACTS": "build/FACTS.json",
     "REFLECT_DOC": "STATE.md",
+    "REFLECT_MEASURE_MODULE": "measure_octave",
 }
 env = dict(os.environ)
 for k, v in DEFAULTS.items():

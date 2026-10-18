@@ -85,6 +85,13 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
    ⇒ A 的代价是 45 文件搬迁 + 33 个改造 + 12 个永久例外。B = 保留两份台但**锁死分工**：
    `build/gates-selftest.sh` 新增「两份台交集必须为空」自证（已跑通 + 反向验证会红）。
    **③ 留本仓**：`critical` 套件被跳过 ⇒ rc≠0（与 C2「off 不是通过」同纪律）+ `lanes.json` 单源。
+   ★ **整层升级（2026-10-18，内容仓 mail/039 待办③，取代摘件）**：机制层已升上游 `45ca586`
+   ——7 个实质差异文件（facts/guard/knobs/render/check_locks/check_questions/check_facts_replay）
+   整层替换、**与上游逐字节同源**；本地补丁退役（自制 measure 分派 → `REFLECT_MEASURE_MODULE`
+   旋钮）；保留数据层 `measure_octave.py` + `mail-read.py` + `build/facts.py` 壳（补旋钮，
+   与守卫互补）。验收六项全绿（反测 rc=2 零字节 / 壳 163 条 / 两台 / registry / 值零变化 /
+   逐字节同源）。**下一批 = compile:true + diagnostics 同批**（NOTES-client-compile-design
+   §9 第 3 步起跑；UI 按钮先藏）。
 6. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
    libm 标量替换（wasm 无标量 FMA）、fill 热点（带宽绑定）、faer/PGO/LTO/链接旗标/NT>8、
    工单 62 ABI 分叉（根因 = f77-fcn.h 未收编手改，已收编 fork `a5a7208`；供给树

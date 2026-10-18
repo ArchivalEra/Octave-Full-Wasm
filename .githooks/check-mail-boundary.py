@@ -84,9 +84,12 @@ def read_inputs():
                     out[f] = fh.read()
             except OSError:
                 out[f] = ""
-    if out:
+    # ★ 未读区是否为空，要看**过滤掉非信件**之后（实测坑 2026-10-18：未读区只剩
+    #   README.md ⇒ 上面收到非空 dict 提前返回 ⇒ check 把 README skip 后 n=0 ⇒
+    #   零值守卫假红，退扫永远到不了）。判据 = 除 README 外没有别的 .md 才算空。
+    if any(f != "README.md" for f in out):
         return out
-    # 未读区空 ⇒ 退到已读区（read/）；两处都空时仍返回空（零值守卫由调用方判）。
+    # 未读区空（或只剩 README）⇒ 退到已读区（read/）；两处都空时仍返回空（零值守卫由调用方判）。
     rd = os.path.join(d, "read")
     if os.path.isdir(rd):
         for f in sorted(os.listdir(rd)):

@@ -29,10 +29,10 @@ interface（决策与执行分离 —— 决策可自证，执行归 measure()�
 """
 from __future__ import annotations
 
-from ledger import changed_keys, dropped_keys, short_value
 import os
 
 from gate import GATE_REPO
+from ledger import changed_keys, dropped_keys, short_value
 
 
 def _gitignored(path):
@@ -84,8 +84,6 @@ def write_target_problems(path, knob_set, ignored=None, carrier_exists=None):
                   "代码默认值）—— 手工跑请先 source，否则写盘目标可能与钩子"
                   "语境不同（issue #20 ②）")
     return fatal, warn
-
-
 from gate import module_meta
 
 
@@ -203,7 +201,7 @@ def _cases():
          lambda: accepted_keys([]) is False),
         ("解析：=空串 ⇒ 空集（一个都不收）",
          lambda: accepted_keys(["--accept-changes="]) == set()),
-        # ② 盲写守卫（issue #20 ②，上游 c29a33b 移植；本仓实测代价 ≈40 分钟）
+        # ② 盲写守卫（issue #20 ②）
         ("目标不被 gitignore 覆盖、无载体 ⇒ 无 warn 无 fatal",
          lambda: write_target_problems("/x/FACTS.json", knob_set=True,
                                        ignored=False, carrier_exists=False)
@@ -242,3 +240,4 @@ if __name__ == "__main__":
     sys.exit(main_selftest_or(sys.argv[1:],
                               "guard（台账写盘守卫：掉条 / 改口 / 逐条接受的接线）",
                               _cases, _run))
+

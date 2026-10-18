@@ -91,7 +91,9 @@ def replay_all(ledger, runner=None):
         rc, stdout = run(cmd)
         if rc is None:
             out.append("`%s` 复跑**超时**（%.0fs）：`%s` —— 要起服务/要构建的条目应写 "
-                       "replay=False，别拿超时当数据" % (k, t, cmd))
+                       "replay=False，别拿超时当数据。注：重启后冷启动首跑可能超时"
+                       "（文件系统冷，热缓存后往往秒回）—— 重跑一次再判，或调大 "
+                       "REFLECT_REPLAY_TIMEOUT" % (k, t, cmd))
             continue
         if rc != 0:
             out.append("`%s` 复跑**命令报错**（rc=%s）：`%s` —— 坏 cmd 印在活状态文档里，"
@@ -279,3 +281,4 @@ if __name__ == "__main__":
     sys.exit(main_selftest_or(sys.argv[1:],
                               "check_facts_replay（台账 cmd 逐字复跑：stdout 必须等于值）",
                               _cases, run))
+
