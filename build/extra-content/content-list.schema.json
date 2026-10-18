@@ -204,6 +204,95 @@
           "items": {
             "$ref": "#/$defs/candidate"
           }
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "★ **预编译件**（判决 2026-10-18，`build/113/NOTES-release-model.md` §4）：宿主构建的 `.oct` 二进制，**逐架构一份**。**为什么不塞进 `versions[]`**：`versions[]` 的语义是**上游 tarball 候选**（顶层标量 == 某候选逐字），而 artifact 是**我们自己构建的字节**——混进去会破坏那条不变量，且让 `stage` 出现两种含义。**发布单位 = `(name, version, arch)` 三元组**（不是单个文件、不是整个包集）；`control` 的 9 个 `.oct` 是一个 artifact 的**内容**，不是 9 个发布物。**三条不变量**（校验器逐条判）：① 同一 entry 内 `(arch, octave, toolchain, recipe)` **不得重复**（一个架构一个配方只许一份 —— 想要第二份必须换 `recipe` 且显式可见，不许静默替换）；② **版本锚定**：artifact **没有自己的 version 字段** —— 它只可能附着在 entry 顶层 `version`（= 某个已发布的源码候选）上，即「预编译件永远属于某个已发布源码版本」；③ **不许编**：`arch` 必须由字节派生（`build/113/oct-arch.py` 读 `dylink.0`），`files` 必须与站点字节相符，派生不出/字节不在 ⇒ `stage` 用 withheld + `withheld_cause`（不许写一个猜的 arch）。**架构不进版本号**：版本号是上游事实（`optim 1.6.3`），架构是我们的构建矩阵 —— 把架构塞进版本号会产生 `optim-1.6.3-wasm32` 这种**上游不存在的版本**，那正是坏模型。**产地**：内容仓**不声明**本键（它不构建、量不出 sha），宿主装配时补上（与 staged 语义同一条纪律：字节在谁那谁记）。",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "arch",
+        "form",
+        "files"
+      ],
+      "properties": {
+        "arch": {
+          "type": "string",
+          "enum": [
+            "wasm32",
+            "wasm64"
+          ],
+          "description": "目标架构（**派生值**，从 `.oct` 字节的 `dylink.0` TARGET_FEATURES 读，不看目录名）。与条目级 `arch` 三档语义不同：artifact 的 arch 是**必需**的——它就是这个 artifact 的身份键。"
+        },
+        "octave": {
+          "type": "string",
+          "description": "对哪版 Octave 头编的（如 `11.3.0`）。**跨大版本 ABI 是赌博**：现役 28 个 `.oct` 曾是 7.2 时代产物（HISTORY §10.6），2026-10-18 全量重编为 11.3.0。"
+        },
+        "toolchain": {
+          "type": "string",
+          "description": "构建工具链标识（如 `emcc 6.0.12`）。**溯源标签，不是可复现承诺**：同一配方重编的 sha 会变（emcc/ccache 状态），发布判据只能锚当次字节的 sha。"
+        },
+        "recipe": {
+          "type": "string",
+          "description": "构建配方标识（如 `O2`）。预编译批 A/B 实测：`-O3` 体积 +11% 零收益、LTO 弄坏 dlopen、`wasm-opt` 无感 ⇒ 现役唯一配方 = `O2`（`build/113/NOTES-pkg-precompile.md`）。**同一 arch 想要第二个配方 ⇒ 必须换这个值**（唯一性不变量）。"
+        },
+        "form": {
+          "type": "string",
+          "enum": [
+            "oct",
+            "octdir"
+          ],
+          "description": "投送形态：`octdir` = 一包一组 `.oct`（现役全部）；`oct` = 单文件。"
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "description": "**逐文件 sha256**（fail-closed 的唯一依据 —— 与 `versions[]` 同款三段核对：装配/站点闸门/客户端各核一次）。",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "sha256"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "url": {
+          "type": "string",
+          "description": "站点上的目录（同源相对，如 `assets/octdir/optim/`）。"
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "staged",
+            "withheld"
+          ],
+          "description": "staged = 字节在站点且 sha 相符；withheld = 未 stage（须带 `withheld_cause`，且**不带** files/arch 之外的派生值）。"
+        },
+        "withheld_cause": {
+          "type": "string",
+          "description": "withheld 的原因（如 `bytes-not-staged` / `arch-underivable`）。"
         }
       },
       "additionalProperties": true

@@ -186,6 +186,54 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
                 if not hit:
                     probs.append("%s 顶层标量 (version/sha256/url) 不等于任何候选（不变量 ②：兼容视图必须"
                                  "恰好是候选之一 —— 防两处各写一份漂移）" % tag)
+        # artifacts[]（判决 2026-10-18，NOTES-release-model §4）：预编译件的三条不变量。
+        #   发布单位 = (name, version, arch) 三元组；artifact **没有自己的 version**（版本锚定在条目上）。
+        if "artifacts" in e:
+            arts = e["artifacts"]
+            if not isinstance(arts, list) or not arts:
+                probs.append("%s artifacts 必须是非空数组（零值守卫：空候选集不是通过）" % tag)
+            else:
+                seen_id = set()
+                for ai, a in enumerate(arts):
+                    if not isinstance(a, dict):
+                        probs.append("%s artifacts[%d] 不是对象" % (tag, ai))
+                        continue
+                    # ① 唯一性：(arch, octave, toolchain, recipe) 不得重复
+                    ident = (a.get("arch"), a.get("octave"), a.get("toolchain"), a.get("recipe"))
+                    if ident in seen_id:
+                        probs.append("%s artifacts[%d] 的 (arch,octave,toolchain,recipe)=%r 重复"
+                                     "（不变量 ①：一个架构一个配方只许一份 —— 要第二份必须换 recipe）"
+                                     % (tag, ai, ident))
+                    seen_id.add(ident)
+                    # ② 版本锚定：artifact 不许自带 version 字段
+                    if "version" in a:
+                        probs.append("%s artifacts[%d] 带了 version=%r —— 预编译件**没有自己的版本**"
+                                     "（不变量 ②：它只附着在条目顶层 version 上）"
+                                     % (tag, ai, a.get("version")))
+                    # ③ 不许编：arch 必须存在且在词表；staged 必须有 files；withheld 必须带 cause
+                    if not a.get("arch"):
+                        probs.append("%s artifacts[%d] 缺 arch（不变量 ③：架构必须由字节派生，不许省）"
+                                     % (tag, ai))
+                    stage = a.get("stage", "staged")
+                    if stage == "withheld":
+                        if not a.get("withheld_cause"):
+                            probs.append("%s artifacts[%d] 是 withheld 却没写 withheld_cause（不许白 withheld）"
+                                         % (tag, ai))
+                    else:
+                        fs = a.get("files")
+                        if not isinstance(fs, list) or not fs:
+                            probs.append("%s artifacts[%d] 是 staged 却没有 files（不变量 ③：逐文件 sha 是"
+                                         "fail-closed 的唯一依据）" % (tag, ai))
+                        else:
+                            for f in fs:
+                                if not isinstance(f, dict) or not f.get("name"):
+                                    probs.append("%s artifacts[%d] 的 files 项缺 name" % (tag, ai))
+                                    break
+                                sh = f.get("sha256")
+                                if not (isinstance(sh, str) and re.fullmatch(r"[0-9a-f]{64}", sh)):
+                                    probs.append("%s artifacts[%d] 的文件 %r sha256 不是 64 位小写 hex"
+                                                 % (tag, ai, f.get("name")))
+                                    break
         # arch（裁决 2026-10-16，用户点令「楚河汉界」）：**只在"要 dlopen 进宿主的东西"上标**。
         #   三档语义（schema 的 arch 描述里也有全文）：
         #     ① 纯 .m（content 不含 oct，且 form 不是 oct/octdir）⇒ **不许带** arch（无架构概念）
@@ -356,6 +404,33 @@ def selftest():
              "form": "pkg", "content": ["oct"], "arch": "wasm128"}]}, schema=schema), False)
 
     # description/links（2026-10-17 规范键定稿）：正反各钉住
+    # artifacts[]（判决 2026-10-18，NOTES-release-model §4）：三条不变量正反各钉住
+    def _mka(**over):
+        base = {"arch": "wasm32", "octave": "11.3.0", "toolchain": "emcc 6.0.12", "recipe": "O2",
+                "form": "octdir", "files": [{"name": "a.oct", "sha256": "a" * 64}],
+                "url": "assets/octdir/p/", "stage": "staged"}
+        base.update(over); return base
+    add("★ artifacts：合法形状（两架构各一份）⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {**_mkent(), "artifacts": [_mka(), _mka(arch="wasm64")]}]}, schema=schema), True)
+    add("★ artifacts ①反向：同 arch+配方 两份 ⇒ 必须报（唯一性）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {**_mkent(), "artifacts": [_mka(), _mka()]}]}, schema=schema), False)
+    add("★ artifacts ②反向：artifact 自带 version ⇒ 必须报（版本锚定在条目上）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {**_mkent(), "artifacts": [_mka(version="1.6.3")]}]}, schema=schema), False)
+    add("★ artifacts ③反向：缺 arch ⇒ 必须报（不许省派生值）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {**_mkent(), "artifacts": [{k: v for k, v in _mka().items() if k != "arch"}]}]},
+        schema=schema), False)
+    add("★ artifacts ③反向：staged 但 files 空 ⇒ 必须报（逐文件 sha 是唯一依据）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {**_mkent(), "artifacts": [_mka(files=[])]}]}, schema=schema), False)
+    add("★ artifacts ③：withheld 带 cause 不带 files ⇒ 不报（派生不出就如实 withheld）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {**_mkent(), "artifacts": [{"arch": "wasm64", "form": "octdir", "files": [],
+                                        "stage": "withheld", "withheld_cause": "bytes-not-staged"}]}]},
+        schema=schema), True)
     add("★ description/links：规范形状 ⇒ 不报", lambda: check_table(
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "a", "version": "1", "sha256": "a" * 64, "url": "u",

@@ -340,7 +340,78 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
             problems.append("R12 %s links 与货架档案不符（逐字对账；站点 %d 条 ≠ 档案 %d 条"
                             "或内容有漂）" % (name, len(got_l) if isinstance(got_l, list) else -1,
                                             len(want_l) if isinstance(want_l, list) else -1))
+
+    # R13（★ 2026-10-18，判决 NOTES-release-model §3B / §6 第 3 步）：**预编译件发布判据**。
+    #   一个 `artifacts[]` 条目声称"这个包的这一架构已发布" ⇒ 必须能被站点字节证明：
+    #     B2 逐文件 sha：artifact.files 里的每个 name 在站点上真在、且 sha 相符；
+    #        反向：站点目录里**多出来的** `.oct` 也必报（多一件 = 目录与发布记录不一致）；
+    #     B3 架构纯度：每个 `.oct` 的**机器派生**架构 == artifact.arch（不看目录名）；
+    #     B1 唯一性：同一 entry 内 (arch,octave,toolchain,recipe) 不重复（校验器也判，这里再判一次
+    #        —— 站点闸门是最后一道，不依赖上游闸门跑过）。
+    #   反向可证伪：把任一文件 sha 改一位 / 声明 arch 与字节不符 / 站点多一个 .oct ⇒ 必红（自证里有）。
+    for p in packs:
+        arts = p.get("artifacts")
+        if not isinstance(arts, list):
+            continue
+        seen_a = set()
+        for ai, a in enumerate(arts):
+            if not isinstance(a, dict):
+                continue
+            an = p.get("name", "?")
+            ident = (a.get("arch"), a.get("octave"), a.get("toolchain"), a.get("recipe"))
+            if ident in seen_a:
+                problems.append("R13 %s artifacts[%d] 的 (arch,octave,toolchain,recipe)=%r 重复"
+                                "（B1 唯一性：一个架构一个配方只许一份）" % (an, ai, ident))
+            seen_a.add(ident)
+            if a.get("stage") == "withheld":
+                if not a.get("withheld_cause"):
+                    problems.append("R13 %s artifacts[%d] 是 withheld 却没写 cause" % (an, ai))
+                continue
+            arch_claim = a.get("arch")
+            url = a.get("url") or ""
+            d = os.path.join(site_dir, url)
+            if not url or not os.path.isdir(d):
+                problems.append("R13 %s artifacts[%d] 声称 staged 但站点目录不在：%s"
+                                % (an, ai, url or "(无 url)"))
+                continue
+            want_files = {f.get("name"): f.get("sha256") for f in (a.get("files") or [])
+                          if isinstance(f, dict) and f.get("name")}
+            if not want_files:
+                problems.append("R13 %s artifacts[%d] 是 staged 却没有 files" % (an, ai))
+                continue
+            have = sorted(n for n in os.listdir(d) if n.endswith(".oct"))
+            for fn, want_sha in want_files.items():
+                fp = os.path.join(d, fn)
+                if not os.path.isfile(fp):
+                    problems.append("R13 %s artifacts[%d] 记录的文件不在站点：%s" % (an, ai, fn))
+                    continue
+                got_sha = sha_of(fp)
+                if got_sha != want_sha:
+                    problems.append("R13 %s artifacts[%d] %s 的 sha=%s ≠ 记录 %s（B2 逐文件对账）"
+                                    % (an, ai, fn, got_sha[:12], str(want_sha)[:12]))
+                    continue
+                got_arch = _arch_of_oct(fp)
+                if arch_claim and got_arch and got_arch != arch_claim:
+                    problems.append("R13 %s artifacts[%d] %s 的派生架构=%s ≠ 声明的 %s（B3）"
+                                    % (an, ai, fn, got_arch, arch_claim))
+            extra = [n for n in have if n not in want_files]
+            if extra:
+                problems.append("R13 %s artifacts[%d] 站点目录里有记录之外的 .oct：%s（多一件 = "
+                                "目录与发布记录不一致）" % (an, ai, ", ".join(extra[:3])))
     return problems, []
+
+
+def _arch_of_oct(path):
+    """`.oct` 的架构（判据唯一产地 = `build/113/oct-arch.py`；读不出 ⇒ ""）。"""
+    try:
+        import importlib.util as _iu
+        vp = os.path.join(REPO, "build", "113", "oct-arch.py")
+        spec = _iu.spec_from_file_location("_oa13", vp)
+        mod = _iu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.arch_of_file(path)
+    except Exception:
+        return ""
 
 
 def arch_probe(d):
@@ -720,6 +791,41 @@ def _selftest():
         cases.append(("★ R12 反向：透传键整个缺失 ⇒ 必须报（缺省 = 空值，不是缺键）",
                       lambda d=d: any("R12" in p and "缺" in p for p in _r9_probs(d))))
 
+        # R13（2026-10-18，预编译件发布判据）—— 正反各钉住
+        def _r13_fixture(tmp2, mutate=None):
+            d2 = _mk_fixture(tmp2, [_pack(sha=good_sha)], blob_sha=data)
+            od = os.path.join(d2, "site", "assets", "octdir", "demo")
+            os.makedirs(od)
+            blob = _mk_oct("wasm32")
+            fn = os.path.join(od, "a.oct")
+            open(fn, "wb").write(blob)
+            art = {"arch": "wasm32", "form": "octdir", "url": "assets/octdir/demo/",
+                   "stage": "staged", "octave": "11.3.0", "toolchain": "t", "recipe": "O2",
+                   "files": [{"name": "a.oct",
+                              "sha256": hashlib.sha256(blob).hexdigest(),
+                              "size": len(blob)}]}
+            catp = os.path.join(d2, "site", "assets", "forge-catalog.json")
+            cd = json.load(open(catp))
+            cd["packs"][0]["artifacts"] = [art]
+            if mutate:
+                mutate(cd["packs"][0], od, blob)
+            json.dump(cd, open(catp, "w"))
+            return d2
+        d = _r13_fixture(os.path.join(tmp, "r13_ok"))
+        cases.append(("R13：artifact 与站点字节逐文件对账 ⇒ 不报",
+                      lambda d=d: _r9_probs(d) == []))
+        d = _r13_fixture(os.path.join(tmp, "r13_badsha"),
+                         lambda pk, od, b: pk["artifacts"][0]["files"][0].update(sha256="b" * 64))
+        cases.append(("★ R13 反向：记录 sha 与站点字节不符 ⇒ 必须红（B2）",
+                      lambda d=d: any("R13" in p and "B2" in p for p in _r9_probs(d))))
+        d = _r13_fixture(os.path.join(tmp, "r13_badarch"),
+                         lambda pk, od, b: pk["artifacts"][0].update(arch="wasm64"))
+        cases.append(("★ R13 反向：声明 arch 与字节派生不符 ⇒ 必须红（B3）",
+                      lambda d=d: any("R13" in p and "B3" in p for p in _r9_probs(d))))
+        d = _r13_fixture(os.path.join(tmp, "r13_extra"),
+                         lambda pk, od, b: open(os.path.join(od, "extra.oct"), "wb").write(b"X"))
+        cases.append(("★ R13 反向：站点目录多一个记录外的 .oct ⇒ 必须红（目录↔记录不一致）",
+                      lambda d=d: any("R13" in p and "记录之外" in p for p in _r9_probs(d))))
         # ③ 空输入必须报 / 未启用如实说
         d = _mk_fixture(os.path.join(tmp, "empty"), [_pack(sha=good_sha)], blob_sha=data)
         with open(os.path.join(d, "site", "assets", "forge-catalog.json"), "w") as fh:

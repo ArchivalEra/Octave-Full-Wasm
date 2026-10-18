@@ -638,6 +638,66 @@ def adapt_versions_for_site(entry, site, staged_check):
         out.append(d)
     return out or None
 
+def artifacts_for_site(entry, site, octave_ver, arch_of=None, toolchain="", recipe=""):
+    """把站点上该包的**预编译件**编成 `artifacts[]`（判决 2026-10-18，NOTES-release-model §4）。
+
+    发布单位 = `(name, version, arch)`；一个包在同一架构下的一组 `.oct` = **一个** artifact
+    （不是 N 个发布物）。`version` **不进 artifact** —— 它锚定在条目顶层（不变量 ②）。
+
+    逐档扫 `assets/octdir{,-w64}/<name>/`：
+      · 目录不在 ⇒ 该档没有 artifact（不编，不写空壳）；
+      · 在 ⇒ 逐文件量 sha256 + 用 `oct-arch.py` 从字节派生 arch（**不看目录名**）；
+        全部同档才 `staged`；混杂/读不出 ⇒ `withheld` + cause（不许编一个猜的 arch）。
+    **纯函数**（自测直接喂合成 site 目录 + 假 arch_of）。返回 list（可为空）。
+    """
+    out = []
+    for sub in ("octdir", "octdir-w64"):
+        d = os.path.join(site, "assets", sub, entry.get("name", ""))
+        if not os.path.isdir(d):
+            continue
+        files, archs, bad = [], set(), []
+        for fn in sorted(os.listdir(d)):
+            if not fn.endswith(".oct"):
+                continue
+            fp = os.path.join(d, fn)
+            try:
+                files.append({"name": fn, "sha256": sha256_file(fp),
+                              "size": os.path.getsize(fp)})
+                a = (arch_of or _arch_of_file)(fp)
+            except OSError as e:
+                bad.append("%s 读不出：%r" % (fn, e))
+                continue
+            if a == "unknown":
+                bad.append("%s 的架构读不出（不是 side module？）" % fn)
+            else:
+                archs.add(a)
+        if not files:
+            continue
+        url = "assets/%s/%s/" % (sub, entry.get("name", ""))
+        if bad or len(archs) != 1:
+            out.append({"arch": "", "form": "octdir", "files": files, "url": url,
+                        "stage": "withheld",
+                        "withheld_cause": ("arch-mixed" if len(archs) > 1 else "arch-underivable")})
+            continue
+        art = {"arch": archs.pop(), "form": "octdir", "files": files, "url": url,
+               "stage": "staged"}
+        if octave_ver:
+            art["octave"] = octave_ver
+        if toolchain:
+            art["toolchain"] = toolchain
+        if recipe:
+            art["recipe"] = recipe
+        out.append(art)
+    return out
+
+
+def _arch_of_file(path):
+    """`.oct` 文件的架构（判据唯一产地 = `build/113/oct-arch.py`，这里只是薄包装）。"""
+    sys.path.insert(0, os.path.join(REPO, "build", "113"))
+    from oct_arch_probe import arch_of_file as _aof
+    return _aof(path)
+
+
 def catalog_doc(packs, octave, gen, entries_extra=None, site=None):
     extra = list(entries_extra or [])
     # ★ 依赖边**全部来自数据**（接缝 §2 的落法，2026-10-15 内容仓 mail/011 起）：
@@ -657,6 +717,18 @@ def catalog_doc(packs, octave, gen, entries_extra=None, site=None):
                                           lambda s, u: os.path.isfile(os.path.join(s, u)))
             if _vs is not None:
                 _p["versions"] = _vs
+    # ★ artifacts[]（判决 2026-10-18，NOTES-release-model §4）：**预编译件**进目录。
+    #   为什么放在这里（装配态）而不是货架档案里：artifact 是**宿主构建的字节**
+    #   （sha/arch/工具链都是装配侧量出来的），内容仓不构建、量不出 —— 与 staged 语义同一条纪律。
+    #   ⚠️ 只在 `site` 给定（真装配）时编：纯函数自证不碰站点。
+    if site is not None:
+        _toolchain = os.environ.get("PKG_OCT_TOOLCHAIN", "emcc 6.0.12")
+        _recipe = os.environ.get("PKG_OCT_RECIPE", "O2")
+        for _p in list(packs) + extra:
+            _arts = artifacts_for_site(_p, site, octave,
+                                       toolchain=_toolchain, recipe=_recipe)
+            if _arts:
+                _p["artifacts"] = _arts
     return {
         "schema": 2,          # 接缝 §2：schema 2 加 form/content 两轴（kinds 留作兼容视图）
         "octave": octave,
@@ -792,6 +864,37 @@ def _selftest():
         # 反向：坏形状的 links **原样透传**（不静默删 —— 让站点闸门/端口校验器点名）
         return ents[0]["links"] == ["not-a-dict", {"label": "ok", "url": "https://ok"}]
     cases.append(("★ 上游条目反向：坏形状 links 不许静默删（透传，闸门去点名）", _up_desc_reverse))
+    # ★ artifacts[]（判决 2026-10-18，NOTES-release-model §4）
+    def _mk_site_with_oct(arch="wasm32", n=2):
+        d = tempfile.mkdtemp()
+        pkg = os.path.join(d, "assets", "octdir", "demo")
+        os.makedirs(pkg)
+        for i in range(n):
+            open(os.path.join(pkg, "m%d.oct" % i), "wb").write(b"OCT-BYTES-%d" % i)
+        return d
+    def _art_ok():
+        d = _mk_site_with_oct()
+        arts = artifacts_for_site({"name": "demo"}, d, "11.3.0",
+                                  arch_of=lambda _p: "wasm32", toolchain="emcc 6.0.12",
+                                  recipe="O2")
+        a = arts[0]
+        return (len(arts) == 1 and a["arch"] == "wasm32" and a["stage"] == "staged"
+                and len(a["files"]) == 2 and a["recipe"] == "O2"
+                and a["octave"] == "11.3.0" and "version" not in a)
+    cases.append(("★ artifacts：站点有 .oct ⇒ 一个 artifact（逐文件 sha，无 version 字段）", _art_ok))
+    def _art_mixed():
+        d = _mk_site_with_oct()
+        seq = iter(["wasm32", "wasm64"])
+        arts = artifacts_for_site({"name": "demo"}, d, "11.3.0",
+                                  arch_of=lambda _p: next(seq))
+        return len(arts) == 1 and arts[0]["stage"] == "withheld" \
+            and arts[0]["withheld_cause"] == "arch-mixed"
+    cases.append(("★ artifacts 反向：包内架构混杂 ⇒ withheld（不许猜一个 arch）", _art_mixed))
+    def _art_none():
+        d = tempfile.mkdtemp()
+        return artifacts_for_site({"name": "demo"}, d, "11.3.0", arch_of=lambda _p: "wasm32") == []
+    cases.append(("★ artifacts：站点没有该包的 .oct ⇒ 空列表（不编空壳）", _art_none))
+
 
 
     # ② 该报的必须报

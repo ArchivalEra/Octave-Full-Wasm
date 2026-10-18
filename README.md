@@ -161,6 +161,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Package precompilation batch (2026-10-18)**: all 28 Forge `.oct` side modules that were still compiled with Octave 7.2 headers are rebuilt against 11.3.0 — **two flavors only**, per the three-line model: `wasm32` (no `-pthread`, serves the `base` cell) and `wasm64` (`-pthread -sMEMORY64=1`, serves `w64`). The tuning knobs were measured, not guessed: `-O3` costs **+11% bytes** for noise-level speed, **LTO breaks dlopen outright** (it strips symbols only dlopen needs — the §5.78 precedent reproduced on both flavors), and `wasm-opt -O3` post-processing yields -0.6% with no speed gain ⇒ **the shipped recipe is `-O2`**, because on the side-module layer there is no knob headroom left (the real levers are main-module/BLAS, already done). Verified in-browser: `accept-113-pkgoct` **27/0 on both flavors**; full `PROBES=1` sweep green. See `build/113/NOTES-pkg-precompile.md`.
 
+**Release model defined (2026-10-18)**: a package is released as an **artifact** = `(name, version, arch)` — not as a pile of files, and **not as a second version number**: the version is the upstream fact (`optim 1.6.3`) while the architecture is a build-matrix index key, so there is no `optim-1.6.3-wasm32` pseudo-version. The shipped catalog now carries `artifacts[]` (per-architecture, per-file sha256, derived `arch`, plus `octave`/`toolchain`/`recipe` provenance) — currently **5 packages × 2 architectures = 10 release units**. Gate R13 reconciles every artifact file against the site bytes (missing, extra, or sha drift ⇒ red). See `build/113/NOTES-release-model.md`.
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -279,9 +281,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (48915 bytes)
-- `README.zh.md` (45223 bytes)
-- `STATE.md` (89526 bytes)
+- `README.de.md` (49507 bytes)
+- `README.zh.md` (45833 bytes)
+- `STATE.md` (91461 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (51513 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -327,6 +329,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-pkg-precompile.md` (5577 bytes)
 - `build/113/NOTES-plugin-survey.md` (18550 bytes)
 - `build/113/NOTES-plugins.md` (4279 bytes)
+- `build/113/NOTES-release-model.md` (13071 bytes)
 - `build/113/NOTES-slicot.md` (19273 bytes)
 - `build/113/NOTES-t2-graphics.md` (7241 bytes)
 - `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
@@ -371,7 +374,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/check-build-manifest.py` (28829 bytes)
 - `build/113/check-ci-bootstrap.sh` (6162 bytes)
 - `build/113/check-dylink-signatures.py` (9002 bytes)
-- `build/113/check-forge-catalog.py` (48224 bytes)
+- `build/113/check-forge-catalog.py` (54644 bytes)
 - `build/113/check-lane-purity.py` (11201 bytes)
 - `build/113/check-oct-host-symbols.mjs` (953 bytes)
 - `build/113/check-oct-imports.py` (16007 bytes)
@@ -503,17 +506,17 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/extra-content/bad/unknown-axis.json` (5102 bytes)
 - `build/extra-content/bad/unknown-form.json` (5079 bytes)
 - `build/extra-content/check-content-port.py` (8496 bytes)
-- `build/extra-content/content-list.schema.json` (16491 bytes)
+- `build/extra-content/content-list.schema.json` (21518 bytes)
 - `build/extra-content/golden/runtime.json` (826 bytes)
 - `build/extra-content/golden/shelf.json` (5080 bytes)
 - `build/extra-content/golden/toolchain-llvm.json` (6352 bytes)
 - `build/extra-content/golden/toolchain.json` (885 bytes)
 - `build/extra-content/golden/versions.json` (1452 bytes)
-- `build/extra-content/validate-content-list.py` (29484 bytes)
+- `build/extra-content/validate-content-list.py` (34992 bytes)
 - `build/facts.py` (1604 bytes)
 - `build/fftw_threads_stub.c` (553 bytes)
 - `build/forge-build.sh` (2117 bytes)
-- `build/forge-catalog.py` (56637 bytes)
+- `build/forge-catalog.py` (61878 bytes)
 - `build/forge-fetch.py` (5109 bytes)
 - `build/forge-preload/asciiplot.m` (940 bytes)
 - `build/forge-preload/betacdf.m` (7159 bytes)
@@ -796,7 +799,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `site/assets/data/doc-cache` (2219997 bytes)
 - `site/assets/data/installed_packages.m` (5603 bytes)
 - `site/assets/data/macros.texi` (3369 bytes)
-- `site/assets/forge-catalog.json` (31172 bytes)
+- `site/assets/forge-catalog.json` (39493 bytes)
 - `site/assets/forge/cgi-0.1.2.tar.gz` (9960 bytes)
 - `site/assets/forge/datatypes-1.4.2.tar.gz` (2091502 bytes)
 - `site/assets/forge/geometry-4.1.0.tar.gz` (113949 bytes)
