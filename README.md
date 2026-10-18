@@ -179,6 +179,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **In-browser compilation landed (2026-10-18)**: `OctaveAssets.compileExtension(name)` now compiles a package's `src/*.cc` into a real `.oct` inside the browser, returning a verdict plus a **live `diagnostics` log stream**. Per the user directive the toolchain is **pulled in stages**: sysroot (19.7 MB) and clang (45.8 MB) at init, while **lld (31.8 MB) is deferred until the first link** — so the first compile peaks at 66 MB raw instead of 81 MB. A purpose-built `compile-worker.mjs` does the staging while still importing the producer's `driver/compile-core.mjs` orchestration. Acceptance `accept-compile-extension` is **11/0** on both sites. **Known boundary, recorded honestly**: the product is recognized (`exist=3`, `which` correct) but a cross-boundary call still fails, while the site's prebuilt 7.2 artifact works — the same typeinfo-export gap as ticket 65's ruling A, which is why the fix belongs to that relink batch.
 
+**Fact refresh (2026-10-18, pre-compaction)**: ledger re-measured — zero value changes, only measurement timestamps; replay gate 34/34 verbatim; STATE assertions consistent.
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -297,8 +299,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (53905 bytes)
-- `README.zh.md` (50376 bytes)
+- `README.de.md` (54029 bytes)
+- `README.zh.md` (50545 bytes)
 - `STATE.md` (103295 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (68939 bytes)
