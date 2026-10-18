@@ -159,6 +159,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 - `.scratch/open-questions/issues/` — local ticket tracker
 - `docs/agents/upstream-issues.md` — issues filed back upstream to [Einfacht](https://github.com/ArchivalEra/Einfacht) (archived copies); `docs/agents/ui-issue-interface-change.md` — the interface/behaviour notice filed to the UI repo
 
+**Package precompilation batch (2026-10-18)**: all 28 Forge `.oct` side modules that were still compiled with Octave 7.2 headers are rebuilt against 11.3.0 — **two flavors only**, per the three-line model: `wasm32` (no `-pthread`, serves the `base` cell) and `wasm64` (`-pthread -sMEMORY64=1`, serves `w64`). The tuning knobs were measured, not guessed: `-O3` costs **+11% bytes** for noise-level speed, **LTO breaks dlopen outright** (it strips symbols only dlopen needs — the §5.78 precedent reproduced on both flavors), and `wasm-opt -O3` post-processing yields -0.6% with no speed gain ⇒ **the shipped recipe is `-O2`**, because on the side-module layer there is no knob headroom left (the real levers are main-module/BLAS, already done). Verified in-browser: `accept-113-pkgoct` **27/0 on both flavors**; full `PROBES=1` sweep green. See `build/113/NOTES-pkg-precompile.md`.
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -277,8 +279,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (48057 bytes)
-- `README.zh.md` (44436 bytes)
+- `README.de.md` (48915 bytes)
+- `README.zh.md` (45223 bytes)
 - `STATE.md` (89526 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (51513 bytes)
