@@ -63,6 +63,14 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 5. **Einfacht 反哺（暗线，持续推进）**：三插件已并（#11 check_pins/check_locks、
    #12 check_ab）；**可执行闸门脚本必须显式 `__main__` 入口**（#12 并后抓到的缺口）。
    提 issue/PR 前先做现有档位对照表；覆盖不到或配置繁琐 ⇒ 自行迭代再提 PR。
+   ★ **#20（2026-10-18，三线裁决大拆除的实战反哺）**：三条「两套产地并存」——
+   ① 根 `gates-selftest.sh`（声明式）与 `build/gates-selftest.sh`（手写 46 条）**都跑**、
+   职责重叠；② `REFLECT_*` 的代码默认值把写操作导向**被 gitignore 掩盖**的位置
+   （裸跑 `facts.py` 写根 `FACTS.json`，而钩子读 `build/FACTS.json` ⇒ 重测静默不生效）；
+   ③ 档位/车道存在性散在 `plugins.json` / `manifest.json` / `check-build-manifest.py` 三处，
+   **漏改 manifest 的 inputs ⇒ 核心闸门 probe-lane 被 sweep 永久跳过而报全绿**。
+   共同形状：**"必须一致"的东西只要有一个产地没被闸门看着，它漂的时候表现是
+   "跳过/默认值/没报错"，不是红**。
 6. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
    libm 标量替换（wasm 无标量 FMA）、fill 热点（带宽绑定）、faer/PGO/LTO/链接旗标/NT>8、
    工单 62 ABI 分叉（根因 = f77-fcn.h 未收编手改，已收编 fork `a5a7208`；供给树

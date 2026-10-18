@@ -3,6 +3,22 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-18 · Einfacht 反哺 #20）
+
+- **★ 反哺上报：三线裁决大拆除里卡住的三处「两套产地并存」（Einfacht issue #20）**：
+  https://github.com/ArchivalEra/Einfacht/issues/20 —— 每条带可复跑判据 + 最小复现：
+  ① **`gates-selftest.sh` 两份并存**（根 = 上游声明式 `registry --all-runnable`；
+  `build/` = 本仓手写 46 条名单），**pre-commit 两个都跑**（`reflect-hooks/pre-commit:73,74`）
+  ⇒ 同一件事两处产地，新增闸门义务不同（声明自动 vs 手写登记）；
+  ② **`REFLECT_*` 默认值把写操作导向被 gitignore 掩盖的位置**：裸跑 `facts.py` 写仓库根
+  `FACTS.json`（60052 字节实测），而钩子读 `build/FACTS.json` ⇒ **重测"成功"但改口不生效**，
+  `check_facts_replay` 一直红而根因是写错地方（本次会话真实代价 ≈40 分钟）；
+  ③ **档位/车道知识散在三张登记表**：本次漏改 `manifest.json` 的 `THREADS_ARTIFACT`
+  ⇒ **核心闸门 `probe-lane` 被 sweep 永久跳过而 summary 报 "0 FAIL"**（假绿）。
+  · **共同形状**：「必须一致」的东西只要有一个产地没被闸门看着，它漂的时候表现是
+  「跳过 / 默认值 / 没报错」，**不是红** —— 这是本仓反复踩的"收集-断言式闸门在输入消失时
+  静默变绿"的跨仓库版。
+
 ## 现在是什么（2026-10-18 · mail 读信规则批）
 
 - **★ mail 未读区/已读区 + 读信入口命令（2026-10-18，采纳内容仓 `mail/031` 提案，用户点令「read 文件夹」）**：
