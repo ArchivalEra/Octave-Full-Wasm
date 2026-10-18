@@ -65,9 +65,19 @@ OpenBLAS-e2、rust-sort——见台账），不在包编译层。
 这是 **optim 源码对 octave_value_list 的用法与 11.3.0 调用约定的既有边界**，
 不是编译配方问题。结案实验：`.m` 包装路径全绿即视为可用；直调面**不作承诺**。
 
-## §5 全量重编与发运
+## §5 全量重编与发运（已完成）
 
 配方 = 现役 `build-pkg-oct.sh`（-O2、11.3.0 头、写死模块表）× 两档：
 w32（`/src/work/octave-install` + 无旗标影子）、w64（`/src/work/octave-install-w64`
 + `-pthread -sMEMORY64=1 -fno-threadsafe-statics` 影子，`build-w64-lane.sh` 同款）。
-threads 档复用 w32 产物 + atomics 影子重编（`build-oct-lane.sh` 既有线）。
+~~threads 档复用 w32 产物 + atomics 影子重编~~ —— **该档已随三线裁决整档删除**（2026-10-17，
+HISTORY §5.108）：wasm32 不允许多线程，本批只发 w32/w64 两份。
+
+**结果**：三档各 28 个 `.oct` 全绿；base 档 slicot 模块补编（判据⑨ 4 个 BLAS 入口模块内定义、
+零 `__cxa_guard` 引用）。上站 8768 → 8761，两站逐字节一致；
+`accept-113-pkgoct` **两档各 27/0**（真调用）。
+
+**途中真 bug（记档）**：threads 档首轮重编全部变成 wasm64——`lane-shim.sh` 建影子时沿 PATH
+解析"真实编译器"，命中了前面还在 PATH 里的 **w64 影子** ⇒ `-sMEMORY64=1` 透传进产物。
+`oct-arch.py` 纯度检查当场抓红 28 个。修法：建影子时用**干净 PATH**（只含真 emsdk + /src/bin）。
+教训：车道影子必须**链到真编译器**，不能链到另一个影子（自证里应加一条反向断言）。
