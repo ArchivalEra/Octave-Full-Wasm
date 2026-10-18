@@ -167,6 +167,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Upstream report (2026-10-18)**: the three-line purge surfaced three "two homes for one fact" gaps, filed as [Einfacht #20](https://github.com/ArchivalEra/Einfacht/issues/20): (1) two `gates-selftest.sh` benches coexist (declarative upstream + a hand-written 46-entry list) and pre-commit runs both; (2) the `REFLECT_*` code default writes the ledger to a gitignored path, so a bare re-measure reports success while the hook reads a different file; (3) lane knowledge lives in three registries, and forgetting one made the core `probe-lane` gate get silently skipped while the sweep still reported zero failures.
 
+**Inbox (2026-10-18)**: content-repo `033` acknowledged both the release model (`artifacts[]` belongs to the host; architecture is not a version axis) and the `read/` adoption, and accepted that the zero-value-guard conflict was a gap in its own proposal. Replied with the upstream issue number ([#20](https://github.com/ArchivalEra/Einfacht/issues/20)) — its input-vanished root cause and this repo's silently-skipped core gate are the same family.
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -285,8 +287,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (50541 bytes)
-- `README.zh.md` (46747 bytes)
+- `README.de.md` (50957 bytes)
+- `README.zh.md` (47135 bytes)
 - `STATE.md` (94172 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (51513 bytes)
