@@ -29,9 +29,9 @@
 #   M_ASSETS="pkgfix webshims" sh build/promote-pages.sh
 # 它做的事（与 `promote-webgl.sh` 第 3 步同构，**挂载点逐字读 assets-meta.json**）：
 #   ① `bundle-m` 重打包 → 两个站点 + 仓库镜像的 `assets/m/<名>.js`
-#   ② `sync-js` 刷新三个清单（`manifest{,.threads,.w64}.json`）里那两个资产的 sha
+#   ② `sync-js` 刷新清单（`manifest{,.w64}.json`）里那两个资产的 sha
 #      ★ 漏第 ② 步的后果是加载器 **fail-closed 拒载**（"资产校验失败"）—— 实测过两次。
-#   ③ **重生成车道清单**（`make-lane-manifest.py --lane threads|w64`）：它们从基础清单复制
+#   ③ **重生成车道清单**（`make-lane-manifest.py --lane w64`）：它们从基础清单复制
 #      非 oct 条目 ⇒ 基础清单的 m-asset sha 一变，车道那份就陈旧（本批实测抓到）。
 set -uo pipefail
 REPO=${REPO:-/mnt/hdd/zcode-projects/Octave-Full-Wasm}   # 可覆盖：自证在夹具上跑
@@ -125,8 +125,8 @@ if [ "$MODE" = "selftest" ]; then
   printf '[{"name":"m1","kind":"js","url":"assets/m/m1.js","sha256":"%064d"}]' 0 \
     > "$tmp/site/assets/manifest.json"
   printf '[{"name":"m1","kind":"js","url":"assets/m/m1.js","sha256":"%064d"}]' 1 \
-    > "$tmp/site/assets/manifest.threads.json"
-  if python3 "$(dirname "$0")/113/make-lane-manifest.py" "$tmp/site/assets" --check --lane threads \
+    > "$tmp/site/assets/manifest.w64.json"
+  if python3 "$(dirname "$0")/113/make-lane-manifest.py" "$tmp/site/assets" --check --lane w64 \
       >/dev/null 2>&1; then
     echo "fail | promote-pages/**陈旧的车道清单竟没报**（m 资产 sha 变更没人拦）"; bad=1
   else
@@ -160,7 +160,7 @@ check_lanes () {  # $1=站点目录
   if [ ! -f "$_s/lanes.js" ]; then
     echo "   ✗ $_s/lanes.js 缺失（页面引用它 ⇒ 会 404）"; return 1
   fi
-  for d in "" threads w64 w64-base; do
+  for d in "" w64 w64-base; do   # 三线裁决：threads 已删
     _p="$_s"; [ -n "$d" ] && _p="$_s/$d"
     if [ -f "$_p/octave.js" ] && [ -f "$_p/octave.wasm" ] && [ -f "$_p/octave.data" ]; then
       _name=base; [ -n "$d" ] && _name="$d"
@@ -259,7 +259,7 @@ if [ -n "$M_ASSETS" ]; then
     cp -p "$SITE/assets/manifest.json" "$d/assets/manifest.json"
   done
   # 车道清单从基础清单复制非 oct 条目 ⇒ 基础那份的 m-asset sha 一变，车道那份就陈旧。
-  for lane in threads w64; do
+  for lane in w64; do   # 三线裁决：threads 清单已随档删除
     for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
       [ -f "$d/assets/manifest.$lane.json" ] || continue
       python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --lane "$lane" >/dev/null \
@@ -269,7 +269,7 @@ if [ -n "$M_ASSETS" ]; then
   # ★ 反向断言两条：
   #   ① 车道清单必须与磁盘字节一致（漏重生成 ⇒ 红）
   #   ② 三个站点的 m-asset 必须逐字节相同（拷贝漏一处 ⇒ 红）
-  for lane in threads w64; do
+  for lane in w64; do
     for d in "$SITE" "$SITE_EXP" "$REPO_MIRROR"; do
       [ -f "$d/assets/manifest.$lane.json" ] || continue
       python3 "$REPO/build/113/make-lane-manifest.py" "$d/assets" --check --lane "$lane" >/dev/null 2>&1 \

@@ -17,7 +17,7 @@
 // 用法：
 //   HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh \
 //     test/browser/bench-lanes.mjs "http://127.0.0.1:8761/" w64 > w64-logs/speed-w64.log
-//   （`?lane=` 由本文件拼；lane ∈ base|threads|w64|w64-base）
+//   （`?lane=` 由本文件拼；lane ∈ base|w64|w64-base —— threads 已删）
 import { chromium } from 'playwright-core';
 
 const URL = process.argv.find(a => /^http/.test(a)) || 'http://127.0.0.1:8761/';

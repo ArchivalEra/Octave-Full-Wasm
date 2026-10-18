@@ -113,29 +113,31 @@ wasm 里的 C 经 `EM_JS` 同步调 `pyodide.runPython` 即可 ⇒ 数据通道 
 标签变量；另有 `P5_OBJS` 是脚本内数组不算），一个都不许手设（漏一个会**静默退化**，而构建/链接/自检全绿）。
 **证据：** `build/113/relink.sh`
 
-### 四格（base / threads / w64 / w64-base）
-同一个站最多部署**四份产物**，**文件名逐字相同**、靠**子目录**区分（Emscripten 胶水内部写死了
+### 三格（base / w64 / w64-base）
+同一个站最多部署**三份产物**（三线裁决 2026-10-17；**threads 档已删**——wasm32 不允许多线程，
+HISTORY §5.108），**文件名逐字相同**、靠**子目录**区分（Emscripten 胶水内部写死了
 `octave.data`，换名就得改胶水）：根目录 `base`（wasm32 单线程，**红线**：任何静态托管都能跑）、
-`threads/`（wasm32 + pthread，内存 shared）、`w64/`（memory64 + pthread ⇒ **>4 GiB 地址空间**，
-目标形态）、`w64-base/`（memory64 单线程回退）。**三档非底线档都不许是唯一产物**。
-**证据：** `bridge/lane.js`（`FILES` 表）+ `build/gen-lanes.sh`
+`w64/`（memory64 + pthread ⇒ **>4 GiB 地址空间**，master/IP 线产物）、`w64-base/`（memory64
+单线程回退格——**不是产品线**）。站点只是展示层：**试验场绑定三个分支**（wasm32-final /
+master / IllegalPerformance），不许往站点加格（死档断言在 `check-lane-purity.py` 的 DEAD_LANES）。
+**证据：** `bridge/lane.js`（`FILES` 表）+ `build/gen-lanes.sh` + `build/113/check-lane-purity.py`
 
 ### 档清单（`lanes.js`）
 **选档的第三根轴**：站点**真的**部署了哪几档，由 `gen-lanes.sh` 按磁盘生成、页面**同步**读
-（`window.__octaveLanes`）。为什么必须有它：只按能力选档会在"只有 base+threads"的站点上挑 `w64`
+（`window.__octaveLanes`）。为什么必须有它：只按能力选档会在"只有 base"的站点上挑 `w64`
 并 **404**（实测）。判据 = 能力 ∩ 清单；`base` 缺失时生成器**必红**。
 **证据：** `build/gen-lanes.sh`
 
 ### 选档（lane）
 页面/Worker 在**加载胶水之前**、用**同步**判据定档（两根能力轴 × 清单）：COI + `SharedArrayBuffer`
-（轴 1）× memory64（轴 2）⇒ 从「能力最优 ∩ 清单里有」里取第一档。不能等异步探测：线程档胶水在
+（轴 1）× memory64（轴 2）⇒ 从「能力最优 ∩ 清单里有」里取第一档。不能等异步探测：w64 胶水在
 被 import 的那一刻就会建 shared 内存，没有隔离**当场抛**。URL 上
-`?lane=base|threads|w64|w64-base` 可显式覆盖（测试/调试用；覆盖不改物理前提，选错档**必须响亮失败**）。
+`?lane=base|w64|w64-base` 可显式覆盖（threads 已不是合法覆盖名——覆盖正则已收窄，输入它会被忽略并落自动选档）（测试/调试用；覆盖不改物理前提，选错档**必须响亮失败**）。
 **证据：** `test/browser/probe-lane.mjs`
 
 ### COI 头（跨源隔离）
 宿主发 `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
-⇒ 页面拿到 `crossOriginIsolated` + `SharedArrayBuffer` ⇒ 才可能用线程档。**这是本项目的产品决定**
+⇒ 页面拿到 `crossOriginIsolated` + `SharedArrayBuffer` ⇒ 才可能用 w64 档。**这是本项目的产品决定**
 （B6，2026-09-27）：要求宿主发头，而不是装 service worker。自家站点用 `build/serve-coi.py` 起
 （同一份目录可 `--no-coi` 起第二台，专门测基础档）。
 **证据：** `build/serve-coi.py`

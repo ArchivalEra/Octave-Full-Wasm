@@ -28,7 +28,7 @@ const check = (ok, label, detail) => { ok ? pass++ : fail++; console.log(`${ok ?
 const pageSha = await page.evaluate(() => window.__octaveWasmSha || null).catch(() => null);
 check(!!pageSha, '① 页面自证 sha 存在（页面实例化的字节）', pageSha || '缺席（页面没算？）');
 if (pageSha) {
-  // ★ B6 双档（2026-09-27）：**取页面真正实例化的那一份**（线程档在 `threads/` 下）。
+  // ★ B6 多档：**取页面真正实例化的那一份**（w64 档在 `w64/` 下；threads 已删）。
   //   第一版写死 `fetch('octave.wasm')` ⇒ 带头站点上"HTTP 层"必然报红（拿根目录那份去比
   //   线程档页面自证的 sha，实测 http=1ed3e528… page=c2899a71…）—— 那是**探针自己的** bug。
   const laneDir = await page.evaluate(() => {

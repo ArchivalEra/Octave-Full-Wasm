@@ -15,7 +15,7 @@
 #               /mnt/hdd/octave-wasm-build/site-illegalperf-baseline（对照）
 # 端口约定：8868=候选、8869=对照；**必须带头起**（serve-coi.py 默认 COI）——
 #   页面在 COI 下选 w64 档，候选就住在 w64 槽。
-# 四格结构保留：base(根)/threads/w64-base 槽 = 主线现状拷贝（本线未动，
+# 三格结构保留：base(根)/w64-base 槽 = 主线现状拷贝（本线未动，threads 档已删，
 #   标记里如实记 untouched）；w64 槽 = 本线产物。
 set -euo pipefail
 REPO=${REPO:-$(cd "$(dirname "$0")/../.." && pwd)}
@@ -47,7 +47,7 @@ PY
 
 mkdir -p "$DEST"
 rsync -a --delete "$MAIN_SITE/" "$DEST/"
-# 只覆盖 w64 槽（四格结构里 base(根)/threads/w64-base 槽属主线，一个字节都不动）。
+# 只覆盖 w64 槽（base(根)/w64-base 槽属主线，一个字节都不动）。
 # 身份证 octave.build.json 必须随行——probe-artifact-sha 的 ③a 档内自洽判据读它
 # （漏拷 = 探针拿主线旧身份证对候选字节，1 FAIL 的教训 2026-10-05）。
 cp "$ART/octave.wasm" "$DEST/w64/octave.wasm"
@@ -68,9 +68,9 @@ mark = {
     "from_artifact_dir": art,
     "wasm_sha256": sha,
     "rust_sort": kind == "candidate",
-    "note": "w64 槽 = 本线候选/对照；base(根)/threads/w64-base 槽 = 主线现状拷贝（untouched）"
+    "note": "w64 槽 = 本线候选/对照；base(根)/w64-base 槽 = 主线现状拷贝（untouched；threads 已删）"
   },
-  "untouched_lanes": ["base(root)", "threads", "w64-base"],
+  "untouched_lanes": ["base(root)", "w64-base"],
   "ports": {"candidate": 8868, "baseline": 8869, "server": "build/serve-coi.py（COI 带头）"}
 }
 json.dump(mark, open(dest, "w"), ensure_ascii=False, indent=1)

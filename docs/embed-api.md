@@ -20,7 +20,7 @@
 ├─ bridge/octave-embed.js（🔜 拟新增：promise 化薄封装，本表实现层）─┤
 ├─ bridge/octave-core.js（✅ 内核：Module 配置/启动链/资产/IDBFS/能力门）─┤
 ├─ createOctaveHost（✅ 页面适配器工厂：print/stdin/clicks/doc 9 件接口）─┤
-├─ wasm 四档（base/threads/w64/w64-base；选档由 bridge/lane.js 自动）────┤
+├─ wasm 三档（base/w64/w64-base；threads 已删 2026-10-17；选档由 bridge/lane.js 自动）────┤
 └──────────────────────────────────────────────┘
 ```
 
@@ -60,7 +60,7 @@
 | 文件上传/下载 | `octave.fs.download(name)`（Blob 下载）；上传 = UI 的 file input → `octave.fs.write`（webfilepick 队列桥仍在） | ✅e |
 | 音频播放/录音 | 队列桥现成（`webaudio`/`webaudiorec`）；embed 层透传即可 | ✅ |
 | 网络（urlread 等） | 同步 XHR 桥现成（`webnet`；注意 COI 下跨源需 CORP/CORS —— 已实测约束） | ✅ |
-| 选档（w64/threads/base…） | **UI 不用管**：`bridge/lane.js` 按 COI×memory64×清单自动选，embed 层透传实例 | ✅ |
+| 选档（w64/w64-base/base…） | **UI 不用管**：`bridge/lane.js` 按 COI×memory64×清单自动选，embed 层透传实例 | ✅ |
 
 ## 3. 多实例与嵌入（`createOctaveHost` 的已知边界，UI 必须知道）
 

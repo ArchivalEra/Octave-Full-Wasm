@@ -16,8 +16,7 @@
   {
    "name": "e2-openblas",
    "lanes": [
-    "w64",
-    "threads"
+    "w64"
    ],
    "knob": "E2_OPENBLAS",
    "applied": "库序：-L$E2_OPENBLAS 排最前 ⇒ -lrefblas 解析到线程版 OpenBLAS（FMA 内核已烘进归档）",
@@ -51,7 +50,6 @@
    "name": "rust-sort",
    "lanes": [
     "base",
-    "threads",
     "w64"
    ],
    "knob": "RUST_SORT",
@@ -69,9 +67,6 @@
  ],
  "lane_expect": {
   "base": {},
-  "threads": {
-   "e2_openblas": true
-  },
   "w64": {
    "e2_openblas": true,
    "malloc": "mimalloc",

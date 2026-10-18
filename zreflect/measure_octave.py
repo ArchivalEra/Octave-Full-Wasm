@@ -161,82 +161,21 @@ def measure():
                                         "最近一次**全绿**扫描的 PASS 合计")
             break
 
-    # ── ★ 线程档车道（B6，branch `threads`，2026-09-27）─────────────────────────────
-    #    为什么这些也要进台账：线程档的每个数字（sha / 共享内存 / 导出面 / BLAS 来自哪）都是
-    #    **测出来的**；文档引用它们时必须是**键引用**而不是手抄（F2 的规矩）。
-    #    量不到就不写（换了机器/没建过车道 ⇒ 台账里没有这些键，文档引用键会被闸门抓出来）。
-    # 线程档在哪：优先 `THREADS_OUT`（容器内路径）；否则 `<站点>/threads/`（**promote 后**的形态）；
-    # 车道验证阶段站点还是 `siteWebGL` ⇒ 用 `LANE_SITE=` 指过去（本脚本在**宿主**跑）。
-    TW = os.environ.get("THREADS_OUT")
-    tw_man = (os.path.join(TW, "octave.build.json") if TW
-              else os.path.join(os.environ.get("LANE_SITE", SITE), "threads", "octave.build.json"))
-    if os.path.exists(tw_man):
-        try:
-            tm = json.load(open(tw_man, encoding="utf-8"))
-            tme = tm.get("measured", {}) or {}
-            th = tme.get("threads") or {}
-            facts["threads_verdict"] = fact(tm.get("verdict"),
-                                            "读 %s 的 verdict" % tw_man, "m2fc-threads-out/octave.build.json",
-                                            "只有 ok 才可部署（fail-closed）")
-            if th:
-                facts["threads_shared_memory"] = fact(bool(th.get("shared_memory")),
-                                                      "读 %s 的 measured.threads.shared_memory" % tw_man,
-                                                      "m2fc-threads-out/octave.build.json",
-                                                      "wasm 内存段的 shared 位；线程档的硬身份")
-                facts["threads_pthread_glue"] = fact(th.get("pthread_glue"),
-                                                     "读 %s 的 measured.threads.pthread_glue" % tw_man,
-                                                     "m2fc-threads-out/octave.build.json",
-                                                     "基础档实测是 0")
-            v = (tme.get("simd") or {}).get("v128")
-            if v is not None:
-                facts["threads_v128"] = fact(v, "读 %s 的 measured.simd.v128" % tw_man,
-                                             "m2fc-threads-out/octave.build.json",
-                                             "线程档也带 SIMD（两轴不互斥）")
-            if tme.get("exported_functions") is not None:
-                facts["threads_exported_functions"] = fact(
-                    tme["exported_functions"], "读 %s 的 measured.exported_functions" % tw_man,
-                    "m2fc-threads-out/octave.build.json")
-            bd = ((tm.get("inputs") or {}).get("blas") or {}).get("resolved_dir")
-            if bd:
-                facts["threads_blas_dir"] = fact(bd, "读 %s 的 inputs.blas.resolved_dir" % tw_man,
-                                                 "m2fc-threads-out/octave.build.json",
-                                                 "**必须含 `-threads`**（判据见 check-build-manifest.lane_blas_problem）")
-            pw = os.path.join(os.path.dirname(tw_man), "octave.wasm")
-            if os.path.exists(pw):
-                facts["threads_wasm_sha"] = fact(sha256sum(pw), "sha256sum %s" % pw,
-                                                 "m2fc-threads-out/octave.wasm")
-                facts["threads_wasm_bytes"] = fact(os.path.getsize(pw), "stat -c%%s %s" % pw,
-                                                   "m2fc-threads-out/octave.wasm")
-        except (OSError, ValueError) as e:
-            print("⚠ 读不到线程档身份证（%s）：%s" % (tw_man, e), file=sys.stderr)
+    # ── ★ threads 档台账键已删（三线裁决 2026-10-17）：wasm32+atomics 多线程是畸形档，
+    #    整档（产物/站点资产/清单）已从全线移除。原 threads_* 8 键经 --allow-drop 掉档并记 HISTORY。
 
     # ── ★ `.oct` 分档（站点侧，B6）：两档各多少条 + 车道那套是否都有 TLS 入口 ────────
+    # ★ 三线裁决（2026-10-17）：车道 .oct 键只留 w64（threads 那套已删）。
     LANE_SITE = os.environ.get("LANE_SITE", SITE)   # 车道站点（验证期 = siteWebGL；promote 后 = site）
-    for sub, key, why in (("oct-threads", "oct_lane_files", "线程档 `assets/oct-threads/` 条数"),
-                          ("octdir-threads", "oct_lane_octdir_files",
-                           "线程档 `assets/octdir-threads/` 条数"),
+    for sub, key, why in (("oct-w64", "oct_w64_files", "w64 档 `assets/oct-w64/` 条数"),
+                          ("octdir-w64", "octdir_w64_files", "w64 档 `assets/octdir-w64/` 条数"),
                           ("oct", "oct_base_files", "基础档 `assets/oct/` 条数"),
                           ("octdir", "octdir_base_files", "基础档 `assets/octdir/` 条数")):
-        base_sub = "oct" if sub.startswith("oct-") else ("octdir" if sub.startswith("octdir-") else sub)
-        d = os.path.join(LANE_SITE if sub.endswith("-threads") else SITE, "assets", sub)
+        d = os.path.join(LANE_SITE if sub.endswith("-w64") else SITE, "assets", sub)
         if not os.path.isdir(d):
             continue
         n = sum(1 for _r, _x, fs in os.walk(d) for f in fs if f.endswith(".oct"))
         facts[key] = fact(n, "find %s -name '*.oct' | wc -l" % d, "site/assets/%s" % sub, why)
-    _lane_octs = []
-    for sub in ("oct-threads", "octdir-threads"):
-        d = os.path.join(LANE_SITE, "assets", sub)
-        if os.path.isdir(d):
-            _lane_octs += [os.path.join(r, f) for r, _x, fs in os.walk(d) for f in fs
-                           if f.endswith(".oct")]
-    if _lane_octs:
-        ok = sum(1 for x in _lane_octs if b"_emscripten_tls_init" in open(x, "rb").read())
-        facts["oct_lane_tls_init"] = fact(ok, "python3 build/113/check-oct-lane.py "
-                                               "<站点>/assets/oct-threads <站点>/assets/octdir-threads "
-                                               "--base <站点>/assets/oct <站点>/assets/octdir",
-                                          "site/assets/oct-threads + octdir-threads",
-                                          "每个都必须有（没有在线程档里 dlopen 会 tlsInitFunc 不是函数）；"
-                                          "分母见 oct_lane_files + oct_lane_octdir_files")
 
     # ── ★ 选档探针的实测汇总（B6 双档 → 工单 30 四格）：从**保存下来的探针日志**里读
     #    （facts.py 不自己开浏览器）──
@@ -443,7 +382,7 @@ def measure():
             cmd="<重链 w64 后：python3 build/113/witness-build-provenance.py w64>",
             source="site/w64/octave.build.json 的 tool.script_sha256 vs build/113/link-web.sh",
             note="贵事实的便宜见证：部署件记录的构建脚本 sha 必须 == 仓库现役脚本。"
-                 "做不到就 DRIFT（来源漂移）。注意**旧档**（base/threads/w64-base）建造时间不同、"
+                 "做不到就 DRIFT（来源漂移）。注意**旧档**（base/w64-base）建造时间不同、"
                  "记录 sha 各异 ⇒ 只对活跃迭代并每批重链的 w64 档断言。",
             replay=False,
             witness="python3 build/113/witness-build-provenance.py w64",
@@ -609,7 +548,7 @@ def measure():
         _n = _lt.count("8 PASS / 0 FAIL")
         facts["locale_contract_lanes"] = fact(
             _n,
-            "for l in w64 base threads w64-base; do sh test/browser/run.sh "
+            "for l in w64 base; do sh test/browser/run.sh "   # 三线：threads 已删（原含 threads/w64-base 的 locale 合同见 HISTORY）
             "test/browser/probe-locale.mjs \"http://127.0.0.1:8761/?lane=$l\"; done "
             "（读 w64-logs/locale-all-lanes.log 的 '8 PASS / 0 FAIL' 计数）",
             "w64-logs/locale-all-lanes.log",
@@ -1164,7 +1103,7 @@ def measure():
             except OSError as e:
                 print("⚠ 读不到交付包选档日志 %s：%s" % (_dp, e), file=sys.stderr)
         facts["floor_matrix_fail"] = fact(_ff, "同上", "w64-logs/floor-*.log",
-                                          "必须 0；含「无 memory64 的引擎必须落 threads」这条反向断言")
+                                          "必须 0；含「无 memory64 的引擎必须落 base」这条反向断言（threads 已删）")
 
     # ── ★ 三线 6.0.12 与客户端自编（2026-10-12 批）──────────────────────────────
     #   为什么进台账：这些是"现在如此"的断言，且**各有可复跑的产物读数**（不是散文）。
@@ -1474,7 +1413,7 @@ def measure():
         "accept_suites", "accept_pass", "probe_lane_fail",
         "floor_matrix_engines", "floor_matrix_pass", "floor_matrix_fail",
         "w64_mem_probe_fail", "dist_lane_probe_fail", "w64_big_heap",
-        "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns", "oct_lane_tls_init",
+        "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns",
         "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
         "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
         "w64_malloc",
@@ -1493,8 +1432,8 @@ def measure():
         "hotpath_xpow_libm_pct", "hotpath_xpow_driver_pct", "hotpath_fft_blktrans_pct",
         "xpow_driver_spike_pct", "xpow_driver_spike_ratio", "locale_contract_lanes",
         "ip_vs_next_sort_ip_ms", "ip_vs_next_sort_next_ms", "ip_vs_next_sort_ratio",
-        "w64_base_wasm64", "w64_base_shared_memory", "threads_verdict",
-        "threads_shared_memory", "threads_pthread_glue", "threads_v128",
+        "w64_base_wasm64", "w64_base_shared_memory",   # threads_* 键已删（三线裁决）
+        "oct_w64_files", "octdir_w64_files",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
         "exported_functions", "fonts_count", "jspi_entry", "env_vars",
     }

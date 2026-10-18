@@ -75,7 +75,8 @@ def lane_blas_problem(declared, man):
 
     为什么单列：实测发现 wasm-ld 的 atomics 规则只针对**带 TLS/原子的**对象 ⇒ 一个**非 atomics 的纯计算
     BLAS**（无 TLS）可以**静默**链进 shared-memory 模块（当时的产物 0 违规，里面却混着基础档对象）。
-    判据只能看**输入侧溯源**：身份证 `inputs.blas.resolved_dir` 必须是车道路径（含 `-threads`）。
+    判据只能看**输入侧溯源**：身份证 `inputs.blas.resolved_dir` 必须是车道路径（含 `-w64`；
+    threads 档已删 —— 2026-10-17 三线裁决，`threads=true` 这条声明轴现在只有 w64 会写）。
     纯函数 ⇒ 自证直接喂合成输入。"""
     if declared.get("threads") is not True:
         return None
@@ -88,9 +89,9 @@ def lane_blas_problem(declared, man):
         if "openblas" not in rd.lower():
             return ("声明 e2_openblas=true，但链进去的 BLAS 在 `%s` ⇒ 不是 E2 那份 OpenBLAS" % rd)
         return None
-    if "-threads" not in rd and "-w64" not in rd:
-        return ("声明 threads=true，但链进去的 BLAS 在 `%s`（**基础档**）"
-                "⇒ 产物里混着基础档对象，口径不一致" % rd)
+    if "-w64" not in rd:
+        return ("声明 threads=true，但链进去的 BLAS 在 `%s`（**不是 w64 车道**）"
+                "⇒ 产物里混着基础档对象，口径不一致（threads 档已删，唯一多线程车道 = w64）" % rd)
     return None
 
 
@@ -407,8 +408,8 @@ CASES = [
      lambda: len(compare(_DECL, _THREADS_MEAS)) == 1),
     ("★ 声明 threads=true 但 BLAS 来自基础档 ⇒ **必须报**（车道一致性）",
      lambda: _lane_blas_bad(True, "/src/deps/lapack-simd/lib") == 1),
-    ("★ 声明 threads=true 且 BLAS 来自车道 ⇒ 不报",
-     lambda: _lane_blas_bad(True, "/src/deps-threads/lapack-simd/lib") == 0),
+    ("★ 声明 threads=true 且 BLAS 来自 w64 车道 ⇒ 不报（threads 档已删，唯一多线程车道 = w64）",
+     lambda: _lane_blas_bad(True, "/src/deps-w64/lapack-simd/lib") == 0),
     ("★ 非线程档不受这条约束（否则会误伤 product/scalar/m1）",
      lambda: _lane_blas_bad(False, "/src/deps/lapack-simd/lib") == 0),
     ("★ 量不到线程事实 ⇒ 必须报（不许当通过）",

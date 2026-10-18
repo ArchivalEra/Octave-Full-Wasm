@@ -8,7 +8,7 @@
   3. `.oct` 按 `application/octet-stream` 发（浏览器要 fetch 它进 wasm 文件系统）。
 
 ★ 4（B6 起）：**默认发跨源隔离头** `Cross-Origin-Opener-Policy: same-origin` +
-  `Cross-Origin-Embedder-Policy: require-corp` —— 站点里带**线程档**（`threads/`），页面按这两个头
+  `Cross-Origin-Embedder-Policy: require-corp` —— 站点里带**多线程档**（`w64/`；threads 档已删），页面按这两个头
   判断"能不能用 SharedArrayBuffer"；**不发**的话页面会**静默**落回基础档（不报错，只是没线程）。
   想专门测"基础档那一侧"（或本来就打算把这份包当纯静态站点发），用 `--no-coi`。
 

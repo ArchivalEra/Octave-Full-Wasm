@@ -130,14 +130,6 @@
     "why": "pthread×dlopen 探针产物，由容器里的 `bash build/113/probe-threads.sh` 生成（仓库外；探针自己注入 COI 头）"
    }
   ],
-  "probe-threads-coi": [
-   {
-    "kind": "path",
-    "env": "PROBE_DIR",
-    "value": "/mnt/hdd/octave-wasm-build/threads-probe",
-    "why": "同上产物，这一档专门验 COI 头的三种形态"
-   }
-  ],
   "probe-jspi": [
    {
     "kind": "path",
@@ -162,26 +154,12 @@
     "why": "Worker 内 JSPI 探针产物，由 `bash build/113/probe-jspi-worker.sh` 生成"
    }
   ],
-  "probe-blas-threads": [
-   {
-    "kind": "path",
-    "env": "PROBE_DIR",
-    "value": "/mnt/hdd/octave-wasm-build/blas-threads-probe",
-    "why": "线程版 OpenBLAS 探针产物，由 `bash build/113/probe-blas-threads.sh` 生成；另需 firefox（playwright 默认缓存里有就不必设 `PLAYWRIGHT_BROWSERS_PATH`，缺则该项如实报红）"
-   }
-  ],
   "probe-lane": [
    {
     "kind": "path",
     "env": "SITE_DIR",
     "value": "/mnt/hdd/octave-wasm-build/siteWebGL",
-    "why": "双档站点目录（探针**自托管**它，不看 URL）。⚠️ 要跑 **wasm64 四格矩阵**就覆盖它：`SITE_DIR=/mnt/hdd/octave-wasm-build/site-w64 PROBES=1 sh build/sweep.sh <URL> probe-lane`（THREADS_ARTIFACT 也要一起覆盖成那个站点的）。实测教训：不覆盖时探针会用**它自己的内部默认**，于是你会拿另一个站点的成绩当这个站点的—— 现在由 sweep.sh 的 `--inputs-for` 把声明值对齐给子进程（F4 接线，2026-09-28 补）。"
-   },
-   {
-    "kind": "path",
-    "env": "THREADS_ARTIFACT",
-    "value": "/mnt/hdd/octave-wasm-build/siteWebGL/threads/octave.wasm",
-    "why": "线程档 wasm（探针拿它核‘产物实测事实’那一格）。覆盖 SITE_DIR 时要一起覆盖，否则两处指向不同站点（这个‘默认不联动’是已知的小别扭）。"
+    "why": "多档站点目录（探针**自托管**它，不看 URL）。三线裁决 2026-10-17：threads 档已删，矩阵收敛为三格（COI×memory64）+ 死档反向断言（`?lane=threads` ⇒ 覆盖失效落 base、页面照常 ready）。⚠️ 要跑 w64 矩阵就覆盖它：`SITE_DIR=<w64 站> PROBES=1 sh build/sweep.sh <URL> probe-lane`。"
    }
   ],
   "probe-coi-sw": [

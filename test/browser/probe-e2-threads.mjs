@@ -70,15 +70,15 @@ async function cell (name, opts) {
       if (await page.evaluate(() => window.__octaveReady === true).catch(() => false)) break;
       await new Promise(r => setTimeout(r, 300));
     }
-    // 选档自证：本探针只在**线程档**上有意义（单线程档不会挂）
+    // 选档自证：本探针只在**多线程档（w64）**上有意义（单线程档不会挂；threads 档已删）
     const lane = await page.evaluate(() => ((window.__octaveCaps || {}).lane || {}).chosen || '?');
-    check(lane === 'threads', `${name} · 页面跑的是线程档`, `lane=${lane}`);
+    check(lane === 'w64', `${name} · 页面跑的是 w64 多线程档`, `lane=${lane}`);
 
     // 装夹具（与 accept-113-oct 同一套动作：写 .oct + 建函数名符号链接 + addpath）
     if (!opts.noFixture) {
       const wrote = await page.evaluate(async () => {
         try {
-          const buf = await fetch('threads/minioct.oct').then(r => r.arrayBuffer());
+          const buf = await fetch('w64/minioct.oct').then(r => r.arrayBuffer());
           const FS = window.Module.FS, dir = '/usr/src/octave/m/oct';
           try { FS.mkdir(dir); } catch (e) { /* 已存在 */ }
           FS.writeFile(dir + '/minioct.oct', new Uint8Array(buf));

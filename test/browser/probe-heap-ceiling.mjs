@@ -22,11 +22,11 @@
 //   且两档数字应当一致（"64 位在这份产物里没兑现"这条结论**可被证伪**）。
 //
 // 用法：sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs [URL]
-//   env：HEAP_LANES="base,threads,w64"（默认三档；w64-base 可选）
+//   env：HEAP_LANES = 'base,w64' 可选）
 import { chromium } from 'playwright-core';
 
 const URL = process.argv.find(a => /^http/.test(a)) || 'http://127.0.0.1:8761/';
-const LANES = (process.env.HEAP_LANES || 'base,threads,w64').split(',');
+const LANES = (process.env.HEAP_LANES || 'base,w64').split(',');
 const BLOCK = 100e6;            // 每块 100e6 个 double = 0.7629 GiB
 const MAXBLOCK = 24;            // 上限 18 GiB，防呆
 

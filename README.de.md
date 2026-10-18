@@ -150,7 +150,8 @@ Protokolle in `w64-logs/ieee-*.log`.
 
 Vier Deployment-**Spuren** desselben Interpreters, automatisch pro
 Browser-Fähigkeit gewählt (`lanes.js`): `base` (wasm32, single-thread) →
-`threads` (wasm32 + pthread) → `w64` (memory64 + Threads + FMA + mimalloc +
+`w64` (memory64 + Threads + FMA + mimalloc +
+★ Drei-Linien-Entscheid 2026-10-17: die `threads`-Spur (wasm32+atomics) war fehlgebildet und wurde gelöscht — Experimente sind an die drei Zweige gebunden. Ursprüngliche Kette: `threads` →
 rust-sort) / `w64-base`. Ohne COI-Header serviert sinkt man **lautlos** auf
 `base` — siehe das [Deployment-Ticket](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
 

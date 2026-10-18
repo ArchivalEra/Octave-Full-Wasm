@@ -139,14 +139,14 @@ for (const name of ENGINES) {
 
 // ── 断言：矩阵的每一条红绿判据 ────────────────────────────────────────────────
 // 该选哪一档 = 优先级顺序里**清单中真的部署了**的第一档（与 `bridge/lane.js` 同构）：
-//   COI + m64     ⇒ w64 → threads → base
-//   COI + 无 m64  ⇒ threads → base          ← ★ 不许是 w64（本批的反向断言）
+//   COI + m64     ⇒ w64 → base
+//   COI + 无 m64  ⇒ base                    ← ★ 不许是 w64（本批的反向断言；threads 已删）
 //   非 COI + m64  ⇒ w64-base → base
 //   非 COI + 无 m64 ⇒ base
 function expectedLane (r) {
   const inv = Array.isArray(r.lanes) ? r.lanes : [];
   const order = r.coi === true
-    ? (r.mem64 === true ? ['w64', 'threads', 'base'] : ['threads', 'base'])
+    ? (r.mem64 === true ? ['w64', 'base'] : ['base'])   // 三线：threads 已删
     : (r.mem64 === true ? ['w64-base', 'base'] : ['base']);
   for (const l of order) if (inv.includes(l)) return l;
   return null;

@@ -73,14 +73,13 @@ out_default() {
     product) echo /src/websrc/product ;;
     scalar)  echo /src/websrc/scalar ;;
     m1)      echo /src/websrc/m1 ;;
-    threads) echo /src/websrc/m2fc-threads-out ;;    # B6：线程档（PLAN-threads §5 步骤④）
     w64)     echo /src/websrc/w64-out ;;              # wasm64 车道（PLAN-wasm64）
     w64-base) echo /src/websrc/w64-base-out ;;         # wasm64 基础档（单线程）
     *)       echo "" ;;
   esac
 }
 
-modes_list() { echo "product scalar m1 threads w64 w64-base"; }
+modes_list() { echo "product scalar m1 w64 w64-base"; }   # 三线裁决 2026-10-17：threads（wasm32+atomics）档已删——wasm32 不允许多线程
 
 # 基线：结构优先 —— 下一级模式自己的产物在就用它，否则退回表里记录的现存路径。
 pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
@@ -92,7 +91,7 @@ pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
 # ── 模式表：**唯一**的真值来源。全部变量都在这里推出来，调用方一个都不许传 ──────────
 mode_table() {      # 输出 KEY=VALUE 行（供 export）
   local m="$1"
-  case "$m" in product|scalar|m1|threads|w64|w64-base) ;; *)
+  case "$m" in product|scalar|m1|w64|w64-base) ;; *)
     echo "FATAL: 未知模式 '$m'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 
   # 三模式共有：都是"完整产品形态"的能力面（区别只在 DCE / SIMD 两条轴，
@@ -158,45 +157,6 @@ EOF
         echo "BASELINE_WASM=$(pick_baseline m1 /src/websrc/out/octave.wasm)"
       fi
       ;;
-    threads)
-      # ★ B6（2026-09-27）：product 的形态 **+ 线程运行时**。
-      #   链接侧只多一个 `-pthread`（它自带 SHARED_MEMORY ⇒ wasm 内存 shared ⇒ 浏览器侧
-      #   **硬要求** COOP/COEP，闸门③ 由此翻面）。实测：`-pthread` 编/链在 emcc 下都成立。
-      #   ⚠️ **只加这个旗标是不够的**：对象层必须是用 `WITH_THREADS=1` 重编过的那一份
-      #   （configure 去掉 `--disable-threads` **且**撤销 AX_PTHREAD 覆盖）。拿旧对象链 ⇒
-      #   链接期就报特性不兼容；硬链成 ⇒ 产物的 threads 实测事实会是 false，而
-      #   `check-build-manifest.py` 的 threads 判定**当场判拒**（fail-closed）。
-      cat <<'EOF'
-MAIN_MODULE_LEVEL=2
-WITH_JSPI=1
-KEEP_LIST=/src/libwork/keep.txt
-LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
-EXPORT_IF_DEFINED=
-EXPORTED_FUNCS=_main
-OCT_SCAN_DIRS=/src/octs-site
-DEPS=/usr/local-threads
-DEPS_ROOT=/src/deps-threads
-GL4ES_A=/src/libwork/gl4es-src-threads/lib/libGL.a
-GLU_A=/src/libwork/glu-webgl-threads/lib/libGLU.a
-EOF
-      echo "MAXIMUM_MEMORY=2GB"
-      # `-pthread` 自带 SHARED_MEMORY；**池大小必须显式给** —— 否则 Emscripten 只允许
-      # "从 worker 里动态起 worker"，主线程 `pthread_create` 直接失败 ⇒ "线程档"名不副实
-      # （命令行看着有线程、实际一个都起不来）。4 = 够用且不白占内存（每个 worker 有独立栈）。
-      # ★ E2（branch `e2-openblas`，2026-09-27）：把 BLAS 换成**线程版 OpenBLAS**。
-      #   `E2_OPENBLAS=<目录>` 时该目录**排在最前**（`-lrefblas` 从那里解析）⇒ 主模块的
-      #   `dgemm_` 等走 OpenBLAS；LAPACK 仍是车道那份 f2c 库（`-llapack` 从车道目录解析）。
-      #   为什么排最前就能"换库"：link-web.sh 用的是 `-lrefblas`，而 `-L` 的**顺序**决定
-      #   同名库谁被选中（不写死路径 ⇒ 一个变量就够，见 NOTES-threads 的 E2 节）。
-      if [ -n "${E2_OPENBLAS:-}" ]; then
-        echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-threads/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
-      else
-        echo "EXTRA_LDFLAGS=-L/src/deps-threads/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
-      fi
-      # 基线 = **现役 product 产物**（导出面要保住）。`/src/websrc/product` 还没链过时，退回
-      # A1 那份逐字节复现的 product 产物（sha 与 8761 现役件相同）。
-      echo "BASELINE_WASM=$(pick_baseline product /src/websrc/a1-verify-product/octave.wasm)"
-      ;;
     w64|w64-base)
       # ★ wasm64 车道（2026-09-28，branch `wasm64`）：= threads 的形态 **+ memory64**。
       #   目标形态见 `build/113/PLAN-wasm64.md` §0（memory64 主路径 + 单线程回退）。
@@ -248,7 +208,12 @@ EOF
         echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib"
       fi
       echo "MEMORY64=1"
-      echo "BASELINE_WASM=$(pick_baseline threads /src/websrc/m2fc-threads-out/octave.wasm)"
+      # ★ 基线来源（2026-10-17 三线裁决改）：曾取 threads 产物（m2fc-threads-out）——
+      #   threads 档（wasm32+atomics）是畸形儿已删除（wasm32 不允许多线程），且跨线
+      #   取基线本身就是错配（wasm32 的导出面当 wasm64 的保活基线）。改为**自档**：
+      #   本模式自己的产物目录（out_default w64 = /src/websrc/w64-out）优先，
+      #   退回车道治理化产物（LANE_TAG=-6012 那套）。
+      echo "BASELINE_WASM=$(pick_baseline w64 /src/libwork/w64-artifacts/octave.wasm)"
       ;;
   esac
 
@@ -277,7 +242,7 @@ EOF
   #   -Wl,--export-if-defined=octave_rust_sort_f64 ⇒ 导出段量出 measured.rust_sort。
   #   ★ 2026-10-05 发运：w64 默认翻 1（产品决定）——每批 w64 重链自带 rust_sort，
   #   product/threads 仍默认 0（wasm32-final 冻结，不再做 wasm32 车道活）。
-  case "$m" in w64) echo "RUST_SORT=${RUST_SORT:-1}" ;; product|threads) echo "RUST_SORT=${RUST_SORT:-0}" ;; *) echo "RUST_SORT=" ;; esac
+  case "$m" in w64) echo "RUST_SORT=${RUST_SORT:-1}" ;; product) echo "RUST_SORT=${RUST_SORT:-0}" ;; *) echo "RUST_SORT=" ;; esac
 
   # ★ 仓库架构批 B4：上游树路径**透传**（provision/等价性验证用）。表从环境读——
   #   操作员设 OCT_TREE=... 时透传给 link-web.sh；不设则空 = 脚本默认路径。
@@ -309,26 +274,10 @@ EOF
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
       ;;
-    threads)
-      # `E2_OPENBLAS` 有值时多声明一条 `e2_openblas` ⇒ `check-build-manifest.py` 据此换判据
-      # （BLAS 溯源从"必须含 -threads"改成"必须指向 E2 目录"）。
-      _e2=""
-      [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
-      # ★ 工单 63：rust_sort 声明从模式表推出（同 malloc/product）。
-      _rust_decl=""
-      [ "$(mode_table "$1" | sed -n 's/^RUST_SORT=//p')" = 1 ] \
-        && _rust_decl=', "rust_sort": "f64-stable"'
-      cat <<EOF
-{"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": true${_e2}${_rust_decl},
- "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
-           "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
-EOF
-      ;;
     w64)
       # ★ wasm64 车道：显式声明 wasm64=true，与 wasm32 各档明确区分
       # ★ E2 钩子（工单 31）：`E2_OPENBLAS` 有值时多声明 `e2_openblas` ⇒ check-build-manifest
-      #   把 BLAS 溯源判据从"必须含 -w64"换成"必须指向 E2 目录"（与 threads 那条同规则）。
+      #   把 BLAS 溯源判据从"必须含 -w64"换成"必须指向 E2 目录"。
       _e2=""
       [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
       # ★ 工单 59：分配器声明**从模式表推出**（单一真值来源）—— 别从环境读：explain 的
@@ -410,7 +359,8 @@ usage() {
   relink.sh explain <模式>                             # 打印全部变量（文档生成物）
   relink.sh --list
 模式：product（现役） / scalar（去 SIMD 的对照） / m1（无 DCE，保活基线）
-      threads（B6 线程档：product + `-pthread` ⇒ **需宿主发 COOP/COEP**，否则页面自动落回非线程档）
+      w64 / w64-base（wasm64 车道：多线程 + memory64；w64-base = 无 COI 回退格）
+      ★ 三线裁决 2026-10-17：threads（wasm32+atomics）档已删 —— wasm32 线永远是单线程
 EOF
 }
 
@@ -453,7 +403,6 @@ cmd_list() {
   echo "product  $(out_default product)   现役形态：M2 + JSPI + 字体 + GL + IDBFS + SIMD BLAS"
   echo "scalar   $(out_default scalar)    同上但**无 SIMD**（product 的 A/B 对照，也是 product 的保活基线）"
   echo "m1       $(out_default m1)        M1（无 DCE），导出面最全（保活闸门差分基线；scalar 的基线）"
-  echo "threads  $(out_default threads)  B6 线程档：product + -pthread（内存 shared ⇒ 宿主必须发 COOP/COEP）"
   echo "w64      $(out_default w64)      wasm64 线程档：w64 + -pthread（MEMORY64=1）"
   echo "w64-base $(out_default w64-base) wasm64 基础档：单线程 + MEMORY64=1"
 }
@@ -483,7 +432,7 @@ cmd_selfcheck() {
       echo "✗ 模式表声明了 \$$v，但 link-web.sh 根本不读它（表在骗人）" >&2; bad=1; }
   done < <(mode_table product | cut -d= -f1)
   # 各模式的变量集合必须完全一致（否则"换模式"会悄悄多/少一个变量）
-  for check_m in scalar m1 threads w64 w64-base; do
+  for check_m in scalar m1 w64 w64-base; do
     if [ "$(mode_table product | cut -d= -f1 | sort | tr '\n' ' ')" \
        != "$(mode_table "$check_m" | cut -d= -f1 | sort | tr '\n' ' ')" ]; then
       echo "✗ 模式 product 与 $check_m 推出的变量集合不一致" >&2; bad=1
@@ -518,7 +467,6 @@ cmd_link() {
   #   判据从**树自己**读（`Makefile` 的 prefix 行），不信任何人的记忆。
   local want
   case "$m" in
-    threads)      want=/src/work/octave-install-threads ;;
     w64|w64-base) want=/src/work/octave-install${LANE_TAG:-}-w64 ;;
     *)            want=/src/work/octave-install ;;
   esac
@@ -535,31 +483,8 @@ cmd_link() {
     [ -n "$have" ] && echo "  树前缀校验：$have == 模式 $m 的期望 ✓"
   fi
 
-  # ★★ 线程档的**隐形前置**（2026-09-28 实测被它咬，见 HISTORY §5.67）★★
-  #   为什么线程档需要它：`-pthread` 要求 shared-memory 链上**每个对象**都声明 `atomics`，
-  #   而 farm 里那 20+ 个库的构建脚本**没有传旗标的点位**（有的写死在 emf77 命令行、有的在
-  #   cmake）⇒ 只能靠 `lane-shim.sh` 建的 **PATH 影子**（`$LANE_SHIM/em++` 就是
-  #   `em++ -pthread "$@"`）把旗标注进去。而 **`main.cc` 的编译也在 `link-web.sh` 里** ⇒
-  #   链线程档之前影子必须在 PATH 上 —— 否则 `main.o` 不带 atomics，
-  #   链接期报 `--shared-memory is disallowed by /src/websrc/main.o`。
-  #   以前这一步**只存在于操作员的记忆与 NOTES 散文里**，而这个入口自称"唯一入口、
-  #   一个变量都不许手设" —— 那句话在 threads 模式上是**假的**。
-  #   现在由入口自己挂：口径搬进代码。缺影子就**点名 FATAL**（附可直接复制的建法），
-  #   而不是链到一半才炸（那时错误信息离根因很远）。
-  #   ⚠️ 检查放在 LINK_WEB 之前：`--selftest` 的第 ⑤ 条要在**宿主**上就能证明它会红。
-  if [ "$m" = threads ]; then
-    if [ -d "$LANE_SHIM" ]; then
-      export PATH="$LANE_SHIM:$PATH"
-      echo "  车道影子：$LANE_SHIM（注入 -pthread —— 线程档的 atomics 前置）"
-    else
-      echo "FATAL: threads 模式需要**车道影子**（$LANE_SHIM 不存在）—— 它是线程档的隐形前置：" >&2
-      echo "       \`-pthread\` 要求链上每个对象都带 atomics，而 farm 那批库没有传旗标的点位，" >&2
-      echo "       只能靠 PATH 影子注入。没有它 ⇒ main.o 不带 atomics ⇒ 链接期才报" >&2
-      echo "       \`--shared-memory is disallowed by main.o\`（离根因很远）。" >&2
-      echo "       建它：export PATH=/src/bin:\$PATH && bash build/113/lane-shim.sh -pthread" >&2
-      exit 2
-    fi
-  elif [ "$m" = w64 ]; then
+  # ★★ w64 的隐形前置（同机制：-pthread ⇒ 全链 atomics ⇒ PATH 影子注入；threads 档已删，机制归 w64）
+  if [ "$m" = w64 ]; then
     local shim_w64="${LANE_SHIM_W64:-/src/libwork/lane-shim-w64}"
     if [ -d "$shim_w64" ]; then
       export PATH="$shim_w64:$PATH"
@@ -633,7 +558,7 @@ cmd_rebuild() {
   #   的树，却用 `-pthread -sMEMORY64=1` 的编译器编 ⇒ 树自相矛盾，链到 wasm-opt 才炸
   #   （`call param types must match`，而那批 f2c ABI 不匹配本来是被容忍的）。
   #   9/28 的 w64 树是 `build-w64-lane.sh` 建的（那里传 WITH_THREADS=1）⇒ 又是"前置只在车道脚本里"。
-  local _th=0; case "$m" in threads|w64) _th=1 ;; esac
+  local _th=0; case "$m" in w64) _th=1 ;; esac
   echo "  ① cd $OCT && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 WITH_THREADS=$_th bash $HERE/configure-113-full.sh"
   echo "  ② cd $OCT && emmake make clean      # 刻意强制：不信任 config.h 的新鲜度"
   echo "  ③ cd $OCT && emmake make -k -j$JOBS"
@@ -666,16 +591,15 @@ cmd_rebuild() {
   #   `--shared-memory is disallowed by <tree>.o` —— 一个离根因很远的错。
   #   以前这一步只在**操作员记忆**里（export PATH=…lane-shim…），本单把它搬进入口：
   #   与 cmd_link 同款处置（缺了就**点名** FATAL，不许编到一半才炸）。
-  if [ "$m" = threads ] || [ "$m" = w64 ]; then
-    local shim="${LANE_SHIM:-/src/libwork/lane-shim}"
-    [ "$m" = w64 ] && shim="${LANE_SHIM_W64:-/src/libwork/lane-shim-w64}"
+  if [ "$m" = w64 ]; then
+    local shim="${LANE_SHIM_W64:-/src/libwork/lane-shim-w64}"
     if [ -d "$shim" ]; then
       export PATH="$shim:$PATH"
       echo "  车道影子：$shim（rebuild 的 configure/make 也走它 —— 否则对象不带 atomics）"
     else
       echo "FATAL: \`rebuild $m\` 需要**车道影子** $shim，但它不在 —— 缺它编出来的树对象不带 atomics，" >&2
       echo "       重链会报 \`--shared-memory is disallowed by …\`（离根因很远的错）。" >&2
-      echo "       建它：bash build/113/lane-shim.sh \"$([ "$m" = w64 ] && echo '-pthread -sMEMORY64=1' || echo '-pthread')\" \"$shim\"" >&2
+      echo "       建它：bash build/113/lane-shim.sh \"-pthread -sMEMORY64=1 -fno-threadsafe-statics\" \"$shim\"" >&2
       exit 2
     fi
   fi
@@ -686,12 +610,11 @@ cmd_rebuild() {
   local th="$_th"
   # ★ 工单 28（2026-09-30 实测）：**必须把车道自己的 install 前缀传给 configure** ——
   #   不传就落到默认的 product 路径（`/src/work/octave-install`），于是产物**烘死 product 的
-  #   docstrings 路径**，而站点资产是按**车道**前缀挂载的（`manifest.threads.json` 挂到
+  #   docstrings 路径**，而站点资产是按**车道**前缀挂载的（`manifest.w64.json` 挂到
   #   `/src/work/octave-install-threads/…`）⇒ 运行期 `help` 全打不开（实测 accept-help 5/7）。
   #   这类错 `verdict=ok` **查不出来**（它只核对声明 vs 量测），必须靠运行期套件 + 下面的烘死路径自证。
   local inst
   case "$m" in
-    threads)      inst=/src/work/octave-install-threads ;;
     w64|w64-base) inst=/src/work/octave-install-w64 ;;
     *)            inst=/src/work/octave-install ;;
   esac
@@ -845,7 +768,7 @@ cmd_selftest() {
   #    ⚠️ 这条在**宿主**上跑：`LANE_SHIM=/不存在` ⇒ 必须命中"点名 FATAL"那一路。
   #      它证明的是"入口认得这个前置"，不证明容器内的愉快路径（那由每次真链覆盖）。
   n=$((n + 1))
-  msg="$(LANE_SHIM=/nonexistent-lane-shim bash "$0" link threads --out /tmp/_zr_shim_probe 2>&1 || true)"
+  msg="$(LANE_SHIM_W64=/nonexistent-w64-shim bash "$0" link w64 --out /tmp/_zr_shim_probe 2>&1 || true)"
   if printf '%s' "$msg" | grep -q '车道影子'; then
     echo "PASS | ★ 缺车道影子 ⇒ 入口**点名** FATAL（不再靠人的记忆）"
   else
@@ -855,8 +778,8 @@ cmd_selftest() {
   #    实测背景：`explain` 把空值渲染成 `（空）`，我拿它当数据源驱动探针 ⇒
   #    `-Wl,--export-if-defined=（空）`，而 `P5_GLPROBE=（空）` 会让 `[ -n ]` 判真、悄加一个 -D。
   n=$((n + 1))
-  ph="$(bash "$0" exports threads 2>/dev/null | grep -c '（空）' || true)"
-  em="$(bash "$0" exports threads 2>/dev/null | grep -c '^EXPORT_IF_DEFINED=$' || true)"
+  ph="$(bash "$0" exports w64 2>/dev/null | grep -c '（空）' || true)"
+  em="$(bash "$0" exports w64 2>/dev/null | grep -c '^EXPORT_IF_DEFINED=$' || true)"
   if [ "${ph:-1}" -eq 0 ] && [ "${em:-0}" -ge 1 ]; then
     echo "PASS | ★ exports 机器可读（无占位符；空变量是真空）"
   else
@@ -864,19 +787,19 @@ cmd_selftest() {
   fi
   # ⑥b ★ 工单 26：`rebuild <车道>` 的车道影子前置也必须被点名
   n=$((n + 1))
-  msg="$(LANE_SHIM=/nonexistent-shim bash "$0" rebuild threads --out /tmp/_zr_rb_probe --yes-rebuild 2>&1 || true)"
+  msg="$(LANE_SHIM_W64=/nonexistent-shim bash "$0" rebuild w64 --out /tmp/_zr_rb_probe --yes-rebuild 2>&1 || true)"
   if printf '%s' "$msg" | grep -q '车道影子'; then
-    echo "PASS | ★ rebuild threads 缺车道影子 ⇒ 入口**点名** FATAL（工单 26）"
+    echo "PASS | ★ rebuild w64 缺车道影子 ⇒ 入口**点名** FATAL（工单 26；threads 档已删，机制归 w64）"
   else
-    echo "fail | rebuild threads 缺影子时没点名（msg=${msg:0:120}）"; bad=1
+    echo "fail | rebuild w64 缺影子时没点名（msg=${msg:0:120}）"; bad=1
   fi
   # ⑥c ★ 工单 29：link 之前必须校验"树前缀 vs 模式"
   n=$((n + 1))
   fx="$(mktemp -d)"
-  printf 'prefix = /src/work/octave-install-threads\n' > "$fx/Makefile"
+  printf 'prefix = /src/work/octave-install-w64\n' > "$fx/Makefile"
   msg="$(OCT="$fx" bash "$0" link product --out /tmp/_zr_pfx_probe 2>&1 || true)"
   if printf '%s' "$msg" | grep -q '树的 configure 前缀'; then
-    echo "PASS | ★ link product 撞上 threads 前缀的树 ⇒ 点名 FATAL（工单 29）"
+    echo "PASS | ★ link product 撞上 w64 前缀的树 ⇒ 点名 FATAL（工单 29；threads 档已删）"
   else
     echo "fail | 树前缀不匹配时没拦（msg=${msg:0:110}）"; bad=1
   fi
@@ -1032,7 +955,7 @@ case "$SUB" in
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }
-case "$MODE" in product|scalar|m1|threads|w64|w64-base) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
+case "$MODE" in product|scalar|m1|w64|w64-base) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || OUT="$(out_default "$MODE")"
 
 case "$SUB" in

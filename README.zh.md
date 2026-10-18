@@ -134,7 +134,8 @@ MATLAB 语义那块的桥，**在接口层面也已经存在**：OM 的脚本 AP
 ## 架构
 
 同一解释器的四条部署**车道**，按浏览器能力自动选档（`lanes.js`）：
-`base`（wasm32 单线程）→ `threads`（wasm32 + pthread）→
+`base`（wasm32 单线程 —— wasm32 线**永远单线程**）→ `w64`（memory64 多线程）/ `w64-base`（回退格）。
+★ 三线裁决 2026-10-17：`threads` 档（wasm32+atomics 多线程）是畸形档，**已整档删除**（HISTORY §5.108）——试验场绑定三分支（wasm32-final / master / IllegalPerformance），站点只是展示层。原链条：
 `w64`（memory64 + 线程 + FMA + mimalloc + rust-sort）/ `w64-base`。
 不带 COI 头服务会**静默**落到 `base` 档——见[部署工单](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2)。
 

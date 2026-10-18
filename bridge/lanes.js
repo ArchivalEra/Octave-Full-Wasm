@@ -12,5 +12,5 @@
 //   · 站点上那份 = 真相（哪些档真的部署了），由生成器写。
 //
 // ⚠️ 为什么不能省掉它：`bridge/lane.js` 的能力驱动选档在**没有清单**时会退回
-//    [base, threads]，但那是**兜底**（会打告警）—— 兜底不该是常态。
-(function (g) { g.__octaveLanes = ["base", "threads"]; })(typeof window !== 'undefined' ? window : self);
+//    [base]，但那是**兜底**（会打告警）—— 兜底不该是常态。
+(function (g) { g.__octaveLanes = ["base"]; })   // 三线裁决：threads 已删(typeof window !== 'undefined' ? window : self);

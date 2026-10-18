@@ -111,7 +111,7 @@ const loadRes = await page.evaluate(async (mods) => {
   const lane = (window.__octaveCaps && window.__octaveCaps.lane
                 && window.__octaveCaps.lane.chosen) || 'base';
   const prefix = (lane === 'w64' || lane === 'w64-threads' || lane === 'w64-base') ? 'assets/oct-w64/'
-               : (lane === 'threads') ? 'assets/oct-threads/' : 'assets/oct/';
+               : 'assets/oct/';   // 三线：threads 已删
   const out = [];
   for (const m of Object.keys(mods)) {
     try {

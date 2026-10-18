@@ -51,17 +51,24 @@ READOBJ_CANDIDATES = (
 )
 
 # 车道名 → 期望档。车道名里的 "w64" 一律是 wasm64；"wasm32"/"product"/"base" 是 wasm32。
+# ★ 三线模型权威枚举（2026-10-17 用户点令终版）：
+#   三个实验场 = 分支：wasm32-final（wasm32 单线程）/ master（wasm64 多线程）/
+#   IllegalPerformance（wasm64 多线程 + Rust 补丁）。站点只是展示层：
+#   base=wasm32 产物、w64/w64-base=wasm64 产物、w64-base 是回退格（不是产品线）。
+#   **threads（wasm32+atomics 多线程）是畸形档，已删 —— 出现即必红。**
 LANE_EXPECT = {
+    # 产品线（三线）
+    "wasm32-final": "wasm32",
+    "master": "wasm64",
+    # 站点档（展示层；base=wasm32 线产物，w64/w64-base=wasm64 线产物）
+    "base": "wasm32",
     "w64": "wasm64",
     "w64-base": "wasm64",
-    "wasm64": "wasm64",
-    "master": "wasm64",
-    "wasm32": "wasm32",
+    # 旧构建模式名（relink.sh 的产物档）
     "product": "wasm32",
-    "base": "wasm32",
-    "threads": "wasm32",
-    "wasm32-final": "wasm32",
+    "wasm64": "wasm64",
 }
+DEAD_LANES = {"threads": "wasm32+atomics 多线程畸形档（三线裁决 2026-10-17 删除）—— wasm32 永远单线程"}
 
 
 def expected_arch(lane):
@@ -120,6 +127,8 @@ def octs_in(dirs):
 def check(lane, host, oct_dirs, site=None, arch_of_=arch_of):
     """纯逻辑（自证注入 arch_of_）。返回 (problems, stats)。"""
     problems, stats = [], {}
+    if lane in DEAD_LANES:
+        return ["车道 %r 是死档：%s" % (lane, DEAD_LANES[lane])], stats
     want = expected_arch(lane)
     if want is None:
         return ["车道名 %r 未知 ⇒ 不知道期望哪个架构（lane_expect 表里没有）" % lane], stats
@@ -203,6 +212,10 @@ def _selftest():
     p, _ = check("w64", "/x/host64.wasm", [tempfile.mkdtemp(prefix="lane-empty-")], arch_of_=fak)
     ok.append(("★ .oct 集合为空 ⇒ 必须报（零值守卫）", any("零值守卫" in x for x in p)))
 
+    # ⑥b 死档名必须**点名**报（三线裁决：threads 是被删除的畸形档，不是"陌生名"）
+    p_dead, _s2 = check("threads", "/x/h.wasm", [tempfile.mkdtemp(prefix="lane-empty-")], arch_of_=fak)
+    ok.append(("★ 死档名 threads ⇒ 必须点名畸形档（wasm32 永远单线程）",
+               any("死档" in x or "畸形档" in x for x in p_dead)))
     # ⑥ 陌生车道名必须报（防止把新车道静默当通过）
     p, _ = check("bogus-lane", "/x/host64.wasm", [d], arch_of_=fak)
     ok.append(("★ 陌生车道名 ⇒ 必须报", any("未知" in x for x in p)))

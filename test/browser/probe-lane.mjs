@@ -8,10 +8,12 @@
 //   · 选中的那一档是不是**真的**拿到了 shared 内存（`HEAP8.buffer instanceof SharedArrayBuffer`）
 //     —— 这是"线程档在跑"的**唯一硬证据**（不是看命令行写了 -pthread）；
 //   · 没有 COI 时是不是**老实落回**基础档（而不是装作能用）；
-//   · **显式选错档时必须响亮地失败**（`?lane=threads` 在没有 COI 的站点上 —— 反证档）。
+//   · **显式选错档时必须响亮地失败**（`?lane=w64` 在没有 COI 的站点上 —— 反证档）。
+//   · **死档必须死透**（`?lane=threads` 已随三线裁决删除 ⇒ 该 URL 不再是合法覆盖；
+//     覆盖失效 ⇒ 自动选档接管，且站点无 threads/ 目录 —— 不许 404 到死档）。
 //
 // 输入（F4 契约，在 test/browser/manifest.json 的 inputs 里声明）：
-//   SITE_DIR = **双档站点目录**（必须是已经部署了 `threads/` 子目录的那一份）
+//   SITE_DIR = **多档站点目录**（已部署 w64/ 的那一份）
 //   REPO     = 仓库路径（用它起 `build/serve-coi.py` —— 顺带把"发头脚本"本身也测了）
 //
 // 用法（从仓库原路径直跑）：
@@ -122,8 +124,8 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   args: ['--no-proxy-server', '--no-sandbox', '--disable-dev-shm-usage'] });
 
 // ── ★ 档清单（工单 23）：页面必须真的加载了站点清单，且**选中的档在清单里** ──────
-//   为什么这条必须存在：四格选档器是**能力**驱动的 —— 没有清单它会在这类"只部署了
-//   base+threads"的站点上挑 w64 并 404。声明与选择必须对得上，这条在**运行期**钉住它。
+//   为什么这条必须存在：选档器是**能力**驱动的 —— 没有清单它会在"只部署了 base"的
+//   站点上挑 w64 并 404。声明与选择必须对得上，这条在**运行期**钉住它。
 {
   const r = await probeLane(browser, `${A}/index.html`);
   const i = r.info;
@@ -134,17 +136,19 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
   check(Array.isArray(inv) && inv.indexOf(i.laneState) >= 0,
     '★ 选中的档**在**清单里（声明与选择一致，不会 404）',
     `chosen=${i.laneState} lanes=${JSON.stringify(inv)}`);
+  check(Array.isArray(inv) && inv.indexOf('threads') < 0,
+    '★ 清单**不许**含 threads（三线裁决：threads 档已删 —— 出现即死档残留)', JSON.stringify(inv));
   if (hasW64) {
     check(Array.isArray(inv) && inv.indexOf('w64') >= 0,
-      '四格站点：清单必须含 w64（否则能力最优的档选了会 404）', JSON.stringify(inv));
+      '多档站点：清单必须含 w64（否则能力最优的档选了会 404）', JSON.stringify(inv));
   } else {
     check(Array.isArray(inv) && inv.indexOf('w64') < 0,
-      '★ 双档站点：清单**不许**含 w64（否则会选到没部署的档并 404）', JSON.stringify(inv));
+      '★ 单档站点：清单**不许**含 w64（否则会选到没部署的档并 404）', JSON.stringify(inv));
   }
 }
 
 if (hasW64) {
-  console.log('--- wasm64 两轴探针 (COI × memory64 四格矩阵) ---');
+  console.log('--- wasm64 两轴探针 (COI × memory64 三格矩阵；threads 已删) ---');
 
   // ── Cell 1: COI + native m64 ⇒ w64 (shared memory) ──────────────────────
   {
@@ -172,17 +176,16 @@ if (hasW64) {
     check(i.capsArtifactWasm64 === true, 'Cell 2: 产物实测为 wasm64', JSON.stringify({ wasm64: i.capsArtifactWasm64, verdict: i.capsVerdict }));
   }
 
-  // ── Cell 3: COI + no-m64 ⇒ threads (shared memory wasm32) ───────────────
+  // ── Cell 3: COI + no-m64 ⇒ base（三线裁决 2026-10-17：wasm32 永远单线程，threads 档已删）──
   {
     const r = await probeLane(browser, `${A}/index.html`, { disableMemory64: true });
     const i = r.info;
-    const ok = i.laneState === 'threads' && i.lanePlan === 'threads' && i.capsLane === 'threads';
+    const ok = i.laneState === 'base' && i.lanePlan === 'base' && i.capsLane === 'base';
     if (!ok) laneWrong = true;
     check(i.coi === true, 'Cell 3: 带头站点 crossOriginIsolated = true', JSON.stringify({ coi: i.coi, sab: i.sab }));
-    check(ok, 'Cell 3: ★ COI + no-m64 ⇒ 回退到 threads 档', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+    check(ok, 'Cell 3: ★ COI + no-m64 ⇒ base（wasm32 无多线程档 —— threads 已删的反向断言）', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
     check(r.ready === true, 'Cell 3: 页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
-    check(i.sharedMemory === true, 'Cell 3: threads 真的拿到 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory }));
-    check(i.capsArtifactThreads === true, 'Cell 3: 产物实测为 threads', JSON.stringify({ threads: i.capsArtifactThreads, verdict: i.capsVerdict }));
+    check(i.sharedMemory === false, 'Cell 3: base 非 shared 内存（单线程 wasm32）', JSON.stringify({ sharedMemory: i.sharedMemory }));
   }
 
   // ── Cell 4: no-COI + no-m64 ⇒ base (non-shared wasm32) ──────────────────
@@ -245,26 +248,29 @@ if (hasW64) {
   for (const k of kids) { try { k.kill('SIGTERM'); } catch (e) { /* 已退出 */ } }
   console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
   if (laneWrong) {
-    console.log('FATAL: 四格选档有错误 ⇒ exit 7');
+    console.log('FATAL: 选档矩阵有错误 ⇒ exit 7');
     process.exit(7);
   }
   process.exit(fail ? 1 : 0);
 }
 
-// ── 格 1：带头 ⇒ 线程档，且**真的**是 shared 内存 ────────────────────────────────
+// ── 格 1：带头 ⇒ 选中的档与站点清单一致（hasW64 站 ⇒ w64 且真 shared；否则 base）──
 {
   const r = await probeLane(browser, `${A}/index.html`);
   const i = r.info;
   check(i.coi === true, '带头站点：crossOriginIsolated = true', JSON.stringify({ coi: i.coi, sab: i.sab }));
-  check(i.laneState === 'threads' && i.lanePlan === 'threads' && i.capsLane === 'threads',
-        '★ 带头站点选中**线程档**', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+  const want = hasW64 ? 'w64' : 'base';
+  const ok = i.laneState === want && i.lanePlan === want && i.capsLane === want;
+  check(ok, `★ 带头站点选中 ${want}（与站点部署一致）`, JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
   check(r.ready === true, '带头站点：页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
-  check(i.sharedMemory === true,
-        '★★ 线程档**真的**拿到 shared 内存（caps.sharedMemory：主模块内存是 SharedArrayBuffer）',
-        JSON.stringify({ sharedMemory: i.sharedMemory, heap8: i.buf }));
-  check(i.capsArtifactThreads === true,
-        '★ 产物的实测事实也是线程档（身份证 measured.threads.shared_memory）',
-        JSON.stringify({ artifactThreads: i.capsArtifactThreads, verdict: i.capsVerdict }));
+  if (hasW64) {
+    check(i.sharedMemory === true,
+          '★★ w64 档**真的**拿到 shared 内存（caps.sharedMemory：主模块内存是 SharedArrayBuffer）',
+          JSON.stringify({ sharedMemory: i.sharedMemory, heap8: i.buf }));
+    check(i.capsArtifactThreads === true,
+          '★ 产物实测为多线程（身份证 measured.threads.shared_memory —— w64 是多线程线）',
+          JSON.stringify({ artifactThreads: i.capsArtifactThreads, verdict: i.capsVerdict }));
+  }
 }
 
 // ── 格 2：不带头 ⇒ 基础档（老实回落，不许装作能用）────────────────────────────
@@ -290,17 +296,14 @@ if (hasW64) {
         JSON.stringify({ ready: r.ready, sharedMemory: i.sharedMemory }));
 }
 
-// ── 格 4（反证）：不带头 + 显式 threads ⇒ **必须响亮地失败** ─────────────────────
+// ── 格 4（反证·三线版）：不带头 + 显式 ?lane=threads ⇒ **死档 URL 被忽略**（覆盖正则已收窄），
+//     自动选档接管 ⇒ 不带头落 base、页面照常 ready —— 死档不许把站点带死，也不许 404 到死目录。
 {
-  const r = await probeLane(browser, `${B}/index.html?lane=threads`, { expectReady: false });
+  const r = await probeLane(browser, `${B}/index.html?lane=threads`);
   const i = r.info;
-  check(i.laneState === 'threads', '反证档：选档确实被覆盖成 threads', JSON.stringify({ state: i.laneState }));
-  check(r.ready === false,
-        '★★ **没有 COI 时强行选线程档 ⇒ 起不来**（不是"静默降级"，是硬失败）',
-        JSON.stringify({ ready: r.ready, buf: i.buf }));
-  const why = (r.errs || []).join(' | ');
-  check(/SharedArrayBuffer|crossOriginIsolated|shared|DataClone/i.test(why),
-        '★ 失败原因指向隔离/共享内存（而不是别的偶发失败）', why.slice(0, 200) || '(没有错误文本)');
+  check(i.laneState !== 'threads', '★ 死档断言：?lane=threads 不再是合法覆盖（不被选成 threads）', JSON.stringify({ state: i.laneState }));
+  check(i.laneState === 'base', '★ 死档 URL ⇒ 自动选档接管，不带头落 base', JSON.stringify({ state: i.laneState, plan: i.lanePlan }));
+  check(r.ready === true, '★ 死档 URL 不许把页面带死（base 照常 ready）', JSON.stringify({ ready: r.ready }));
 }
 
 // ── 格 5（B6，2026-09-27）：带头 + `?worker=1` ⇒ **自动落基础档**（不自动选未验证组合）─────

@@ -37,7 +37,7 @@
 
 | 守卫 | 什么时候拦 | 你该做什么 |
 |---|---|---|
-| **掉条**（键没了） | 某个输入不在（例：站点上没有 `threads/`）| 把输入准备好；确实要删就 `--allow-drop` 并把掉的键记进 HISTORY |
+| **掉条**（键没了） | 某个输入不在（例：站点上没有 `w64/`）| 把输入准备好；确实要删就 `--allow-drop` 并把掉的键记进 HISTORY（实例：threads_* 11 键，2026-10-17 三线裁决） |
 | **改口**（值换了） | 量出的值和台账不一样 | **逐条确认是实测出来的**，然后 `--accept-changes`；若只是量错了，先修输入 |
 
 为什么改口要拦：闸门只对少数几个 sha 回盘核对，其余条目的旧值一旦被覆盖，
@@ -99,7 +99,7 @@ git add -A && git commit …                # pre-commit 会把上面全部再�
 
 - **有键的**（`python3 zreflect/facts.py show` 能看）：现役 wasm32 双档的全部数字——
   基础档（`wasm_sha` / `wasm_v128` / `exported_functions` / `accept_suites` / `accept_pass` …）、
-  线程档（`threads_*` 那组）、E2 两组（`e2_single_*` / `e2_threaded_*`）、
+  E2 两组（`e2_single_*` / `e2_threaded_*`）、
   探针（`probe_lane_pass` / `probe_lane_fail`）、`env_vars`。
 - **w64 车道也已上键**（2026-09-28 补，10 条）：`w64_verdict` / `w64_wasm64` /
   `w64_shared_memory` / `w64_exported_functions` / `w64_v128` / `w64_i64_insns` /

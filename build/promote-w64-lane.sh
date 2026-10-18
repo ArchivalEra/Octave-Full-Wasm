@@ -6,10 +6,10 @@
 # ── 为什么单独一个入口，而不是并进 `promote-webgl.sh` ────────────────────────────
 # 两条**实测**理由（不是口味问题）：
 #  ① `promote-webgl.sh` 是**产物导向**的：它会从容器 `THREADS_OUT`（默认
-#     `/src/websrc/m2fc-threads-out`）**重推线程档**。而那个目录今天已漂到 `c2899a71…`
+#     ~~`/src/websrc/m2fc-threads-out`~~ **（threads 档已删，2026-10-17 三线裁决）**。
 #     （工单 19/27 的试验重链落在那里），**站点上现役线程档是 `e570905e…`**
 #     ⇒ 裸跑 promote-webgl.sh 会把线程档换掉，而本批的硬判据是
-#     "**base / threads 两档逐字节不许变**"。
+#     "**base 档逐字节不许变，threads 档必须不存在**"。
 #  ② w64 车道还带**自己的一套 `.oct`**（`assets/oct-w64/`、`assets/octdir-w64/`）和自己那份
 #     `manifest.w64.json`（它把 install 前缀改口到 `/src/work/octave-install-w64`）
 #     —— promote-webgl.sh 里没有这条路径。
@@ -17,13 +17,13 @@
 #   有 `--dry-run` / `--verify` / `--selftest`，且全部判据 fail-closed）。
 #
 # ── 判据（逐条 fail-closed）────────────────────────────────────────────────────
-#   A. 进件前：目标站点的 **base / threads 两档 sha 必须等于台账**（`wasm_sha` /
-#      `threads_wasm_sha`）—— 否则 FATAL。这是本批的**反向断言**：w64 批次只许**新增**两档。
+#   A. 进件前：目标站点的 **base 档 sha 必须等于台账**（`wasm_sha`）且**不许存在任何
+#      threads 痕迹**（三线裁决：threads 档已删 —— 残留即 FATAL）。w64 批次只许**新增** w64 两格。
 #   B. 容器里两份产物：`octave.build.json` 的 `verdict == "ok"`、`measured.wasm64 == true`
 #      （w64 还要 `measured.threads.shared_memory == true`；w64-base 必须是 false）。
 #   C. 落件后逐档核：**身份证自查**（`check-build-manifest.py --out-dir`：清单里的 sha 与磁盘
 #      上的字节逐条对上）+ `w64/octave.wasm` sha == 台账 `w64_wasm_sha`（容器那份不许是别的）。
-#   D. base / threads 两档 sha **逐字节未变**（再查一次 —— 防"拷错方向"）。
+#   D. base 档 sha **逐字节未变** + threads 痕迹仍为零（再查一次 —— 防"拷错方向"/"塞回死档"）。
 #   E. `lanes.js` 由 `gen-lanes.sh` **按磁盘重生成** ⇒ 必须列出四档（缺档 = 选档器 404）。
 #   F. 车道 `.oct` 条数 == 基础清单的 oct/octdir 条数（与 promote-webgl 第 5 步同构），
 #      且 `make-lane-manifest.py --check --lane w64` 过。
@@ -53,7 +53,7 @@ LANE_OCT_PKG_HOST=${LANE_OCT_PKG_HOST:-$BASE/octs-w64-pkg}
 LANE_FILES="octave.js octave.wasm octave.data octave.build.json"
 LANE_FIXTURES="minioct.oct dldprobe.oct"
 LEDGER_BASE_KEY=wasm_sha
-LEDGER_THREADS_KEY=threads_wasm_sha
+LEDGER_THREADS_KEY=  # threads 档已删（2026-10-17）：不再取台账键，改为死档断言
 LEDGER_W64_KEY=w64_wasm_sha
 LEDGER_W64B_KEY=w64_base_wasm_sha
 
@@ -125,19 +125,22 @@ PY
 short () { printf '%s' "${1:-}" | cut -c1-16; }
 sha12 () { sha256sum "$1" 2>/dev/null | cut -c1-12 || echo "(缺)"; }
 
-# ── A/D：base / threads 的 sha 守卫（**本批的反向断言**）──────────────────────────
+# ── A/D：base 的 sha 守卫 + threads 死档断言（**本批的反向断言**）──────────────────
 # 写成函数是为了自证能直接喂合成值（三类用例都走它，不碰真站点）。
-lane_guard () {  # lane_guard <站点> <期望base> <期望threads> <模式：before|after> <before_base> <before_threads>
-  local site="$1" wb="$2" wt="$3" phase="$4" bb="${5:-}" bt="${6:-}" rc=0
-  local gb gt
+lane_guard () {  # lane_guard <站点> <期望base> <_unused> <模式：before|after> <before_base> <_unused2>
+  # ★ 三线裁决（2026-10-17）：threads 档已删 —— 本守卫对 threads 只做**死档断言**：
+  #   站点上不许存在任何 threads 痕迹（目录/分档清单/分档 .oct）。出现 = FATAL。
+  local site="$1" wb="$2" _wt="$3" phase="$4" bb="${5:-}" _bt="${6:-}" rc=0
+  local gb
   gb="$(sha256sum "$site/octave.wasm" 2>/dev/null | cut -d' ' -f1)"
-  gt="$(sha256sum "$site/threads/octave.wasm" 2>/dev/null | cut -d' ' -f1)"
   [ -n "$gb" ] || { printf 'FATAL: %s/octave.wasm 读不到（站点目录写错了？）\n' "$site" >&2; return 1; }
   [ "$gb" = "$wb" ] || { printf 'FATAL: base 档 sha=%s ≠ 台账 %s\n' "$(short "$gb")" "$(short "$wb")" >&2; rc=1; }
-  [ -z "$wt" ] || [ "$gt" = "$wt" ] || { printf 'FATAL: threads 档 sha=%s ≠ 台账 %s\n' "$(short "$gt")" "$(short "$wt")" >&2; rc=1; }
+  local dead
+  for dead in "$site/threads" "$site/assets/oct-threads" "$site/assets/octdir-threads" "$site/assets/manifest.threads.json"; do
+    [ -e "$dead" ] && { printf 'FATAL: 站点存在死档残留 %s（threads 档已删 —— wasm32 不允许多线程）\n' "$dead" >&2; rc=1; }
+  done
   if [ "$phase" = after ]; then
     [ "$gb" = "$bb" ] || { printf 'FATAL: 本批不许动 base 档，但 sha 从 %s 变成了 %s\n' "$(short "$bb")" "$(short "$gb")" >&2; rc=1; }
-    [ "$gt" = "$bt" ] || { printf 'FATAL: 本批不许动 threads 档，但 sha 从 %s 变成了 %s\n' "$(short "$bt")" "$(short "$gt")" >&2; rc=1; }
   fi
   return "$rc"
 }
@@ -188,23 +191,24 @@ p = os.path.join(site, "lanes.js")
 s = open(p, encoding="utf-8").read() if os.path.exists(p) else ""
 m = re.search(r"__octaveLanes\s*=\s*(\[[^\]]*\])", s)
 inv = json.loads(m.group(1)) if m else []
-want = ["base", "threads", "w64", "w64-base"]
+want = ["base", "w64", "w64-base"]   # 三线裁决：threads 已删；出现 threads 也红
 miss = [x for x in want if x not in inv]
-if miss:
-    print("FATAL: lanes.js 少了 %s（实际 %s）⇒ 选档器会挑到没部署的档并 404\n"
-          % (miss, inv), file=sys.stderr)
+dead = [x for x in inv if x == "threads"]
+if miss or dead:
+    print("FATAL: lanes.js 期望 %s（实际 %s；死档残留=%s）⇒ 选档器会挑到没部署的档并 404\n"
+          % (want, inv, dead), file=sys.stderr)
     raise SystemExit(1)
 print("   lanes.js = %s" % inv)
 PY
 }
 
 verify_site () {  # <站点>  —— 只核不写
-  local site="$1" rc=0 wb wt w64b
-  wb="$(ledger $LEDGER_BASE_KEY)"; wt="$(ledger $LEDGER_THREADS_KEY)"
+  local site="$1" rc=0 wb w64b
+  wb="$(ledger $LEDGER_BASE_KEY)"
   w64b="$(ledger $LEDGER_W64B_KEY)"
   [ -n "$wb" ] || die "台账读不到 $LEDGER_BASE_KEY（$REPO/build/FACTS.json）"
   [ -d "$site" ] || die "站点目录不存在：$site"
-  lane_guard "$site" "$wb" "$wt" before || rc=1
+  lane_guard "$site" "$wb" "" before || rc=1
   lane_check "$site" w64 "$(ledger $LEDGER_W64_KEY)" || rc=1
   lane_check "$site" w64-base "$w64b" || rc=1
   for lane in w64 w64-base; do
@@ -226,40 +230,39 @@ selftest () {
   local tmp bad=0 n=0
   tmp="$(mktemp -d)"
   trap "rm -rf '$tmp'" EXIT
-  mkfix () {  # mkfix <站点> <base sha> <threads sha>
+  mkfix () {  # mkfix <站点>（base + 空 manifest；threads 死档不存在才是"正常"）
     local d="$1"
-    mkdir -p "$d/threads" "$d/assets/oct-threads"
-    printf 'BASE' > "$d/octave.wasm"; printf 'THR' > "$d/threads/octave.wasm"
+    mkdir -p "$d/assets"
+    printf 'BASE' > "$d/octave.wasm"
     printf '[]' > "$d/assets/manifest.json"
   }
   bs="$(printf 'BASE' | sha256sum | cut -d' ' -f1)"
-  ts="$(printf 'THR' | sha256sum | cut -d' ' -f1)"
-  # ① 正常：两档 sha 与"台账"一致 ⇒ 不报
+  # ① 正常：base 与台账一致且无 threads 痕迹 ⇒ 不报
   n=$((n+1)); mkfix "$tmp/ok"
-  if lane_guard "$tmp/ok" "$bs" "$ts" before >/dev/null 2>&1; then
-    echo "PASS | lane_guard：base/threads 与台账一致 ⇒ 放行"
+  if lane_guard "$tmp/ok" "$bs" "" before >/dev/null 2>&1; then
+    echo "PASS | lane_guard：base 与台账一致且无死档 ⇒ 放行"
   else echo "fail | lane_guard 正常用例竟然报错"; bad=$((bad+1)); fi
   # ② 该报的必须报：base 被换过 ⇒ 必须红（本批的反向断言）
   n=$((n+1)); mkfix "$tmp/bad"; printf 'OTHER' > "$tmp/bad/octave.wasm"
-  if lane_guard "$tmp/bad" "$bs" "$ts" before >/dev/null 2>&1; then
+  if lane_guard "$tmp/bad" "$bs" "" before >/dev/null 2>&1; then
     echo "fail | ★ base 档被换过却没报（反向断言失效）"; bad=$((bad+1))
   else echo "PASS | ★ base 档 sha 不等于台账 ⇒ 必须红"; fi
-  # ③ 该报的必须报：after 阶段 threads 被动过 ⇒ 必须红
-  n=$((n+1)); mkfix "$tmp/moved"
-  if lane_guard "$tmp/moved" "$bs" "$ts" after "$bs" "deadbeef" >/dev/null 2>&1; then
-    echo "fail | ★ after 阶段 threads 被换却没报"; bad=$((bad+1))
-  else echo "PASS | ★ after 阶段 threads 变了 ⇒ 必须红（只许新增两档）"; fi
+  # ③ 该报的必须报：死档残留（threads/ 目录）⇒ 必须红（三线裁决的反向断言）
+  n=$((n+1)); mkfix "$tmp/dead"; mkdir -p "$tmp/dead/threads"; printf 'THR' > "$tmp/dead/threads/octave.wasm"
+  if lane_guard "$tmp/dead" "$bs" "" before >/dev/null 2>&1; then
+    echo "fail | ★ threads 死档残留却没报"; bad=$((bad+1))
+  else echo "PASS | ★ threads 死档残留 ⇒ 必须红（wasm32 不允许多线程）"; fi
   # ④ 空输入必须报：站点目录不存在 ⇒ lane_guard 必须红
   n=$((n+1))
-  if lane_guard "$tmp/nonexistent" "$bs" "$ts" before >/dev/null 2>&1; then
+  if lane_guard "$tmp/nonexistent" "$bs" "" before >/dev/null 2>&1; then
     echo "fail | ★ 站点不存在却没报（零值守卫失效）"; bad=$((bad+1))
   else echo "PASS | ★ 站点目录不存在 ⇒ 必须红"; fi
-  # ⑤ 空输入必须报：lanes.js 缺档 ⇒ 必须红
+  # ⑤ 空输入必须报：lanes.js 缺档或含死档 ⇒ 必须红
   n=$((n+1)); mkdir -p "$tmp/lanes"
   printf '(function(g){g.__octaveLanes = ["base","threads"];})(self);\n' > "$tmp/lanes/lanes.js"
   if lanes_js_check "$tmp/lanes" >/dev/null 2>&1; then
-    echo "fail | ★ 双档清单竟被当成四格通过"; bad=$((bad+1))
-  else echo "PASS | ★ lanes.js 只有两档 ⇒ 必须红"; fi
+    echo "fail | ★ 含死档 threads 的清单竟通过"; bad=$((bad+1))
+  else echo "PASS | ★ lanes.js 含 threads（死档）或缺档 ⇒ 必须红"; fi
   n=$((n+1)); : > "$tmp/lanes/lanes.js"
   if lanes_js_check "$tmp/lanes" >/dev/null 2>&1; then
     echo "fail | ★ 空 lanes.js 竟通过"; bad=$((bad+1))
@@ -282,23 +285,21 @@ if [ "$MODE" = selftest ]; then selftest; exit $?; fi
 # ── --verify：只核不写 ────────────────────────────────────────────────────────
 if [ "$MODE" = verify ]; then
   say "verify $SITE"
-  if verify_site "$SITE"; then echo "✅ 四格齐备且 base/threads 未动"; exit 0; fi
+  if verify_site "$SITE"; then echo "✅ 三格齐备（base/w64/w64-base）且无 threads 痕迹"; exit 0; fi
   exit 3
 fi
 
 # ── 真发运 / dry-run ─────────────────────────────────────────────────────────
 say "目标站点 $SITE（模式 $MODE；容器 $CTR）"
 [ -d "$SITE" ] || die "站点目录不存在：$SITE"
-WB="$(ledger $LEDGER_BASE_KEY)"; WT="$(ledger $LEDGER_THREADS_KEY)"
+WB="$(ledger $LEDGER_BASE_KEY)"
 W64W="$(ledger $LEDGER_W64_KEY)"; W64BW="$(ledger $LEDGER_W64B_KEY)"
 [ -n "$WB" ] || die "台账读不到 $LEDGER_BASE_KEY"
 BEFORE_B="$(sha256sum "$SITE/octave.wasm" | cut -d' ' -f1)"
-BEFORE_T="$(sha256sum "$SITE/threads/octave.wasm" | cut -d' ' -f1)"
 
-say "0) 进件前守卫：base / threads 必须等于台账（**本批只许新增两档**）"
+say "0) 进件前守卫：base 等于台账 + 无 threads 痕迹（**本批只许新增 w64 两格**）"
 echo "   base    现值 $(short "$BEFORE_B") / 台账 $(short "$WB")"
-echo "   threads 现值 $(short "$BEFORE_T") / 台账 $(short "$WT")"
-lane_guard "$SITE" "$WB" "$WT" before || die "站点现状与台账不符 ⇒ 别在本批动它（先把站点修回台账态）"
+lane_guard "$SITE" "$WB" "" before || die "站点现状与台账不符（或有 threads 死档残留）⇒ 别在本批动它（先把站点修回台账态）"
 
 say "1) 容器产物与身份证核对（verdict / wasm64 / shared）"
 for pair in "w64:$W64_OUT:true" "w64-base:$W64_BASE_OUT:false"; do
@@ -347,7 +348,7 @@ fi
 
 say "5) 自检"
 rc=0
-lane_guard "$SITE" "$WB" "$WT" after "$BEFORE_B" "$BEFORE_T" || rc=1
+lane_guard "$SITE" "$WB" "" after "$BEFORE_B" || rc=1
 lane_check "$SITE" w64 "$W64W" || rc=1
 lane_check "$SITE" w64-base "$W64BW" || rc=1
 for lane in w64 w64-base; do
@@ -374,7 +375,7 @@ done
 # 落件属 root（docker cp）⇒ 把站点归还给当前用户（与 promote-webgl.sh 第 4 步同构）
 run "sudo chown -R \$(id -u):\$(id -g) '$SITE'"
 [ "$rc" = 0 ] || die "自检没过 ⇒ **别上线**（站点可能已是半成品：重跑本脚本或从备份回滚）"
-echo "   ✅ 两档齐、base/threads 未动、清单与 .oct 条数自洽、lanes.js 四档"
+echo "   ✅ w64 两格齐、base 未动、无 threads 痕迹、清单与 .oct 条数自洽、lanes.js 三格"
 
 echo
 echo "下一步（**必须**）："

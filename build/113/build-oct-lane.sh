@@ -20,10 +20,13 @@
 set -euo pipefail
 
 SRC="${SRC:-/src/work/octave-11.3.0}"
-OCT_INSTALL="${OCT_INSTALL:-/src/work/octave-install-threads}"   # 线程档的头/库
-OUT_CORE="${OUT_CORE:-/src/libwork/octs-threads}"
-OUT_PKG="${OUT_PKG:-/src/libwork/octs-threads-pkg}"
-SUNDIALS_PREFIX="${SUNDIALS_PREFIX:-/src/deps-threads/sundials}"
+# ★ 三线裁决（2026-10-17）：threads 档（wasm32+atomics）已删 —— 本脚本是**车道 .oct 的
+#   通用构建器**，w64 车道（build-w64-lane.sh）也复用它（通过环境变量覆盖全部路径）。
+#   默认值因此指向 w64 那套（不再有 threads 默认）。
+OCT_INSTALL="${OCT_INSTALL:-/src/work/octave-install-w64}"        # w64 车道的头/库
+OUT_CORE="${OUT_CORE:-/src/libwork/octs-w64}"
+OUT_PKG="${OUT_PKG:-/src/libwork/octs-w64-pkg}"
+SUNDIALS_PREFIX="${SUNDIALS_PREFIX:-/src/deps-w64/sundials}"
 SITE_MANIFEST="${SITE_MANIFEST:-/mnt/hdd/octave-wasm-build/site/assets/manifest.json}"
 FORGE="${FORGE:-/src/forge}"
 
@@ -47,7 +50,7 @@ head -3 "$(command -v emcc)" | grep -q "车道影子" || {
 head -3 "$(command -v emcc)" | grep -q -- "-fno-threadsafe-statics" || {
   echo "FATAL: 车道影子缺 -fno-threadsafe-statics ⇒ 编出来的 .oct 会引用两档主模块都不提供的" >&2
   echo "       __cxa_guard_acquire/release（第一次动态静态初始化就 TypeError: resolved is not a function）" >&2
-  echo "       重做影子：SHIM=\$(PATH=/src/bin:\$PATH bash /src/bin/lane-shim.sh \"-pthread -fno-threadsafe-statics\")" >&2
+  echo "       重做影子：SHIM=\$(PATH=/src/bin:\$PATH bash /src/bin/lane-shim.sh \"-pthread -sMEMORY64=1 -fno-threadsafe-statics\")" >&2
   exit 2; }
 [ -d "$OCT_INSTALL/include" ] || { echo "FATAL: 缺线程档安装头 $OCT_INSTALL（先配线程档并 make install）" >&2; exit 2; }
 
@@ -85,9 +88,9 @@ echo "== ④b slicot 调度模块（唯一需要**静态链库**的那个 .oct�
 #   --defined-only --extern-only` 两档都没有）⇒ 第一次 BLAS 调用就崩。判据必须看**产物**：
 #   模块体积 + "这些符号是定义还是导入"（见本步末尾的第⑨条判据）。
 SLICOT_C_SRC="${SLICOT_C_SRC:-/src/libwork/f2c-probe}"     # 已由 f2c 翻译好的 .c（613 个）
-SLICOT_OBJ="${SLICOT_OBJ:-/src/libwork-threads/slicot-obj}"
-SLICOT_LIB="${SLICOT_LIB:-/src/libwork-threads/slicotlibrary.a}"
-SLICOT_NODUP="${SLICOT_NODUP:-/src/libwork-threads/slicotlibrary-nodup.a}"
+SLICOT_OBJ="${SLICOT_OBJ:-/src/libwork-w64/slicot-obj}"
+SLICOT_LIB="${SLICOT_LIB:-/src/libwork-w64/slicotlibrary.a}"
+SLICOT_NODUP="${SLICOT_NODUP:-/src/libwork-w64/slicotlibrary-nodup.a}"
 # ⚠️ BLAS/LAPACK 用**基础档的 PIC 版**（`/src/deps/lapack-pic/`），不用车道那套 `lapack-simd`：
 #   车道那套**不是 PIC** ⇒ side module 链接直接报
 #   `relocation R_WASM_MEMORY_ADDR_LEB cannot be used against symbol ...; recompile with -fPIC`

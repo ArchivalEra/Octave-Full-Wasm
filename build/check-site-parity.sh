@@ -49,18 +49,13 @@ STRICT=0
 if [ "${1:-}" = "--selftest" ]; then
   tmp="$(mktemp -d)"; fails=0; ncases=0
   mkfix() {
-    mkdir -p "$1/assets/oct-threads"
+    mkdir -p "$1/assets/oct-w64"   # ⚠️ 必须先建 assets/（旧夹具只建过 assets/oct-threads）
     for f in octave.wasm octave.js octave.data index.html assets-loader.js octave.build.json \
              VERSION lane.js octave-core.js octave-worker.js; do
       printf 'same-%s' "$f" > "$1/$f"
     done
-    mkdir -p "$1/threads"
-    for f in octave.wasm octave.js octave.data octave.build.json; do
-      printf 'same-thr-%s' "$f" > "$1/threads/$f"
-    done
     printf '[]' > "$1/assets/manifest.json"
-    printf '[]' > "$1/assets/manifest.threads.json"
-    printf 'lane-oct' > "$1/assets/oct-threads/a.oct"
+    printf 'lane-oct' > "$1/assets/oct-w64/a.oct"   # 车道 .oct 判据改用 w64（threads 已删）
   }
   probe() {  # $1 = 期望（ok|red），$2 = 用例名
     ncases=$((ncases + 1))
@@ -76,17 +71,17 @@ if [ "${1:-}" = "--selftest" ]; then
   printf 'diff' > "$tmp/b/VERSION"
   probe red "一处内容不同 ⇒ 红"
   rm -f "$tmp/a/VERSION" "$tmp/b/VERSION" "$tmp/c/VERSION"   # 复原（下面只动车道那一层）
-  printf 'lane-oct-OLD' > "$tmp/c/assets/oct-threads/a.oct"
-  probe red "★ 车道 .oct 有一处是旧件 ⇒ 必须红（B6：另一套编译的 44 个 side module）"
-  rm -f "$tmp/a/assets/oct-threads/a.oct" "$tmp/b/assets/oct-threads/a.oct" "$tmp/c/assets/oct-threads/a.oct"
+  printf 'lane-oct-OLD' > "$tmp/c/assets/oct-w64/a.oct"
+  probe red "★ 车道 .oct 有一处是旧件 ⇒ 必须红（w64 那套 side module）"
+  rm -f "$tmp/a/assets/oct-w64/a.oct" "$tmp/b/assets/oct-w64/a.oct" "$tmp/c/assets/oct-w64/a.oct"
   probe red "★ 三处都没有车道 .oct ⇒ 必须红（零值守卫：分档检查不许空转）"
   # ★ 工单 30：四格（w64/w64-base）也要进闸门 —— 一档"三处之一少了/旧了"必须红
   #   ⚠️ 先把前面用例删掉的 VERSION 复原：它三处都缺时是**红**（零值守卫）⇒ 不复原的话
   #      下面这两个 ok 用例会因为 VERSION 而红，看起来像"四格判据坏了"（自证自己先踩到）。
   for d in "$tmp/a" "$tmp/b" "$tmp/c"; do printf 'same-VERSION' > "$d/VERSION"; done
-  printf 'lane-oct' > "$tmp/a/assets/oct-threads/a.oct"
-  printf 'lane-oct' > "$tmp/b/assets/oct-threads/a.oct"
-  printf 'lane-oct' > "$tmp/c/assets/oct-threads/a.oct"
+  printf 'lane-oct' > "$tmp/a/assets/oct-w64/a.oct"
+  printf 'lane-oct' > "$tmp/b/assets/oct-w64/a.oct"
+  printf 'lane-oct' > "$tmp/c/assets/oct-w64/a.oct"
   mkfix_w64() {
     mkdir -p "$1/w64" "$1/w64-base" "$1/assets/oct-w64"
     for f in octave.wasm octave.js octave.data octave.build.json minioct.oct dldprobe.oct; do
@@ -114,13 +109,13 @@ fi
 
 # 部署件清单：三处必须逐字节相同的那批
 DEPLOY="octave.wasm octave.js octave.data octave.build.json index.html assets-loader.js VERSION assets/manifest.json"
-# ★ B6 双档：线程档与**选档胶水**也是部署件（同名文件、子目录区分；lane.js 决定选哪一档）
-#   —— 不列进来就会"8761 还在跑上一版选档逻辑/上一版线程档"而闸门全绿。
+# ★ 选档胶水也是部署件（lane.js 决定选哪一档）
+#   —— 不列进来就会"8761 还在跑上一版选档逻辑"而闸门全绿。
 #   `octave-core.js`/`octave-worker.js` 是内核与 worker 宿主（index.html 与 worker 都 src 它），
 #   它们**必须**与站点同时更新（实测：promote 前 A/C 的这两份是"选档前"的老件）。
+#   ★ 三线裁决（2026-10-17）：threads 档已删 —— 它的部署件条目全部移除；
+#     w64/w64-base 仍走下面的**动态**清单。
 DEPLOY="$DEPLOY lane.js octave-core.js octave-worker.js"
-DEPLOY="$DEPLOY threads/octave.wasm threads/octave.js threads/octave.data threads/octave.build.json"
-DEPLOY="$DEPLOY assets/manifest.threads.json"
 # ★ 工单 30（2026-10-01）：其余车道**动态**进清单 —— 三处**任一处**有这一档就都核。
 #   为什么不写死：闸门要在"四格站"和"双档站"上都能用（8768 先落地那半天不能假红），
 #   而"一处有一处没有"恰恰是本闸门最该抓的漂移。判据是**档目录在不在**，不是清单说什么。
@@ -142,11 +137,11 @@ done
 # 车道 `.oct` 分档（44 个 `-pthread` 的 side module）：不进上面那张清单（它是**集合**不是单件），
 # 单独用 (相对路径, sha256) 列表比对。判据可证伪：任一处的旧件/缺件都会让列表不同。
 # 工单 30：档名当参数 —— 线程档与 wasm64 档是**两套**编译产物，各比各的。
-lane_list() {  # $1=站点  $2…=档名（默认 threads）
+lane_list() {  # $1=站点  $2…=档名（默认 w64）
   python3 - "$@" <<'PY'
 import hashlib, os, sys
 site = sys.argv[1]
-lanes = sys.argv[2:] or ["threads"]
+lanes = sys.argv[2:] or ["w64"]   # 三线裁决：threads 已删
 for lane in lanes:
     for sub in ("assets/oct-%s" % lane, "assets/octdir-%s" % lane):
         root = os.path.join(site, sub)
@@ -228,7 +223,7 @@ done
 say "【车道 .oct 分档】"
 # 分档检查按**档**做：线程档一定有（红线）；wasm64 档三处任一有才做
 # （工单 30 —— 不做的话"8761 有 w64/ 而 w64 的 .oct 是旧件"这条**没人拦**）。
-for _LANE in threads w64; do
+for _LANE in w64; do   # 三线裁决：threads 已删
   _has=0
   for _d in "$A" "$B" "$C"; do [ -d "$_d/$_LANE" ] && _has=1; done
   if [ "$_LANE" = w64 ] && [ "$_has" = 0 ]; then continue; fi

@@ -15,8 +15,8 @@
 // JSPI 能力门（两个 gate）、`Capabilities`。
 // 宿主**提供**（9 件，全部是"这一侧才知道的事"）：
 //   base      资源前缀（wasm/.data/资产/清单都在它后面）
-//   lane      选档计划（B6）：`{lane,dir,js,wasm,data,manifest}` —— 线程档时 wasm 在 `threads/`、
-//             资产清单换成 `assets/manifest.threads.json`（只有 `.oct` 那部分不同）
+//   lane      选档计划（B6）：`{lane,dir,js,wasm,data,manifest}` —— w64 时 wasm 在 `w64/`、
+//             资产清单换成 `assets/manifest.w64.json`（只有 `.oct` 那部分不同）
 //             子目录（文件名不变，胶水内部的 `octave.data` 引用因此不用改）。
 //             缺省 = 基础档（`opts.lane` 不传时的行为与 B6 之前逐字节一致）
 //   print     stdout 汇（页面：console.log + 上屏；worker：合批 postMessage）
@@ -81,7 +81,7 @@
         sharedArrayBuffer: (typeof global.SharedArrayBuffer === 'function'),
       },
       lane: { chosen: lane.lane, dir: lane.dir || '', js: lane.js,
-              threads: (lane.lane === 'threads' || lane.lane === 'w64' || lane.lane === 'w64-threads'),
+              threads: (lane.lane === 'w64' || lane.lane === 'w64-threads'),   // 实测轴：w64 产物是多线程（threads 档已删）
               wasm64: (lane.lane === 'w64' || lane.lane === 'w64-threads' || lane.lane === 'w64-base') },
       sharedMemory: null,      // 实例化后填（见 instantiateWasm 的 .then）
       artifact: null,     // 由 octave.build.json 填充（读不到就是 null，绝不因此报错）
@@ -571,7 +571,7 @@
       // 控制台里：await OctaveAssets.load('ode15s') / OctaveAssets.list()
       var Assets = host.assets(Module, baseOf(), function () { return st.ready; });
       st.assets = Assets;
-      // ★ B6：资产清单**按档**（线程档的 `.oct` 在 `oct-threads/`，理由见 bridge/lane.js）。
+      // ★ B6：资产清单**按档**（w64 的 `.oct` 在 `oct-w64/`，理由见 bridge/lane.js）。
       Assets.init(lane.manifest).then(function () {
         host.print('[assets] 可用资产: ' + Assets.list().join(', '));
         return Assets.load(CORE_DLDFCN).catch(function (e) {

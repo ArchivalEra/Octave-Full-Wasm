@@ -7,13 +7,13 @@
 
 ## 为什么必须按清单放（实测踩到）
 
-第一版按"源目录 → 目标目录"的朴素映射：核心目录 → `oct-threads/`、包目录 → `octdir-threads/<包>/`。
+第一版按"源目录 → 目标目录"的朴素映射：核心目录 → `oct-<lane>/`、包目录 → `octdir-<lane>/<包>/`（threads 档已删，现行车道 = w64）。
 结果 **slicot 调度模块**（`__control_slicot_functions__.oct`）被编进了**核心**目录，而清单说它属于
 `octdir/control/` ⇒ 放错地方 ⇒ 被 `--check` 判"缺文件"。**清单是结构的唯一真值**，源目录只提供文件。
 
 命名/位置规则（逐字来自清单）：
-  kind=oct    → `<assets>/oct-threads/<url 的文件名>`
-  kind=octdir → `<assets>/octdir-threads/<name>/<files 里的每个 .oct>`
+  kind=oct    → `<assets>/oct-<lane>/<url 的文件名>`
+  kind=octdir → `<assets>/octdir-<lane>/<name>/<files 里的每个 .oct>`
 
 源：在给定的若干目录里按**文件名**找（找不到就 FATAL，不静默；同名文件出现两次要报出来）。
 
@@ -46,7 +46,7 @@ def index_sources(dirs):
     return idx, dup
 
 
-def wanted(manifest, lane="threads"):
+def wanted(manifest, lane="w64"):   # 三线裁决：threads 已删
     """从基础清单推出 (文件名, 目标相对 assets 的路径) 列表。"""
     out = []
     oct_dir = "oct-%s" % lane
@@ -68,7 +68,7 @@ def wanted(manifest, lane="threads"):
     return out
 
 
-def stage(site, srcs, copy=shutil.copyfile, lane="threads"):
+def stage(site, srcs, copy=shutil.copyfile, lane="w64"):
     """返回 (落件数, 缺件列表, 冲突列表)。`copy` 可注入 ⇒ 自证不碰真文件。"""
     man = json.load(open(os.path.join(site, "assets", "manifest.json"), encoding="utf-8"))
     idx, dup = index_sources(srcs)
@@ -145,11 +145,11 @@ def selftest():
         n, missing, dup = stage(d, srcs)
         cases = [
             ("按清单落件：3 个文件都在", lambda: n == 3 and not missing),
-            ("★ 放在**核心**目录里的 slicot 模块被放到清单说的 `octdir-threads/control/`",
-             lambda: os.path.exists(os.path.join(d, "assets", "octdir-threads", "control",
+            ("★ 放在**核心**目录里的 slicot 模块被放到清单说的 `octdir-w64/control/`",
+             lambda: os.path.exists(os.path.join(d, "assets", "octdir-w64", "control",
                                                  "__control_slicot_functions__.oct"))),
-            ("kind=oct 进 `oct-threads/`",
-             lambda: os.path.exists(os.path.join(d, "assets", "oct-threads", "gzip.oct"))),
+            ("kind=oct 进 `oct-w64/`",
+             lambda: os.path.exists(os.path.join(d, "assets", "oct-w64", "gzip.oct"))),
             ("**缺件必须报**（把源指向空目录）",
              lambda: stage(d, [os.path.join(d, "nowhere")])[1] != []),
         ]

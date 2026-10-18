@@ -3,14 +3,14 @@
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# 为什么有它：四格选档是**能力**上的最优，但站点可能只部署了几档（8761/8768 只有 base+threads）。
+# 为什么有它：三格选档是**能力**上的最优，但站点可能只部署了几档。
 # 能力驱动的选择器在那种站点上会挑 `w64` 并 **404** —— 而"站点少一档"没有闸门会拦。
 # 这份文件把"**磁盘上真有哪几档**"变成页面能**同步**读到的清单（`global.__octaveLanes`），
 # 由 `bridge/lane.js` 在选档时与能力判据取交集。
 #
 # ⚠️ 它是**生成物**：不要手改（手抄清单今天已经漂过两份资产）。判定完全来自磁盘：
 #   base      ⇐ 根目录有 octave.js + octave.wasm
-#   threads   ⇐ threads/ 目录里有那三件
+#   （threads 档已删 —— 三线裁决 2026-10-17：wasm32 不允许多线程）
 #   w64       ⇐ w64/ 目录里有那三件
 #   w64-base  ⇐ w64-base/ 目录里有那三件
 #
@@ -24,10 +24,10 @@ if [ "${1:-}" = "--selftest" ]; then
   n=$((n+1)); mk "$tmp/s1"
   if sh "$0" "$tmp/s1" >/dev/null 2>&1 && grep -q '__octaveLanes = \["base"\]' "$tmp/s1/lanes.js"; then
     echo "PASS | gen-lanes/只有 base ⇒ 清单 [\"base\"]"; else echo "fail | gen-lanes/只有 base 竟然红"; bad=1; fi
-  # ② 四格齐 ⇒ 四格都写进去
-  n=$((n+1)); mk "$tmp/s2"; mk "$tmp/s2/threads"; mk "$tmp/s2/w64"; mk "$tmp/s2/w64-base"
-  if sh "$0" "$tmp/s2" >/dev/null 2>&1 && grep -q 'w64-base' "$tmp/s2/lanes.js"; then
-    echo "PASS | gen-lanes/四格齐 ⇒ 清单含 w64-base"; else echo "fail | gen-lanes/四格齐却漏了档"; bad=1; fi
+  # ② 三格齐 ⇒ 三格都写进去（threads 已删；残留 threads/ 目录**不再**进清单）
+  n=$((n+1)); mk "$tmp/s2"; mk "$tmp/s2/w64"; mk "$tmp/s2/w64-base"; mk "$tmp/s2/threads"
+  if sh "$0" "$tmp/s2" >/dev/null 2>&1 && grep -q 'w64-base' "$tmp/s2/lanes.js" && ! grep -q 'threads' "$tmp/s2/lanes.js"; then
+    echo "PASS | gen-lanes/三格齐 ⇒ 清单含 w64-base 且**不含** threads（死档残留不进清单）"; else echo "fail | gen-lanes/三格清单不对"; bad=1; fi
   # ③ **没有 base** ⇒ 必须红（base 是红线：任何静态托管的底线）
   n=$((n+1)); mkdir -p "$tmp/s3/w64"; for f in octave.js octave.wasm octave.data; do : > "$tmp/s3/w64/$f"; done
   if sh "$0" "$tmp/s3" >/dev/null 2>&1; then echo "fail | gen-lanes/**没有 base 竟没报**（红线失效）"; bad=1
@@ -52,7 +52,6 @@ LANES=""
 add () { LANES="${LANES:+$LANES,}\"$1\""; }
 
 has3 ""          && add base
-has3 threads     && add threads
 has3 w64         && add w64
 has3 w64-base    && add w64-base
 

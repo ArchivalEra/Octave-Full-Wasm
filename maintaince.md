@@ -9,7 +9,7 @@
 
 GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端计算，无服务端执行端点）：
 浏览器验收套件、带复跑命令的事实台账、每道先证明自己会红的闸门群——
-上游全量 fork/submodule 接入。可交付物 = 四格站点（base/threads/w64/w64-base）+
+上游全量 fork/submodule 接入。可交付物 = 三格站点（base/w64/w64-base —— threads 档已删，HISTORY §5.108）+
 嵌入接口层（UI 方开工包）。
 活跃开发前端 = **IllegalPerformance 分支**（Rust 补丁线——本仓唯一允许改 Octave 树
 补丁的线，用户拍板解除且不回主线）。
@@ -27,7 +27,7 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 - **给 agent 的硬规矩**：`AGENTS.md`（路径铁律 / 三条不可违背 / 验收底线 / 批次收尾）。
 - **历史与事故**：`HISTORY.md`（append-only，`§5.x`）。
 - **悬案**：`.scratch/open-questions/issues/NN-*.md`（每条挂可执行结算件）。
-- **机制/推断**：`build/113/NOTES-*.md`（jspi/threads/webgl/wasm64/hotpath/libm/plugins/upstream）。
+- **机制/推断**：`build/113/NOTES-*.md`（jspi/threads[历史档案]/webgl/wasm64/hotpath/libm/plugins/upstream/precompile）。
 - **上游**：`upstream/`（18 submodule，5 fork 的 wasm 补丁分支）+ `build/upstream-lock.json`
   （无 git 上游的 URL+sha256）+ `build/113/NOTES-upstream.md`（升级 SOP）；
   **额外内容 `shelf/`**（第 19 个 submodule，`Octave-Extra-Content` 独立仓（private）：包档案 + 供给配方，
@@ -80,7 +80,7 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
 | **IllegalPerformance** | wasm64 多线程 + Rust 补丁 | **non-free**（"脱离开源社区"）；主线榨干之前不开 |
 
 **分档的唯二依据 = 用户能否使用 + 是否 non-free。与性能无关**（"极限性能"是构建旋钮，不是分档依据）。
-站点四格（base/threads/w64/w64-base）是**同一站点内的选档矩阵**，不是四条产品线。
+站点曾是四格（base/threads/w64/w64-base）选档矩阵；**threads 格已于 2026-10-17 删除**（HISTORY §5.108），现役站点 = 三格（base/w64/w64-base），站点只是展示层——**试验场绑定三个分支**（wasm32-final / master / IllegalPerformance）。
 
 ## 分支模型（三线独立，2026-10-07 定稿）
 

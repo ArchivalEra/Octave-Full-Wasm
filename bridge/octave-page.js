@@ -167,7 +167,7 @@ function createOctaveHost(opts) {
     var core = G.createOctaveCore({
         base: base, mode: 'single', isDefault: isDefault, home: o.home,
         state: inst, clicks: clicks,
-        // ★ 必须转发 lane：不转发 ⇒ 页面按档加载了 threads/w64 的胶水，内核却取根目录产物
+        // ★ 必须转发 lane：不转发 ⇒ 页面按档加载了 w64 的胶水，内核却取根目录产物
         //   ⇒ 开机 BindingError / eval_string is not a function（probe-lane / embed-multi 实测）。
         //   缺省必须是**页面的选档计划**（页面只有一档）。
         lane: o.lane || G.__octaveLanePlan,

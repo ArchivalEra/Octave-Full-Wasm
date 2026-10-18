@@ -1,3 +1,8 @@
+> ⚠️ **档已删（2026-10-17 三线裁决）**：threads 档（wasm32+atomics 多线程）已从全线删除——
+> wasm32 线永远单线程。本文档是**历史档案**（B1/B2/E1/E2/B5/C4 的实测知识仍有效，
+> 机制已被 w64 车道继承）；但其中所有"部署 threads/ 目录 / manifest.threads.json"的
+> 操作性内容**已作废**。现行口径见 `AGENTS.md` 三线模型 + `NOTES-pkg-precompile.md`。
+
 # PLAN-threads.md · 浏览器内线程化 + 教材站嵌入（branch `Slay`）
 
 > **接续先读**：本文件 §0.5（现在的状态与下一步顺序）。依据两份外部评审

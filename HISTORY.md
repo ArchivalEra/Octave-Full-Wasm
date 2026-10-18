@@ -5937,3 +5937,50 @@ UI 的现场：全英文界面点安装 ⇒ 冒出裸中文 `Module.FS 尚未就
 
 - 内容仓 `mail/029`（四问答集）已投已推（`488c864`）；
 - LLVM `mail/012`（收执短复 + 手抄数字已修告知）落它仓工作树（按投递规矩不提交）。
+
+### 5.108 三线裁决执行：threads 档（wasm32+atomics）整档删除 + 试验场↔分支绑定（2026-10-17，用户点令）
+
+**用户原话**：「你的意思是你他妈保留了wasm32 threads档。我真的不想再重复，横跨所有为UI服务的仓库，
+只有wasm32单线程，wasm64多线程与脱离官方树的三种形态，不允许出其他畸形儿，wasm32不允许拥有多线程档」
++「你一直拿base/threads/w64/w64-base当试验场，这是不可被接受的，你需要将试验场与分支牢绑定，
+只能存在wasm32-final/master/IllegalPerformance三种实验场，进行一次特大规模的仓库清理」。
+
+- **为什么是畸形儿**：threads 档（wasm32+atomics 多线程）与 wasm32 线「无 COI、单线程、全兼容」的
+  定义**直接矛盾**；它是 B6（2026-09-27）为验证 pthread 链留下的实验产物长进了生产站——
+  四格矩阵就是从它长出来的（"往站点加一档"这个动作此前没有任何闸门拦）。
+- **七阶段拆除**（每阶段自证全绿）：
+  ① `relink.sh`：threads 模式全删（模式枚举/身份证分支/影子门/树前缀守卫/自证用例改挂 w64）；
+  **w64 的 BASELINE_WASM 从 m2fc-threads-out 改自档**（跨线取基线本就是错配）——23 自证；
+  ② 页面档死：`lane.js` 删 threads 文件表与选择分支（非 m64 一律 base）、floor=['base']、
+  override 正则收窄；`lanes.js` 默认 [base]；gen-lanes 探测删（残留 threads/ 不进清单）；
+  ③ 站点摘除：三站（site/ 镜像、8761、8768）删 `threads/ + assets/oct-threads/ +
+  octdir-threads/ + manifest.threads.json`（约 51 件/站）；lanes.js 重生成三格；
+  ④ 部署入口拆除：promote-webgl 2b/3b 段删（换成幂等死档清理 + 出现 threads/ 痕迹必 FATAL）；
+  promote-w64-lane 守卫反向化（lane_guard 死档断言）；promote-pages 车道循环收成 w64；
+  check-site-parity DEPLOY 列表去 threads；site-illegalperf untouched_lanes 去 threads；
+  纯 A 类删除 7 文件（stage-lane-assets / build-tree-lane / GPT-REVIEW×2 /
+  probe-blas-threads×3 / probe-threads-coi）；`build-oct-lane.sh` 保留但默认值 w64 化
+  （**它是 w64 车道 .oct 的构建器**——清查报告误判为纯 A 类，w64 在用）；NOTES/PLAN-threads
+  保留为历史档案 + 头部加「档已删」横幅（活脚本还引用其知识点）；
+  ⑤ 验收矩阵三格化：probe-lane 33/0（Cell 3 = COI+无m64 ⇒ base 的反向断言；格 1/4 按站点
+  部署自适应；**死档 URL `?lane=threads` ⇒ 覆盖失效、自动选档接管、页面照常 ready** 的
+  三重断言）；lane-pick-selftest 9/0；browser-floor/bench-lanes/heap-ceiling 枚举收窄；
+  accept-113-assets/oct/full/probe-caps/e2-threads 的档前缀改 w64；manifest.json 去
+  probe-threads-coi/probe-blas-threads 登记；
+  ⑥ 台账：**threads_\* 8 键 + oct_lane_\* 3 键经 --allow-drop 掉档**（163 条）；
+  `locale_contract_lanes` 4→2（实测 w64+base 两档）；oct 车道键改 w64 形状
+  （oct_w64_files / octdir_w64_files）；make-lane-manifest/stage-oct-by-manifest 默认
+  w64 化（自证 21/0、6/0）；
+  ⑦ 纪律固化：`check-lane-purity.py` LANE_EXPECT 改三线权威枚举 + **DEAD_LANES={threads}**
+  （车道名 threads ⇒ 点名畸形档必红，自证 7/0）；现役双档纯度实测绿
+  （w64: 宿主 wasm64 + 44 .oct 同档；base: 宿主 wasm32 + 44 .oct 同档）。
+- **试验场↔分支绑定（新纪律）**：三个实验场 = `wasm32-final` / `master` / `IllegalPerformance`
+  三个分支；站点四格矩阵只是**展示层**（base=wasm32 线产物、w64/w64-base=wasm64 线产物、
+  w64-base 是回退格不是产品线）。**新实验 = 新分支或分支内实验站，不许往站点加格**——
+  车道纯度闸门的死档断言就是这条纪律的机器判据。
+- **预编译批的连带修正**：本批重编的 28×3 套 .oct 中 threads 那套废弃（只留 w32/w64 两份，
+  正合三线口径）；`NOTES-pkg-precompile.md` 的"threads 档复用 build-oct-lane"小节作废。
+- **保留的 B 类共用机制**（w64 在用，不删）：lane-shim.sh（w64 影子 -pthread+MEMORY64）、
+  check-oct-lane.py（w64 .oct 也要 TLS 入口）、make-lane-manifest.py --lane w64、
+  atomics_scan.py、WITH_THREADS/AX_PTHREAD 补丁、身份证 measured.threads 实测轴
+  （w64 是多线程线，这轴名是事实不是档名）。

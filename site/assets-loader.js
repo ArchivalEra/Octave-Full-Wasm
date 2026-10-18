@@ -37,7 +37,7 @@
   'use strict';
 
   // ⚠️ 清单 URL 的注入点**已经存在**（下面的 `init(url)`，实现见 `fetchJSON(url || MANIFEST_URL)`）
-  //    —— B6 双档复用它（线程档传 `assets/manifest.threads.json`）：**别再加法子**，
+  //    —— B6 多档复用它（w64 传 `assets/manifest.w64.json`）：**别再加法子**，
   //    两套机制必然分叉（本仓的老教训）。
   var MANIFEST_URL = 'assets/manifest.json';
   var OCTAVE_M = '/usr/src/octave/m';
@@ -93,7 +93,7 @@
         if (st && st.lane) lane = st.lane;
         if (!lane && opts && opts.lane && opts.lane.lane) lane = opts.lane.lane;
         if (/^w64/.test(lane)) return 'wasm64';   // w64 / w64-base / w64-threads
-        if (lane) return 'wasm32';                // base / threads
+        if (lane) return 'wasm32';                // base（wasm32 线 = 单线程）
         return '';
       } catch (e) { return ''; }
     }
@@ -510,7 +510,7 @@
     var API = {
       OCTAVE_M: OCTAVE_M,
       init: function (url) {
-        // ★ B6：**没显式给清单时按档取**（线程档 = `assets/manifest.threads.json`）。
+        // ★ B6：**没显式给清单时按档取**（w64 = `assets/manifest.w64.json`）。
         //   为什么必要（实测踩到）：`window.OctaveAssets` 是**全局默认实例**（A2 之前的别名，
         //   套件/工具还在用它）—— 它不知道选档，默认拉基础档清单 ⇒ 线程档会把**基础档的 `.oct`**
         //   装进 FS ⇒ dlopen 报 `failed to load Incompatible version or missing dependencies`

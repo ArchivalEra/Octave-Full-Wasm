@@ -3,7 +3,7 @@
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""从基础清单生成**线程档清单**（`assets/manifest.threads.json`）。
+"""从基础清单生成**车道清单**（默认 `assets/manifest.w64.json`；threads 档已删 —— 2026-10-17 三线裁决）。
 
 ## 为什么需要它（实测依据）
 
@@ -16,7 +16,7 @@
 
 清单里每条资产都带显式 `url`（`kind:oct`）或 `base_url`（`kind:octdir`，配 `files` 列表）⇒
 "分档"= **换一份清单**，把这两类的前缀指到
-`assets/oct-threads/`、`assets/octdir-threads/`；**其余条目逐字不动**。加载器那边一行都不用改
+`assets/oct-<lane>/`、`assets/octdir-<lane>/`；**其余条目逐字不动**。加载器那边一行都不用改
 （它本来就有 `init(url)` 这个注入点，内核按档传）。
 
 用法：
@@ -36,9 +36,9 @@ def rewrite_for(lane_name):
             "octdir": ("assets/octdir/", "assets/octdir-%s/" % lane_name)}
 
 
-REWRITE = rewrite_for("threads")
+REWRITE = rewrite_for("w64")   # 三线裁决：threads 档已删，默认车道 = w64
 BASE = "manifest.json"
-LANE = "manifest.threads.json"
+LANE = "manifest.w64.json"
 LANE_KEYS = ("oct", "octdir")          # 这两类**分档**（换一套 side module）
 # ★ 第二类要改口的：**烤进产物的 install 前缀**（2026-09-27 实测事故 —— 见 `baked_prefix`）。
 #   基础产物烤的是 `/src/work/octave-install`，线程档烤的是 `...-threads` ⇒ 清单里挂在
@@ -85,7 +85,7 @@ def rewrite_entry(a, mount_from=None, mount_to=None, rewrite_map=None):
 
 
 def rel_to_assets(url, assets_dir):
-    """清单里的 url 是**相对站点根**的（`assets/oct-threads/x.oct`），而本模块的入参是
+    """清单里的 url 是**相对站点根**的（`assets/oct-<lane>/x.oct`），而本模块的入参是
     `<站点>/assets` ⇒ 必须把开头的 `assets/` 剥掉再接，否则得到 `assets/assets/...`
     （实测踩到：判据把**已经落好的**文件全报成"不存在"）。"""
     rel = url.split("assets/", 1)[-1] if url.startswith("assets/") else url
@@ -110,7 +110,7 @@ def _sha_of_path(p):
     return h.hexdigest()
 
 
-def sync_shas(lane, assets_dir, sha_of=None, exists=os.path.exists, lane_name="threads"):
+def sync_shas(lane, assets_dir, sha_of=None, exists=os.path.exists, lane_name="w64"):
     """把**改写后**的条目 sha256 按磁盘实际字节重算，返回改了几条。
 
     ★ 本生成器的头号陷阱（2026-09-27 实测事故）：只改 `url` 不改 `sha256` ⇒ 加载器
@@ -134,7 +134,7 @@ def sync_shas(lane, assets_dir, sha_of=None, exists=os.path.exists, lane_name="t
     return n
 
 
-def build_lane_manifest(man, assets_dir=None, sha_of=None, mount_from=None, mount_to=None, lane_name="threads"):
+def build_lane_manifest(man, assets_dir=None, sha_of=None, mount_from=None, mount_to=None, lane_name="w64"):
     rw = rewrite_for(lane_name)
     out = dict(man)
     out["assets"] = []
@@ -154,7 +154,7 @@ def build_lane_manifest(man, assets_dir=None, sha_of=None, mount_from=None, moun
 
 
 def checks(man, lane, assets_dir, exists=os.path.exists, sha_of=None,
-           mount_from=None, mount_to=None, lane_baked=None, lane_name="threads"):
+           mount_from=None, mount_to=None, lane_baked=None, lane_name="w64"):
     """返回问题清单。六类判据都能证伪。"""
     rw = rewrite_for(lane_name)
     sha_of = sha_of or _sha_of_path
@@ -250,7 +250,7 @@ def _one(vals):
 def main(argv):
     if "--selftest" in argv:
         return selftest()
-    lane_name = "threads"
+    lane_name = "w64"
     check_only = False
     args = []
     i = 0
@@ -365,7 +365,7 @@ def _lane_synced():
 
 # ── install 前缀那一组（真事故：accept-help 5/7；线程档 wasm 烤 `...-threads`，清单照抄基础前缀）
 _PF = "/src/work/octave-install"
-_PT = "/src/work/octave-install-threads"
+_PT = "/src/work/octave-install-w64"   # 三线裁决：threads 前缀已删
 _MANP = {"assets": [
     # ⚠️ 必须**也含一条 oct**：否则会先撞上"基础清单里一条 oct/octdir 都没有 ⇒ 生成器空转"
     #    那条零值守卫（自证用例自己踩过），测不到前缀这一组。
@@ -384,8 +384,8 @@ def _lane_stale_mount():
 
 
 CASES = [
-    ("oct 的 url 前缀被改写", lambda: _lane_of()["assets"][0]["url"] == "assets/oct-threads/a.oct"),
-    ("octdir 的 base_url 被改写", lambda: _lane_of()["assets"][1]["base_url"] == "assets/octdir-threads/d"),
+    ("oct 的 url 前缀被改写", lambda: _lane_of()["assets"][0]["url"] == "assets/oct-w64/a.oct"),
+    ("octdir 的 base_url 被改写", lambda: _lane_of()["assets"][1]["base_url"] == "assets/octdir-w64/d"),
     ("非 oct 条目**逐字不动**", lambda: _lane_of()["assets"][2] == _MAN["assets"][2]),
     ("★ install 前缀的 mount 被改口到车道", lambda: _LANEP["assets"][1]["mount"].startswith(_PT)),
     ("★ 改口后的清单 ⇒ 不报（且规则③ 归一化后仍逐字相同）", lambda: not checks(
@@ -408,7 +408,7 @@ CASES = [
     ("★ 改写后路径不存在 ⇒ 必须报", lambda: bool(checks(
         _MAN, _lane_of(), "/tmp", lambda p: False, _SHA))),
     ("★ 非 oct 条目被改动 ⇒ 必须报（证明分档只动 .oct）", lambda: bool(checks(
-        _MAN, {"assets": [dict(_MAN["assets"][0], url="assets/oct-threads/a.oct"),
+        _MAN, {"assets": [dict(_MAN["assets"][0], url="assets/oct-w64/a.oct"),
                           _MAN["assets"][1], dict(_MAN["assets"][2], url="x.js")]},
         "/tmp", _ALL, _SHA))),
     # ★ 本轮真事故的形状：只换路径、sha 留着基础档的 ⇒ 加载器 fail-closed 拒载（必须报）
