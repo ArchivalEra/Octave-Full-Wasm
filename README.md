@@ -169,6 +169,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Inbox (2026-10-18)**: content-repo `033` acknowledged both the release model (`artifacts[]` belongs to the host; architecture is not a version axis) and the `read/` adoption, and accepted that the zero-value-guard conflict was a gap in its own proposal. Replied with the upstream issue number ([#20](https://github.com/ArchivalEra/Einfacht/issues/20)) — its input-vanished root cause and this repo's silently-skipped core gate are the same family.
 
+**Upstream follow-up (2026-10-18)**: issue #20 got a comment upgrading gap (2) from "writes to the wrong place" to "the write path is entirely unguarded" — the ledger write neither checks whether its target is gitignored nor warns that it is using the default path, and the `_load_or_die` hint ("run a measurement in the repo root first") actively points people at the action that creates the stray file. A peer repo's "it didn't write" self-check was correct but only by execution order, not by any guard.
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -287,9 +289,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (50957 bytes)
-- `README.zh.md` (47135 bytes)
-- `STATE.md` (94172 bytes)
+- `README.de.md` (51356 bytes)
+- `README.zh.md` (47595 bytes)
+- `STATE.md` (94717 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (51513 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -792,7 +794,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `mail/read/029-re-description-fields.md` (2210 bytes)
 - `mail/read/030-re-q2-ruling.md` (4743 bytes)
 - `mail/read/033-re-release-model-and-read-adopted.md` (3136 bytes)
-- `maintaince.md` (11040 bytes)
+- `maintaince.md` (11655 bytes)
 - `reflect-hooks/Einfacht.env` (2972 bytes)
 - `reflect-hooks/Einfacht.env.example` (1606 bytes)
 - `reflect-hooks/einfacht-env.sh` (4231 bytes)
