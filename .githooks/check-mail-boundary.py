@@ -64,7 +64,15 @@ def check(g, letters, owner_tokens=OWNER_TOKENS, skip=NOT_A_LETTER):
 
 
 def read_inputs():
-    """读本仓 `mail/*.md`（**只读本仓** —— 边界规则第 ② 条）。"""
+    """读本仓 `mail/*.md`（**只读本仓** —— 边界规则第 ② 条）。
+
+    ★ 2026-10-18（采纳内容仓 mail/031 的 `read/` 提案）：未读区（`mail/*.md`）可能被
+    `zreflect/mail-read.py` 归档清空（全部搬进 `mail/read/`）。此时**退而扫已读区** ——
+    已读的信 `To:` 不变，同一条不变量照样成立。两处都空才返回空（零值守卫仍在，
+    不会被"归档"这个合法动作变成假红）。
+    ⚠️ `read/` 是子目录 ⇒ `os.listdir` 给的名字 `read` 不以 `.md` 结尾 ⇒ 天然跳过
+      （所以本函数对"未读区有信"的情形行为逐字不变）。
+    """
     d = os.path.join(root(), MAILBOX)
     out = {}
     if not os.path.isdir(d):
@@ -76,6 +84,18 @@ def read_inputs():
                     out[f] = fh.read()
             except OSError:
                 out[f] = ""
+    if out:
+        return out
+    # 未读区空 ⇒ 退到已读区（read/）；两处都空时仍返回空（零值守卫由调用方判）。
+    rd = os.path.join(d, "read")
+    if os.path.isdir(rd):
+        for f in sorted(os.listdir(rd)):
+            if f.endswith(".md"):
+                try:
+                    with open(os.path.join(rd, f), encoding="utf-8", errors="replace") as fh:
+                        out[f] = fh.read()
+                except OSError:
+                    out[f] = ""
     return out
 
 
@@ -96,6 +116,35 @@ def _np(letters):
     return len(g.problems)
 
 
+def _read_inputs_with(tree):
+    """用临时目录冒充 mail/（**注入**：自证不碰真收件箱）。
+
+    `tree` = {相对路径: {文件名: 正文}}；"read" 键 = read/ 子目录。
+    返回 check() 报出的问题数（0 = 不报）。⚠️ 这里走**真** read_inputs（含退扫逻辑）
+    —— 自证要验的正是那段逻辑，喂合成 dict 是验不到的。
+    """
+    import shutil
+    import tempfile
+    t = tempfile.mkdtemp()
+    try:
+        d = os.path.join(t, MAILBOX)
+        os.makedirs(d)
+        for sub, files in tree.items():
+            sd = os.path.join(d, sub) if sub else d
+            os.makedirs(sd, exist_ok=True)
+            for name, body in files.items():
+                with open(os.path.join(sd, name), "w", encoding="utf-8") as fh:
+                    fh.write(body)
+        saved_root = root
+        try:
+            globals()["root"] = lambda: t
+            return _np(read_inputs())
+        finally:
+            globals()["root"] = saved_root
+    finally:
+        shutil.rmtree(t, True)
+
+
 CASES = [
     ("正常：收件人是本仓 ⇒ 不报", lambda: _np({
         "001-x.md": "**To:** host（Octave-Full-Wasm）\n**From:** extra-content\n",
@@ -108,6 +157,14 @@ CASES = [
     ("★ 空输入必须报：只有 README、没有真信 ⇒ 必红（零值守卫）", lambda: _np({
         "README.md": "# 协议说明\n"}) == 1),
     ("★ 空输入必须报：mail/ 一个文件都没有 ⇒ 必红（零值守卫）", lambda: _np({}) == 1),
+    # ★ read/ 归档（2026-10-18，采纳内容仓 mail/031）：未读区被清空是**合法动作**，
+    #   闸门必须退扫 read/ 而不是假红；但两处都空仍必须红（零值守卫不许被归档绕过）。
+    ("★ read/ 退扫：未读区空 + read/ 里是合法信 ⇒ 不报（归档不许变成假红）",
+     lambda: _read_inputs_with({"read": {"001-x.md": "**To:** host（Octave-Full-Wasm）\n"}}) == 0),
+    ("★ read/ 退扫反向：未读区空 + read/ 里有 To 别的仓的信 ⇒ 必红（不变量照样成立）",
+     lambda: _read_inputs_with({"read": {"099-leak.md": "**To:** OpenModelica-Full-Wasm\n"}}) == 1),
+    ("★ read/ 退扫零值：未读区空 + read/ 也空 ⇒ 必红（归档不许把闸门变成恒绿）",
+     lambda: _read_inputs_with({"read": {}}) == 1),
 ]
 
 
