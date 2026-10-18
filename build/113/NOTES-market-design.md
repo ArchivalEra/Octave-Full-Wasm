@@ -194,3 +194,44 @@ await OctaveAssets.install('symbolic', { planOnly:true })     // 预演零下载
   不是新接口。
 - 四份原始设计里各有一处**我方修正或质疑**（① 的 `versions[]` vs `alternates` 之争、
   ② 的 11 条砍掉清单、③ 的 708 行路由、④ 的 N1–N3）—— 全部记在 §1/§2，未丢。
+
+---
+
+## §10 下载/装载分离（2026-10-18，内容仓 `mail/037` 规格的宿主裁定）
+
+**背景**：用户点令「市场提供下载源码包/预编译包两选项；装载在另一界面；已安装改已下载」。
+内容仓出规格（`mail/037`，design-it-twice 四子代理 + 原生 Octave 11.3.0 实测 OPFS 布局），
+宿主三项确认。**这是本判决书的延伸，不是推翻**——缝仍在「记录」上（§2 判决），
+只是**记录从"站点装配态"多出一种"用户本地态"**。
+
+### 宿主的三个裁定
+
+| # | 项 | 裁定 | 判据 |
+|---|---|---|---|
+| 1 | engine 的 sha 源 | **用 `<站点>/<lane>/octave.build.json` 的 `measured.files`**，不是 `upstream-lock.json` | 实测：`upstream-lock.json` 是**第三方源码锁**（9 条：lapack/glpk/pyodide…），**没有一条是引擎三件套**；而 `octave.build.json` 每档一份、逐件带 sha256 + bytes，且 `check-build-manifest.py` 已靠它判 verdict |
+| 2 | `ARCH_MISMATCH` 口径 | **装载期硬闸门**，与下载层解耦（下载层只记账） | 现役实现 `assets-loader.js:678-689`：plan 阶段扫 deps 闭包、`hostArch` 不读引擎、能力层豁免 |
+| 3 | `install()` 是否收敛到 DownloadStore | **暂不收敛**，两条链并存 | ① install 是"下载→核验→untar→落盘→addpath"**原子链、无时间 gap**，而 DownloadStore 的全部价值来自跨时间 gap；② 两套 staged 语义不同（站点装配态 vs 用户 OPFS + 与今日目录对账），合并即造"同一事实两个产地"；③ 现役 14 码已覆盖 install 全部失败面，收敛会引入 NOT_DOWNLOADED 等**在一步到位路径上不该出现的码** |
+
+### 两条链的分工（写死）
+
+| 链 | 管什么 | 判据 |
+|---|---|---|
+| `install()` | 站点随附内容的**即时装载**（今天有、今天用） | 14 码闭集 + `verdict` 四态 |
+| `DownloadStore`（UI 实现） | 市场内容的**先下后装**（跨时间 gap） | 内容仓规格 I1–I6 + 三连全通验收 |
+
+**将来若要收敛**（UI 需要 install 也走 OPFS）：**由宿主发起**（走 `mail/`），
+判据 = "两套 staged 语义能合并成一个"——今天不能。
+
+### 错误码扩展口径（给 UI 实现时用）
+
+内容仓列的 ~6 个新码（`NOT_DOWNLOADED` / `VERSION_WITHHELD` / `FLAVOR_UNAVAILABLE` /
+`STORAGE_WRITE_FAILED` / …）宿主同意闭集扩展，要求与本仓 14 码同构：
+`err.code` + SCREAMING_SNAKE + 进 `_byCode` 的 `[state, cause]` 表 +
+**`cannot-know` 只保留给"连目录/索引都读不到"**（其余 failed/not-found）。
+
+### 一处最有价值的实测（内容仓给，建议 UI 写进实现注释）
+
+**"目录树顺眼 ≠ 布局正确"**：`.m` 必须在包根，多套一层子目录 ⇒ `pkg load`
+**无报错但类 undefined**。⇒ 兼容判据只能是**原生 Octave 跑
+`pkg rebuild → pkg list → pkg load` 三连全通**，不是目录结构长得对。
+

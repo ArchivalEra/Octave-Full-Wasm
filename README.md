@@ -171,6 +171,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Upstream follow-up (2026-10-18)**: issue #20 got a comment upgrading gap (2) from "writes to the wrong place" to "the write path is entirely unguarded" — the ledger write neither checks whether its target is gitignored nor warns that it is using the default path, and the `_load_or_die` hint ("run a measurement in the repo root first") actively points people at the action that creates the stray file. A peer repo's "it didn't write" self-check was correct but only by execution order, not by any guard.
 
+**Architecture change: download/load separation (2026-10-18)**: per the user directive ("the market offers source and precompiled options; loading happens in a separate view; installed becomes downloaded"), the content repo specified a `DownloadStore` that cuts `install()`'s chain between sha verification and untar, persisting verified bytes plus a manifest into OPFS. The seam still lives on the **record** (not on a method) — it simply gains a second kind of record: the user-local one. Host rulings: (1) the engine's per-file sha comes from `<site>/<lane>/octave.build.json`'s `measured.files`, **not** `upstream-lock.json` (which is a third-party source lock); (2) `ARCH_MISMATCH` stays a load-time hard gate, decoupled from the download layer; (3) `install()` is **not** converged onto `DownloadStore` — the two chains coexist (atomic no-gap load vs across-time-gap download).
+
 ## Branches (three independently maintainable lines)
 
 | branch | fork pin (`upstream/octave`) | role |
@@ -289,9 +291,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (51356 bytes)
-- `README.zh.md` (47595 bytes)
-- `STATE.md` (94717 bytes)
+- `README.de.md` (52032 bytes)
+- `README.zh.md` (48378 bytes)
+- `STATE.md` (96697 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (51513 bytes)
 - `bridge/embed-demo.html` (6565 bytes)
@@ -331,7 +333,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/NOTES-libm.md` (2974 bytes)
 - `build/113/NOTES-lsode.md` (12160 bytes)
 - `build/113/NOTES-main-module-2.md` (6400 bytes)
-- `build/113/NOTES-market-design.md` (12688 bytes)
+- `build/113/NOTES-market-design.md` (15638 bytes)
 - `build/113/NOTES-octc-spike.md` (12302 bytes)
 - `build/113/NOTES-p5-osmesa.md` (33080 bytes)
 - `build/113/NOTES-pkg-precompile.md` (5577 bytes)

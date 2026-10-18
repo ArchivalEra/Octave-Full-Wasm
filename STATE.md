@@ -3,6 +3,26 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-18 · 下载/装载分离规格）
+
+- **★ 架构重大变化：下载与装载分离（内容仓 `mail/037` 规格，宿主三项裁定）**：
+  用户点令「市场提供下载源码包/预编译包两选项；装载在另一界面；已安装改已下载」。
+  规格 = 内容仓（design-it-twice 四子代理 + **原生 Octave 11.3.0 实测**定 OPFS 布局）；
+  **缝仍在「记录」上**（不推翻市场判决书 §2），只是记录从"站点装配态"多出一种"用户本地态"。
+  **宿主三个裁定**（判决书 §10，`build/113/NOTES-market-design.md`）：
+  · **engine 的 sha 源更正**：用 `<站点>/<lane>/octave.build.json` 的 `measured.files`
+    （每档一份、逐件 sha256+bytes），**不是** `upstream-lock.json` —— 实测后者是**第三方源码锁**
+    （9 条 lapack/glpk/pyodide…，无一条是引擎三件套）。这让 I1 三源同构（都从产物读）。
+  · **`ARCH_MISMATCH` = 装载期硬闸门**，与下载层解耦（下载层只记账）——现役
+    `assets-loader.js:678-689` 已是这个口径（plan 阶段扫 deps 闭包、hostArch 不读引擎、能力层豁免）。
+  · **`install()` 暂不收敛到 DownloadStore**（两条链并存）：install 是**原子链无时间 gap**，
+    而 DownloadStore 的全部价值来自跨时间 gap；两套 staged 语义不同（站点装配态 vs 用户 OPFS
+    + 与今日目录对账），合并即造"同一事实两个产地"；且现役 14 码已覆盖 install 全部失败面。
+  · 新错误码 ~6 个（`NOT_DOWNLOADED` / `VERSION_WITHHELD` / …）**同意闭集扩展**，要求与
+    本仓 14 码同构；`cannot-know` 只保留给"连目录/索引都读不到"。
+  · **最有价值的实测**（内容仓给）：`.m` 必须在包根，**多套一层 ⇒ `pkg load` 无报错但类
+    undefined** ⇒ 兼容判据只能是原生 Octave 跑 `pkg rebuild → pkg list → pkg load` 三连全通。
+
 ## 现在是什么（2026-10-18 · Einfacht 反哺 #20）
 
 - **★ 反哺上报：三线裁决大拆除里卡住的三处「两套产地并存」（Einfacht issue #20）**：
