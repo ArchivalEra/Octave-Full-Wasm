@@ -60,6 +60,8 @@ NAME=${3:-octave-full-wasm-site-$(date +%Y%m%d)}
 OUT=$DIST/$NAME
 
 echo "== 打包 $SITE → $OUT =="
+echo "   排除（可重建缓存，非维护对象）：assets/llvm（工具链 118 MB）+ assets/octinc（Octave 头）"
+echo "   要交付 B 线能力：跑 build/113/provision-llvm-wasm.sh fetch 重建这两处"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 # 站点内容（排除上一版留下的临时/派生文件）
@@ -74,6 +76,18 @@ EXCL=""
 for p in '*.js.gz' '*.html.gz' '*.css.gz' '*.json.gz' '*.m.gz' '*.svg.gz' '*.wasm.gz' '*.data.gz' '*.oct.gz'; do
   EXCL="$EXCL --exclude=$p"
 done
+# ★ 工具链不纳入交付包（2026-10-18，compile 批；设计稿 NOTES-client-compile-design §7.1
+#   的原判断「倾向不进」）。理由三条，都是**可复跑的事实**：
+#   ① 体量：assets/llvm 13 件 = 118 MB 原始（clang 45.8 + lld 31.8 + 两档 sysroot 39.4 + 余量），
+#      会把交付包从 ~80 MB 抬到 ~200 MB 量级；
+#   ② **不是维护对象**：字节 = 邻仓 Release（`build/upstream-lock.json` 的 llvm-wasm 条钉 URL+sha256），
+#      站点副本由 `build/113/provision-llvm-wasm.sh` **可删可重建**；
+#   ③ 缺它时 B 线只**少一个能力**（`compileExtension` 报 FLAVOR_UNAVAILABLE/404），
+#      页面与 A 线（install）不受影响 —— 与"必需资产"不同类。
+#   ⚠️ 判据（反向）：打包必须**明说**排除了什么（下面那行 echo），且包内 `assets/llvm`
+#      不存在是**预期**；要交付 B 能力 = 跑 provision 重建，不是塞进包里。
+EXCL="$EXCL --exclude=./assets/llvm"
+EXCL="$EXCL --exclude=./assets/octinc"
 # `set -f`：$EXCL 是拼出来的字符串，禁掉通配展开（否则 `--exclude=*.js.gz` 这种词
 # 会被 shell 再当 glob 试一遍 —— 现在没这形状的文件，但别留这个坑）。
 set -f

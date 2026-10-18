@@ -569,7 +569,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/lib/retractions.json` (12200 bytes)
 - `build/lib/sweep_select.py` (16282 bytes)
 - `build/main.cc` (26639 bytes)
-- `build/make-dist.sh` (7787 bytes)
+- `build/make-dist.sh` (9051 bytes)
 - `build/normalize_arpack.py` (1861 bytes)
 - `build/pins.json` (1701 bytes)
 - `build/pkgfix/__pkgfix_basename__.m` (1962 bytes)
