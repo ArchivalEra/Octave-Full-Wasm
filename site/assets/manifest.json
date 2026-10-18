@@ -600,7 +600,7 @@
     {
       "name": "forge",
       "url": "assets/m/forge.js",
-      "sha256": "5080e92bf87da329faf207b875da2da0d8a795a8023a5f701480be8612fafae2",
+      "sha256": "972a5b4a54658939bb680812298335d3c24aced196b41fa0c6f36951331439cb",
       "deps": [],
       "kind": "js"
     }

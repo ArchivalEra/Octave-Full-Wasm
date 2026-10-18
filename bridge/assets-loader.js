@@ -62,6 +62,8 @@
     //   读它的：build/pkgfix/__webassets_info__.m 与 build/pkgfix/__websource_of__.m。
     var installError = {};      // name → 失败原因（成功时删）
     var catalogMiss = {};       // name → 1（货架**读成功**但确实没这个包）
+    var _compiled = {};         // B 线：name → {octPath, diagnostics}（compileExtension 幂等缓存）
+    var _tcWorkers = {};        // target → Promise<Worker>（工具链 Worker 池：重活离主线程，一次起复用）
     var catalogState = 'unread'; // unread | ok | fail —— miss 是不是终态取决于它
     var byName = {};
     var loaded = {};       // name -> {files: n, addpath: [...]}
@@ -447,6 +449,124 @@
       } catch (e) { /* 记账失败不影响任何东西 */ }
     }
 
+    // ── B 线的四个内部缝（§4.3：不暴露给调用方；每个可单独测）───────────────────
+
+    // ① toolchainWorker(target)：起/复用编译 Worker（浏览器适配器 = 站点 assets/llvm/browser/worker.mjs，
+    //    协议：init{clangWasmUrl,lldWasmUrl,sysrootTarUrl,sysrootSha256} → ready；compile → result）。
+    //    ★ sysroot 按 target 选档（两档 sysroot 都发是 v0.1.1 修的 issue #1：错档产物缺
+    //    _emscripten_tls_init ⇒ 线程宿主拒载）。sysroot sha 从工具链 manifest 读（fail-closed，
+    //    不硬编码）。
+    function toolchainWorker(target, log) {
+      if (_tcWorkers[target]) return _tcWorkers[target];
+      _tcWorkers[target] = Promise.all([fetchJSON('assets/llvm/manifest.json'),
+                                        fetchJSON('assets/llvm/config.h.json').catch(function () { return null; })])
+      .then(function (both) {
+        var man = both[0], _configMacros = both[1];
+        var byName = {};
+        (man.assets || []).forEach(function (a) { byName[a.name] = a; });
+        var sysroot = (target === 'wasm64') ? 'sysroot-headers.wasm64.tar' : 'sysroot-headers.tar';
+        if (!byName[sysroot]) throw errCode('FLAVOR_UNAVAILABLE', '工具链缺 ' + sysroot + '（站点供给不全？跑 provision-llvm-wasm.sh）');
+        var B = 'assets/llvm/';
+        // ★ 用**本仓的分片 worker**（bridge/compile-worker.mjs，随页面资产上站）：
+        //   首编只拉 clang + 本档 sysroot（两件、各自核 sha）；lld 31.8 MB 推迟到
+        //   **首次链接**才拿。用户点令 2026-10-18：「需要保证能分次懒加载」。
+        //   编排逻辑仍是生产者 driver/compile-core.mjs（worker 里 import，不复制）。
+        var w = new Worker('compile-worker.mjs', { type: 'module' });
+        return new Promise(function (resolve, reject) {
+          w.onerror = function (e) { reject(errCode('MODULE_NOT_READY', 'Worker 起不来：' + (e.message || e.filename || '?') + (e.lineno ? ':' + e.lineno : ''))); };
+          w.onmessage = function (ev) {
+            var m = ev.data || {};
+            if (m.type === 'log') { log(m.text); return; }
+            if (m.type === 'phase') { log('[phase] ' + (m.phase || '?')); return; }
+            if (m.type === 'ready') {
+              w.onmessage = null;
+              if (m.bytes) log('[lazy] 首编已拉：clang ' + (m.bytes.clang / 1048576).toFixed(1)
+                               + ' MB + sysroot ' + (m.bytes.sysroot / 1048576).toFixed(1)
+                               + ' MB（lld 推迟到首链）');
+              resolve(w);
+            }
+          };
+          w.postMessage({ type: 'init',
+            clangWasmUrl: B + 'clang.wasm', clangGlueUrl: B + 'clang.js',
+            lldWasmUrl: B + 'lld-wasm-only.wasm', lldGlueUrl: B + 'lld-wasm-only.js',
+            sysrootTarUrl: B + sysroot, sysrootSha256: byName[sysroot].sha256,
+            octincTarUrl: 'assets/octinc/octave-headers.tar.gz',
+            configMacros: _configMacros });
+        });
+      });
+      return _tcWorkers[target];
+    }
+
+    // ②b cfgReady()：config.h 宏数（诊断用；真正的 config.h 由 worker 写进 /src）
+    function cfgReady() {
+      return fetchJSON('assets/llvm/config.h.json').then(function (c) {
+        return Object.keys(c || {}).length;
+      }, function () { return 0; });
+    }
+
+    // ② headersInto(M, target)：Octave 头进**引擎 FS**（assets/octinc/ 一次拉；
+    //    tar 解包委托引擎 gunzip+untar）+ 合成 config.h（25 宏跟 catalog 走：build-pkg-oct.sh
+    //    emit_config_h 的同款产物，站点 assets/llvm/config.h.json 由供给脚本从容器取出）。
+    var _headersDone = false;
+    function headersInto(M, target) {
+      if (_headersDone) return Promise.resolve(_headersDone);
+      var inc = '/src/octinc';
+      return fetchBinary('assets/octinc/octave-headers.tar.gz').then(function (buf) {
+        M.FS.writeFile('/tmp/octinc.tar.gz', new Uint8Array(buf));
+        var rc = M.eval_string("__forge_src_list__('/tmp/octinc.tar.gz', '" + inc + "', true)");
+        if (rc !== 0) throw errCode('UNPACK_FAILED', 'Octave 头解包失败（rc=' + rc + '）');
+        return fetchJSON('assets/llvm/config.h.json');
+      }).then(function (cfg) {
+        // config.h：25 宏逐条写（数据跟 catalog 走，不硬编码 —— §10 判据 2）
+        var lines = ['#pragma once'];
+        Object.keys(cfg || {}).forEach(function (k) { lines.push('#define ' + k + ' ' + cfg[k]); });
+        M.FS.writeFile(inc + '/config.h', lines.join('\n'));
+        _headersDone = (cfg && Object.keys(cfg).length) || 0;
+        return _headersDone;
+      });
+    }
+
+    // ③ workerCompile(worker, files, target)：发 compile 请求；files 的**主 TU 排首位**
+    //    （compile-core 只编第一个键 —— 实测门槛 1）。源走 worker 的 source（单 TU），
+    //    多 TU 包先只编主 TU（v1 边界，diagnostics 里明说）。
+    function workerCompile(w, files, target, log) {
+      var names = Object.keys(files).sort(function (a, b) {
+        // 主 TU 优先：与包同名的 .cc、__开头的 DEFUN 宿主、再其余
+        var score = function (n) { return /__/.test(n) ? 0 : (/^[^/]+\.cc$/.test(n) ? 1 : 2); };
+        return score(a) - score(b);
+      });
+      var main = names[0];
+      if (names.length > 1) log('[v1] 多 TU 包只编主 TU：' + main + '（其余 ' + (names.length - 1) + ' 个暂不编）');
+      return new Promise(function (resolve, reject) {
+        w.onmessage = function (ev) {
+          var m = ev.data || {};
+          if (m.type === 'log') { log(m.text); return; }
+          if (m.type === 'result') { w.onmessage = null; resolve(m); }
+        };
+        w.onerror = function (e) { reject(errCode('MODULE_NOT_READY', '编译 Worker 崩了：' + (e.message || '?'))); };
+        w.postMessage({ type: 'compile', source: files[main], target: target,
+                        abi: { exceptions: 'wasm-legacy', pthread: true, memory64: target === 'wasm64' },
+                        define: ['HAVE_CONFIG_H=1'], include: ['/src/octinc'], flags: ['-std=c++17'],
+                        // lld 两件（worker 首链时才拉；不从 init 提前取）
+                        lld: { wasmUrl: 'assets/llvm/lld-wasm-only.wasm',
+                               glueUrl: 'assets/llvm/lld-wasm-only.js' } });
+      });
+    }
+
+    // ④ guessOctName(name, files)：产物文件名 = Octave 按文件名找模块（门槛 3）。
+    //    规则（build-pkg-oct.sh 的模块表口径）：主 TU 去扩展名；__bfgsmin.cc 的 DEFUN 是
+    //    __bfgsmin（单下划线）—— 但那是逐包表知识；v1 通用规则 = 主 TU basename。
+    function guessOctName(name, files) {
+      var names = Object.keys(files).sort(function (a, b) {
+        var score = function (n) { return /__/.test(n) ? 0 : (/^[^/]+\.cc$/.test(n) ? 1 : 2); };
+        return score(a) - score(b);
+      });
+      // ⚠️ 必须取 **basename**：源清单里的相对路径是 `pkg-1.3.3/src/cell2cell.cc`
+      //   ⇒ 直接去扩展名会得到带子目录的名字，写盘时嵌套目录不存在 ⇒ ErrnoError 44（实测）。
+      var base = String(names[0]).split('/').pop();
+      return base.replace(/\.[^.]*$/, '') + '.oct';
+    }
+
     // ── browse/statusOf 的共享内核 ────────────────────────────────────────────
     // 条目 → Entry（判决书 §3）：三属性 + 版本候选 + 描述。**一条产地**（statusOf 的三属性
     // 判据与 browse 的 Entry 同源 —— 同一事实不允许两个出口两个答案，N6 的教训）。
@@ -591,6 +711,147 @@
       },
       // 便捷：把资产交给 Octave（在主线程可用时同步调用）
       eval: function (expr) { return Msafe().eval_string(expr); },
+
+      // ── B 线：**浏览器内自编 .oct**（设计稿 NOTES-client-compile-design §4.2/§4.3）────
+      //   接口 = 一个方法（深模块判据：删掉它 ⇒ 每个调用点都要自己拼工具链/头/sysroot 档/
+      //   编译门槛/落盘 ⇒ 复杂度在 N 处复现）。返回 Verdict；diagnostics = 编译日志流
+      //   （§4.2 + 内容仓 mail/037 裁决④：现编、产物只进 MEMFS、不写 OPFS、不产生下载记录）。
+      //   内部四缝（§4.3，不暴露给调用方，只给测试注入）：toolchain()/headers()/
+      //   pickSysroot()/compileAndLand()。
+      compileExtension: function (name, opts) {
+        opts = opts || {};
+        var onProgress = opts.onProgress || function () {};
+        var diags = [];                       // diagnostics：编译日志流（UI 终端/诊断抽屉消费）
+        var pushDiag = function (text) {
+          diags.push(String(text));
+          if (opts.onDiagnostic) { try { opts.onDiagnostic(String(text)); } catch (e) {} }
+        };
+        // 幂等：同包编过（本会话）⇒ 直接回缓存（§4.2 "同 pin 键直接返回"的会话内形态）
+        if (_compiled[name]) {
+          return Promise.resolve({ state: 'compiled', name: name, cached: true,
+                                   diagnostics: _compiled[name].diagnostics,
+                                   octPath: _compiled[name].octPath });
+        }
+        return API.catalog().then(function (cat) {
+          // ── 判 kinds：包必须带 src（B 的对象是 src/*.cc；纯 .m 包 ⇒ m-only 软失败，明说）
+          var p = _catalogByName[name];
+          if (!p) throw errCode('NOT_IN_ANY_LIST', '货架上没有包：' + name);
+          var content = p.content || p.kinds || [];
+          var srcTar = p.url;
+          if (content.indexOf('src') < 0) {
+            return { state: 'm-only', name: name,
+                     why: '包不含 src（content=' + JSON.stringify(content) + '）⇒ 无可编译件；.m 部分用 install()',
+                     diagnostics: diags };
+          }
+          // ── 宿主档 ⇒ 目标档（楚河汉界同判据：w64* ⇒ wasm64，其余 ⇒ wasm32）
+          var hostArch = hostArchOf(opts);
+          var target = (hostArch === 'wasm64') ? 'wasm64' : 'wasm32';
+          pushDiag('[compile] ' + name + ' → ' + target + '（宿主 ' + (hostArch || '?') + ' 档）');
+          // ── 取源码 tarball（货架字节，sha 核过）+ 展开成 files 映射
+          // ── 前置：forge m 助手（__forge_src_list__ 在那个 bundle；与 install() 同款前置）
+          return API.load(['webio', 'webshell', 'webfile', 'forge']).catch(function () { return null; })
+          .then(function () {
+          onProgress({ phase: 'src', name: name });
+          return fetchBinary(srcTar).then(function (buf) {
+            return sha256Hex(buf).then(function (hex) {
+              if (p.sha256 && hex && hex !== p.sha256) {
+                throw errCode('SHA_MISMATCH', '源码包校验失败 ' + name + '（期望 ' + p.sha256.slice(0, 12) + '… 实得 ' + hex.slice(0, 12) + '…）');
+              }
+              // 解包：委托引擎内建 gunzip+untar（零 JS tar 解析器，与 install() 同款）。
+              //   展到 /tmp/compile-src/<name>/，再从 FS 读出 src/*.cc + config.h。
+              var M = Msafe();
+              if (!M || !M.eval_string) throw errCode('ENGINE_NOT_READY', '引擎还没就绪，不能取源');
+              var workdir = '/tmp/compile-src/' + name;
+              var tarPath = workdir + '.tar.gz';
+              try { M.FS.mkdirTree('/tmp/compile-src'); } catch (e) {}
+              M.FS.writeFile(tarPath, new Uint8Array(buf));
+              var rc = M.eval_string("__forge_src_list__('" + tarPath + "', '" + workdir + "')");
+              if (rc !== 0) throw errCode('UNPACK_FAILED', '源码解包失败（rc=' + rc + '）：' + (M.last_error_message() || ''));
+              // 读回文件清单（__forge_src_list__ 写 workdir/../.filelist）
+              var listRaw = '';
+              try { listRaw = M.FS.readFile(workdir + '.files', { encoding: 'utf8' }); } catch (e) {}
+              var srcFiles = {};
+              (listRaw || '').split('\n').forEach(function (rel) {
+                rel = rel.trim();
+                if (!rel || !/\.cc$|\.cpp$|\.c$|\.h$/.test(rel)) return;
+                try { srcFiles[rel] = M.FS.readFile(workdir + '/' + rel, { encoding: 'utf8' }); } catch (e) {}
+              });
+              if (!Object.keys(srcFiles).length) {
+                return { state: 'm-only', name: name,
+                         why: 'tarball 里没有可编译源（.cc/.cpp/.c）', diagnostics: diags };
+              }
+              pushDiag('[src] ' + Object.keys(srcFiles).length + ' 个源文件');
+              // ── 取 Octave 头 + 合成 config.h（25 宏 = build-pkg-oct.sh emit_config_h 的产物，
+              //    客户端复现的核心知识 ⇒ 数据跟 catalog 走，不硬编码 —— §10 判据 2）
+              onProgress({ phase: 'headers', name: name });
+              // 头由 worker 直接装进 clang FS（见 compile-worker.mjs 的 octincTarUrl 段）；
+              // 这里只报"配置宏就绪"，不再在页面 FS 里解一遍（旧缝 headersInto 已成死代码，保留函数但不调用）。
+              return Promise.resolve(cfgReady()).then(function (nMacro) {
+                pushDiag('[headers] worker 侧安装（Octave 头 + config.h ' + nMacro + ' 宏）');
+                // ── 起 Worker 跑编译（重活离主线程；§7.3）
+                onProgress({ phase: 'toolchain', name: name });
+                return toolchainWorker(target, pushDiag).then(function (worker) {
+                  onProgress({ phase: 'compile', name: name });
+                  return workerCompile(worker, srcFiles, target, pushDiag).then(function (r) {
+                    if (!r.ok) {
+                      // 编失败 ⇒ m-only 软失败 + 明说哪一件没成（§6.3 反向：不许静默当成功）
+                      return { state: 'm-only', name: name, stage: r.error ? 'compile' : 'link',
+                               why: String(r.error || 'unknown') +
+                                    (r.detail ? '\n' + r.detail.join('\n') : ''),
+                               diagnostics: diags };
+                    }
+                    // ── 落盘 + addpath + 同步 pkg 库（compileAndLand；§4.2）
+                    pushDiag('[land] 编译成功 ' + (r.moduleBytes ? r.moduleBytes.length : '?') + ' B，开始落盘');
+                    var octName = guessOctName(name, srcFiles);
+                    var landDir = OCTAVE_M + '/forge/' + name + '/oct-' + target;
+                    // ★ 门槛 2（设计稿 §10 实测）：嵌套路径必须**逐级建父目录**，否则
+                    //   writeFile 报 `ErrnoError errno=44`。旧代码把 mkdirTree 的失败吞进
+                    //   空 catch 里 ⇒ 真正的错在 writeFile 才炸（且信息是数字）。现在 fail-loud。
+                    try { M.FS.mkdirTree(landDir); } catch (e) {
+                      throw errCode('UNPACK_FAILED', '建不了落盘目录 ' + landDir + '：' + (e && e.message));
+                    }
+                    try {
+                      M.FS.writeFile(landDir + '/' + octName, new Uint8Array(r.moduleBytes));
+                      pushDiag('[land] 写盘 OK → ' + landDir + '/' + octName);
+                    } catch (e) {
+                      throw errCode('UNPACK_FAILED', '写 .oct 失败（' + landDir + '/' + octName + '）：'
+                                    + (e && (e.message || e.name) || e));
+                    }
+                    addPaths([landDir]);
+                    pushDiag('[land] addpath OK');
+                    try {
+                      M.eval_string("if (exist('__pkgfix_sync_db__') == 2) try; __pkgfix_sync_db__ (); catch; end; end");
+                    } catch (e) {}
+                    _compiled[name] = { octPath: landDir + '/' + octName, diagnostics: diags.slice() };
+                    onProgress({ phase: 'done', name: name });
+                    return { state: 'compiled', name: name,
+                             octPath: landDir + '/' + octName,
+                             bytes: r.moduleBytes.length,
+                             symbolGap: r.gap || null,
+                             diagnostics: diags };
+                  });
+                });
+              });
+            });
+          });
+        });
+          }).catch(function (e) {   // ← forge preload 那层 .then 的 catch（整链兜底）
+          // ★ 抛出物可能是**非 Error 对象**（实测：err:"undefined"、thrown:"[object Object]"）——
+          //   序列化出来，别让调用方只看到 undefined。设计稿 §6.3：失败要明说哪一件没成。
+          var detail;
+          try { detail = (e && e.message) ? (e.message + '\n' + (e.stack || '')) : JSON.stringify(e); }
+          catch (x) { detail = String(e); }
+          // 打点：最近一条 diags 是哪阶段（errno=44 之类无栈错误靠这个定位）
+          var _last = diags.length ? diags[diags.length - 1] : '(none)';
+          var err = errCode((e && e.code) || 'COMPILE_FAILED',
+                            '编译失败：' + String(detail).slice(0, 300)
+                            + ' ｜ 最后阶段：' + String(_last).slice(0, 120));
+          err.__verdict__ = { state: 'failed', name: name, cause: (e && e.code) || 'compile-failed',
+                              why: String(detail).slice(0, 400), retriable: false };
+          err.diagnostics = diags;
+          throw err;
+        });
+      },
 
       // ── Forge **按需拉取**（设计稿 build/113/NOTES-forge-ondemand.md §3）──────────
       // 「货架」= 站点上的 `assets/forge-catalog.json`（构建期由 build/forge-catalog.py

@@ -192,3 +192,49 @@ compileExtension(name)
    - 主 TU 必须排 `files` 首位（我第一跑编成了 `Array-base.cc`，`ok=true` 却是错的产物 ——
      **这正是"能编过 ≠ 编对了"的形状**，务必进验收反向断言）；
    - 多文件要逐级建父目录（否则 `ErrnoError errno=44`）。
+
+---
+
+## §11 落地实测（2026-10-18，compile 批）
+
+**已实现并验收**（`accept-compile-extension` **11/0**，8768+8761）：
+
+| 项 | 状态 | 凭据 |
+|---|---|---|
+| `OctaveAssets.compileExtension(name,{onProgress,onDiagnostic})` | ✅ | C1 |
+| 真包编译（miscellaneous → cell2cell.oct，wasm64） | ✅ **state=compiled，5.0 s，13,405 B** | C2a |
+| Octave 识别产物 | ✅ `exist=3`、`which` 指向该 `.oct` | C2b |
+| **分段懒加载**（用户点令） | ✅ 首编只拉 **clang 45.8 MB + sysroot 19.7 MB**；**lld 31.8 MB 推迟到首次链接** | C3 诊断流 `[lazy]` 行 |
+| `diagnostics` 日志流 | ✅ 20 条（onDiagnostic 逐条回调） | C3 |
+| 幂等（同会话二次调用） | ✅ `cached:true` 且**零网络** | C4 |
+| 反向：纯 `.m` 包 | ✅ `state:'m-only'` + 明说"不含 src" | C5 |
+| 反向：坏源 | ✅ `ok:false` + `clang exited 1` | C6 |
+| 产物架构 == 宿主档 | ✅ dylink 特性含 `wasm64`（w64 宿主） | C7 |
+
+**★ 已知边界（如实记，本批未解决）**：
+- **现编产物的跨边界调用仍不通**：`cell2cell({1,2},1)` 在现编 11.3 产物上报
+  `Invalid resizing operation or ambiguous assignment to an out-of-bounds array element`；
+  **同一站点、随站预编的 7.2 产物同样调用 = 1x1（正常）** ⇒ 对照实验已把范围锁死。
+  已排除：调用语法 / 注册路径（`exist=3`）/ config.h 宏（与容器 host 侧逐字一致）/ 架构（C7）。
+  **同族证据**：`symbolGap` 里 4 条 typeinfo（`_ZTI6Matrix/_ZTS6Matrix/_ZTI7NDArray/_ZTS7NDArray`）
+  在宿主 w64 wasm 的导出面里**为 0** —— 是**工单 65 缺口 2（`_ZTIi`）的扩大版**：
+  不只是基本类型，**Octave 类（Matrix/NDArray）的 typeinfo 也不在宿主导出面**。
+  ⇒ 与工单 65 合并处理：**裁决 A 的重链**（ready-for-human，产品决定）一旦落地，
+  这条边界应随之消失（判据 = 本套件 C2c 从"报错"翻成"1x1"）。
+- **多 TU 包只编主 TU**（v1 边界）：`miscellaneous` 有 6 个源，只编 `cell2cell.cc`；
+  其余 4 个 TU（`partint` / `sample` / `text_waitbar`）需要各自成模块，
+  且 helper（`error-helpers.cc`）要与主 TU 一起链 —— **下一批做**（判据：`partint(5)` 非空）。
+- **供给体积**：`assets/llvm/` 13 件 = **约 120 MB 原始**（clang 45.8 + lld 31.8 + 两档 sysroot
+  各 19.7 + 头 0.5 + 其余）；**已按用户点令分段**（见上），但**站点总量**显著增加。
+  `make-dist` 的取舍待定（§7.1 原判断"倾向不进交付包"，本批未改）。
+
+**本批新增的机械知识（都是实测踩出来的，别再踩）**：
+1. **验证 dlopen 路径必须 `eval_async`**：同步 `eval_string` 抛 `SuspendError` 且被 Octave
+   侧吞掉 ⇒ 表现成 `exist=0`（我一度误判"产物没被识别"，白查两轮）。JSPI 铁律的又一次应验。
+2. **`installFiles` 不许按 size 跳过**：sysroot 里有 7 个合法零字节文件；只能按"name 以 `/`
+   结尾 = 目录项"判断。
+3. **产物文件名必须 `basename`**：源清单里是 `pkg-1.3.3/src/cell2cell.cc`，直接去扩展名
+   会得到带子目录的名字 ⇒ 写盘 `ErrnoError 44`（门槛 2 的第三种形态）。
+4. **`mkdirTree` 的失败不许空 catch**：吞掉之后真正的错在 `writeFile` 才炸，且信息只有 `ErrnoError`。
+5. **vendor 的 bundle manifest 可能漏列依赖**：v0.1.1 的 `manifest.json` 没列
+   `driver/compile-core.mjs`（worker 的 import 依赖）⇒ provision 侧已兜底补拷 + 上报生产者仓。

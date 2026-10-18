@@ -50,9 +50,13 @@ page_files () {
   #    `octave-page.js`，缺它 = 站点整个坏（404）；`octave-embed.js`/`embed-demo.html`
   #    是接口层与上手页（accept-embed-api 也要取 `${URL}embed-demo.html`）。
   #    之前漏过 lane.js（工单 23）—— 同一形状：清单比页面引用少一件。
+  # ★ compile-worker.mjs（2026-10-18，compile 批）：assets-loader 的 compileExtension
+  #   用 `new Worker('compile-worker.mjs')` ⇒ 缺它 = B 线整条 404（页面其它功能不受影响，
+  #   所以这是**必须靠清单守**的静默缺失）。
   for f in index.html assets-loader.js octave-core.js lane.js queue.js p5canvas.js \
            octave-worker.js webaudio.js webaudiorec.js webfilepick.js webnet.js \
-           octave-page.js octave-embed.js embed-demo.html; do
+           octave-page.js octave-embed.js embed-demo.html \
+           compile-worker.mjs; do
     printf '%s\n' "$f"
   done
 }

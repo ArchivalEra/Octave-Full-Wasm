@@ -90,8 +90,12 @@ GNU Octave 11.3.0 → WebAssembly 的**全量浏览器运行时**（纯客户端
    整层替换、**与上游逐字节同源**；本地补丁退役（自制 measure 分派 → `REFLECT_MEASURE_MODULE`
    旋钮）；保留数据层 `measure_octave.py` + `mail-read.py` + `build/facts.py` 壳（补旋钮，
    与守卫互补）。验收六项全绿（反测 rc=2 零字节 / 壳 163 条 / 两台 / registry / 值零变化 /
-   逐字节同源）。**下一批 = compile:true + diagnostics 同批**（NOTES-client-compile-design
-   §9 第 3 步起跑；UI 按钮先藏）。
+   逐字节同源）。**compile:true + diagnostics 已落地（2026-10-18）**：`compileExtension` +
+   分段懒加载（sysroot 19.7 MB / clang 45.8 MB / **lld 31.8 MB 首链才拉**，用户点令）+
+   `diagnostics` 日志流；验收 `accept-compile-extension` **11/0**（双站）；供给 =
+   `provision-llvm-wasm.sh`（13 资产逐件 sha）。**已知边界**：现编产物可识别（`exist=3`）
+   但跨边界调用失败，同站随站预编 7.2 产物正常 ⇒ typeinfo 导出面（工单 65 缺口 2 扩大版，
+   归重链批）。设计稿 §11 含五条机械知识。
 6. **性能边界（实测封口项，勿重开）**：插件可达部件空间（BLAS/分配器即全部）、
    libm 标量替换（wasm 无标量 FMA）、fill 热点（带宽绑定）、faer/PGO/LTO/链接旗标/NT>8、
    工单 62 ABI 分叉（根因 = f77-fcn.h 未收编手改，已收编 fork `a5a7208`；供给树

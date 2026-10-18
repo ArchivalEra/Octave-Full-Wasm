@@ -99,7 +99,12 @@ def select(manifest, names, flt, probes, env, exists=os.path.exists):
             note = exc.get(name, {}).get("why", "")
             skipped.append("%s（%s%s）" % (name, why, "：" + note if note else ""))
             continue
-        rows.append((name, c.get("timeout", 420), 1 if c.get("summary", True) else 0))
+        # ★ per-suite timeout 覆盖（2026-10-18，compile 批）：exceptions 里 "timeout": N
+        #   覆盖类别默认（首例 accept-compile-extension：首编要拉 81 MB 工具链 + sysroot 解包，
+        #   类别默认 420s 不够）。与 manual/requires_env 同一张 exceptions 表 —— 例外只有一个家。
+        t_over = exc.get(name, {}).get("timeout")
+        t = int(t_over) if isinstance(t_over, (int, float)) else c.get("timeout", 420)
+        rows.append((name, t, 1 if c.get("summary", True) else 0))
     # ⚠️ 汇总（第一版每个套件刷一条 ⇒ 清单坏掉时打出 80 行，等于没有信息）
     for cat, names_ in sorted(missing_cats.items()):
         errors.append("清单缺类别定义 %s：%d 个套件（例：%s）"

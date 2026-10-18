@@ -84,6 +84,16 @@
    "sha256": "2abdcc2e35208af406e07724cffa85bc582ced97e9028383ecf5462541393f95",
    "optional": true,
    "note": "符号计算的**共享能力层**（接缝 §5 第④步）。本仓 third_party/ 从不入仓（同 glpk/lapack 一族：字节在持久盘，本 lock 只钉 URL+sha）⇒ 本机缺席即 SKIP，不是缺陷。⚠️ 本 lock 只钉 **core**；两个轮子（sympy 1.14.0 / mpmath 1.4.1）的 sha 在 provision-pyodide.sh 里（它们来自 PyPI，且 pyodide-lock 记的是重打包字节 —— 那个身份坑记在该脚本头注）。optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说"
+  },
+  {
+   "name": "llvm-wasm",
+   "version": "v0.1.1",
+   "url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.1/llvm-wasm-bundle-v0.1.1.tar.gz",
+   "file": "octave-wasm/third_party/llvm-wasm-bundle-v0.1.1.tar.gz",
+   "form": "文件",
+   "sha256": "a9ba3b41e5fa8e7445e9b8ffaf32ca73e10ae9285bc1afc5327d0f549c84f733",
+   "optional": true,
+   "note": "浏览器内编 .oct 的工具链（clang/lld/sysroot 两档 + driver + worker）。逐资产 sha 的权威 = release 内 manifest.json（配方摘录：recipes/llvm-wasm.md）。optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说。站点副本（assets/llvm/）= provision 产物（可删可重建 = 缓存）。"
   }
  ]
 }
