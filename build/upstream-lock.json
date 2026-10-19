@@ -87,13 +87,13 @@
   },
   {
    "name": "llvm-wasm",
-   "version": "v0.1.1",
-   "url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.1/llvm-wasm-bundle-v0.1.1.tar.gz",
-   "file": "octave-wasm/third_party/llvm-wasm-bundle-v0.1.1.tar.gz",
+   "version": "v0.1.3",
+   "url": "https://github.com/ArchivalEra/LLVM-wasm/releases/download/v0.1.3/llvm-wasm-bundle-v0.1.3.tar.gz",
+   "file": "octave-wasm/third_party/llvm-wasm-bundle-v0.1.3.tar.gz",
    "form": "文件",
-   "sha256": "a9ba3b41e5fa8e7445e9b8ffaf32ca73e10ae9285bc1afc5327d0f549c84f733",
+   "sha256": "cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce",
    "optional": true,
-   "note": "浏览器内编 .oct 的工具链（clang/lld/sysroot 两档 + driver + worker）。逐资产 sha 的权威 = release 内 manifest.json（配方摘录：recipes/llvm-wasm.md）。optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说。站点副本（assets/llvm/）= provision 产物（可删可重建 = 缓存）。"
+   "note": "浏览器内编 .oct 的工具链（clang/lld/sysroot 两档 + driver + worker）。逐资产 sha 的权威 = release 内 manifest.json（配方摘录：recipes/llvm-wasm.md）。v0.1.3（2026-10-19）：`driver/compile-core.mjs` 进 manifest（14 条）—— 我方 mail/013 报的缺口已修，兜底拷贝随之退役（provision 里改为正向断言）。optional：字节在持久盘（跨机器可缺席），本机缺席 ⇒ SKIP 明说。站点副本（assets/llvm/）= provision 产物（可删可重建 = 缓存）。"
   }
  ]
 }

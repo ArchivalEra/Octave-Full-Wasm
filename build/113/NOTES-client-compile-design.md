@@ -245,6 +245,13 @@ compileExtension(name)
    ⇒ **修了但没重发**。已正式上报（宿主 `mail/044` → LLVM-wasm `mail/013`）；
    原 STATE 写"已上报"在查证前是**没有凭据的活状态断言**（内容仓核了它的 mail/issues/
    questions 三处都无痕迹）——这条本身就是一次教训：**"已上报"也是断言，要有落点**。
+   ★ **结案（2026-10-19）**：对方发 v0.1.3 —— 14 条含 `driver/compile-core.mjs`，
+   并附 `release/check-published.mjs`（四对账，含"bundle driver == repo HEAD 逐字节"
+   那层，正是抓"一致地旧"的判据；对方承认我抓的那次其内部 13/13/13 自洽、
+   内部一致性检查天然抓不到）。我方独立复跑：bundle sha `cd6450fe…` 逐字相符、
+   `check-published --tar --freshness` 20 PASS。⇒ 我方 pin 换 v0.1.3、
+   **兜底拷贝退役**（provision 里改成正向断言：manifest 必须列它，缺 ⇒ die），
+   反向验证已做（删掉 manifest 那项 ⇒ 断言红）。
 
 ---
 

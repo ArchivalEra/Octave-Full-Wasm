@@ -22,9 +22,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 CACHE="${LLVM_CACHE:-/mnt/hdd/octave-wasm-build/third_party/llvm}"
 SITE="${SITE_DIR:-/mnt/hdd/octave-wasm-build/site}"
-VER="v0.1.1"
+# ★ v0.1.1 → v0.1.3（2026-10-19）：v0.1.3 把我们 `mail/013` 报的缺口修了 ——
+#   `driver/compile-core.mjs` 进 manifest（14 条），并附发布字节对账器
+#   （release/check-published.mjs，含"bundle driver == repo HEAD 逐字节"那层）。
+#   sha 我方独立复跑相符（`sha256sum llvm-wasm-bundle-v0.1.3.tar.gz`）。
+VER="v0.1.3"
 BUNDLE="llvm-wasm-bundle-${VER}.tar.gz"
-BUNDLE_SHA="a9ba3b41e5fa8e7445e9b8ffaf32ca73e10ae9285bc1afc5327d0f549c84f733"
+BUNDLE_SHA="cd6450fe7944875cb39f8e4a0790d5a08e032044f1db89054dadcabb749b20ce"
 URL="https://github.com/ArchivalEra/LLVM-wasm/releases/download/${VER}/${BUNDLE}"
 # 本地优先（生产者仓就在本机：/mnt/hdd/zcode-projects/LLVM-wasm/release/）—— 免下载
 LOCAL_FIRST="${LOCAL_FIRST:-/mnt/hdd/zcode-projects/LLVM-wasm/release/${BUNDLE}}"
@@ -84,21 +88,17 @@ shutil.copy2(os.path.join(src, "manifest.json"), os.path.join(dst, "manifest.jso
 print("  ✓ %-28s（逐件 sha 的权威）" % "manifest.json")
 sys.exit(1 if bad else 0)
 PY
-  # ★ compile-core.mjs（worker 的 import 依赖）：v0.1.1 与 **已发布的 v0.1.2** 的 manifest
-  #   资产列表都**缺它**（worker 第 15 行 import '../driver/compile-core.mjs'，而两个 bundle
-  #   都只列 toolchain/abi/tar-reader/sysroot-bundle 四个 driver）。生产者自己修了打包脚本
-  #   （LLVM-wasm `149e72b`，glob 取代手写清单），但那次提交**晚于 v0.1.2 打 tag 16 分钟**
-  #   ⇒ 已发布资产仍是 13 条（tar 内 manifest 与 release 的 content-list.json 都是 13，
-  #   工作树 out/ 才是 14）。消费侧兜底：从生产者仓补拷（sha 不核——它不在 manifest，
-  #   无凭可核；产地 = git 仓）。已在宿主 `mail/044` → LLVM-wasm `mail/013` 正式上报；
-  #   对方重发后本条可删（`upstream-lock.json` 换 URL+sha256 走正路）。
-  CORE_SRC="${LLVM_CORE_SRC:-/mnt/hdd/zcode-projects/LLVM-wasm/release/out/driver/compile-core.mjs}"
-  if [ -s "$CORE_SRC" ]; then
-    cp "$CORE_SRC" "$SITE/assets/llvm/driver/compile-core.mjs"
-    say "  ✓ driver/compile-core.mjs（从生产者仓补拷 —— v0.1.2 已发布资产仍缺，已信 013）"
-  else
-    die "driver/compile-core.mjs 缺（bundle 没带且生产者仓不在 $CORE_SRC）—— worker import 必 404"
+  # ★ compile-core.mjs（worker 的 import 依赖）：**已由 bundle 自带**（v0.1.3 起）。
+  #   历史：v0.1.1/v0.1.2 的已发布资产都缺它（13 条），靠"从生产者仓补拷"兜底。
+  #   本方已正式上报（宿主 `mail/044` → LLVM-wasm `mail/013`），对方 v0.1.3 修复并附
+  #   发布字节对账器双证 ⇒ **兜底按承诺退出**（不再是"能不能编"的隐式前提）。
+  #   退出条件（当时写在信里）：对方重发后 ⇒ 换 URL+sha256、删兜底行、自证翻面。
+  #   ⚠️ 现在这里是一条**正向断言**：bundle manifest 必须列它，缺 ⇒ 响亮失败。
+  #      （反向由下面 fetch 的逐资产 sha 校验承担：列了但字节不符也过不去。）
+  if ! grep -q '"driver/compile-core.mjs"' "$SITE/assets/llvm/manifest.json" 2>/dev/null; then
+    die "bundle manifest 里没有 driver/compile-core.mjs（v0.1.3+ 应自带；worker import 必 404）"
   fi
+  say "  ✓ driver/compile-core.mjs（bundle 自带，manifest 已列 —— 兜底已按 mail/013 承诺退出）"
   # worker（浏览器适配器）：bundle 不带它（tar -t 实测无 browser/）⇒ 从生产者仓拷。
   #   ⚠️ 它是代码不是字节资产（manifest 不列）；产地 = LLVM-wasm 仓 browser/worker.mjs。
   WRK_SRC="${LLVM_WORKER_SRC:-/mnt/hdd/zcode-projects/LLVM-wasm/browser/worker.mjs}"
