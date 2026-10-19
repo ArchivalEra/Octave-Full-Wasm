@@ -71,7 +71,7 @@ if (caps) {
     //   w64 是另一份产物、v128 也不同（台账 `w64_v128`）⇒ 精确值只在基础档那侧断言，
     //   w64 那侧断 `> 0` 并把实际值打出来（它的精确值由 `relink.sh verify w64` 与
     //   `check-deploy-sha.sh` 在**产物层**核）—— 否则探针会把正确的线程档判红（实测踩到）。
-    if (caps.lane === 'w64' || caps.lane === 'w64-threads' || caps.lane === 'w64-base') {   // 三线：threads 已删
+    if (caps.lane === 'w64' || caps.lane === 'w64-threads') {   // threads/w64-base 双死档
       check(a.simd === true && typeof a.v128 === 'number' && a.v128 > 0,
             '★ B2（车道档）`simd=true` 且 `v128>0`（精确值见台账）',
             `v128=${a.v128} lane=${caps.lane}`);

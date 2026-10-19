@@ -148,7 +148,7 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
 }
 
 if (hasW64) {
-  console.log('--- wasm64 两轴探针 (COI × memory64 三格矩阵；threads 已删) ---');
+  console.log('--- wasm64 两轴探针 (COI × memory64 两格矩阵；threads/w64-base 双死档) ---');
 
   // ── Cell 1: COI + native m64 ⇒ w64 (shared memory) ──────────────────────
   {
@@ -163,17 +163,19 @@ if (hasW64) {
     check(i.capsArtifactWasm64 === true, 'Cell 1: 产物实测为 wasm64', JSON.stringify({ wasm64: i.capsArtifactWasm64, verdict: i.capsVerdict }));
   }
 
-  // ── Cell 2: no-COI + native m64 ⇒ w64-base (non-shared) ─────────────────
+  // ── Cell 2: no-COI（哪怕 native m64）⇒ base ─────────────────────────────
+  //   ★ 2026-10-19 二次裁决：w64-base 死档 —— master 线必须 COI+多线程；
+  //     无 COI 唯一线 = wasm32(base)。wasm64 无单线程产品形态。
   {
     const r = await probeLane(browser, `${B}/index.html`);
     const i = r.info;
-    const ok = i.laneState === 'w64-base' && i.lanePlan === 'w64-base' && i.capsLane === 'w64-base';
+    const ok = i.laneState === 'base' && i.lanePlan === 'base' && i.capsLane === 'base';
     if (!ok) laneWrong = true;
     check(i.coi === false, 'Cell 2: 不带头站点 crossOriginIsolated = false', JSON.stringify({ coi: i.coi, sab: i.sab }));
-    check(ok, 'Cell 2: ★ no-COI + m64 ⇒ 选中 w64-base 档', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
+    check(ok, 'Cell 2: ★ no-COI + m64 ⇒ base（w64-base 死档 —— master 线必须 COI）', JSON.stringify({ state: i.laneState, plan: i.lanePlan, caps: i.capsLane }));
     check(r.ready === true, 'Cell 2: 页面跑到 ready', JSON.stringify({ ready: r.ready, errs: r.errs.slice(0, 2) }));
-    check(i.sharedMemory === false, 'Cell 2: w64-base 不是 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory }));
-    check(i.capsArtifactWasm64 === true, 'Cell 2: 产物实测为 wasm64', JSON.stringify({ wasm64: i.capsArtifactWasm64, verdict: i.capsVerdict }));
+    check(i.sharedMemory === false, 'Cell 2: base 非 shared 内存', JSON.stringify({ sharedMemory: i.sharedMemory }));
+    check(i.capsArtifactWasm64 === false, 'Cell 2: 跑的是 wasm32 产物（base 档）', JSON.stringify({ wasm64: i.capsArtifactWasm64 }));
   }
 
   // ── Cell 3: COI + no-m64 ⇒ base（三线裁决 2026-10-17：wasm32 永远单线程，threads 档已删）──
@@ -304,6 +306,16 @@ if (hasW64) {
   check(i.laneState !== 'threads', '★ 死档断言：?lane=threads 不再是合法覆盖（不被选成 threads）', JSON.stringify({ state: i.laneState }));
   check(i.laneState === 'base', '★ 死档 URL ⇒ 自动选档接管，不带头落 base', JSON.stringify({ state: i.laneState, plan: i.lanePlan }));
   check(r.ready === true, '★ 死档 URL 不许把页面带死（base 照常 ready）', JSON.stringify({ ready: r.ready }));
+}
+
+// ── 格 4b（2026-10-19 二次裁决）：?lane=w64-base ⇒ **同样死档**（覆盖正则已收窄），
+//     不带头落 base、页面照常 ready —— master 线必须 COI+多线程，无单线程形态。
+{
+  const r = await probeLane(browser, `${B}/index.html?lane=w64-base`);
+  const i = r.info;
+  check(i.laneState !== 'w64-base', '★ 死档断言：?lane=w64-base 不再是合法覆盖', JSON.stringify({ state: i.laneState }));
+  check(i.laneState === 'base', '★ w64-base 死档 URL ⇒ 不带头落 base（wasm32 = 无 COI 唯一线）', JSON.stringify({ state: i.laneState, plan: i.lanePlan }));
+  check(r.ready === true, '★ w64-base 死档 URL 不许把页面带死', JSON.stringify({ ready: r.ready }));
 }
 
 // ── 格 5（B6，2026-09-27）：带头 + `?worker=1` ⇒ **自动落基础档**（不自动选未验证组合）─────

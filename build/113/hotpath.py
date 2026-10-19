@@ -149,7 +149,7 @@ def symbols(mode="w64", out=None, openblas=None, container_out=None):
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit("FATAL: 符号构建失败：\n" + (r.stderr or r.stdout)[-800:])
-    # 站点 = 线上四格结构的副本（assets/lanes/base/threads/w64-base 全留），只换 w64/
+    # 站点 = 线上两格结构的副本（assets/lanes/base 全留），只换 w64/（threads/w64-base 已死档）
     site = os.path.join(BASE, "site")
     if os.path.isdir(out):
         shutil.rmtree(out)

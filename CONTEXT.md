@@ -113,13 +113,14 @@ wasm 里的 C 经 `EM_JS` 同步调 `pyodide.runPython` 即可 ⇒ 数据通道 
 标签变量；另有 `P5_OBJS` 是脚本内数组不算），一个都不许手设（漏一个会**静默退化**，而构建/链接/自检全绿）。
 **证据：** `build/113/relink.sh`
 
-### 三格（base / w64 / w64-base）
-同一个站最多部署**三份产物**（三线裁决 2026-10-17；**threads 档已删**——wasm32 不允许多线程，
-HISTORY §5.108），**文件名逐字相同**、靠**子目录**区分（Emscripten 胶水内部写死了
-`octave.data`，换名就得改胶水）：根目录 `base`（wasm32 单线程，**红线**：任何静态托管都能跑）、
-`w64/`（memory64 + pthread ⇒ **>4 GiB 地址空间**，master/IP 线产物）、`w64-base/`（memory64
-单线程回退格——**不是产品线**）。站点只是展示层：**试验场绑定三个分支**（wasm32-final /
-master / IllegalPerformance），不许往站点加格（死档断言在 `check-lane-purity.py` 的 DEAD_LANES）。
+### 两格（base / w64）
+同一个站最多部署**两份产物**（三线裁决 2026-10-17 删 threads；**2026-10-19 二次裁决删 w64-base**——
+master 线必须 COI+多线程，无 COI 唯一线 = wasm32，HISTORY §5.109），**文件名逐字相同**、
+靠**子目录**区分（Emscripten 胶水内部写死了 `octave.data`，换名就得改胶水）：
+根目录 `base`（wasm32 单线程，**红线**：任何静态托管都能跑；**无 COI 环境唯一线**）、
+`w64/`（memory64 + pthread ⇒ **>4 GiB 地址空间**，master/IP 线产物）。
+站点只是展示层：**试验场绑定三个分支**（wasm32-final / master / IllegalPerformance），
+不许往站点加格（双死档断言在 `check-lane-purity.py` 的 DEAD_LANES = {threads, w64-base}）。
 **证据：** `bridge/lane.js`（`FILES` 表）+ `build/gen-lanes.sh` + `build/113/check-lane-purity.py`
 + `build/lanes.json`（**档知识的唯一声明**；四个消费方由 `check-lanes-single-source.py` 对账）
 
@@ -135,7 +136,7 @@ master / IllegalPerformance），不许往站点加格（死档断言在 `check-
 **证据：** `build/lanes.json` + `build/113/check-lanes-single-source.py --selftest`
 
 ### 档清单（`lanes.js`）
-**选档的第三根轴**：站点**真的**部署了哪几档，由 `gen-lanes.sh` 按磁盘生成、页面**同步**读
+**选档的第三根轴**：站点**真的**部署了哪几档（两格：base/w64），由 `gen-lanes.sh` 按磁盘生成、页面**同步**读
 （`window.__octaveLanes`）。为什么必须有它：只按能力选档会在"只有 base"的站点上挑 `w64`
 并 **404**（实测）。判据 = 能力 ∩ 清单；`base` 缺失时生成器**必红**。
 **证据：** `build/gen-lanes.sh`
@@ -144,7 +145,7 @@ master / IllegalPerformance），不许往站点加格（死档断言在 `check-
 页面/Worker 在**加载胶水之前**、用**同步**判据定档（两根能力轴 × 清单）：COI + `SharedArrayBuffer`
 （轴 1）× memory64（轴 2）⇒ 从「能力最优 ∩ 清单里有」里取第一档。不能等异步探测：w64 胶水在
 被 import 的那一刻就会建 shared 内存，没有隔离**当场抛**。URL 上
-`?lane=base|w64|w64-base` 可显式覆盖（threads 已不是合法覆盖名——覆盖正则已收窄，输入它会被忽略并落自动选档）（测试/调试用；覆盖不改物理前提，选错档**必须响亮失败**）。
+`?lane=base|w64` 可显式覆盖（threads/w64-base 都不是合法覆盖名——覆盖正则已收窄，输入它们会被忽略并落自动选档）（测试/调试用；覆盖不改物理前提，选错档**必须响亮失败**）。
 **证据：** `test/browser/probe-lane.mjs`
 
 ### COI 头（跨源隔离）

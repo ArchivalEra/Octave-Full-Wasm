@@ -10,12 +10,11 @@
 //     64 位 WebAssembly 在不支持 memory64 的引擎上无法实例化。
 // 必须在**加载胶水之前**、用**同步**判据决定 —— 不能等异步探测回来再选。
 //
-// ── 三格矩阵（优先级从高到低；三线裁决 2026-10-17：threads 格已删——
-//    wasm32 线永远是单线程，wasm32+atomics 多线程档是畸形儿，不允许存在）────────
-//   1. COI + m64 ⇒ `w64`（wasm64 多线程档，master/IP 线产物）
-//   2. 非COI + m64 ⇒ `w64-base`（wasm64 单线程回退格 —— 不是产品线）
-//   3. 非COI/无SAB + 任何 ⇒ `base`（wasm32 单线程 —— wasm32 线的全部）
-//   （COI + 非 m64 也落 base：没有 wasm32 多线程这回事）
+// ── 两格矩阵（2026-10-19 用户点令二次裁决：w64-base 回退格废除——master 线必须
+//    COI+多线程，无 COI 唯一线 = wasm32（base）；wasm64 不存在单线程产品形态）──
+//   1. COI + SAB + m64 ⇒ `w64`（wasm64 多线程档，master/IP 线产物）
+//   2. 其余一切 ⇒ `base`（wasm32 单线程 —— 无 COI 环境的唯一线）
+//   死档（出现即非法）：threads（wasm32+atomics）、w64-base（wasm64 单线程）
 //
 // ── ★ 第三轴：**站点到底有哪些档**（工单 23，2026-09-30）──────────────────────
 // 为什么需要：四格是**能力**上的最优；但站点可能**只部署了其中几档**
@@ -51,14 +50,14 @@
     }
   }
 
-  // 显式覆盖（测试/调试用）：URL 上写 `?lane=w64`、`?lane=w64-base` 或 `?lane=base`。
+  // 显式覆盖（测试/调试用）：URL 上写 `?lane=w64` 或 `?lane=base`（w64-base 已死档，写它会被忽略落自动选档）。
   // ⚠️ 覆盖**不改判据** —— 它只改"选哪一档"，物理前提仍是硬的：
   //    在没隔离的页面上强行选 w64 ⇒ 胶水建 shared 内存当场抛。
   //    这正是我们要能证伪的那一条（`probe-lane` 的反证档：**必须响亮地失败**）。
   function override(env) {
     try {
       var q = (env && env.location && env.location.search) || '';
-      var m = /[?&]lane=(w64|w64-threads|w64-base|base)(?:&|$)/.exec(q);
+      var m = /[?&]lane=(w64|w64-threads|base)(?:&|$)/.exec(q);
       return m ? m[1] : null;
     } catch (e) { return null; }
   }
@@ -74,9 +73,9 @@
     if (m64) {
       auto = (coi && sab)
         ? { lane: 'w64', why: '跨源隔离 + SharedArrayBuffer + memory64 可用（目标 wasm64 线程档）' }
-        : { lane: 'w64-base',
-            why: !coi ? '没有跨源隔离（宿主未发 COOP/COEP ⇒ 用 wasm64 基础档）'
-                      : 'SharedArrayBuffer 不可用（用 wasm64 基础档）' };
+        : { lane: 'base',
+            why: !coi ? '没有跨源隔离 ⇒ 用基础档（master 线必须 COI+多线程；无 COI 唯一线 = wasm32）'
+                      : 'SharedArrayBuffer 不可用 ⇒ 用基础档（同上：wasm64 无单线程产品形态）' };
     } else {
       // ★ 三线裁决（2026-10-17）：非 m64 一律 base —— wasm32 永远单线程，
       //   不存在"wasm32 多线程档"（threads 档已删，COI+SAB 不再改变 wasm32 的选择）。
@@ -94,15 +93,13 @@
     var whyInv = inv ? ('站点清单声明 ' + inv.join('/'))
                      : '站点**没有**档清单（lanes.js 缺失）⇒ 按 [base] 判定';
     if (avail.indexOf(auto.lane) < 0) {
-      var order = ['w64', 'w64-base', 'base'];
+      var order = ['w64', 'base'];
       var fallback = null;
       for (var i = 0; i < order.length; i++) {
         if (avail.indexOf(order[i]) >= 0) {
-          // 只退到**能力可行**的那几档：wasm64 线程档要求 COI+SAB+m64，w64-base 要求 m64
+          // 只退到**能力可行**的那几档：wasm64 线程档要求 COI+SAB+m64
           var cand = order[i];
-          var okCap = (cand === 'base')
-            || (cand === 'w64' && coi && sab && m64)
-            || (cand === 'w64-base' && m64);
+          var okCap = (cand === 'base') || (cand === 'w64' && coi && sab && m64);
           if (okCap) { fallback = cand; break; }
         }
       }
@@ -139,8 +136,8 @@
     if (ov && ov !== auto.lane) {
       var whyWarn = '';
       if ((ov === 'w64' || ov === 'w64-threads') && !coi) {
-        whyWarn = '；⚠️ 没有 COI ⇒ 线程档会**硬失败**（这是有意的可证伪档）';
-      } else if ((ov === 'w64' || ov === 'w64-threads' || ov === 'w64-base') && !m64) {
+        whyWarn = '；⚠️ 没有 COI ⇒ 线程档会**硬失败**（这是有意的可证伪档；无 COI 唯一线 = base）';
+      } else if ((ov === 'w64' || ov === 'w64-threads') && !m64) {
         whyWarn = '；⚠️ 没有 memory64 支持 ⇒ wasm64 档会**硬失败**（这是有意的可证伪档）';
       }
       return { lane: ov, coi: coi, sab: sab, memory64: m64, forced: true,
@@ -156,9 +153,6 @@
     'w64-threads': { lane: 'w64', dir: 'w64/',
                      js: 'w64/octave.js', wasm: 'w64/octave.wasm', data: 'w64/octave.data',
                      manifest: 'assets/manifest.w64.json' },
-    'w64-base': { lane: 'w64-base', dir: 'w64-base/',
-                  js: 'w64-base/octave.js', wasm: 'w64-base/octave.wasm', data: 'w64-base/octave.data',
-                  manifest: 'assets/manifest.w64.json' },
     base: { lane: 'base', dir: '',
             js: 'octave.js', wasm: 'octave.wasm', data: 'octave.data',
             manifest: 'assets/manifest.json' }

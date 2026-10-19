@@ -745,32 +745,8 @@ def measure():
                 "实测 <1.0 ⇒ 负判决（wasm 无标量 FMA，见 NOTES-libm.md）",
                 replay=False)
 
-    # ★ **w64-base**（工单 30，2026-10-01）：四格里的第四格 —— memory64 **单线程**回退档。
-    #   为什么上键：发运判据里有一条"只新增两档、base/threads 逐字节不变"，而**新那一档**的
-    #   sha 原来没有任何台账项 ⇒ `promote-w64-lane.sh` 只能拿容器当参照，"部署的到底是不是
-    #   验收过的那一份"就没人拦。上键之后那条判据变成"与台账比"。
-    W64BA = os.environ.get("W64_BASE_ARTIFACTS", os.path.join(os.path.dirname(SITE), "w64-base-artifacts"))
-    try:
-        bj = json.load(open(os.path.join(W64BA, "octave.build.json"), encoding="utf-8"))
-        me = bj.get("measured") or {}
-        facts["w64_base_verdict"] = fact(bj.get("verdict"),
-                                        "python3 build/facts.py（读 %s/octave.build.json）" % W64BA,
-                                        "w64-base-artifacts/octave.build.json")
-        facts["w64_base_wasm64"] = fact(bool(me.get("wasm64")),
-                                        "读 %s 的 measured.wasm64" % W64BA,
-                                        "w64-base-artifacts/octave.build.json",
-                                        "回退档也必须是真 64 位（否则它回退的是**另一个 ABI**，不是同一档）")
-        facts["w64_base_shared_memory"] = fact(bool((me.get("threads") or {}).get("shared_memory")),
-                                               "读 %s 的 measured.threads.shared_memory" % W64BA,
-                                               "w64-base-artifacts/octave.build.json",
-                                               "单线程回退档：**不**是 shared（这是它与 w64 的分界）")
-        wf = (me.get("files") or {}).get("octave.wasm") or {}
-        facts["w64_base_wasm_sha"] = fact(wf.get("sha256"), "sha256sum %s/octave.wasm" % W64BA,
-                                          "w64-base-artifacts/octave.wasm")
-        facts["w64_base_wasm_bytes"] = fact(wf.get("bytes"), "stat -c %%s %s/octave.wasm" % W64BA,
-                                            "w64-base-artifacts/octave.wasm")
-    except (OSError, ValueError) as e:
-        print("⚠ 读不到 w64-base 身份证（%s）：%s" % (W64BA, e), file=sys.stderr)
+    # ★ w64-base 台账段已删（2026-10-19 二次裁决死档）：master 线必须 COI+多线程，
+    #   无 COI 唯一线 = wasm32(base)。w64_base_* 5 键经 --allow-drop 掉档（见 HISTORY）。
     # 两份日志：由 build-w64-lane.sh 的 facts 阶段写（`llvm-objdump` / `llvm-readobj` 量的）
     try:
         facts["w64_i64_insns"] = fact(int(open(os.path.join(W64L, "i64.txt"),
@@ -1414,7 +1390,7 @@ def measure():
         "floor_matrix_engines", "floor_matrix_pass", "floor_matrix_fail",
         "w64_mem_probe_fail", "dist_lane_probe_fail", "w64_big_heap",
         "w64_oct_files", "w64_oct_wasm64", "w64_i64_insns",
-        "e2_single_verdict", "e2_threaded_verdict", "w64_verdict", "w64_base_verdict",
+        "e2_single_verdict", "e2_threaded_verdict", "w64_verdict",
         "w64_wasm64", "w64_shared_memory", "w64_v128", "w64_exported_functions",
         "w64_malloc",
         "w64_relaxed_madd", "w64_build_recipe_ok",
@@ -1432,7 +1408,7 @@ def measure():
         "hotpath_xpow_libm_pct", "hotpath_xpow_driver_pct", "hotpath_fft_blktrans_pct",
         "xpow_driver_spike_pct", "xpow_driver_spike_ratio", "locale_contract_lanes",
         "ip_vs_next_sort_ip_ms", "ip_vs_next_sort_next_ms", "ip_vs_next_sort_ratio",
-        "w64_base_wasm64", "w64_base_shared_memory",   # threads_* 键已删（三线裁决）
+        # w64_base_* 键已删（2026-10-19 w64-base 死档）
         "oct_w64_files", "octdir_w64_files",
         "threads_exported_functions", "threads_blas_dir", "wasm_v128",
         "exported_functions", "fonts_count", "jspi_entry", "env_vars",

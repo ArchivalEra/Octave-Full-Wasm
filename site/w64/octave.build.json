@@ -2,7 +2,7 @@
  "schema": 1,
  "tool": {
   "name": "link-web.sh",
-  "script_sha256": "99752b3fb7d1ccd3e89818ac9a86824789a6eb538e7add47420df8f73cbbf7e8",
+  "script_sha256": "0fa68214515955f2dbab50f8a0e8c6eb369804deb4ce75b20483ed594dcef52c",
   "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.12 (5488e0871d46d19a3209988190fa6a653126256f)",
   "manifest_writer": {
    "name": "write-build-manifest.py",
@@ -10,8 +10,8 @@
   }
  },
  "build": {
-  "when": "2026-10-11T09:01:41+0000",
-  "out": "/src/websrc/out-6012-gov",
+  "when": "2026-10-19T10:12:30+0000",
+  "out": "/src/websrc/w64-6012-out",
   "mode": "w64"
  },
  "declared": {
@@ -39,7 +39,7 @@
   ]
  },
  "measured": {
-  "exported_functions": 750,
+  "exported_functions": 757,
   "malloc": "mimalloc",
   "rust_sort": "f64-stable",
   "simd": {
@@ -73,12 +73,12 @@
   "preload_atftp_misplaced": false,
   "files": {
    "octave.wasm": {
-    "sha256": "8c535553a2140ae45b99f9a095081254297ec87ae0f7cc2323748974ec3ca6d6",
-    "bytes": 31246703
+    "sha256": "0225d0b374f3bed931dd61333476c4133c0526e35d0aa509a053fe0b7e39a82c",
+    "bytes": 31246819
    },
    "octave.js": {
-    "sha256": "9ce47cd63b1feac3047c80cb89eb89a39513a66d4c69177fc822f468cefaad37",
-    "bytes": 517348
+    "sha256": "bfd2d1323c7e4ef6fe2b7ad9f444907eaee9142bc7da62b425adb66074722b3d",
+    "bytes": 517810
    },
    "octave.data": {
     "sha256": "0ee2fca153b13b6ae1d93cd74e2fc77182d08fba98658f7eb1b266ccde445883",
@@ -89,7 +89,7 @@
  "inputs": {
   "link_web_sh": {
    "path": "/src/bin/link-web.sh",
-   "sha256": "99752b3fb7d1ccd3e89818ac9a86824789a6eb538e7add47420df8f73cbbf7e8"
+   "sha256": "0fa68214515955f2dbab50f8a0e8c6eb369804deb4ce75b20483ed594dcef52c"
   },
   "blas": {
    "resolved_dir": "/src/work/e2-openblas-lib-w64",
@@ -107,20 +107,20 @@
   },
   "keep_list": {
    "path": "/src/libwork/keep-6012-w64.txt",
-   "sha256": "0511f4db94c7dd59ac3f6ce2ee8a398f48ba9997075f7fa164e8089a1817789d",
-   "lines": 1329
+   "sha256": "3192d5ae3fe1294c443cf3fd08be769d9029e1f3551372c765b4f1caeee92d65",
+   "lines": 1336
   },
   "baseline_wasm": {
-   "path": "/src/websrc/m2fc-threads-out/octave.wasm",
-   "sha256": "c2899a71b5c75fce43475ecaedd35cd76af6aeb5fee542ebd9ad8479276f2cf4"
+   "path": "/src/websrc/w64-out/octave.wasm",
+   "sha256": "73ce8aa5f965e2e5f97296cf982e31627effb37092233924f3816b70ca9fa098"
   }
  },
  "notes": [],
  "verdict": "ok",
  "mismatches": [],
  "checked": {
-  "when": "2026-10-11T09:01:41+0000",
+  "when": "2026-10-19T10:12:30+0000",
   "by": "check-build-manifest.py",
-  "script_sha256": "777f2e99912d27175080a3611de8069ce3d24cc6596c8a33b4561049a0d81c24"
+  "script_sha256": "08b29d6f6c7293e968c2580b8c0e3917d9a8a7f84423bf459c59214cf87d271d"
  }
 }

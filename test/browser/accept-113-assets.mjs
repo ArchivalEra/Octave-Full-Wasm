@@ -110,7 +110,7 @@ const loadRes = await page.evaluate(async (mods) => {
   //   （实测：线程档首跑这条 4 FAIL）。
   const lane = (window.__octaveCaps && window.__octaveCaps.lane
                 && window.__octaveCaps.lane.chosen) || 'base';
-  const prefix = (lane === 'w64' || lane === 'w64-threads' || lane === 'w64-base') ? 'assets/oct-w64/'
+  const prefix = (lane === 'w64' || lane === 'w64-threads') ? 'assets/oct-w64/'   /* w64-base 死档 2026-10-19 */
                : 'assets/oct/';   // 三线：threads 已删
   const out = [];
   for (const m of Object.keys(mods)) {

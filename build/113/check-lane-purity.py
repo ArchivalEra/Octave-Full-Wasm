@@ -54,7 +54,7 @@ READOBJ_CANDIDATES = (
 # ★ 三线模型权威枚举（2026-10-17 用户点令终版）：
 #   三个实验场 = 分支：wasm32-final（wasm32 单线程）/ master（wasm64 多线程）/
 #   IllegalPerformance（wasm64 多线程 + Rust 补丁）。站点只是展示层：
-#   base=wasm32 产物、w64/w64-base=wasm64 产物、w64-base 是回退格（不是产品线）。
+#   base=wasm32 产物、w64=wasm64 多线程产物（w64-base 已死档 2026-10-19）。
 #   **threads（wasm32+atomics 多线程）是畸形档，已删 —— 出现即必红。**
 LANE_EXPECT = {
     # 产品线（三线）—— 表必须与上面那段权威枚举逐条对应（单源对账器 R6 盯着：
@@ -64,15 +64,18 @@ LANE_EXPECT = {
     "wasm32-final": "wasm32",
     "master": "wasm64",
     "IllegalPerformance": "wasm64",
-    # 站点档（展示层；base=wasm32 线产物，w64/w64-base=wasm64 线产物）
+    # 站点档（展示层；base=wasm32 线产物，w64=wasm64 多线程线产物）
     "base": "wasm32",
     "w64": "wasm64",
-    "w64-base": "wasm64",
     # 旧构建模式名（relink.sh 的产物档）
     "product": "wasm32",
     "wasm64": "wasm64",
 }
-DEAD_LANES = {"threads": "wasm32+atomics 多线程畸形档（三线裁决 2026-10-17 删除）—— wasm32 永远单线程"}
+DEAD_LANES = {
+    "threads": "wasm32+atomics 多线程畸形档（三线裁决 2026-10-17 删除）—— wasm32 永远单线程",
+    "w64-base": "wasm64 单线程'回退格'（2026-10-19 用户点令废除）—— master 线必须 COI+多线程；"
+                "无 COI 唯一线 = wasm32(base)；wasm64 无单线程产品形态",
+}
 
 
 def expected_arch(lane):
@@ -148,7 +151,7 @@ def check(lane, host, oct_dirs, site=None, arch_of_=arch_of):
     else:
         problems.append("没给 --host ⇒ 判据①没做（零值守卫：空断言面不是通过）")
 
-    # ② 车道 .oct
+    # ② 车道 .oct（零值守卫；w64-base 已死档化，不再有回退格豁免）
     octs = octs_in(oct_dirs or [])
     stats["oct_total"] = len(octs)
     if not octs:
@@ -215,6 +218,19 @@ def _selftest():
     # ⑤ 空输入必须报：.oct 目录空
     p, _ = check("w64", "/x/host64.wasm", [tempfile.mkdtemp(prefix="lane-empty-")], arch_of_=fak)
     ok.append(("★ .oct 集合为空 ⇒ 必须报（零值守卫）", any("零值守卫" in x for x in p)))
+
+    # ⑥c ★ 死档 w64-base（2026-10-19 二次裁决）：任何形态必须**点名**报（与 threads 同待遇）
+    d2 = tempfile.mkdtemp(prefix="lane-fb-")
+    open(os.path.join(d2, "a.oct"), "wb").write(b"\0asm\x01\0\0\0")
+    p_dead2, _s3 = check("w64-base", "/x/host64.wasm", [d2], arch_of_=fak)
+    ok.append(("★ 死档 w64-base 有 .oct ⇒ 仍必点名报（master 线无单线程形态）",
+               any("死档" in x or "畸形" in x for x in p_dead2)))
+    p_dead3, _s4 = check("w64-base", "/x/host64.wasm", [tempfile.mkdtemp(prefix="lane-empty-")], arch_of_=fak)
+    ok.append(("★ 死档 w64-base 目录空 ⇒ 仍必点名报（不以空集逃逸）",
+               any("死档" in x or "畸形" in x for x in p_dead3)))
+    p_prod_none, _st2 = check("w64", "/x/host64.wasm", [tempfile.mkdtemp(prefix="lane-empty-")], arch_of_=fak)
+    ok.append(("★ 产品格 w64 目录空 ⇒ 仍必报（零值守卫不受死档化影响）",
+               any("零值守卫" in x for x in p_prod_none)))
 
     # ⑥b 死档名必须**点名**报（三线裁决：threads 是被删除的畸形档，不是"陌生名"）
     p_dead, _s2 = check("threads", "/x/h.wasm", [tempfile.mkdtemp(prefix="lane-empty-")], arch_of_=fak)

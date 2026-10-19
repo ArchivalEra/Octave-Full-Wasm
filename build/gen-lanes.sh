@@ -10,9 +10,9 @@
 #
 # ⚠️ 它是**生成物**：不要手改（手抄清单今天已经漂过两份资产）。判定完全来自磁盘：
 #   base      ⇐ 根目录有 octave.js + octave.wasm
-#   （threads 档已删 —— 三线裁决 2026-10-17：wasm32 不允许多线程）
 #   w64       ⇐ w64/ 目录里有那三件
-#   w64-base  ⇐ w64-base/ 目录里有那三件
+#   （threads 已删 —— 2026-10-17；w64-base 已删 —— 2026-10-19：master 线必须
+#    COI+多线程，无 COI 唯一线 = wasm32；wasm64 无单线程产品形态）
 #
 # 用法：sh build/gen-lanes.sh <站点目录>   ⇒ 写 <站点>/lanes.js 并打印清单
 set -eu
@@ -24,10 +24,10 @@ if [ "${1:-}" = "--selftest" ]; then
   n=$((n+1)); mk "$tmp/s1"
   if sh "$0" "$tmp/s1" >/dev/null 2>&1 && grep -q '__octaveLanes = \["base"\]' "$tmp/s1/lanes.js"; then
     echo "PASS | gen-lanes/只有 base ⇒ 清单 [\"base\"]"; else echo "fail | gen-lanes/只有 base 竟然红"; bad=1; fi
-  # ② 三格齐 ⇒ 三格都写进去（threads 已删；残留 threads/ 目录**不再**进清单）
+  # ② 两格齐 + 两个死档残留 ⇒ 清单只认 base/w64（threads 与 w64-base 残留都不进）
   n=$((n+1)); mk "$tmp/s2"; mk "$tmp/s2/w64"; mk "$tmp/s2/w64-base"; mk "$tmp/s2/threads"
-  if sh "$0" "$tmp/s2" >/dev/null 2>&1 && grep -q 'w64-base' "$tmp/s2/lanes.js" && ! grep -q 'threads' "$tmp/s2/lanes.js"; then
-    echo "PASS | gen-lanes/三格齐 ⇒ 清单含 w64-base 且**不含** threads（死档残留不进清单）"; else echo "fail | gen-lanes/三格清单不对"; bad=1; fi
+  if sh "$0" "$tmp/s2" >/dev/null 2>&1 && grep -q '"w64"' "$tmp/s2/lanes.js" && ! grep -q 'w64-base' "$tmp/s2/lanes.js" && ! grep -q 'threads' "$tmp/s2/lanes.js"; then
+    echo "PASS | gen-lanes/两格齐 ⇒ 清单含 w64 且**不含** w64-base/threads（双死档残留不进清单）"; else echo "fail | gen-lanes/两格清单不对"; bad=1; fi
   # ③ **没有 base** ⇒ 必须红（base 是红线：任何静态托管的底线）
   n=$((n+1)); mkdir -p "$tmp/s3/w64"; for f in octave.js octave.wasm octave.data; do : > "$tmp/s3/w64/$f"; done
   if sh "$0" "$tmp/s3" >/dev/null 2>&1; then echo "fail | gen-lanes/**没有 base 竟没报**（红线失效）"; bad=1
@@ -53,7 +53,6 @@ add () { LANES="${LANES:+$LANES,}\"$1\""; }
 
 has3 ""          && add base
 has3 w64         && add w64
-has3 w64-base    && add w64-base
 
 # 零值守卫：**base 必须在**（它是"任何静态托管都能跑"的红线）。
 # 没有 base 的站点是一个**残缺部署**，这里必须红 —— 不许生成一份"没有底线档"的清单。

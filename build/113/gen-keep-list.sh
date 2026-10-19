@@ -66,7 +66,11 @@ n_oct=$(find "$@" -name '*.oct' 2>/dev/null | wc -l)
 FILTER='^(memory|__indirect_function_table|__stack_pointer|__memory_base|__table_base|emscripten_run_script|exit|__assert_fail)$'
 grep -vE "$FILTER" "$TMP" | LC_ALL=C sort -u > "$TMP.keep"
 
-# ★ 基本类型 typeinfo 保活（工单 65 缺口 2，LLVM-wasm mail/026 裁决 2026-10-17，判 A）：
+# # ★★ 同步义务（2026-10-19 重链批实测）：keep 里的 typeinfo 只靠 --export-if-defined
+#   **不够** —— MAIN_MODULE=2 的 DCE 会先删掉没人引用的归档成员（树代码不 import 基本类型
+#   typeinfo）⇒ export-if-defined 静默忽略。真保活 = link-web.sh 的 TI_TYPEINFO_FLAGS
+#   （-Wl,-u,_ZTIi 强引用 + export-if-defined，成对）。**改这 7 条必须两边同步**。
+★ 基本类型 typeinfo 保活（工单 65 缺口 2，LLVM-wasm mail/026 裁决 2026-10-17，判 A）：
 #   `throw 42;`（基本类型抛出）的 side module 必然导入 `_ZTIi`（emcc 官方路径同样 —— 它是
 #   任何正确编译器的必然产物）；定义在宿主 sysroot 的 libc++abi（D 段，实测在
 #   libc++abi-mt-legacyexcept.a）。但现役 `.oct` **零个**导入它（11,663 个全量扫描 = 0；

@@ -75,7 +75,7 @@ if [ "${1:-}" = "--selftest" ]; then
   probe red "★ 车道 .oct 有一处是旧件 ⇒ 必须红（w64 那套 side module）"
   rm -f "$tmp/a/assets/oct-w64/a.oct" "$tmp/b/assets/oct-w64/a.oct" "$tmp/c/assets/oct-w64/a.oct"
   probe red "★ 三处都没有车道 .oct ⇒ 必须红（零值守卫：分档检查不许空转）"
-  # ★ 工单 30：四格（w64/w64-base）也要进闸门 —— 一档"三处之一少了/旧了"必须红
+  # ★ 工单 30：w64 档进闸门 —— 一档"三处之一少了/旧了"必须红（w64-base 死档 2026-10-19）
   #   ⚠️ 先把前面用例删掉的 VERSION 复原：它三处都缺时是**红**（零值守卫）⇒ 不复原的话
   #      下面这两个 ok 用例会因为 VERSION 而红，看起来像"四格判据坏了"（自证自己先踩到）。
   for d in "$tmp/a" "$tmp/b" "$tmp/c"; do printf 'same-VERSION' > "$d/VERSION"; done
@@ -83,10 +83,9 @@ if [ "${1:-}" = "--selftest" ]; then
   printf 'lane-oct' > "$tmp/b/assets/oct-w64/a.oct"
   printf 'lane-oct' > "$tmp/c/assets/oct-w64/a.oct"
   mkfix_w64() {
-    mkdir -p "$1/w64" "$1/w64-base" "$1/assets/oct-w64"
+    mkdir -p "$1/w64" "$1/assets/oct-w64"
     for f in octave.wasm octave.js octave.data octave.build.json minioct.oct dldprobe.oct; do
       printf 'same-w64-%s' "$f" > "$1/w64/$f"
-      printf 'same-w64-%s' "$f" > "$1/w64-base/$f"
     done
     printf '[]' > "$1/assets/manifest.w64.json"
     printf 'lane-oct-64' > "$1/assets/oct-w64/a.oct"

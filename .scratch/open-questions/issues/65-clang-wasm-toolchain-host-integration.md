@@ -1,6 +1,42 @@
 # 65 · clang-wasm 工具链 ↔ 本仓宿主的接入缺口（DELIVERY §4 的实测复核）
 
-**Status:** ready-for-human
+**Status:** resolved
+（2026-10-19，用户点令「那就干」—— 重链落地并全量验绿，结案。判据与过程见下方「结案判据全部翻面」段。）
+**结案判据全部翻面（实测）**：
+- `probe-toolchain-gap` **rc=2 → rc=0**（两模块 dlopen OK 且 `probe_f(22)==22`）；
+- `accept-compile-extension` **16/0**，其中 C2c/C8e 从"如实记边界"**翻成硬绿**：
+  `cell2cell({1,2},1)=1x1`、`partint(4)` 不变式成立（PARTINT_OK=1，5x4 分拆矩阵）；
+- 8768 全量 `PROBES=1` 96 套 / 1576 PASS / 0 FAIL；8761 promote verify 全绿
+  （w64 `c994bdad…` / w64-base `35ef50dc…`，台账同步）。
+**落地三件**：
+1. `-6012` 车道全套重链（keep-6012-* 补 7 条 typeinfo + link-web 新增 `TI_TYPEINFO_FLAGS`
+   = `-Wl,-u,_ZTIi` **强引用** + export-if-defined 成对 ×7 —— 实测光靠 keep 的
+   export-if-defined 拦不住 DCE：树代码不 import 基本类型 typeinfo ⇒ 归档成员被删 ⇒
+   符号不存在 ⇒ 静默忽略，§7.4 同形状的放大版）；
+2. ★ C2c 真根因**不是** typeinfo（旧推断被本批证伪）：**Octave 头按档分叉** ——
+   wasm32 树 `mxtypes.h` 的 `mwSize/mwIndex=int32_t` vs wasm64 树 `int64_t`
+   （`f77-fcn.h` 同分叉）。octinc 之前只供 wasm32 树的头 ⇒ 索引宽度错位 ⇒
+   "Invalid resizing operation"。修：provision 按**目标档**供两份头
+   （octave-headers.tar.gz / octave-headers.wasm64.tar.gz，含"两份必须真分叉"的反向断言），
+   worker/本地台按 target 选。
+3. purity 回退格修正：w64-base 无专属 .oct 目录是设计形状（现役 8761 同样没有），
+   既存误报已修（自证 10/0：回退格空目录不报 / 产品格仍零值守卫 / 回退格有 .oct 仍判架构）。
+**重链批实录（2026-10-19）**：
+- 第一轮 `relink.sh link w64`（默认 keep-w64.txt，已含 7 条）被**保活闸门**拦：
+  `★ 新缺导出: _Unwind_CallPersonality ← __bfgsmin.oct 等 5 个`。追因 = **NOTES-emsdk-upgrade
+  §7.3/§7.5 的已知 ABI 演进缺口**：现役扫描目录（octs-w64*/）的 `.oct` 是 clang 23 编的
+  （import 旧名 `_Unwind_CallPersonality`），6.0.12 主模块只有新名 `__gxx_wasm_personality_v0`
+  （libunwind wasm64 实测**零库定义**旧名；emscripten 源码 grep 亦无）。
+  SOP 修法 = 连 `.oct` 车道一起用 6.0.12 重编 ⇒ 走 `LANE_TAG=-6012` 全套（octs-6012-w64
+  17 个 + octs-6012-w64-pkg 27 个 = 6.0.12 新代，已盘点在容器）。
+- 补齐：keep-6012-w64.txt / keep-6012-w32.txt / keep-6012m-w64.txt 各 +7 条 typeinfo
+  （工单的追加当时只补到 keep-w64.txt/keep.txt 两个现役文件，**漏了 -6012 系**——
+  这正是"追加知识要覆盖全部 keep 产地"的教训）。
+- 第二轮被**前缀守卫**拦（正确）：`-6012` 树需 `octave-install-6012-w64` 前缀重建
+  （防"链得过但 help 坏"的工单 28 同族盲区）⇒ `rebuild w64 --out /src/websrc/w64-6012-out`
+  执行中（全树重配+重编）。
+- 容器脚本漂移一并修：relink.sh / link-web.sh / check-oct-imports.py 的容器拷贝是旧版
+  （LANE_TAG 的 -w64 新形状没有）⇒ docker cp 同步，relink 自证 23/0。
 **进展（2026-10-17，LLVM-wasm mail/026 归属答复后）**：判 **A**（支持基本类型 throw）——
 `_ZTIi` 是任何正确编译器对 `throw 42` 的必然产物（emcc 官方路径同样）、定义在宿主 sysroot
 的 `libc++abi-mt-legacyexcept.a`（D 段实测在）、`__cxa_*` 同族先例已导出。LLVM 信里的

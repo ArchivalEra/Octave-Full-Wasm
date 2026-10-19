@@ -584,12 +584,32 @@ if [ "${MALLOC:-}" = mimalloc ]; then MALLOC_FLAGS+=("-Wl,--export-if-defined=mi
 #   EXTRA_LDFLAGS 的 -u,dlsode_ 同款先例）+ 探针导出（--export-if-defined：未链入 ⇒ 静默忽略）。
 #   缝在 Array-base.cc（fork f4bf15b，弱符号判空回退 octave_sort）——取下补丁 = 本旋钮关。
 #   判据在产物侧：write-build-manifest.py 从导出段量 measured.rust_sort。
+# ★★ 工单 65 缺口 2（判 A，2026-10-19 重链批实测翻出的真机制）：
+#   基本类型 typeinfo（_ZTIi 等 7 条）**光靠 keep 的 --export-if-defined 不够** ——
+#   `--export-if-defined` 对"存在"的符号导出，但 **MAIN_MODULE=2 的 DCE 先把没人引用的
+#   归档成员删掉**（树代码不 import 基本类型 typeinfo ⇒ libc++abi 的成员不被拉入 ⇒
+#   符号不存在 ⇒ export-if-defined 静默忽略 —— §7.4 同款形状的放大版）。
+#   实测：keep-6012-w64.txt 已含 7 条、链接行已带 7 个 export-if-defined，产物导出面
+#   仍无 _ZTIi（47 个 _ZTI* 全是 Octave 类）。正解 = **`-u` 强引用**（rust_sort 的
+#   `-Wl,-u,octave_rust_sort_f64` 同款先例）：强制保留未定义引用 ⇒ 拉归档成员进链接。
+#   这 7 条与 KEEP_FLAGS 分开写死在这里（它们是 ABI 承诺，不是扫描产物 ——
+#   gen-keep-list 的追加段与这里必须同步改，两处都注明了对方）。
+TI_TYPEINFO_FLAGS=(
+  "-Wl,-u,_ZTIv" "-Wl,--export-if-defined=_ZTIv"
+  "-Wl,-u,_ZTIb" "-Wl,--export-if-defined=_ZTIb"
+  "-Wl,-u,_ZTIc" "-Wl,--export-if-defined=_ZTIc"
+  "-Wl,-u,_ZTIi" "-Wl,--export-if-defined=_ZTIi"
+  "-Wl,-u,_ZTIf" "-Wl,--export-if-defined=_ZTIf"
+  "-Wl,-u,_ZTIl" "-Wl,--export-if-defined=_ZTIl"
+  "-Wl,-u,_ZTId" "-Wl,--export-if-defined=_ZTId"
+)
+
 RUST_FLAGS=()
 if [ "${RUST_SORT:-0}" = 1 ]; then
   # 库按车道选：wasm64（memory64，rustc 无 wasm64-emscripten target ⇒
   # nightly build-std 编 wasm64-unknown-unknown）vs wasm32（rustc 直编）。
   case "${BUILD_MODE:-}" in
-    w64|w64-base) RUST_LIB=/src/deps/rustsort-w64/librustsort.a ;;
+    w64) RUST_LIB=/src/deps/rustsort-w64/librustsort.a ;;   # w64-base 已死档（2026-10-19）
     *)            RUST_LIB=/src/deps/rustsort/librustsort.a ;;
   esac
   RUST_FLAGS+=("-Wl,-u,octave_rust_sort_f64" "$RUST_LIB"
@@ -603,6 +623,7 @@ em++ --bind \
   ${EXTRA_LDFLAGS:-} \
   ${MALLOC_FLAGS[@]+"${MALLOC_FLAGS[@]}"} \
   ${RUST_FLAGS[@]+"${RUST_FLAGS[@]}"} \
+  ${TI_TYPEINFO_FLAGS[@]+"${TI_TYPEINFO_FLAGS[@]}"} \
   ${GL_INC_FLAGS[@]+"${GL_INC_FLAGS[@]}"} \
   -s "EXPORTED_FUNCTIONS=$EF_JSON" \
   ${JSPI_FLAGS[@]+"${JSPI_FLAGS[@]}"} \
@@ -633,7 +654,7 @@ set +x
 if [ "${MEMORY64:-0}" = "1" ]; then
   # 退出码契约（工单 56 修）：0=已打 / 3=不适用（无 dlsync 调用点：非线程 memory64）/
   # 4=形状不认识（有 dlsync 但形状变 ⇒ **必须 FATAL**）。此前 3 与 4 都返 3 而被 `||FATAL`
-  # 一律当失败 ⇒ 非线程 memory64（w64-base）建不出符号站。
+  # 一律当失败 ⇒ 非线程 memory64（w64-base 已死档；此说明留作历史背景）做不出符号站。
   set +e
   python3 "$HERE/patch-glue-proxy-dlsync-bigint.py" --apply "$OUT/octave.js"
   _drc=$?

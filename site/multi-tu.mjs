@@ -143,6 +143,13 @@ export function linkModuleArgv({ target, abi, objs, linkArgv }) {
   if (typeof linkArgv !== 'function') throw new Error('linkModuleArgv: 缺 linkArgv 注入');
   if (!objs || !objs.length) throw new Error('linkModuleArgv: 没有对象可链');
   const base = linkArgv({ target, abi, hasCrt: true, objPath: objs[0] });
+  // ★ emcc 同款链接级 -mllvm（2026-10-19 C2c 根因）：em++ -shared 会传
+  //   combiner-global-alias-analysis=false / wasm-enable-sjlj / wasm-use-legacy-eh / disable-lsr。
+  //   实测缺编译侧四个时对象就错；链接侧四个由 emcc 全传。正式修在生产者 abi.mjs。
+  base.push('-mllvm', '-combiner-global-alias-analysis=false',
+            '-mllvm', '-wasm-enable-sjlj',
+            '-mllvm', '-wasm-use-legacy-eh',
+            '-mllvm', '-disable-lsr');
   // ★ lld 是**通用驱动器**：不给 `-flavor wasm` 它会打印
   //   "lld is a generic driver. Invoke ld.lld/…/wasm-ld instead" 并退 1
   //   （实测：只设 thisProgram 不够）。生产者 glue 是同款 lld-wasm-only，

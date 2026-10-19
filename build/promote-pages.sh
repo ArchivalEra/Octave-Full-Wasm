@@ -166,7 +166,7 @@ check_lanes () {  # $1=站点目录
   if [ ! -f "$_s/lanes.js" ]; then
     echo "   ✗ $_s/lanes.js 缺失（页面引用它 ⇒ 会 404）"; return 1
   fi
-  for d in "" w64 w64-base; do   # 三线裁决：threads 已删
+  for d in "" w64; do   # threads/w64-base 双死档（2026-10-17/19）
     _p="$_s"; [ -n "$d" ] && _p="$_s/$d"
     if [ -f "$_p/octave.js" ] && [ -f "$_p/octave.wasm" ] && [ -f "$_p/octave.data" ]; then
       _name=base; [ -n "$d" ] && _name="$d"

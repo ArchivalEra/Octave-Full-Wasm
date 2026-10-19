@@ -20,12 +20,12 @@ function pick (env) {
 }
 
 const SAB = function () {};
-const four = ['base', 'w64', 'w64-base'];   // 三格（threads 已删）
-const two = ['base'];   // 无清单兜底 = [base]
+const two = ['base', 'w64'];   // 两格（threads/w64-base 双死档）
+const onlyBase = ['base'];   // 无清单兜底 = [base]
 const CASES = [
   // ① 双档站（8761/8768）：引擎有 memory64 也**不许**选 w64（那档没部署）
   ['站点只有 base + COI + m64 ⇒ base（不选没部署的 w64）',
-   { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: two }, 'base'],
+   { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: onlyBase }, 'base'],
   ['双档站 + 无 COI ⇒ base',
    { crossOriginIsolated: false, memory64: true, __octaveLanes: two }, 'base'],
   // ② **无清单**（老站点/第三方镜像）⇒ 历史形态，同样不许 w64
@@ -33,11 +33,11 @@ const CASES = [
    { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true }, 'base'],
   // ③ 四格站（8848）：能力最优照旧
   ['四格站 + COI + m64 ⇒ w64',
-   { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: four }, 'w64'],
-  ['四格站 + 无 COI + m64 ⇒ w64-base',
-   { crossOriginIsolated: false, memory64: true, __octaveLanes: four }, 'w64-base'],
+   { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: two }, 'w64'],
+  ['★ 无 COI（哪怕有 m64）⇒ base（master 线必须 COI；w64-base 死档）',
+   { crossOriginIsolated: false, memory64: true, __octaveLanes: two }, 'base'],
   ['三格站 + COI + 无 m64 ⇒ base（wasm32 永远单线程——threads 已删的反向断言）',
-   { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: false, __octaveLanes: four }, 'base'],
+   { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: false, __octaveLanes: two }, 'base'],
   // ④ 退档与红线
   ['只有 base 的站 + COI ⇒ base（退档，且 base 是底线）',
    { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: ['base'] }, 'base'],
@@ -45,7 +45,7 @@ const CASES = [
    { crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: false, __octaveLanes: ['w64', 'base'] }, 'base'],
   // ⑤ worker 宿主（B6 的红线：worker 里不许自动选线程档）
   ['worker 宿主（importScripts 在场）⇒ base',
-   { importScripts: function () {}, crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: four }, 'base'],
+   { importScripts: function () {}, crossOriginIsolated: true, SharedArrayBuffer: SAB, memory64: true, __octaveLanes: two }, 'base'],
 ];
 
 let pass = 0, fail = 0;

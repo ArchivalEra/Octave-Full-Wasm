@@ -132,8 +132,14 @@ function makeRuntime({ site, target, cwd }) {
       }
       const inst = await makeInstance({ jsPath: p.clangJs, wasmPath: p.clangWasm });
       installFiles(inst.FS, sysrootFiles);
-      // Octave 头：站点 assets/octinc/octave-headers.tar.gz（gzip）
-      const inc = join(site, 'assets', 'octinc', 'octave-headers.tar.gz');
+      // Octave 头**按目标档**（2026-10-19 C2c 根因）：wasm64 用 wasm64 树头
+      //   （mxtypes.h 的 mwSize=int64；wasm32 树是 int32 ⇒ 索引宽度错位）
+      const inc = join(site, 'assets', 'octinc',
+        target === 'wasm64' ? 'octave-headers.wasm64.tar.gz' : 'octave-headers.tar.gz');
+      if (!existsSync(inc)) {
+        throw new Error('Octave 头缺：' + inc + '（跑 provision-llvm-wasm.sh fetch；'
+          + 'wasm64 档需要 octave-headers.wasm64.tar.gz）');
+      }
       if (existsSync(inc)) {
         const gunzipped = execFileSync('gzip', ['-dc', inc], { maxBuffer: 1 << 30 });
         const files = await readTarFilesBuffer(site, new Uint8Array(gunzipped));
@@ -277,7 +283,16 @@ async function main(argv) {
     define: ['HAVE_CONFIG_H=1'],
     // 两个 include 根（与容器侧同口径）：`-I octinc` 解 <octave/oct.h>，
     // `-I octinc/octave` 解 `#include <randmtzig.h>` 这类**扁平**内部头（sample.cc 实测缺它）
-    include: ['/src/octinc', '/src/octinc/octave'], flags: ['-std=c++17'],
+    include: ['/src/octinc', '/src/octinc/octave'],
+    // ★ emcc 同款 clang 级 -mllvm（2026-10-19 C2c 根因实测：em++ -c 会给 clang 传
+    //   wasm-enable-sjlj / wasm-use-legacy-eh / disable-lsr / combiner-global-alias-analysis=false；
+    //   缺它们 ⇒ 对象的 EH 展开形状与宿主运行时不匹配 ⇒ 运行期
+    //   "Invalid resizing operation"（错路径放大）。验证于本地台；正式修在生产者 abi.mjs。
+    flags: ['-std=c++17',
+            '-mllvm', '-wasm-enable-sjlj',
+            '-mllvm', '-wasm-use-legacy-eh',
+            '-mllvm', '-disable-lsr',
+            '-mllvm', '-combiner-global-alias-analysis=false'],
     // 每个新 clang 实例都要重灌 config.h + 全部源（FS 是每实例独立的）
     prepare(inst) {
       inst.FS.mkdirTree('/src');

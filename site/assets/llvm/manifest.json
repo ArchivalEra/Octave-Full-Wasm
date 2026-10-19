@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-10-12T15:12:30+0800",
+ "generated": "2026-10-18T23:17:33+0800",
  "_why": "SPEC §2: per-asset name + bytes + sha256 + license. SPEC §8: toolchain and host-baseline version strings. The loader checks sha256 before use and fails closed (SPEC §9.10).",
  "toolchain": {
   "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.12 (5488e0871d46d19a3209988190fa6a653126256f)",
@@ -23,8 +23,8 @@
   "memory64": false,
   "main_module": 2,
   "recorded_at_packaging": {
-   "emscripten": "6.0.12 (per the migration in flight downstream)",
-   "note": "downstream was migrating 5.0.7 -> 6.0.12; the toolchain was built on 6.0.12 and its products dlopen in both (measured M0/M1)."
+   "emscripten": "6.0.12",
+   "note": "downstream shipped 6.0.12 on all lines as of 2026-10-11; the toolchain is the same version (same-version end to end via release/check-wasm64-e2e.sh). The 5.0.7 axis is retired."
   }
  },
  "assets": [
@@ -46,19 +46,19 @@
   },
   {
    "name": "sysroot-headers.tar",
-   "bytes": 20623360,
-   "sha256": "441e0ee555cb9ee9df2bccd3651d8fe79684fff25281b035274ad82dd8ef827f",
+   "bytes": 20654080,
+   "sha256": "5b9a8d2cd528f3f6c4d3752b153a4aa4495d2416ccb28655a63b9a268d0efa0e",
    "license": "mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)",
    "description": "emscripten sysroot, wasm32: include/ + lib/wasm32-emscripten/pic/crtbegin-mt.o (SPEC §5.1, §6)",
-   "brotli_bytes": 1675293
+   "brotli_bytes": 1680675
   },
   {
    "name": "sysroot-headers.wasm64.tar",
-   "bytes": 20623360,
-   "sha256": "f64833f92cb4c9787c1dfd1f3c67f3e33e36ef3c394cdb7626b13f620c83a279",
+   "bytes": 20654080,
+   "sha256": "8d82242177651dc4c1108c1aae61a704a9f01c409cfd5b24eb6ba79a1cff0c97",
    "license": "mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)",
    "description": "emscripten sysroot, wasm64: include/ + lib/wasm64-emscripten/pic/crtbegin-mt.o. include/ is arch-shared, so this differs from the wasm32 tar only in the crt.",
-   "brotli_bytes": 1675769
+   "brotli_bytes": 1680565
   },
   {
    "name": "clang.js",
@@ -75,32 +75,39 @@
    "description": "emscripten glue for the lld wasm above"
   },
   {
-   "name": "driver/toolchain.mjs",
-   "bytes": 13092,
-   "sha256": "0d3559e96e77ad3cfbbe24de6a7833686c0e81ccf81bacc97ee3e52fd94e6327",
-   "license": "AGPL-3.0-or-later (this repo)",
-   "description": "thin driver: compile() per SPEC §7.4/§7.5"
-  },
-  {
    "name": "driver/abi.mjs",
    "bytes": 7209,
    "sha256": "dd9a76ef660b901c38c8424711335e590949e0843f039a844db861749b2fec85",
    "license": "AGPL-3.0-or-later (this repo)",
-   "description": "ABI flag assembly + §5.4 gap check (shared with the browser worker)"
+   "description": "thin driver runtime (see driver/README.md)"
   },
   {
-   "name": "driver/tar-reader.mjs",
-   "bytes": 1782,
-   "sha256": "3e6a7f25fef18c3b78801a773f0603b7ccc1c713e5a90b33c63c6d8a2eb08951",
+   "name": "driver/compile-core.mjs",
+   "bytes": 5798,
+   "sha256": "c5f4b87318df8f80bf0270ab4cd94ba115fa7673b76a50dc83df14013c1db9e1",
    "license": "AGPL-3.0-or-later (this repo)",
-   "description": "tar reader (shared with the browser worker)"
+   "description": "thin driver runtime (see driver/README.md)"
   },
   {
    "name": "driver/sysroot-bundle.mjs",
    "bytes": 2621,
    "sha256": "ad7649a73d9d91c4fbfd89b2ba417c2037595f6500b5e05fbf1f760051843a78",
    "license": "AGPL-3.0-or-later (this repo)",
-   "description": "bundle loading + sha256 fail-closed (SPEC §9.10)"
+   "description": "thin driver runtime (see driver/README.md)"
+  },
+  {
+   "name": "driver/tar-reader.mjs",
+   "bytes": 1782,
+   "sha256": "3e6a7f25fef18c3b78801a773f0603b7ccc1c713e5a90b33c63c6d8a2eb08951",
+   "license": "AGPL-3.0-or-later (this repo)",
+   "description": "thin driver runtime (see driver/README.md)"
+  },
+  {
+   "name": "driver/toolchain.mjs",
+   "bytes": 9501,
+   "sha256": "7c31874d3e97d1c87ef6d8ad9d39678af6f4bd3e5c6da709896558933b7fd7d0",
+   "license": "AGPL-3.0-or-later (this repo)",
+   "description": "thin driver runtime (see driver/README.md)"
   },
   {
    "name": "LICENSE",
@@ -131,11 +138,11 @@
    "clang.js",
    "sysroot-headers.tar"
   ],
-  "brotli_bytes": 14365662,
+  "brotli_bytes": 14371044,
   "per_arch": {
-   "wasm32": 14365662,
-   "wasm64": 14366138
+   "wasm32": 14371044,
+   "wasm64": 14370934
   },
-  "plus_lld_brotli_bytes": 22860965
+  "plus_lld_brotli_bytes": 22866347
  }
 }

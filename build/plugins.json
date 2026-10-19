@@ -71,7 +71,6 @@
    "e2_openblas": true,
    "malloc": "mimalloc",
    "rust_sort": "f64-stable"
-  },
-  "w64-base": {}
+  }
  }
 }

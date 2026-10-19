@@ -601,3 +601,21 @@ glpk（未编 atomics）链不过 ⇒ `HAVE_GLPK` 静默 undef ⇒ **`__glpk__.o
 
 **⇒ 三条线的验收结论都建立在"页面真的跑了本线产物"之上**（单档站判据）。这一条是本日
 最贵的教训：四格站 + COI 头会让页面静默选 `w64/`，**在别的线的产物上跑本线的验收**。
+
+### §7.7 工单 65 重链批的两处 relink 修正（2026-10-19）
+
+判 A 落地重链（7 条 typeinfo 进 keep）时连环踩出两个机制问题，都已修：
+
+1. **`rebuild` 的 install 前缀不跟 `LANE_TAG`**：`inst=/src/work/octave-install-w64`
+   硬编码 ⇒ `-6012` 树 configure 出无 tag 前缀，而 link 侧前缀守卫要
+   `octave-install-6012-w64` ⇒ **rebuild 完了 link 仍被拦**（白跑一次全树重建）。
+   修法：`inst` 改 `octave-install${LANE_TAG:-}-w64`（与守卫同式子）。
+   教训：**LANE_TAG 五路径（keep/octs/DEPS/DEPS_ROOT/GL4ES/GLU）之外还有第六处** ——
+   rebuild 的 install 前缀。旋钮的"全部产地"清单没列全它。
+2. **容器脚本漂移**：`/src/bin/relink.sh` 的容器拷贝是旧版（`LANE_TAG` 无 `-w64`
+   新形状）⇒ `explain` 显示的路径与仓库版不一致。AGENTS 的"容器脚本是另一份拷贝"
+   提醒了这一点；本批 docker cp 同步 relink.sh / link-web.sh / check-oct-imports.py
+   三件，relink 自证 23/0。
+3. **keep 的 typeinfo 追加漏了 `-6012` 系**：工单 65 当时只补 keep-w64.txt / keep.txt
+   两个现役文件；`-6012` 那套（keep-6012-w64 / keep-6012-w32 / keep-6012m-w64）都缺
+   ⇒ 本批补齐（各 +7）。教训：**keep 的产地有六个文件**，追加知识要按"全部产地"清单来。

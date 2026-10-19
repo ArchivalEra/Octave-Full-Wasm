@@ -128,8 +128,21 @@ async function init (msg) {
   // ★ Octave 头与 sysroot 的解包结果**各只做一次**（tar 解包是 CPU 活，字节已缓存）；
   //   每个 clang 实例只是把这些文件灌进自己的 FS（见 freshClang）。
   if (msg.octincTarUrl) {
-    log('phase 2b: octave headers');
-    const incBuf = new Uint8Array(await (await fetch(msg.octincTarUrl)).arrayBuffer());
+    log('phase 2b: octave headers（' + msg.octincTarUrl.split('/').pop() + '）');
+    // ★ 头按档（loader 已选）：wasm64 用 wasm64 树的头（mxtypes.h 的 mwSize=int64）。
+    //   旧站点缺 wasm64 那份时 loader 会传 wasm32 的 URL —— fetch 404 ⇒ 这里抛
+    //   （fail-loud，不静默用错档头 —— 那正是 C2c 边界的根因形状）。
+    let res;
+    try {
+      res = await fetch(msg.octincTarUrl);
+    } catch (e) {
+      throw new Error('Octave 头取不到（' + msg.octincTarUrl + '）：' + e.message);
+    }
+    if (!res.ok) {
+      throw new Error('Octave 头取不到（' + msg.octincTarUrl + '）：HTTP ' + res.status
+        + ' —— wasm64 档需要 octave-headers.wasm64.tar.gz（跑 provision-llvm-wasm.sh fetch）');
+    }
+    const incBuf = new Uint8Array(await res.arrayBuffer());
     // driver/readTar 只吃**未压缩** tar ⇒ 先用浏览器原生 DecompressionStream 解 gzip
     //   （现代浏览器都有；没有就明确失败，不静默）。
     let raw = incBuf;

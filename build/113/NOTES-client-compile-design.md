@@ -318,3 +318,35 @@ node -e "const b=require('fs').readFileSync('/tmp/compile-local/partint.oct');\
 new WebAssembly.Module(b);console.log(WebAssembly.Module.exports(new WebAssembly.Module(b)).map(e=>e.name).filter(n=>/^G/.test(n)).join(','))"
 # ⇒ Gpartcnt,Gpartint（与站点 assets/octdir/miscellaneous/partint.oct 相同）
 ```
+
+---
+
+## §13 C2c 根因翻案 + 工单 65 结案（2026-10-19，重链批）
+
+**§11 那条"已知边界"的最终归宿：推断被证伪，真根因找到并修复。**
+
+### 翻案链（每步都有实测）
+
+1. 工单 65 重链落地（typeinfo `-u` 保活）后 `probe-toolchain-gap` **rc=0** —— 但
+   C2c 的 "Invalid resizing operation" **仍在** ⇒ 旧记录"typeinfo 同族"是间接推断，错。
+2. AB 分离：容器 11.3 版 cell2cell（8467B，随站可用）vs 本地台同源版（13405B，失败）
+   —— 导出面 13 条**逐条一致** ⇒ 差异在字节内部。
+3. 容器内复现：同 clang + worker 命令 + octinc 头 ⇒ 13404B（坏）；同命令 + **安装树头** ⇒ 好。
+4. 头树 diff：wasm32 树（octinc 的来源）与 wasm64 树的 `mxtypes.h` 分叉 ——
+   `mwSize/mwIndex/mwSignedIndex` 前者 `int32_t`、后者 `int64_t`（`f77-fcn.h` 的
+   `F77_CHAR_ARG_LEN_TYPE` 同分叉）。**wasm32 树还根本没有 `octave/config.h`**
+   （25 宏合成那个历史决定的来源）。
+5. 修：provision 按目标档供两份头 + "两份必须真分叉"反向断言；worker/本地台按 target 选。
+
+### 判据翻面
+
+C2c/C8e：`check(true, "如实记…")` → **硬绿断言**（`R1=1x1/R2=1x2`、`PARTINT_OK=1`）。
+曾错过的两个探针坑也记下：eval_async **吞 Octave 侧 error**（判据必须看输出值，不看
+resolve）；`partint(n)` 只返回**单个**矩阵（`[m,~,~,p]` 接三值 ⇒ "element number 2 undefined"）。
+
+### typeinfo 的真机制（工单 65 的另一半）
+
+keep 的 `--export-if-defined` 单独**不够**：MAIN_MODULE=2 的 DCE 先删没人引用的归档成员
+（树代码不 import 基本类型 typeinfo）⇒ 符号不存在 ⇒ export-if-defined 静默忽略。
+真保活 = `TI_TYPEINFO_FLAGS`（`-Wl,-u,_ZTIi` 强引用 + export-if-defined **成对** ×7，
+rust_sort 的 `-u` 同款先例）。产物导出面实测 7 条全进（757 导出）。

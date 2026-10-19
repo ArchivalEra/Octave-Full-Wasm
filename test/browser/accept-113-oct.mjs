@@ -96,9 +96,9 @@ const wrote = await page.evaluate(async () => {
     //   否则载入失败（`failed to load Incompatible version or missing dependencies` —— 实测
     var lane = (window.__octaveCaps && window.__octaveCaps.lane
                 && window.__octaveCaps.lane.chosen) || 'base';
+    // w64-base/threads 双死档：w64 系档都取 w64/ 夹具，其余取根（base）
     var fx = (lane === 'w64' || lane === 'w64-threads') ? 'w64/minioct.oct'
-           : (lane === 'w64-base') ? 'w64-base/minioct.oct'
-           : (lane === 'threads') ? 'threads/minioct.oct' : 'minioct.oct';
+           : 'minioct.oct';
     const buf = await fetch(fx).then(r => r.arrayBuffer());
     const FS = window.Module.FS;
     const dir = '/usr/src/octave/m/oct';

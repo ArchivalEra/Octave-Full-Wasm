@@ -35,8 +35,8 @@
 
 | 线 | 产物 | 定位 |
 |---|---|---|
-| **wasm32** | wasm32 单线程（无 `-pthread`） | **一石二鸟**：避开 wasm64 的问题 + **无 COI 要求**（`SharedArrayBuffer` 门槛不存在）⇒ 任何浏览器、任何静态托管都能跑 |
-| **master** | wasm64 **多线程** | wasm64 = 主线基础上实现多线程的线。**从来不存在"无多线程的 wasm64 版本"**——`w64-base` 只是站点四格里"有 memory64 但宿主没发 COI 头"的**回退格**，不是产品线 |
+| **wasm32** | wasm32 单线程（无 `-pthread`） | **一石二鸟**：避开 wasm64 的问题 + **无 COI 要求**（`SharedArrayBuffer` 门槛不存在）⇒ 任何浏览器、任何静态托管都能跑。**无 COI 环境下的唯一线** |
+| **master** | wasm64 **多线程**（必须 COI） | wasm64 = 主线基础上实现多线程的线。**必须 COI + 多线程，无 COI 浏览器上一律落 wasm32(base)**——`w64-base`（wasm64 单线程回退格）已于 2026-10-19 用户点令**死档化**：wasm64 不存在单线程产品形态 |
 | **IllegalPerformance** | wasm64 多线程 + **Rust 补丁** | **non-free 线**："脱离开源社区"（Rust 打补丁）——用户原话。**主线性能榨干之前不开 IP 线** |
 
 **分档的唯二依据**（用户点令原文，2026-10-17）：
@@ -45,7 +45,7 @@
 
 **时间判据**（用户给过的事实）：Safari 一年前就支持 wasm64 ⇒ **COI 与更新的浏览器内核才是踏入 master 线的条件**。
 **架构纯度判据可执行**：`python3 build/113/check-lane-purity.py --lane <档> --host <wasm> --oct <目录…>`
-（三条：①宿主 ②车道 `.oct` ③站点**本档专属**目录 `oct-<lane>/octdir-<lane>`；
+（三条：①宿主 ②车道 `.oct` ③站点**本档专属**目录 `oct-<lane>/octdir-<lane>`；**DEAD_LANES={threads,w64-base}**；
 错档逐条点名、rc=1。**别把基础档目录 `assets/oct`/`assets/octdir` 喂进去** ——
 多档站里它们合法装着另一档的 `.oct`，查了必假红，实测 8761 上 44 处假报）。
 已接进 `promote-w64-lane.sh` 第 5 步自检。
@@ -57,7 +57,7 @@ wasm64 mode`，`__ode15__` 整批挂掉）；错档模块进宿主（加载器�
 `reading 'value'` 混在一起时无法区分）；以及 `NOTES-emsdk-upgrade` §7.5/§7.6 那两个假阳。
 **★ 2026-10-17 第二次点令（执行完毕，见 HISTORY §5.108）：threads 档已整档删除。**
 用户原话：「wasm32 不允许拥有多线程档」「不允许出其他畸形儿」⇒ 站点四格矩阵退役，
-站点只剩三格（base / w64 / w64-base，其中 w64-base 是回退格）；**试验场与分支牢绑定**：
+站点只剩**两格**（base / w64；w64-base 已死档 2026-10-19——无 COI 落 base）；**试验场与分支牢绑定**：
 只存在 `wasm32-final` / `master` / `IllegalPerformance` 三个实验场，**新实验 = 新分支，
 不许往站点加格**（机器判据 = `check-lane-purity.py` 的 DEAD_LANES：车道名 threads ⇒ 必红；
 站点出现 `threads/` 或 `manifest.threads.json` ⇒ promote/parity 双闸门必红）。
@@ -140,14 +140,15 @@ wasm64 mode`，`__ode15__` 整批挂掉）；错档模块进宿主（加载器�
 → **同步仓库 `site/`**（入库的可部署镜像，部署说明 DEPLOY.md）：
   `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/` 后一并提交
 → **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
-  ★ **三格（三线裁决后）**：站点 = 根目录三大件（base/wasm32 线）+ `w64/` + `w64-base/`；
-  `threads/` **必须不存在**（probe-lane 死档断言：`?lane=threads` ⇒ 覆盖失效落 base、页面照常 ready）。
-  `SITE_DIR=<站点目录> sh build/…` 跑 `probe-lane` 验"带头选 w64 / 不带头落 w64-base 或 base / 选错档硬失败"。
-  ★ **w64 车道批（工单 30 起）**：`w64/` 与 `w64-base/`（同名文件、子目录区分）+
-  `assets/{oct-w64,octdir-w64}` + `assets/manifest.w64.json`，档清单由 `gen-lanes.sh` 重生成。
-  期望：带头 ⇒ `w64`（shared）、不带头 ⇒ `w64-base`、**无 memory64 ⇒ `base`（反向断言；threads 已删）**、
-  无 COI 强选 `w64` ⇒ 硬失败。w64 批**只走** `build/promote-w64-lane.sh`（它现在拒收
-  **任何 threads 痕迹**的站点）。`probe-lane` 的 PASS 数随站点档数变（三格站 33）。
+  ★ **两格（2026-10-19 二次裁决后）**：站点 = 根目录三大件（base/wasm32 线）+ `w64/`；
+  `threads/` 与 `w64-base/` **都必须不存在**（probe-lane 双死档断言：`?lane=threads|w64-base`
+  ⇒ 覆盖失效落 base、页面照常 ready）。
+  `SITE_DIR=<站点目录> sh build/…` 跑 `probe-lane` 验"带头选 w64 / **不带头（哪怕有 memory64）⇒ base** / 选错档硬失败"。
+  ★ **w64 车道批（工单 30 起）**：`w64/` + `assets/{oct-w64,octdir-w64}` +
+  `assets/manifest.w64.json`，档清单由 `gen-lanes.sh` 重生成。
+  期望：带头 ⇒ `w64`（shared）、不带头 ⇒ `base`（master 线必须 COI；w64-base 死档）、
+  **无 memory64 ⇒ `base`**、无 COI 强选 `w64` ⇒ 硬失败。w64 批**只走**
+  `build/promote-w64-lane.sh`（它现在拒收**任何 threads/w64-base 痕迹**的站点）。
 → `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
 → **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
 → 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**

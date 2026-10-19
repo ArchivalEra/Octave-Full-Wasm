@@ -490,7 +490,13 @@
             clangWasmUrl: B + 'clang.wasm', clangGlueUrl: B + 'clang.js',
             lldWasmUrl: B + 'lld-wasm-only.wasm', lldGlueUrl: B + 'lld-wasm-only.js',
             sysrootTarUrl: B + sysroot, sysrootSha256: byName[sysroot].sha256,
-            octincTarUrl: 'assets/octinc/octave-headers.tar.gz',
+            // ★ Octave 头**按目标档**选（2026-10-19 C2c 真根因）：wasm32 与 wasm64 树的
+            //   octave/mxtypes.h 分叉（mwSize/mwIndex int32 vs int64）—— 用错档头编出的
+            //   .oct 在宿主上索引宽度错位 ⇒ "Invalid resizing operation"。
+            //   缺 wasm64 那份（旧站点）⇒ 回退 wasm32 版并让 worker 打警告（不静默）。
+            octincTarUrl: (target === 'wasm64')
+              ? 'assets/octinc/octave-headers.wasm64.tar.gz'
+              : 'assets/octinc/octave-headers.tar.gz',
             configMacros: _configMacros });
         });
       });

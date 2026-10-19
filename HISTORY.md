@@ -5984,3 +5984,36 @@ UI 的现场：全英文界面点安装 ⇒ 冒出裸中文 `Module.FS 尚未就
   check-oct-lane.py（w64 .oct 也要 TLS 入口）、make-lane-manifest.py --lane w64、
   atomics_scan.py、WITH_THREADS/AX_PTHREAD 补丁、身份证 measured.threads 实测轴
   （w64 是多线程线，这轴名是事实不是档名）。
+
+## §5.109 w64-base 死档化（2026-10-19，用户点令二次三线裁决补刀）
+
+**用户原话**：「master线不允许在无COI的浏览器上跑！！！我们很明确了！！！wasm32是无COI环境下的唯一线，
+master是必须开启多线程的！IP线是脱离官方树的master延伸！！！他妈的过了一周还他妈给它复活了」
+
+**裁决内容**（三线模型的最终形状）：
+- **master 线（wasm64）必须 COI + 多线程** —— 浏览器没有跨源隔离时**一律落 wasm32（base）**；
+- **wasm64 不存在单线程产品形态** —— `w64-base`（"无 COI 回退格"）与 threads 同待遇：**死档**；
+- IP 线 = 脱离官方树的 master 延伸（原判不变）。
+
+**为什么"复活"判定成立**：2026-10-17 首次三线裁决删了 threads，但 `w64-base` 被当时
+的裁决文字表述为"站点四格里的回退格"（HISTORY §5.108 原文），我据此在 2026-10-19 的
+工单 65 重链批把它也重链+发运了 —— 与用户意图（master 必须多线程，无 COI 一律 wasm32）
+不符。本批连根拔除。
+
+**拆除面**（与 threads 首次拆除同形状，七处产地）：
+1. `build/lanes.json`（单源声明）：`w64-base` 移入 `dead_lanes`；precedence 收两格；
+2. `bridge/lane.js`：FILES/order/覆盖正则全删 w64-base；**无 COI（哪怕有 m64）⇒ base**；
+3. `build/gen-lanes.sh`：不再写 w64-base 进站点清单（残留目录不进）；
+4. `build/113/check-lane-purity.py`：DEAD_LANES + LANE_EXPECT 删；死档点名报（自证 10/0）；
+5. `build/113/relink.sh`：模式列表删；死档名调用 ⇒ FATAL 点名（不是"未知模式"）；
+   影子分支/帮助行/mode_declared 全删；三条自证用例翻面成死档断言；
+6. `build/promote-w64-lane.sh`：只发运 w64；`w64-base/` 出现即红（自证 7→8/0 加死档用例）；
+7. 三站（8761/8768/仓库镜像）删 `w64-base/` 目录；lanes.js 两格重生。
+另：台账 `w64_base_*` 5 键 allow-drop 掉档；measure_octave 测量段删除；
+probe-lane 矩阵两格化（Cell 2 翻面：无 COI + m64 ⇒ base；新增格 4b：`?lane=w64-base`
+死档 URL 断言）；test/browser 六个套件的 w64-base 分支清理；
+check-site-parity / promote-pages / hotpath 的档清单更新。
+
+**验收**：probe-lane 33/0（两格站）；单源对账 OK（2 站内档 / 2 死档 / 4 消费方）；
+promote-w64-lane --verify 两站 ✅ 两格齐备（base/w64）且无双死档痕迹；
+三处 parity 完全一致。

@@ -74,12 +74,13 @@ out_default() {
     scalar)  echo /src/websrc/scalar ;;
     m1)      echo /src/websrc/m1 ;;
     w64)     echo /src/websrc/w64-out ;;              # wasm64 车道（PLAN-wasm64）
-    w64-base) echo /src/websrc/w64-base-out ;;         # wasm64 基础档（单线程）
+    # w64-base 已死档（2026-10-19 用户点令）：master 线必须 COI+多线程；
+    # 无 COI 唯一线 = wasm32(base)。出目录的行删除；用该模式名调用会被下面 validate 拦。
     *)       echo "" ;;
   esac
 }
 
-modes_list() { echo "product scalar m1 w64 w64-base"; }   # 三线裁决 2026-10-17：threads（wasm32+atomics）档已删——wasm32 不允许多线程
+modes_list() { echo "product scalar m1 w64"; }   # 三线裁决：threads（2026-10-17）/ w64-base（2026-10-19，master 线必须 COI+多线程）双死档
 
 # 基线：结构优先 —— 下一级模式自己的产物在就用它，否则退回表里记录的现存路径。
 pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
@@ -91,7 +92,14 @@ pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
 # ── 模式表：**唯一**的真值来源。全部变量都在这里推出来，调用方一个都不许传 ──────────
 mode_table() {      # 输出 KEY=VALUE 行（供 export）
   local m="$1"
-  case "$m" in product|scalar|m1|w64|w64-base) ;; *)
+  # ★ 死档点名（与 check-lane-purity 的 DEAD_LANES 同口径）：
+  #   threads（2026-10-17）/ w64-base（2026-10-19）—— 用它们调用要**点名**拒绝，
+  #   不是笼统的"未知模式"。
+  case "$m" in
+    threads|w64-base)
+      echo "FATAL: 模式 '$m' 是死档（threads：wasm32 不允许多线程；w64-base：master 线必须 COI+多线程，无 COI 唯一线 = wasm32/base）" >&2; exit 2 ;;
+  esac
+  case "$m" in product|scalar|m1|w64) ;; *)
     echo "FATAL: 未知模式 '$m'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 
   # 三模式共有：都是"完整产品形态"的能力面（区别只在 DCE / SIMD 两条轴，
@@ -296,15 +304,6 @@ EOF
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
       ;;
-    w64-base)
-      # ★ wasm64 基础档：单线程 + wasm64=true
-      cat <<'EOF'
-{"main_module": 2, "simd": true, "jspi_entry": true, "jspi_glue_suspending": 0,
- "gl4es": true, "idbfs": true, "fontconfig": true, "threads": false, "wasm64": true,
- "fonts": ["FreeSans.otf", "FreeSansBold.otf", "FreeSansOblique.otf", "FreeSansBoldOblique.otf",
-           "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
-EOF
-      ;;
     m1)
       cat <<'EOF'
 {"main_module": 1, "simd": false, "jspi_entry": true, "jspi_glue_suspending": 0,
@@ -404,7 +403,6 @@ cmd_list() {
   echo "scalar   $(out_default scalar)    同上但**无 SIMD**（product 的 A/B 对照，也是 product 的保活基线）"
   echo "m1       $(out_default m1)        M1（无 DCE），导出面最全（保活闸门差分基线；scalar 的基线）"
   echo "w64      $(out_default w64)      wasm64 线程档：w64 + -pthread（MEMORY64=1）"
-  echo "w64-base $(out_default w64-base) wasm64 基础档：单线程 + MEMORY64=1"
 }
 
 # ★ D1 的**反向断言**（静态、不需要容器）：link-web.sh 读的每个环境变量都必须由模式表推出。
@@ -432,7 +430,7 @@ cmd_selfcheck() {
       echo "✗ 模式表声明了 \$$v，但 link-web.sh 根本不读它（表在骗人）" >&2; bad=1; }
   done < <(mode_table product | cut -d= -f1)
   # 各模式的变量集合必须完全一致（否则"换模式"会悄悄多/少一个变量）
-  for check_m in scalar m1 w64 w64-base; do
+  for check_m in scalar m1 w64; do   # w64-base 已死档（2026-10-19），不再对它跑一致性
     if [ "$(mode_table product | cut -d= -f1 | sort | tr '\n' ' ')" \
        != "$(mode_table "$check_m" | cut -d= -f1 | sort | tr '\n' ' ')" ]; then
       echo "✗ 模式 product 与 $check_m 推出的变量集合不一致" >&2; bad=1
@@ -493,16 +491,8 @@ cmd_link() {
       echo "FATAL: w64 模式需要**车道影子**（$shim_w64 不存在）" >&2
       exit 2
     fi
-  elif [ "$m" = w64-base ]; then
-    local shim_w64_single="${LANE_SHIM_W64_SINGLE:-/src/libwork/lane-shim-w64-single}"
-    if [ -d "$shim_w64_single" ]; then
-      export PATH="$shim_w64_single:$PATH"
-      echo "  车道影子：$shim_w64_single（注入 -sMEMORY64=1 —— w64-base 前置）"
-    else
-      echo "FATAL: w64-base 模式需要**车道影子**（$shim_w64_single 不存在）" >&2
-      exit 2
-    fi
   fi
+  # （w64-base 影子分支已删 —— 模式本身死档 2026-10-19；mode_table 的死档拒绝先于一切）
 
   [ -f "$LINK_WEB" ] || {
     echo "FATAL: 找不到 "$LINK_WEB"" >&2; exit 2; }
@@ -615,8 +605,12 @@ cmd_rebuild() {
   #   这类错 `verdict=ok` **查不出来**（它只核对声明 vs 量测），必须靠运行期套件 + 下面的烘死路径自证。
   local inst
   case "$m" in
-    w64|w64-base) inst=/src/work/octave-install-w64 ;;
-    *)            inst=/src/work/octave-install ;;
+    # ★ inst 也跟 LANE_TAG（2026-10-19 实测踩到）：rebuild 的 install 前缀没带 tag
+    #   ⇒ 树 configure 出 --prefix=/src/work/octave-install-w64（无 -6012），
+    #   而前缀守卫（link 侧）要 octave-install${LANE_TAG}-w64 ⇒ rebuild 完了 link 仍被拦。
+    #   两处必须同一个式子 —— 这正是"追加知识要覆盖全部产地"的又一例。
+    w64|w64-base) inst=/src/work/octave-install${LANE_TAG:-}-w64 ;;
+    *)            inst=/src/work/octave-install${LANE_TAG:-} ;;
   esac
   echo "   车道 install 前缀：$inst（configure 的 \$2；不传就会烘死 product 路径 —— 工单 28）"
   [ -d "$inst" ] || { echo "FATAL: 车道安装树不存在：$inst（先建它，别拿 product 树凑）" >&2; exit 2; }
@@ -812,13 +806,13 @@ cmd_selftest() {
   else
     echo "fail | w64 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
   fi
-  # ⑧ ★ w64-base 模式的隐形前置必须在入口里被点名（LANE_SHIM_W64_SINGLE）
+  # ⑧ ★ w64-base 已死档（2026-10-19）：断言翻面 —— 用它 ⇒ 必须被死档 FATAL 拒
   n=$((n + 1))
   msg="$(LANE_SHIM_W64_SINGLE=/nonexistent-w64-single-shim bash "$0" link w64-base --out /tmp/_zr_shim_probe 2>&1 || true)"
-  if printf '%s' "$msg" | grep -q '车道影子'; then
-    echo "PASS | ★ w64-base 缺车道影子 ⇒ 入口**点名** FATAL"
+  if printf '%s' "$msg" | grep -q '死档'; then
+    echo "PASS | ★ w64-base（死档）link ⇒ 必被点名拒绝（不再有影子检查）"
   else
-    echo "fail | w64-base 缺车道影子时入口没点名（msg=${msg:0:100}）"; bad=1
+    echo "fail | w64-base 竟没被死档拒绝（msg=${msg:0:100}）"; bad=1
   fi
   # ⑫ ★ 工单 34：`rebuild` 必须把**车道的 F2C_PREFIX** 打出来（emf77 靠它取 f2c.h；
   #    不跟车道走 ⇒ wasm64 下 Fortran 隐藏长度宽度分叉 ⇒ 模块过不了 wasm-opt 校验）。
@@ -837,13 +831,13 @@ cmd_selftest() {
   else
     echo "fail | rebuild w64 的线程开关不是 1（msg=$(printf '%s' "$msg" | tr '\n' ' ' | cut -c1-120)）"; bad=1
   fi
-  # 反向：w64-base 是**单线程**档，必须是 0（别一律开）
+  # ★ 死档断言（2026-10-19 w64-base 废除）：rebuild/link 用它 ⇒ 必须被 FATAL 点名拒
   n=$((n + 1))
   msg="$(bash "$0" rebuild w64-base --out /tmp/_zr_rb_th2 2>&1 || true)"
-  if printf '%s' "$msg" | grep -q 'WITH_THREADS=0'; then
-    echo "PASS | ★ rebuild w64-base 的 ① 行是 WITH_THREADS=0（单线程回退档）"
+  if printf '%s' "$msg" | grep -q '死档'; then
+    echo "PASS | ★ rebuild w64-base ⇒ 死档必拒（master 线无单线程形态）"
   else
-    echo "fail | rebuild w64-base 的线程开关不是 0"; bad=1
+    echo "fail | rebuild w64-base 竟没被死档拒绝"; bad=1
   fi
   # ⑩ ★ 工单 32：`rebuild` 必须把**车道依赖**（DEPS/D/TARGET_HOST）从模式表里取出来用。
   #   判据：不真跑构建（`--yes-rebuild` 缺席即拒），但**拒绝之前**必须已经打印这三个值 ——
@@ -878,11 +872,13 @@ cmd_selftest() {
   rp="$(bash "$0" exports product 2>/dev/null | grep -c '^RUST_SORT=0$' || true)"
   r1="$(RUST_SORT=1 bash "$0" exports product 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
   rw="$(bash "$0" exports w64 2>/dev/null | grep -c '^RUST_SORT=1$' || true)"
-  rb="$(bash "$0" exports w64-base 2>/dev/null | grep -c '^RUST_SORT=$' || true)"
+  # ★ w64-base 已死档（2026-10-19）：断言改为"用该模式名 ⇒ 必须被 FATAL 拒"，
+  #   与 threads 同待遇（不再断言它的 RUST_SORT 值 —— 那个模式不存在了）。
+  rb="$(bash "$0" exports w64-base 2>&1 >/dev/null | grep -c '死档' || true)"
   if [ "${rp:-0}" -eq 1 ] && [ "${r1:-0}" -eq 1 ] && [ "${rw:-0}" -eq 1 ] && [ "${rb:-0}" -eq 1 ]; then
-    echo "PASS | ★ 工单 63：RUST_SORT w64 默认 1（发运）；product 默认 0；w64-base 硬空"
+    echo "PASS | ★ 工单 63：RUST_SORT w64 默认 1（发运）；product 默认 0；w64-base 死档必拒"
   else
-    echo "fail | rust-sort 旋钮没进模式表（product=$rp env=$r1 w64=$rw w64-base=$rb）"; bad=1
+    echo "fail | rust-sort 旋钮没进模式表（product=$rp env=$r1 w64=$rw w64-base-死档拒=$rb）"; bad=1
   fi
   n=$((n + 1))
   rd1="$(RUST_SORT=1 bash "$0" explain product 2>/dev/null | grep -c '"rust_sort": "f64-stable"' || true)"

@@ -117,9 +117,17 @@ PY
 #   ⚠️ 头必须与**宿主产物同 pin**（ABI 漂移风险 §7.4）—— 判据：容器树 == submodule pin
 #   （witness-upstream-pin.py 每提交核），这里只从**工作树的 upstream/octave** 拷贝。
 provision_octinc () {
-  # ★ 头必须取**容器安装树**（/src/work/octave-install/include/octave-11.3.0/），不是源码树：
+  # ★ 头必须取**容器安装树**（…/octave-install*/include/octave-11.3.0/），不是源码树：
   #   源码树的 .h 多是 .in.h 模板（configure 才生成真值），直接喂编译必失败。
   #   判据（ABI 漂移防线）：容器树 == submodule pin（witness-upstream-pin.py 每提交核）。
+  # ★★ 头必须**按目标档**取（2026-10-19 工单 65 重链批实测翻出的 C2c 真根因）：
+  #   wasm32 树与 wasm64 树的 `octave/mxtypes.h` 不同——`mwSize/mwIndex/mwSignedIndex`
+  #   在前者是 **int32_t**、后者 **int64_t**（f77-fcn.h 的 F77_CHAR_ARG_LEN_TYPE 也分叉）。
+  #   用 wasm32 头编的 .oct 在 wasm64 宿主上索引宽度错位 ⇒ 运行期
+  #   "Invalid resizing operation"（= dim_vector 越界赋值的错路径放大）。
+  #   第一版只从 /src/work/octave-install（product/wasm32 树）打包一份 ⇒ w64 档全错。
+  #   ⇒ 两份都供：octave-headers.tar.gz（wasm32）+ octave-headers.wasm64.tar.gz（wasm64，
+  #   取 -w64 安装树；优先现役 -6012-w64，缺则退回 -w64）。worker 按 target 选。
   DST="$SITE/assets/octinc"
   rm -rf "$DST"; mkdir -p "$DST"
   sudo -n docker exec o113 tar -czf /tmp/octinc.tar.gz -C /src/work/octave-install/include/octave-11.3.0 . \
@@ -128,7 +136,25 @@ provision_octinc () {
   sudo -n docker exec o113 rm -f /tmp/octinc.tar.gz
   N=$(tar -tzf "$DST/octave-headers.tar.gz" | grep -c "\.h$\|\.hh$\|\.tcc$")
   [ "$N" -ge 700 ] || die "头数量 $N < 700（取错了树？安装树全域应 800+）"
-  say "  Octave 头落 $DST/octave-headers.tar.gz（$N 个 .h/.hh/.tcc，容器安装树）"
+  say "  Octave 头落 $DST/octave-headers.tar.gz（$N 个 .h/.hh/.tcc，wasm32 安装树）"
+  # wasm64 档头
+  W64_TREE=""
+  for t in /src/work/octave-install-6012-w64 /src/work/octave-install-w64; do
+    sudo -n docker exec o113 test -d "$t/include/octave-11.3.0" && W64_TREE="$t" && break
+  done
+  [ -n "$W64_TREE" ] || die "找不到 wasm64 安装树（试过 -6012-w64 / -w64）—— 先重链一次 w64 车道"
+  sudo -n docker exec o113 tar -czf /tmp/octinc64.tar.gz -C "$W64_TREE/include/octave-11.3.0" .
+  sudo -n docker cp o113:/tmp/octinc64.tar.gz "$DST/octave-headers.wasm64.tar.gz"
+  sudo -n docker exec o113 rm -f /tmp/octinc64.tar.gz
+  # 反向断言：两份必须**真的不同**（mxtypes.h 的 mwSize 是判别点）—— 相同 = 打包错树
+  sudo -n docker exec o113 tar -xzOf "$W64_TREE/include/octave-11.3.0.tar.gz" 2>/dev/null >/dev/null || true
+  if sudo -n docker exec o113 grep -q "typedef int64_t mwSize;" "$W64_TREE/include/octave-11.3.0/octave/mxtypes.h" \
+     && ! sudo -n docker exec o113 grep -q "typedef int64_t mwSize;" /src/work/octave-install/include/octave-11.3.0/octave/mxtypes.h; then
+    say "  ✓ wasm64 头树核验：mxtypes.h 的 mwSize=int64_t（与 wasm32 树确实分叉）"
+  else
+    die "wasm64 头树核验失败：mxtypes.h 的 mwSize 形状与预期不符（取错树？）"
+  fi
+  say "  Octave 头落 $DST/octave-headers.wasm64.tar.gz（wasm64 安装树：$W64_TREE）"
   # config.h.json（25 宏 = build-pkg-oct.sh emit_config_h 的合成产物，从容器取 —— 数据跟
   # catalog 走、不硬编码在 JS；NOTES-client-compile-design §10 判据 2）。
   SITE_DST="$SITE"

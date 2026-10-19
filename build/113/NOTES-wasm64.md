@@ -216,8 +216,7 @@ import("playwright-core").then(async pw => {
   档清单 `lanes.js` 由 `gen-lanes.sh` 按磁盘生成。
 - **只加两档，别的逐字节没动**：`base` / `threads` 的 sha 与批前相同
   （台账 `wasm_sha` / `threads_wasm_sha`）；新增的 `w64` / `w64-base` sha 已在台账上键
-  （`w64_wasm_sha` / `w64_base_wasm_sha` / `w64_base_verdict` / `w64_base_wasm64` /
-  `w64_base_shared_memory`）。
+  （`w64_wasm_sha`；`w64_base_*` 4 键已随 w64-base 死档删除 —— 2026-10-19）。
 - **为什么不能用 `promote-webgl.sh` 做这批**（实测）：它会从容器 `THREADS_OUT`
   （`/src/websrc/m2fc-threads-out`）重推线程档，而那份已经漂到 `c2899a71…`
   （现役部署件是 `e570905e…`）⇒ 一次裸跑就会把"base/threads 不许变"这条判据踩掉。

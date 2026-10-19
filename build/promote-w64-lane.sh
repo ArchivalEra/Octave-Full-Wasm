@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Octave-Full-Wasm — **wasm64 车道（w64 / w64-base）的受管辖发运入口**（工单 30，2026-10-01）
+# Octave-Full-Wasm — **wasm64 车道（w64）的受管辖发运入口**（工单 30；w64-base 死档 2026-10-19）
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
@@ -20,7 +20,7 @@
 #   A. 进件前：目标站点的 **base 档 sha 必须等于台账**（`wasm_sha`）且**不许存在任何
 #      threads 痕迹**（三线裁决：threads 档已删 —— 残留即 FATAL）。w64 批次只许**新增** w64 两格。
 #   B. 容器里两份产物：`octave.build.json` 的 `verdict == "ok"`、`measured.wasm64 == true`
-#      （w64 还要 `measured.threads.shared_memory == true`；w64-base 必须是 false）。
+#      （w64 还要 `measured.threads.shared_memory == true`——master 线必须多线程）。
 #   C. 落件后逐档核：**身份证自查**（`check-build-manifest.py --out-dir`：清单里的 sha 与磁盘
 #      上的字节逐条对上）+ `w64/octave.wasm` sha == 台账 `w64_wasm_sha`（容器那份不许是别的）。
 #   D. base 档 sha **逐字节未变** + threads 痕迹仍为零（再查一次 —— 防"拷错方向"/"塞回死档"）。
@@ -36,7 +36,7 @@
 #   sh build/promote-w64-lane.sh /mnt/hdd/octave-wasm-build/site       # 8761（8768 验绿之后）
 #
 # 环境变量（自证/本地模式用；正常发运不用设）：
-#   CTR=-          本地模式：`W64_OUT` / `W64_BASE_OUT` / `LANE_OCT*` 当**宿主**路径读（不碰 docker）
+#   CTR=-          本地模式：`W64_OUT` / `LANE_OCT*` 当**宿主**路径读（不碰 docker）
 #   SITE=/path     目标站点（与位置参数等价）
 set -uo pipefail
 
@@ -44,7 +44,7 @@ REPO=${REPO:-/mnt/hdd/zcode-projects/Octave-Full-Wasm}
 BASE=${OCTAVE_WASM_BASE:-/mnt/hdd/octave-wasm-build}
 CTR=${CTR:-o113}
 W64_OUT=${W64_OUT:-/src/websrc/w64-out}
-W64_BASE_OUT=${W64_BASE_OUT:-/src/websrc/w64-base-out}
+# W64_BASE_OUT 已删（w64-base 死档 2026-10-19）—— master 线必须 COI+多线程
 LANE_OCT=${LANE_OCT:-/src/libwork/octs-w64}
 LANE_OCT_PKG=${LANE_OCT_PKG:-/src/libwork/octs-w64-pkg}
 LANE_OCT_HOST=${LANE_OCT_HOST:-$BASE/octs-w64}
@@ -55,7 +55,7 @@ LANE_FIXTURES="minioct.oct dldprobe.oct"
 LEDGER_BASE_KEY=wasm_sha
 LEDGER_THREADS_KEY=  # threads 档已删（2026-10-17）：不再取台账键，改为死档断言
 LEDGER_W64_KEY=w64_wasm_sha
-LEDGER_W64B_KEY=w64_base_wasm_sha
+# LEDGER_W64B_KEY 已删（w64-base 死档 2026-10-19）
 
 MODE="do"; SITE_ARG=""
 case "${1:-}" in
@@ -136,8 +136,9 @@ lane_guard () {  # lane_guard <站点> <期望base> <_unused> <模式：before|a
   [ -n "$gb" ] || { printf 'FATAL: %s/octave.wasm 读不到（站点目录写错了？）\n' "$site" >&2; return 1; }
   [ "$gb" = "$wb" ] || { printf 'FATAL: base 档 sha=%s ≠ 台账 %s\n' "$(short "$gb")" "$(short "$wb")" >&2; rc=1; }
   local dead
-  for dead in "$site/threads" "$site/assets/oct-threads" "$site/assets/octdir-threads" "$site/assets/manifest.threads.json"; do
-    [ -e "$dead" ] && { printf 'FATAL: 站点存在死档残留 %s（threads 档已删 —— wasm32 不允许多线程）\n' "$dead" >&2; rc=1; }
+  # 双死档（threads：2026-10-17；w64-base：2026-10-19 master 线必须 COI+多线程）
+  for dead in "$site/threads" "$site/w64-base" "$site/assets/oct-threads" "$site/assets/octdir-threads" "$site/assets/manifest.threads.json" "$site/assets/oct-w64-base" "$site/assets/octdir-w64-base"; do
+    [ -e "$dead" ] && { printf 'FATAL: 站点存在死档残留 %s（threads：wasm32 不允许多线程；w64-base：无 COI 唯一线 = base）\n' "$dead" >&2; rc=1; }
   done
   if [ "$phase" = after ]; then
     [ "$gb" = "$bb" ] || { printf 'FATAL: 本批不许动 base 档，但 sha 从 %s 变成了 %s\n' "$(short "$bb")" "$(short "$gb")" >&2; rc=1; }
@@ -191,9 +192,9 @@ p = os.path.join(site, "lanes.js")
 s = open(p, encoding="utf-8").read() if os.path.exists(p) else ""
 m = re.search(r"__octaveLanes\s*=\s*(\[[^\]]*\])", s)
 inv = json.loads(m.group(1)) if m else []
-want = ["base", "w64", "w64-base"]   # 三线裁决：threads 已删；出现 threads 也红
+want = ["base", "w64"]   # 两格（2026-10-19 二次裁决：w64-base 亦死档）
 miss = [x for x in want if x not in inv]
-dead = [x for x in inv if x == "threads"]
+dead = [x for x in inv if x in ("threads", "w64-base")]
 if miss or dead:
     print("FATAL: lanes.js 期望 %s（实际 %s；死档残留=%s）⇒ 选档器会挑到没部署的档并 404\n"
           % (want, inv, dead), file=sys.stderr)
@@ -203,15 +204,15 @@ PY
 }
 
 verify_site () {  # <站点>  —— 只核不写
-  local site="$1" rc=0 wb w64b
+  local site="$1" rc=0 wb
   wb="$(ledger $LEDGER_BASE_KEY)"
-  w64b="$(ledger $LEDGER_W64B_KEY)"
   [ -n "$wb" ] || die "台账读不到 $LEDGER_BASE_KEY（$REPO/build/FACTS.json）"
   [ -d "$site" ] || die "站点目录不存在：$site"
   lane_guard "$site" "$wb" "" before || rc=1
   lane_check "$site" w64 "$(ledger $LEDGER_W64_KEY)" || rc=1
-  lane_check "$site" w64-base "$w64b" || rc=1
-  for lane in w64 w64-base; do
+  # ★ w64-base 死档（2026-10-19）：目录/清单出现即红（与 threads 同待遇）
+  [ ! -e "$site/w64-base" ] || { echo "FATAL: 死档残留 $site/w64-base（master 线必须 COI+多线程；无 COI 唯一线 = base）" >&2; rc=1; }
+  for lane in w64; do
     for f in $LANE_FIXTURES; do
       [ -s "$site/$lane/$f" ] || { echo "FATAL: 缺夹具 $site/$lane/$f（验收套件按档取它）" >&2; rc=1; }
     done
@@ -252,6 +253,11 @@ selftest () {
   if lane_guard "$tmp/dead" "$bs" "" before >/dev/null 2>&1; then
     echo "fail | ★ threads 死档残留却没报"; bad=$((bad+1))
   else echo "PASS | ★ threads 死档残留 ⇒ 必须红（wasm32 不允许多线程）"; fi
+  # ③b w64-base 死档残留（2026-10-19 二次裁决）⇒ 必须红（master 线必须 COI+多线程）
+  n=$((n+1)); mkfix "$tmp/deadb"; mkdir -p "$tmp/deadb/w64-base"; printf 'WB' > "$tmp/deadb/w64-base/octave.wasm"
+  if lane_guard "$tmp/deadb" "$bs" "" before >/dev/null 2>&1; then
+    echo "fail | ★ w64-base 死档残留却没报"; bad=$((bad+1))
+  else echo "PASS | ★ w64-base 死档残留 ⇒ 必须红（master 线无单线程形态）"; fi
   # ④ 空输入必须报：站点目录不存在 ⇒ lane_guard 必须红
   n=$((n+1))
   if lane_guard "$tmp/nonexistent" "$bs" "" before >/dev/null 2>&1; then
@@ -285,7 +291,7 @@ if [ "$MODE" = selftest ]; then selftest; exit $?; fi
 # ── --verify：只核不写 ────────────────────────────────────────────────────────
 if [ "$MODE" = verify ]; then
   say "verify $SITE"
-  if verify_site "$SITE"; then echo "✅ 三格齐备（base/w64/w64-base）且无 threads 痕迹"; exit 0; fi
+  if verify_site "$SITE"; then echo "✅ 两格齐备（base/w64）且无 threads/w64-base 痕迹"; exit 0; fi
   exit 3
 fi
 
@@ -293,7 +299,7 @@ fi
 say "目标站点 $SITE（模式 $MODE；容器 $CTR）"
 [ -d "$SITE" ] || die "站点目录不存在：$SITE"
 WB="$(ledger $LEDGER_BASE_KEY)"
-W64W="$(ledger $LEDGER_W64_KEY)"; W64BW="$(ledger $LEDGER_W64B_KEY)"
+W64W="$(ledger $LEDGER_W64_KEY)"   # w64-base 已死档：不再取台账键
 [ -n "$WB" ] || die "台账读不到 $LEDGER_BASE_KEY"
 BEFORE_B="$(sha256sum "$SITE/octave.wasm" | cut -d' ' -f1)"
 
@@ -302,7 +308,7 @@ echo "   base    现值 $(short "$BEFORE_B") / 台账 $(short "$WB")"
 lane_guard "$SITE" "$WB" "" before || die "站点现状与台账不符（或有 threads 死档残留）⇒ 别在本批动它（先把站点修回台账态）"
 
 say "1) 容器产物与身份证核对（verdict / wasm64 / shared）"
-for pair in "w64:$W64_OUT:true" "w64-base:$W64_BASE_OUT:false"; do
+for pair in "w64:$W64_OUT:true"; do   # w64-base 已死档（2026-10-19）——不再发运
   lane="${pair%%:*}"; rest="${pair#*:}"; out="${rest%%:*}"; want_shared="${rest##*:}"
   ctr_has "$out/octave.wasm" || die "容器里没有 $out/octave.wasm"
   tx="$(mktemp)"; ctr_peek "$out/octave.build.json" "$tx" >/dev/null 2>&1 || true
@@ -316,8 +322,8 @@ for pair in "w64:$W64_OUT:true" "w64-base:$W64_BASE_OUT:false"; do
   echo "   容器 sha=$(ctr_sha "$out/octave.wasm" | cut -c1-16)"
 done
 
-say "2) 落两档四件 → $SITE/{w64,w64-base}/"
-for pair in "w64:$W64_OUT" "w64-base:$W64_BASE_OUT"; do
+say "2) 落 w64 档四件 → $SITE/w64/（w64-base 已死档，同时清理残留）"
+for pair in "w64:$W64_OUT"; do
   lane="${pair%%:*}"; out="${pair#*:}"
   run "mkdir -p '$SITE/$lane'"
   for f in $LANE_FILES; do ctr_cp "$out/$f" "$SITE/$lane/$f"; done
@@ -350,8 +356,8 @@ say "5) 自检"
 rc=0
 lane_guard "$SITE" "$WB" "" after "$BEFORE_B" || rc=1
 lane_check "$SITE" w64 "$W64W" || rc=1
-lane_check "$SITE" w64-base "$W64BW" || rc=1
-for lane in w64 w64-base; do
+[ ! -e "$SITE/w64-base" ] || { echo "FATAL: 死档残留 $SITE/w64-base" >&2; rc=1; }
+for lane in w64; do
   for f in $LANE_FIXTURES; do
     [ -s "$SITE/$lane/$f" ] || { echo "FATAL: 缺夹具 $SITE/$lane/$f" >&2; rc=1; }
   done
@@ -366,7 +372,7 @@ lanes_js_check "$SITE" || rc=1
 #   为什么放在这：混编的失败模式是"宿主与 .oct 都建成功、自检全绿、运行期才炸"
 #   （NOTES-emsdk-upgrade §7.5/§7.6 两个 6.x 假阳都是这个形状），而发运是最后一道闸。
 #   反向断言见 check-lane-purity.py --selftest（喂错档的 .oct 必须红）。
-for lane in w64 w64-base; do
+for lane in w64; do   # w64-base 死档（2026-10-19）—— 残留由上面的 lane_guard 死档扫描拦
   python3 "$REPO/build/113/check-lane-purity.py" --lane "$lane" \
     --host "$SITE/$lane/octave.wasm" \
     --oct "$SITE/assets/oct-$lane" "$SITE/assets/octdir-$lane" || {

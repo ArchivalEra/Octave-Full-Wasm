@@ -82,7 +82,7 @@
       },
       lane: { chosen: lane.lane, dir: lane.dir || '', js: lane.js,
               threads: (lane.lane === 'w64' || lane.lane === 'w64-threads'),   // 实测轴：w64 产物是多线程（threads 档已删）
-              wasm64: (lane.lane === 'w64' || lane.lane === 'w64-threads' || lane.lane === 'w64-base') },
+              wasm64: (lane.lane === 'w64' || lane.lane === 'w64-threads') },   // w64-base 死档 2026-10-19
       sharedMemory: null,      // 实例化后填（见 instantiateWasm 的 .then）
       artifact: null,     // 由 octave.build.json 填充（读不到就是 null，绝不因此报错）
     };
@@ -371,7 +371,7 @@
               || (typeof window !== 'undefined' && window.octaveLaneState && window.octaveLaneState.lane)
               || (typeof self !== 'undefined' && self.octaveLaneState && self.octaveLaneState.lane)
               || '';
-            var isW64 = (lane === 'w64' || lane === 'w64-base' || lane === 'w64-threads');
+            var isW64 = (lane === 'w64' || lane === 'w64-threads');   // w64-base 死档 2026-10-19
             var arg = (isW64 && typeof p !== 'bigint') ? BigInt(p) : p;
             return __evalWaitPromised(arg).finally(function () { Module._free(p); });
           };

@@ -112,12 +112,14 @@ check(c2.exist === '3', 'C2b exist(cell2cell)=3（.oct 被 Octave 识别 —— 
 //   `_ZTI6Matrix/_ZTS6Matrix/_ZTI7NDArray/_ZTS7NDArray` 宿主侧 0 导出 —— 工单 65 缺口 2 的扩大版）。
 //   ⚠️ 判据怎么写：**不写成 PASS 也不写成裸 fail** —— 写成"状态观察 + 与宿主预编产物的对照"，
 //   让这条边界在每次回归里可见（本仓纪律：不确定 ≠ 通过；已知边界要可复跑地记着）。
-const c2cSame = (c2.r1 === '1x1' && c2.r2 === '1x2');
-check(true,
-  'C2c ★ 语义对照（随站预编 7.2 产物=1x1；现编 11.3 产物=' + (c2cSame ? '1x1（本批已一致）' : '报错') + '）'
-    + ' —— 已知边界，见 build/113/NOTES-client-compile-design.md §11',
-  `现编：${c2.r1 || 'n/a'} / ${c2.r2 || 'n/a'} ｜ 对照基准 REF=1x1（同一站点、随站 .oct）`
-    + (c2cSame ? '' : ' ｜ ' + (c2.a2raw || '')));
+// ★ 2026-10-19 翻面（工单 65 重链批）：真根因 = **Octave 头按档**——
+//   octinc 之前只供 wasm32 树的头（mxtypes.h 的 mwSize/mwIndex=int32），wasm64 宿主上
+//   索引宽度错位 ⇒ "Invalid resizing"。曾把它记为"typeinfo 同族"是间接推断（错了——
+//   typeinfo 修掉后它仍在）。现 wasm64 头已供 ⇒ 判据翻成硬绿：R1=1x1 / R2=1x2。
+check(c2.r1 === '1x1' && c2.r2 === '1x2',
+  'C2c ★★ 现编产物语义正确：cell2cell({1,2},1)=1x1 且 (,2)=1x2（与预编产物同值）',
+  `现编：${c2.r1 || 'n/a'} / ${c2.r2 || 'n/a'} ｜ 历史边界与根因见 NOTES-client-compile-design.md §11/§13`
+    + (c2.r1 === '1x1' ? '' : ' ｜ ' + (c2.a2raw || '')));
 // ★ C2d 记录跨边界 typeinfo 缺口（工单 65 缺口 2 的同族、范围更大）
 const gapList = (c2.symbolGap && c2.symbolGap.sideSelfExported) || [];
 const tiGap = gapList.filter((x) => /^_ZT[IS]/.test(x));
@@ -228,10 +230,12 @@ const c8 = await page.evaluate(async (pkg) => {
     //   所以判据 = 同一模块里的**另一个** DEFUN `partint`（它能直接被文件名找到）。
     // ⚠️ 别在双引号 JS 串里塞 `'`（转置符）——实测把字符串截断、Octave 收到半句。
     //   用 `m'*[1:4]'` 改成 `m * (1:4)'` 并把表达式拆成两步，避开两种引号打架。
+    // partint(n) 返回**单个**矩阵（源码 texinfo 的官方判据：partint(n)*[1:n]' == n）。
+    // 第一版按 [m,~,~,p] 接三个返回值 ⇒ "element number 2 undefined"（实测）。
     const b = await ev([
-      "[m, ~, ~, p] = partint (4);",
+      "m = partint (4);",
       "w = m * (1:4).';",
-      "printf ('PARTINT_OK=%d OBJ=%dx%d\\n', double(all (w == 4)), rows (p), columns (p));",
+      "printf ('PARTINT_OK=%d OBJ=%dx%d\\n', double(all (w == 4)), rows (m), columns (m));",
     ].join(' '));
     const g = (o, k) => { const m = String(o.out || '').match(new RegExp(k + '=([^\\s]+)')); return m ? m[1] : null; };
     return { state: r.state, octs, n: octs.length, bytes: r.bytes,
@@ -263,9 +267,8 @@ if (c8.state === 'compiled') {
   check(c8.ePartint === '3',
     'C8d ★★ 第二个模块被编出且被 Octave 识别（v1 的边界：它压根不存在）',
     `partint.oct exist=${c8.ePartint} ｜ octs=${JSON.stringify(c8.octs)}`);
-  check(true,
-    'C8e ★ 调用语义：partint(4) 不变式 ' + (c8.partintOk === '1' ? '成立' : '报错')
-      + ' —— 与 C2c 同一已知边界（typeinfo 导出面，工单 65 重链批）',
+  check(c8.partintOk === '1',
+    'C8e ★★ partint(4) 不变式成立：partint(n)*[1:n]\' == n（随 C2c 同根因同翻面）',
     `PARTINT_OK=${c8.partintOk} ｜ 尾段 ${String(c8.braw || '').slice(0, 160)}`);
 } else {
   check(false, 'C8a ★ 多 TU：miscellaneous 编译 state=compiled',
