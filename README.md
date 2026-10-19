@@ -163,6 +163,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Release model defined (2026-10-18)**: a package is released as an **artifact** = `(name, version, arch)` — not as a pile of files, and **not as a second version number**: the version is the upstream fact (`optim 1.6.3`) while the architecture is a build-matrix index key, so there is no `optim-1.6.3-wasm32` pseudo-version. The shipped catalog now carries `artifacts[]` (per-architecture, per-file sha256, derived `arch`, plus `octave`/`toolchain`/`recipe` provenance) — currently **5 packages × 2 architectures = 10 release units**. Gate R13 reconciles every artifact file against the site bytes (missing, extra, or sha drift ⇒ red). See `build/113/NOTES-release-model.md`.
 
+**LLVM-wasm pin v0.1.3 (2026-10-19)**: the toolchain pin moved from `v0.1.1` to `v0.1.3`, which ships `driver/compile-core.mjs` in its manifest (14 assets) plus `release/check-published.mjs` — a four-way reconciler whose `--freshness` layer compares the bundle's driver set byte-for-byte against the repo HEAD (the layer that catches a bundle that is *consistently* stale; the producer confirmed v0.1.2 was internally self-consistent at 13/13/13, which is why internal-consistency checks missed it). Our side re-verified independently: bundle sha256 matches the declared value, and the fallback copy that pulled `compile-core.mjs` from the producer's working tree is **retired** per the exit condition we wrote into `mail/013` — the provisioner now asserts positively that the bundle's manifest lists it (reverse test done: removing the entry makes it fail loud). `accept-compile-extension` re-ran at 16/0 on the new pin.
+
 **Multi-TU compile + interaction upgrade (2026-10-18)**: v1 compiled only the main translation unit, so `miscellaneous`'s `partint` module never existed. v2 builds the container's full module table: the hand-written table in `build-pkg-oct.sh` is now **data** (`build/pkg-module-table.json`, reconciled by `check-pkg-module-table.py`, 12/0; live repo 6 packages / 27 modules) and the client reads the site copy, with DEFUN scanning only as a fallback — because "every source with a DEFUN should be built" is false (measured: `sample.cc` does not compile against 11.3.0 headers, and the container table deliberately omits it). Artifact names come from the **source basename**, not the first DEFUN (proof: the deployed `partint.oct` exports both `Gpartcnt` and `Gpartint`). The orchestration was extracted into a **deep module** `bridge/multi-tu.mjs` with two adapters: the browser worker and a **local bench** `test/local/compile-local.mjs` — the latter cut a verify cycle from **~8 minutes to 8–14 seconds** and returns full stderr instead of one `Aborted()`. `accept-compile-extension` is **16/0** (was 11/0). Two more Einfacht #20③ commitments landed: a `critical` suite list whose skipped-in-scope entries now force `sweep.sh` to exit non-zero, and `build/lanes.json` as the single declaration of lane knowledge (reconciler 15/0, which caught a real gap: `LANE_EXPECT` was missing `IllegalPerformance`).
 
 **Mail workflow (2026-10-18)**: the inbox now has an unread area (`mail/`) and a read archive (`mail/read/`), with `zreflect/mail-read.py` as the read entry point (read = print + auto `git mv` into the archive). The tool is explicitly **not a gate** — mail content is never trusted machine input. The boundary gate tolerates an empty unread area by falling back to the archive, while still failing when both are empty.
@@ -301,8 +303,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (491966 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (55542 bytes)
-- `README.zh.md` (51738 bytes)
+- `README.de.md` (56531 bytes)
+- `README.zh.md` (52534 bytes)
 - `STATE.md` (107582 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (74294 bytes)
