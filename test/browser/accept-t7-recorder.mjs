@@ -115,9 +115,12 @@ async function waitRecDone (label) {
   console.log(`${r.ok ? 'PASS' : 'fail'} | ${label} :: ${JSON.stringify(r.status).slice(0, 240)}`);
 }
 
-console.log('--- 懒加载前：recorder 符号不存在（这就是改动前的报错来源）---');
-await ev('未加载 → __recorder_record__ 不存在', 'disp(exist("__recorder_record__"))', '0');
-await evErr('未加载 → 构造即报 undefined', 'r0=audiorecorder(8000,8,1)', "'__recorder_audiorecorder__' undefined");
+console.log('--- 懒加载前：oct 层在场、报错换形状（2026-10-19 mail/045 翻面） ---');
+// audiodevinfo.oct 开机装载 ⇒ __recorder_* 由 aliases 挂出（exist=3）；
+// 构造 audiorecorder 现在落到 oct 层 ⇒ err_disabled_feature（PortAudio 不可用）
+// —— 不再是 'undefined'。真正的浏览器录音走 webaudiorec m-bundle（懒加载）。
+await ev('oct 层在场（aliases 挂出）', 'disp(exist("__recorder_record__"))', '3');
+await evErr('未加载 → 构造走 oct 层的 disabled_feature（响亮失败）', 'r0=audiorecorder(8000,8,1)', "PortAudio was unavailable");
 
 console.log('--- 懒加载 webaudiorec（+ webaudio 提供 audiodevinfo）---');
 await page.evaluate(async () => {

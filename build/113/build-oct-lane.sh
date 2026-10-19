@@ -30,7 +30,12 @@ SUNDIALS_PREFIX="${SUNDIALS_PREFIX:-/src/deps-w64/sundials}"
 SITE_MANIFEST="${SITE_MANIFEST:-/mnt/hdd/octave-wasm-build/site/assets/manifest.json}"
 FORGE="${FORGE:-/src/forge}"
 
-TREE_MODS="__delaunayn__ __glpk__ __voronoi__ audioread convhulln fftw gzip __init_fltk__ __init_gnuplot__"
+# ★ audiodevinfo（2026-10-19 内容仓 mail/045 钓鱼执法抓的缺件）：__player_audioplayer__ /
+#   __recorder_audiorecorder__ / audiodevinfo 全在这个模块里。原生 Octave 的 sound →
+#   audioplayer.m → __player_audioplayer__ 链；本构建无 PortAudio ⇒ DEFUN 走
+#   err_disabled_feature，但 **DEFUN 面必须在**（.m 层才能落到桥上——webaudio 桥同
+#   audioread 模式接管）。第一版清单漏了它 ⇒ exist=0、sound 全链断。
+TREE_MODS="__delaunayn__ __glpk__ __voronoi__ audioread audiodevinfo convhulln fftw gzip __init_fltk__ __init_gnuplot__"
 CC_SRCS="webio:/src/websrc/webio.cc __init_web__:/src/websrc/web_graphics_toolkit.cc \
          __web_pause_ms__:/src/websrc/webpause.cc __fltk_uigetfile__:/src/websrc/webfilepick.cc \
          webimage-oct:/src/websrc/webimage.cc webnet-oct:/src/websrc/webnet.cc"

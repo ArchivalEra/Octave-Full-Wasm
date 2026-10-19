@@ -24,6 +24,11 @@
 !.githooks/check-mail-boundary.py
 !mail/
 !mail/*.md
+# ★ mail/read/（已读归档区，2026-10-19 内容仓 mail/044 B1 补洞）：
+#   白名单只放 !mail/*.md 时已读区被全局 * 盖住 ⇒ 归档信盘上在、git 看不见
+#   （实测 27 封在盘 / 21 被跟踪，6 封不可见积压——check-whitelist 的盲区形状）。
+!mail/read/
+!mail/read/*.md
 !README.zh.md
 !README.de.md
 !docs/charts/*

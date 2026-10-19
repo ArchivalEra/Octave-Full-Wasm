@@ -307,6 +307,21 @@ def sync_js(site, names):
             print(f"  ~ {name}: {str(e.get('sha256'))[:12]}… → {digest[:12]}…")
             e["sha256"] = digest
             updated += 1
+            # ★ meta 键（aliases/note/deps…）也要在**已存在**的条目上生效（2026-10-19
+            #   mail/045：给 __web_pause_ms__/audiodevinfo 补 aliases 时发现更新分支
+            #   只改 sha ⇒ meta 改了等于没改——"两个产地"分叉的又一形状）。
+            #   摘要/名字/kind/mount 仍以磁盘真值为准（meta 不许盖）。
+            for k, v in meta.get(name, {}).items():
+                if k not in ("name", "url", "sha256", "kind", "mount", "addpath"):
+                    e[k] = v
+        else:
+            # ★ sha 没变 ⇒ 以前**完全跳过**（第三态）⇒ meta 里的 aliases/note 修正在
+            #   已有条目上永不生效。sync-js 的语义是"定点同步"——meta 也是要同步的事实。
+            for k, v in meta.get(name, {}).items():
+                if k not in ("name", "url", "sha256", "kind", "mount", "addpath") and e.get(k) != v:
+                    e[k] = v
+                    print(f"  ~ {name}: meta.{k} 更新")
+                    updated += 1
 
     for sub in ("m", "pkg"):
         d = os.path.join(assets_dir, sub)

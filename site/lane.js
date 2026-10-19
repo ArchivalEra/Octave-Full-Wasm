@@ -50,7 +50,7 @@
     }
   }
 
-  // 显式覆盖（测试/调试用）：URL 上写 `?lane=w64`、`?lane=w64-base` 或 `?lane=base`。
+  // 显式覆盖（测试/调试用）：URL 上写 `?lane=w64` 或 `?lane=base`（w64-base 已死档，写它会被忽略落自动选档）。
   // ⚠️ 覆盖**不改判据** —— 它只改"选哪一档"，物理前提仍是硬的：
   //    在没隔离的页面上强行选 w64 ⇒ 胶水建 shared 内存当场抛。
   //    这正是我们要能证伪的那一条（`probe-lane` 的反证档：**必须响亮地失败**）。
@@ -97,7 +97,7 @@
       var fallback = null;
       for (var i = 0; i < order.length; i++) {
         if (avail.indexOf(order[i]) >= 0) {
-          // 只退到**能力可行**的那几档：wasm64 线程档要求 COI+SAB+m64，w64-base 要求 m64
+          // 只退到**能力可行**的那几档：wasm64 线程档要求 COI+SAB+m64
           var cand = order[i];
           var okCap = (cand === 'base') || (cand === 'w64' && coi && sab && m64);
           if (okCap) { fallback = cand; break; }

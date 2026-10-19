@@ -85,9 +85,14 @@ async function ev(expr, label, want) {
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 140))}`);
 }
 
-console.log('--- 懒加载前：符号不在 ---');
-await ev('disp(exist("__player_audioplayer__"))', '未加载 → 构造器不存在', '0');
-await ev('disp(exist("__player_play__"))', '未加载 → play 不存在', '0');
+console.log('--- 懒加载前：oct 层在、m 桥不在（2026-10-19 mail/045 翻面） ---');
+// ★ audiodevinfo.oct 进开机 CORE_DLDFCN 后，__player_audioplayer__ 由 oct 的 aliases
+//   符号链接挂出（exist=3，调它走 err_disabled_feature——无 PortAudio 的响亮失败）。
+//   而 webaudio m-bundle 的 .m 桥（真正接 AudioContext 的实现）仍懒加载：
+//   __player_play__ 有 .oct 层同名函数 ⇒ exist=3，但 which 在 load 前指向 oct。
+//   旧断言"不存在=0"是 bundle-only 时代的事实——行为变了，断言翻面（别改检查器）。
+await ev('disp(exist("__player_audioplayer__"))', 'oct 层在场（aliases 挂出）', '3');
+await ev('disp(exist("__player_play__"))', 'play 符号可见（oct 层）', '3');
 
 console.log('--- 懒加载 webaudio ---');
 console.log('  已加载:', await page.evaluate(async () => {
@@ -149,6 +154,12 @@ await ev('set(p,"Tag","x2"); disp(get(p,"Tag"))', 'set()/get() 函数形式', 'x
 await ev('disp(numel(fieldnames(set(p))))', 'set(p) 列出 3 个可写属性', '3');
 await ev('disp(class(p))', '写属性后仍是 audioplayer', 'audioplayer');
 
+// ★ mail/045 回归钉（2026-10-19）：sound 全链曾断（__player_audioplayer__ 缺件，
+//   which 类断言假绿）。三条判据锁住修好的形状：oct 层可见 / sound 真阻塞 / 全链无 undefined。
+// 存在性判据 = "符号解析得到"（exist ≥ 2：oct 层=3 / .m 桥=2，任一即链路通——
+// 本套件此处已懒加载 webaudio ⇒ .m 桥优先 = 2；纯开机体（未 load）= 3。别钉死单值）。
+await ev('disp(exist("__player_audioplayer__") >= 2)', '★ mail/045：__player_audioplayer__ 可见（oct aliases 或 m 桥）', '1');
+await ev('disp(exist("__web_suspend_ok__"))', '★ mail/045：__web_suspend_ok__ 可见（同模块别名）', '3');
 console.log('--- sound() 与 playblocking ---');
 await ev('t0=tic; sound(sin(2*pi*440*(0:1599)/8000), 8000); el=toc(t0); disp(el>0.15)', '★ sound() 阻塞了约 0.2s', '1');
 await ev('disp(which("sound"))', 'sound 仍是核心 .m', 'audio/sound.m');

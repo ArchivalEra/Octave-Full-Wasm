@@ -94,8 +94,10 @@ async function evErr (label, expr, want) {
   console.log(`${ok ? 'PASS' : 'fail'} | ${label} :: ${out || ('rc=' + r.rc + ' ' + r.err.slice(0, 150))}`);
 }
 
-console.log('--- ① audiodevinfo：懒加载前不存在 ---');
-await ev('未加载 → audiodevinfo 不存在', 'disp(exist("audiodevinfo"))', '0');
+console.log('--- ① audiodevinfo：oct 层开机在场（2026-10-19 mail/045 翻面） ---');
+// audiodevinfo.oct 进 CORE_DLDFCN（含 38 个 aliases）⇒ exist=3；真正接浏览器的
+// audiodevinfo.m shim 仍懒加载（load 后 .m 优先）。旧断言"0"是缺件时代的事实。
+await ev('oct 层在场（mail/045 补件后）', 'disp(exist("audiodevinfo"))', '3');
 
 console.log('--- 懒加载 webaudio（含 T6 的 audiodevinfo）---');
 await page.evaluate(async () => { await window.OctaveAssets.load('webaudio'); });

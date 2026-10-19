@@ -38,6 +38,10 @@
   //   只是这些函数不存在（会清晰报错）。
   var CORE_DLDFCN = ['convhulln', '__delaunayn__', '__voronoi__',
                      '__glpk__', 'fftw', 'gzip', 'audioread',
+                     // ★ audiodevinfo（2026-10-19 内容仓 mail/045）：__player_audioplayer__ /
+                     //   __recorder_audiorecorder__ 全在这模块里——缺它 ⇒ sound 全链断
+                     //   （.m 面在场让 which 类断言假绿，第一层真调用就穿帮）。
+                     'audiodevinfo',
                      '__web_pause_ms__'];
   // HELP 组（`help`/`lookfor`/`doc` 的数据依赖与图形句柄 toolkit）—— 逐条理由见
   //   index.html 原注释（built-in-docstrings 必须有、webgraphics 让 `figure` 能建出来…）。
@@ -82,7 +86,7 @@
       },
       lane: { chosen: lane.lane, dir: lane.dir || '', js: lane.js,
               threads: (lane.lane === 'w64' || lane.lane === 'w64-threads'),   // 实测轴：w64 产物是多线程（threads 档已删）
-              wasm64: (lane.lane === 'w64' || lane.lane === 'w64-threads' || lane.lane === 'w64-base') },
+              wasm64: (lane.lane === 'w64' || lane.lane === 'w64-threads') },   // w64-base 死档 2026-10-19
       sharedMemory: null,      // 实例化后填（见 instantiateWasm 的 .then）
       artifact: null,     // 由 octave.build.json 填充（读不到就是 null，绝不因此报错）
     };
@@ -371,7 +375,7 @@
               || (typeof window !== 'undefined' && window.octaveLaneState && window.octaveLaneState.lane)
               || (typeof self !== 'undefined' && self.octaveLaneState && self.octaveLaneState.lane)
               || '';
-            var isW64 = (lane === 'w64' || lane === 'w64-base' || lane === 'w64-threads');
+            var isW64 = (lane === 'w64' || lane === 'w64-threads');   // w64-base 死档 2026-10-19
             var arg = (isW64 && typeof p !== 'bigint') ? BigInt(p) : p;
             return __evalWaitPromised(arg).finally(function () { Module._free(p); });
           };

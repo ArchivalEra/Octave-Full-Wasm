@@ -38,6 +38,10 @@
   //   只是这些函数不存在（会清晰报错）。
   var CORE_DLDFCN = ['convhulln', '__delaunayn__', '__voronoi__',
                      '__glpk__', 'fftw', 'gzip', 'audioread',
+                     // ★ audiodevinfo（2026-10-19 内容仓 mail/045）：__player_audioplayer__ /
+                     //   __recorder_audiorecorder__ 全在这模块里——缺它 ⇒ sound 全链断
+                     //   （.m 面在场让 which 类断言假绿，第一层真调用就穿帮）。
+                     'audiodevinfo',
                      '__web_pause_ms__'];
   // HELP 组（`help`/`lookfor`/`doc` 的数据依赖与图形句柄 toolkit）—— 逐条理由见
   //   index.html 原注释（built-in-docstrings 必须有、webgraphics 让 `figure` 能建出来…）。

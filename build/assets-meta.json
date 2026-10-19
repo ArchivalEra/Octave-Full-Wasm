@@ -217,11 +217,56 @@
    "__web_ginput_pending__",
    "__web_ginput_pop__",
    "__web_run_js__"
-  ]
+  ],
+  "note": "D9/G3 原语模块（挂起/取点/run_js）。一个模块导出 6 个函数 —— Octave 按文件名找 .oct，兄弟函数靠 aliases 符号链接（webio 先例）。2026-10-19 mail/045：sound 链曾因 __web_suspend_ok__ 悬空而断（模块在、名字找不到）。"
  },
  "forge": {
   "note": "Forge **按需安装**助手（issue 64 / 设计稿 NOTES-forge-ondemand §3）：__forge_install__ 把已下载的包 tarball 用引擎内建 gunzip+untar 解包，并按 `pkg install` 的真实布局落盘（inst/ 上提 + 元数据落包根 + 拒异架构 .oct）。由 assets-loader 的 install() 经 eval_string 调用。",
   "deps": [],
   "addpath": "/usr/src/octave/m/forge"
+ },
+ "audiodevinfo": {
+  "note": "dldfcn 官方装载（mail/045 缺件补编）：__player_*/__recorder_* 全在此模块；本构建无 PortAudio ⇒ C++ 走 err_disabled_feature，真正播放由 webaudio m-bundle 的同名纯 .m 桥接管（懒加载 OctaveAssets.load('webaudio')）。",
+  "deps": [],
+  "aliases": [
+   "__player_audioplayer__",
+   "__player_get_channels__",
+   "__player_get_fs__",
+   "__player_get_id__",
+   "__player_get_nbits__",
+   "__player_get_sample_number__",
+   "__player_get_tag__",
+   "__player_get_total_samples__",
+   "__player_get_userdata__",
+   "__player_isplaying__",
+   "__player_pause__",
+   "__player_playblocking__",
+   "__player_play__",
+   "__player_resume__",
+   "__player_set_fs__",
+   "__player_set_tag__",
+   "__player_set_userdata__",
+   "__player_stop__",
+   "__recorder_audiorecorder__",
+   "__recorder_getaudiodata__",
+   "__recorder_get_channels__",
+   "__recorder_get_fs__",
+   "__recorder_get_id__",
+   "__recorder_get_nbits__",
+   "__recorder_get_sample_number__",
+   "__recorder_get_tag__",
+   "__recorder_get_total_samples__",
+   "__recorder_get_userdata__",
+   "__recorder_isrecording__",
+   "__recorder_pause__",
+   "__recorder_recordblocking__",
+   "__recorder_record__",
+   "__recorder_resume__",
+   "__recorder_set_fs__",
+   "__recorder_set_tag__",
+   "__recorder_set_userdata__",
+   "__recorder_stop__",
+   "audiodevinfo"
+  ]
  }
 }
