@@ -10,7 +10,11 @@
 终链重链与否是产品决定）。
 **为什么 needs-info**（2026-10-16）：缺口 1 已修并复验；缺口 2（`_ZTIi`）仍开，
 且**归属待邻仓确认**（宿主 keep-list 加 ／ 工具链把 typeinfo 打进 side module）—— 见文末 §实测复核。
-**Settling:** `sh test/browser/run.sh test/browser/probe-toolchain-gap.mjs <URL> <模块目录>` —— rc=0 ⇒ 两条缺口都已修（两模块 dlopen + `probe_f(22)==22`）；rc=1 ⇒ 缺口 1（TLS）仍在；rc=2 ⇒ 缺口 2（typeinfo `_ZTIi`）仍在；rc=3 ⇒ 环境问题（页面没起来 / 夹具缺失）。**结算件已存在**（2026-10-16 造）；**当前判决 = rc=2**（见下 §实测复核）。
+**Settling:** `sh test/browser/run.sh test/browser/probe-toolchain-gap.mjs <URL> <模块目录>` —— rc=0 ⇒ 两条缺口都已修（两模块 dlopen + `probe_f(22)==22`）；rc=1 ⇒ 缺口 1（TLS）仍在；rc=2 ⇒ 缺口 2（typeinfo `_ZTIi`）仍在；rc=3 ⇒ 环境问题（页面没起来 / 夹具缺失）。**结算件已存在**（2026-10-16 造）；
+**当前判决 = rc=2**（见下 §实测复核）。
+⚠️ **夹具编在 `/tmp`，机器重启就丢**（2026-10-19 实测：断电后 sweep 里本探针报 rc=3
+NO-SUMMARY，看着像回归、其实是环境 —— rc 契约设计正确，它明说了是环境不是缺口）。
+重造用 §复跑 里那条 `node -e` 命令（生产者 `Toolchain` + **per-arch sysroot**）。
 
 ## 背景
 

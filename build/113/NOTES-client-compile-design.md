@@ -295,3 +295,19 @@ C8a 编出容器表全部模块 / C8b 产物名 = 源 basename / C8c 同源第�
 C8d 第二模块被识别（v1 的边界：它压根不存在）/ C8e 调用语义**如实记**为与 C2c 同一
 已知边界（typeinfo 导出面，工单 65 重链批 —— 不假装通过）。
 本地台自证 6/0（分组 / 命名 / 对象名唯一 / basename 冲突必报 / 无 DEFUN 返回 null）。
+
+**本地台怎么跑**（改编译线的第一动作 —— 别先起浏览器）：
+```bash
+node test/local/compile-local.mjs --selftest            # 编排层单测（不碰 wasm，秒级）
+node test/local/compile-local.mjs <包 tar.gz> --target wasm64
+# 例：node test/local/compile-local.mjs \
+#       /mnt/hdd/octave-wasm-build/third_party/forge/miscellaneous-1.3.3.tar.gz --target wasm64
+#   ⇒ 2 模块 / 8s；产物落 /tmp/compile-local/
+#   --only <模块名> 只编一个；--site <目录> 换工具链来源；--out <目录> 换落盘
+```
+产物正确性判据（本地台产物 vs 现役部署件，导出面应逐条一致）：
+```bash
+node -e "const b=require('fs').readFileSync('/tmp/compile-local/partint.oct');\
+new WebAssembly.Module(b);console.log(WebAssembly.Module.exports(new WebAssembly.Module(b)).map(e=>e.name).filter(n=>/^G/.test(n)).join(','))"
+# ⇒ Gpartcnt,Gpartint（与站点 assets/octdir/miscellaneous/partint.oct 相同）
+```

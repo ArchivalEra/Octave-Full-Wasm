@@ -1,0 +1,241 @@
+{
+ "_why": [
+  "★ 容器 build-pkg-oct.sh 里那张**手写模块表**的数据副本（2026-10-18 多 TU 批）。",
+  "为什么必须是数据：客户端自编 .oct 时若靠'扫 DEFUN 全编'，会编出容器**故意不列**的模块",
+  "—— 实测 miscellaneou 的 sample.cc 在 11.3.0 头下编不过（rand_uniform 签名变了），",
+  "而容器表本来就没列它。表里的 sources 也承载了'一个模块跨多个源'的知识",
+  "（optim 的 __bfgsmin = __bfgsmin.cc + error-helpers.cc）。",
+  "★ 与 build-pkg-oct.sh 的一致性由 build/113/check-pkg-module-table.py 对账（单一产地原则）。",
+  "★ 客户端拿不到这张表时退回'扫 DEFUN'兜底（至少不整包漏编），失败按模块如实报。"
+ ],
+ "schema": 1,
+ "module_table": {
+  "control": [
+   {
+    "name": "__control_helper_functions__.oct",
+    "sources": [
+     "__control_helper_functions__.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "is_matrix.oct",
+    "sources": [
+     "is_matrix.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "is_real_matrix.oct",
+    "sources": [
+     "is_real_matrix.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "is_real_scalar.oct",
+    "sources": [
+     "is_real_scalar.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "is_real_square_matrix.oct",
+    "sources": [
+     "is_real_square_matrix.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "is_real_vector.oct",
+    "sources": [
+     "is_real_vector.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "is_zp_vector.oct",
+    "sources": [
+     "is_zp_vector.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "lti_input_idx.oct",
+    "sources": [
+     "lti_input_idx.cc"
+    ],
+    "flags": []
+   }
+  ],
+  "geometry": [
+   {
+    "name": "polybool_mrf.oct",
+    "sources": [
+     "polybool_mrf.cc",
+     "connector.cpp",
+     "martinez.cpp",
+     "polygon.cpp",
+     "utilities.cpp"
+    ],
+    "flags": [
+     "-D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION"
+    ]
+   }
+  ],
+  "miscellaneous": [
+   {
+    "name": "cell2cell.oct",
+    "sources": [
+     "cell2cell.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "partint.oct",
+    "sources": [
+     "partint.cc"
+    ],
+    "flags": []
+   }
+  ],
+  "optim": [
+   {
+    "name": "__bfgsmin.oct",
+    "sources": [
+     "__bfgsmin.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "__disna_optim__.oct",
+    "sources": [
+     "__disna_optim__.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "__max_nargin_optim__.oct",
+    "sources": [
+     "__max_nargin_optim__.cc",
+     "error-helpers.cc"
+    ],
+    "flags": [
+     "-include",
+     "octave/interpreter.h",
+     "-include",
+     "octave/ov-usr-fcn.h",
+     "-include",
+     "octave/pt-misc.h"
+    ]
+   },
+   {
+    "name": "numgradient.oct",
+    "sources": [
+     "numgradient.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "numhessian.oct",
+    "sources": [
+     "numhessian.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   }
+  ],
+  "statistics": [
+   {
+    "name": "editDistance.oct",
+    "sources": [
+     "editDistance.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "libsvmread.oct",
+    "sources": [
+     "libsvmread.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "libsvmwrite.oct",
+    "sources": [
+     "libsvmwrite.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "svmpredict.oct",
+    "sources": [
+     "svmpredict.cc",
+     "svm.cpp",
+     "svm_model_octave.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "svmtrain.oct",
+    "sources": [
+     "svmtrain.cc",
+     "svm.cpp",
+     "svm_model_octave.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "fcnntrain.oct",
+    "sources": [
+     "fcnntrain.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "fcnnpredict.oct",
+    "sources": [
+     "fcnnpredict.cc"
+    ],
+    "flags": []
+   }
+  ],
+  "struct": [
+   {
+    "name": "cell2fields.oct",
+    "sources": [
+     "cell2fields.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "fieldempty.oct",
+    "sources": [
+     "fieldempty.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "fields2cell.oct",
+    "sources": [
+     "fields2cell.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   },
+   {
+    "name": "structcat.oct",
+    "sources": [
+     "structcat.cc",
+     "error-helpers.cc"
+    ],
+    "flags": []
+   }
+  ]
+ }
+}
