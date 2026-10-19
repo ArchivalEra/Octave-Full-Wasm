@@ -237,4 +237,61 @@ compileExtension(name)
    会得到带子目录的名字 ⇒ 写盘 `ErrnoError 44`（门槛 2 的第三种形态）。
 4. **`mkdirTree` 的失败不许空 catch**：吞掉之后真正的错在 `writeFile` 才炸，且信息只有 `ErrnoError`。
 5. **vendor 的 bundle manifest 可能漏列依赖**：v0.1.1 的 `manifest.json` 没列
-   `driver/compile-core.mjs`（worker 的 import 依赖）⇒ provision 侧已兜底补拷 + 上报生产者仓。
+   `driver/compile-core.mjs`（worker 的 import 依赖）⇒ provision 侧兜底补拷。
+   ★ **续查（2026-10-18，内容仓 `mail/042` 追问逼出来的）**：**已发布的 v0.1.2 同样缺**
+   ——tar 内 `manifest.json` 与 release 的 `content-list.json` **都是 13 条**、都不含它；
+   生产者工作树 `release/out/` 是 14 条。根因 = 时序：修打包脚本的 `149e72b`（glob 取代
+   手写清单）是 **10-15 14:47**，而 v0.1.2 的 manifest 生成于 **14:31**、发布 **14:39**
+   ⇒ **修了但没重发**。已正式上报（宿主 `mail/044` → LLVM-wasm `mail/013`）；
+   原 STATE 写"已上报"在查证前是**没有凭据的活状态断言**（内容仓核了它的 mail/issues/
+   questions 三处都无痕迹）——这条本身就是一次教训：**"已上报"也是断言，要有落点**。
+
+---
+
+## §12 多 TU（v2，2026-10-18）：模块分组是**数据**，不是"扫 DEFUN 全编"
+
+**背景**：v1 只编主 TU ⇒ `miscellaneous` 的 `partint` 模块从未出现（判据 `partcnt(5)` 空）。
+
+**最终的模块规则**（三条都有实测出处，不是设计推演）：
+
+1. **产物名 = 源文件 basename**，不是第一个 DEFUN 名。
+   证据 = 现役部署件 `assets/octdir/miscellaneous/partint.oct` 的导出表：
+   `Gpartcnt, Gpartint, _Z4pcntm, …` —— **一个源里的多个 DEFUN 共用一个以源名命名的模块**。
+   （容器 `build-pkg-oct.sh` 的表行同样是 `miscellaneous|partint|partint.cc|`。）
+2. **一个模块可以跨多个源**：`optim/__bfgsmin` = `__bfgsmin.cc + error-helpers.cc`，
+   `statistics/svmtrain` = `svmtrain.cc + svm.cpp + svm_model_octave.cc`。
+3. **包里"含 DEFUN 的源"不等于"该编的模块"**：`miscellaneous/sample.cc` 在 11.3.0 头下
+   **编不过**（`OCTAVE__RAND_UNIFORM()` 零参调用 vs 11.3.0 的 `rand_uniform(n, p)`），
+   而容器表本来就没列它（现役站点只有 cell2cell.oct + partint.oct）。
+   ⇒ **客户端不许扫 DEFUN 全编**（会让用户看到"编译失败"，误判工具链坏）。
+
+**落地方形**：容器那张手写表变成**数据** `build/pkg-module-table.json`（闸门
+`check-pkg-module-table.py` 逐条对账容器表，自证 12/0；真仓 6 包 / 27 模块一致）。
+客户端 `moduleTable()` 优先读站点资产 `assets/pkg-module-table.json`，**扫 DEFUN 只作兜底**。
+
+**架构**：编排抽成深模块 `bridge/multi-tu.mjs`（纯逻辑：分组 / 命名 / 编序 / 链接拼装 /
+basename 摊平；runtime 注入）。两个 adapter：浏览器 `compile-worker.mjs` 与
+**本地台 `test/local/compile-local.mjs`**。后者的动机是用户点令「必须升级交互」：
+改一行 → 浏览器验证 = **8 分钟/轮**；本地台 = **8~14 秒/轮**且拿到完整 stderr（不再是
+一句 `Aborted()`）。今天在这条线上花的四小时，绝大部分是这个往返差。
+
+**本批新踩的机械知识（五条，都别再踩）**：
+1. **clang 的 `callMain` 每个实例只能调一次**：第二次报
+   `LLVM ERROR: too many signal callbacks already registered` ⇒ abort。
+   （v1 单 TU 永远没暴露。）⇒ runtime 契约写死 `clang()` **每次新实例**；字节缓存即可。
+2. **emscripten 的 abort 是抛异常不是返回码**：不接住就只剩 `Aborted(). Build with
+   -sASSERTIONS for more info.` —— 失败原因永远查不到。必须 try/catch + 把 printErr 带出去。
+3. **`collected` 要"清空"不要"替换"**：printErr 闭包持有原数组，`x.collected = []`
+   会让之后的 push 落到旧数组 ⇒ detail 永远空。
+4. **lld 是通用驱动器**：不给 `-flavor wasm` 就打印 "lld is a generic driver" 并退 1
+   （只设 `thisProgram: 'wasm-ld'` 不够）。**lld 的 FS 与 clang 的 FS 是两个** ——
+   sysroot 必须各装一次。
+5. **源必须摊平成 basename**：包源普遍 `#include "./config.h"`；按原始相对路径铺
+   `/src/pkg-x.y/src/a.cc` ⇒ `./config.h` 落到不存在的子目录 ⇒ clang abort。
+   摊平后 `-I /src/octinc -I /src/octinc/octave` 两个根（第二个解 `<randmtzig.h>` 这类扁平头）。
+
+**验收**：`accept-compile-extension` **16/0**（v1 是 11/0）：新增
+C8a 编出容器表全部模块 / C8b 产物名 = 源 basename / C8c 同源第二 DEFUN 也在 /
+C8d 第二模块被识别（v1 的边界：它压根不存在）/ C8e 调用语义**如实记**为与 C2c 同一
+已知边界（typeinfo 导出面，工单 65 重链批 —— 不假装通过）。
+本地台自证 6/0（分组 / 命名 / 对象名唯一 / basename 冲突必报 / 无 DEFUN 返回 null）。

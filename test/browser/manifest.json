@@ -31,6 +31,25 @@
    "timeout": 900
   }
  },
+ "critical_note": [
+  "★ `critical`（Einfacht #20③ B，2026-10-18）：**不许被静默跳过**的套件名。",
+  "它们**不强制运行**（仍按 filter / 类别默认 / PROBES 选片）；但一旦**在本轮范围内**",
+  "却因缺输入或 manual 被跳过，`sweep.sh` 把这一轮判成**不绿**（rc=1），而不是打一行",
+  "『跳过』然后报 0 FAIL。判据 = C2 纪律『off 不是通过』的跨套件版。",
+  "★ 实测动机：`probe-lane`（三线纪律的核心闸门）曾因清单里登记的产物随档删除而被",
+  "sweep **永久跳过**，summary 仍报『0 FAIL』—— 那是一次假绿。",
+  "★ 登记门槛（**只登记『缺了就是环境坏了』的**）：依赖额外站点资产/一次性实验件的",
+  "**不登记** —— 那些在最小站点上合法缺席（accept-embed-api 要 embed-demo.html、",
+  "accept-install-verdict 的 verdict-tamper 副站在跑子集时可缺席、probe-octc-spike 要实验件…）。",
+  "★ 登记了不存在的套件名 ⇒ 选片器报错（改名残留会让那条断言永远没人满足）。"
+ ],
+ "critical": [
+  "accept-113-boot",
+  "accept-113-assets",
+  "accept-113-oct",
+  "accept-dldfcn",
+  "probe-lane"
+ ],
  "exceptions": {
   "probe-bridge-cost": {
    "manual": true,

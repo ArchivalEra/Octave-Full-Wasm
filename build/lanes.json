@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "_why": [
+    "★ 档知识的**唯一数据源**（Einfacht #20③ C，2026-10-18）。",
+    "背景：档名/架构/目录/能力前提散在至少六处 —— bridge/lane.js 的 FILES 与 order、",
+    "build/gen-lanes.sh 的 has3 探测、build/113/check-lane-purity.py 的 LANE_EXPECT、",
+    "build/plugins.json 的 lane_expect、bridge/assets-loader.js 的 /^w64/ 前缀推架构、",
+    "以及若干测试套件的内联名单。三线裁决时就因漏改其中一处，让核心闸门 probe-lane",
+    "被 sweep 永久跳过（summary 仍报 0 FAIL）—— 一次假绿。",
+    "★ 本文件**不是**运行期读取的（浏览器里的选档必须同步、不能 fetch JSON）：",
+    "它是**声明**，由 build/113/check-lanes-single-source.py 逐条对账每个消费方的字面量。",
+    "判据 = AGENTS.md 的 C4：『必须一致』的东西必须有对账器，否则迟早不一致。",
+    "★ 加一档 = 加一条数据 + 跑对账器；对账器红了就改消费方，别改这里去迁就代码。"
+  ],
+  "dead_lanes": {
+    "threads": "wasm32+atomics 多线程畸形档（三线裁决 2026-10-17 删除）—— wasm32 永远单线程，出现即必红"
+  },
+  "product_lines": {
+    "_why": "三线模型（AGENTS.md）：分档唯二依据 = 用户能否使用 + 是否 non-free。与性能无关。",
+    "wasm32-final": {"arch": "wasm32", "threads": false, "free": true,
+                     "desc": "wasm32 单线程，无 COI 要求 ⇒ 任何浏览器、任何静态托管"},
+    "master": {"arch": "wasm64", "threads": true, "free": true,
+               "desc": "wasm64 多线程（需要 COI）"},
+    "IllegalPerformance": {"arch": "wasm64", "threads": true, "free": false,
+                           "desc": "non-free：Rust 补丁脱离开源社区；主线榨干前不开"}
+  },
+  "precedence": ["w64", "w64-base", "base"],
+  "lanes": {
+    "base": {
+      "arch": "wasm32",
+      "role": "product",
+      "product_line": "wasm32-final",
+      "threads": false,
+      "site_dir": "",
+      "needs": [],
+      "site_visible": true,
+      "desc": "wasm32 线 = 单线程基础档；任何静态托管的底线（缺它 = 残缺部署）"
+    },
+    "w64": {
+      "arch": "wasm64",
+      "role": "product",
+      "product_line": "master",
+      "threads": true,
+      "site_dir": "w64/",
+      "needs": ["coi", "sab", "memory64"],
+      "site_visible": true,
+      "desc": "wasm64 多线程档（master/IP 线产物）"
+    },
+    "w64-base": {
+      "arch": "wasm64",
+      "role": "fallback",
+      "product_line": null,
+      "threads": false,
+      "site_dir": "w64-base/",
+      "needs": ["memory64"],
+      "site_visible": true,
+      "desc": "wasm64 单线程回退格 —— 站点四格里的回退格，**不是产品线**"
+    },
+    "w64-threads": {
+      "arch": "wasm64",
+      "role": "legacy-alias",
+      "product_line": null,
+      "threads": true,
+      "site_dir": "w64/",
+      "needs": ["coi", "sab", "memory64"],
+      "site_visible": false,
+      "alias_of": "w64",
+      "desc": "旧 URL 覆盖名（`?lane=w64-threads`）⇒ 等价 w64；不单独部署、不进站点清单"
+    },
+    "wasm32-final": {
+      "arch": "wasm32",
+      "role": "product-line",
+      "product_line": "wasm32-final",
+      "threads": false,
+      "site_dir": null,
+      "needs": [],
+      "site_visible": false,
+      "desc": "分支名（实验场）= 冻结线；不是站点档名"
+    },
+    "master": {
+      "arch": "wasm64",
+      "role": "product-line",
+      "product_line": "master",
+      "threads": true,
+      "site_dir": null,
+      "needs": ["coi", "sab", "memory64"],
+      "site_visible": false,
+      "desc": "分支名（实验场）= wasm64 多线程线；不是站点档名"
+    },
+    "IllegalPerformance": {
+      "arch": "wasm64",
+      "role": "product-line",
+      "product_line": "IllegalPerformance",
+      "threads": true,
+      "site_dir": null,
+      "needs": ["coi", "sab", "memory64"],
+      "site_visible": false,
+      "desc": "分支名（实验场）= non-free 线；不是站点档名"
+    },
+    "product": {
+      "arch": "wasm32",
+      "role": "build-mode",
+      "product_line": "wasm32-final",
+      "threads": false,
+      "site_dir": null,
+      "needs": [],
+      "site_visible": false,
+      "desc": "relink.sh 的构建模式名（产物给 base 档用）"
+    },
+    "wasm64": {
+      "arch": "wasm64",
+      "role": "build-mode",
+      "product_line": "master",
+      "threads": true,
+      "site_dir": null,
+      "needs": ["coi", "sab", "memory64"],
+      "site_visible": false,
+      "desc": "relink.sh 的构建模式名（产物给 w64 档用）"
+    }
+  },
+  "consumers": {
+    "_why": "对账器要读的消费方清单 —— 每一条都是『档名/架构/目录』的一个产地。",
+    "bridge/lane.js": {
+      "what": "FILES 表（档 ⇒ 目录 + 三件套路径）+ order（回退优先级）+ 覆盖正则",
+      "kind": "js"
+    },
+    "build/gen-lanes.sh": {
+      "what": "has3 <目录> && add <档> —— 按磁盘真实存在的档生成站点清单",
+      "kind": "shell"
+    },
+    "build/113/check-lane-purity.py": {
+      "what": "LANE_EXPECT（档名 ⇒ 期望架构）+ DEAD_LANES",
+      "kind": "python"
+    },
+    "build/plugins.json": {
+      "what": "lane_expect 的键（每车道期望的插件指纹）",
+      "kind": "json"
+    }
+  }
+}

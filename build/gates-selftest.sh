@@ -38,6 +38,8 @@ build/113/check-dylink-signatures.py --selftest
 build/113/check-oct-lane.py --selftest
 build/113/atomics_scan.py --selftest
 build/113/check-lane-purity.py --selftest
+build/113/check-lanes-single-source.py --selftest
+build/113/check-pkg-module-table.py --selftest
 build/113/check-ci-bootstrap.sh --selftest
 build/113/oct-arch.py --selftest
 build/113/gen-keep-list.sh --selftest

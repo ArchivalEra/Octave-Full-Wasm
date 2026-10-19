@@ -84,14 +84,18 @@ shutil.copy2(os.path.join(src, "manifest.json"), os.path.join(dst, "manifest.jso
 print("  ✓ %-28s（逐件 sha 的权威）" % "manifest.json")
 sys.exit(1 if bad else 0)
 PY
-  # ★ compile-core.mjs（worker 的 import 依赖）：v0.1.1 的 manifest 资产列表**漏列了它**
-  #   （worker 第 15 行 import '../driver/compile-core.mjs'，但 bundle manifest 只列了
-  #   toolchain/abi/tar-reader/sysroot-bundle 四个 driver）—— 已发信生产者仓修打包；
-  #   消费侧兜底：从生产者仓补拷（sha 不核——它不在 manifest，无凭可核；产地 = git 仓）。
+  # ★ compile-core.mjs（worker 的 import 依赖）：v0.1.1 与 **已发布的 v0.1.2** 的 manifest
+  #   资产列表都**缺它**（worker 第 15 行 import '../driver/compile-core.mjs'，而两个 bundle
+  #   都只列 toolchain/abi/tar-reader/sysroot-bundle 四个 driver）。生产者自己修了打包脚本
+  #   （LLVM-wasm `149e72b`，glob 取代手写清单），但那次提交**晚于 v0.1.2 打 tag 16 分钟**
+  #   ⇒ 已发布资产仍是 13 条（tar 内 manifest 与 release 的 content-list.json 都是 13，
+  #   工作树 out/ 才是 14）。消费侧兜底：从生产者仓补拷（sha 不核——它不在 manifest，
+  #   无凭可核；产地 = git 仓）。已在宿主 `mail/044` → LLVM-wasm `mail/013` 正式上报；
+  #   对方重发后本条可删（`upstream-lock.json` 换 URL+sha256 走正路）。
   CORE_SRC="${LLVM_CORE_SRC:-/mnt/hdd/zcode-projects/LLVM-wasm/release/out/driver/compile-core.mjs}"
   if [ -s "$CORE_SRC" ]; then
     cp "$CORE_SRC" "$SITE/assets/llvm/driver/compile-core.mjs"
-    say "  ✓ driver/compile-core.mjs（从生产者仓补拷 —— v0.1.1 manifest 漏列，已上报）"
+    say "  ✓ driver/compile-core.mjs（从生产者仓补拷 —— v0.1.2 已发布资产仍缺，已信 013）"
   else
     die "driver/compile-core.mjs 缺（bundle 没带且生产者仓不在 $CORE_SRC）—— worker import 必 404"
   fi
@@ -148,6 +152,17 @@ except Exception as e:
     print("  ⚠️ config.h.json 没生成（%s）—— compileExtension 会缺 config.h" % e, file=sys.stderr)
     sys.exit(0)   # 不致命：已有一份在站点上时仍可用；但新站点会缺
 PYJSON
+  # ★ 包模块表（2026-10-18 多 TU 批）：`assets/pkg-module-table.json` = 容器
+  #   build-pkg-oct.sh 那张手写表的对账副本（闸门 check-pkg-module-table.py 盯着）。
+  #   客户端靠它知道"这个包该编出哪几个模块、各由哪些源组成"；缺它 ⇒ 退回扫 DEFUN，
+  #   会编出容器**故意不列**的模块（miscellaneous 的 sample.cc 在 11.3.0 头下编不过）。
+  if [ -f "$REPO/build/pkg-module-table.json" ]; then
+    mkdir -p "$SITE/assets"
+    cp "$REPO/build/pkg-module-table.json" "$SITE/assets/pkg-module-table.json"
+    say "  ✓ assets/pkg-module-table.json（包模块表，编译模块分组的知识）"
+  else
+    say "  ⚠️ build/pkg-module-table.json 缺 —— compileExtension 会退回扫 DEFUN（可能编出不该编的模块）"
+  fi
 }
 
 case "${1:-}" in

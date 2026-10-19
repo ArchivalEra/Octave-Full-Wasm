@@ -15,6 +15,7 @@
 !DEPLOY.md
 !doctor.json
 !build/plugins.json
+!build/lanes.json
 !.githooks/check-state.py
 !.githooks/update-state.py
 !.githooks/state_facts.py
@@ -228,6 +229,15 @@
 
 # 工单 23：档清单的入库默认值（页面引用它，必须能被跟踪）
 !bridge/lanes.js
+# ★ 自编 .oct 线（2026-10-18）：worker 与多 TU 编排 —— 两者都是**页面资产**
+#   （promote-pages.sh 的 page_files 清单里，缺任一件 = B 线整条坏）。
+#   ⚠️ compile-worker.mjs 自 compile 批起就没进白名单：它一直在站点上跑，
+#   但**从未入库** —— 这是白名单闸门看不见的那种漏（`git status --ignored` 才现形）。
+!bridge/compile-worker.mjs
+!bridge/multi-tu.mjs
+# 本地台（多 TU 的秒级验证回路；不是站点资产，但必须入库 —— 它是那条线的唯一快回路）
+!test/local/
+!test/local/compile-local.mjs
 
 # 工单 30：wasm64 车道的受管辖发运入口（base/threads 不许动的反向断言在里面）
 !build/promote-w64-lane.sh

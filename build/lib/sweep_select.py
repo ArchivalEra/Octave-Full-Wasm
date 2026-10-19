@@ -20,6 +20,13 @@ A3 把"怎么跑测试"从仓库外搬进了 `test/browser/manifest.json`，但*
   exceptions  例外（manual = 不产汇总行/需人看；why 必填）
   inputs      套件需要的**输入**：`{"kind": "path"|"env", "value": …, "env": 可选覆盖变量,
               "why": …}`。缺输入 ⇒ 跳过并**报出缺什么**（不是失败，也不是静默漏跑）。
+  critical    **不许被静默跳过的套件名**（2026-10-18，Einfacht #20③ B）：它们**不强制运行**
+              —— 仍按 filter/类别默认/PROBES 选片；但一旦**在选片范围内**却因缺输入或
+              manual 被跳过，`sweep.sh` 必须把这一轮判成**不绿**（rc=1），而不是打一行
+              "跳过"然后报 0 FAIL。动机是实测过的假绿：`probe-lane`（三线纪律的核心闸门）
+              曾因清单里登记的产物随档删除而被 sweep 永久跳过，summary 仍报 "0 FAIL"。
+              ⚠️ 只登记"缺了就是环境坏了"的套件；**依赖额外站点资产**的（如
+              accept-embed-api 要 embed-demo.html）不登记 —— 那些在最小站点上合法缺席。
 
 用法：
   sweep_select.py <manifest> <repo> <filter> <probes 0|1> <logdir>   # 给 sweep.sh 用
@@ -54,14 +61,17 @@ def input_state(inp, env, exists=os.path.exists):
 
 
 def select(manifest, names, flt, probes, env, exists=os.path.exists):
-    """选出这一轮要跑的套件。返回 `(rows, skipped, errors)`：
-      rows    = [(name, timeout, needs_summary), …]
-      skipped = ["名字（原因）", …]   ← **必须非静默**：sweep.sh 会把它们打出来
-      errors  = ["…", …]              ← 清单本身有问题（调用方应 exit 2）"""
+    """选出这一轮要跑的套件。返回 `(rows, skipped, errors, critical_skipped)`：
+      rows             = [(name, timeout, needs_summary), …]
+      skipped          = ["名字（原因）", …]   ← **必须非静默**：sweep.sh 会把它们打出来
+      errors           = ["…", …]              ← 清单本身有问题（调用方应 exit 2）
+      critical_skipped = ["名字（原因）", …]   ← **在选片范围内**却被跳过的 critical 套件
+                          ⇒ 调用方必须让这一轮**不绿**（Einfacht #20③ B：off 不是通过）"""
     cats = manifest.get("categories") or {}
     exc = manifest.get("exceptions") or {}
     inputs = manifest.get("inputs") or {}
-    rows, skipped, errors = [], [], []
+    critical = manifest.get("critical") or []
+    rows, skipped, errors, crit_skip = [], [], [], []
     missing_cats = {}                       # 类别没定义 ⇒ 汇总成一条，别刷 80 行
 
     # 零值守卫：清单/套件列表为空 ⇒ 这个选择器什么也证明不了（"跑了 0 个然后绿"的形状）
@@ -71,6 +81,20 @@ def select(manifest, names, flt, probes, env, exists=os.path.exists):
         errors.append("套件列表为空（test/browser/*.mjs 没扫到东西？）")
     if not isinstance(inputs, dict):
         errors.append("清单的 inputs 段不是对象")
+    if not isinstance(critical, list):
+        errors.append("清单的 critical 段不是数组")
+    # critical 登记了不存在的套件 ⇒ typo/改名残留，必须报（否则那条断言永远没人满足）
+    if isinstance(critical, list):
+        unknown = [c for c in critical if c not in names]
+        if unknown:
+            errors.append("critical 里登记了不存在的套件：%s（改名残留？）"
+                          % ", ".join(sorted(unknown)))
+
+    def _skip(entry, name, why):
+        """记一条跳过；在 critical 名单里且**本轮在范围内** ⇒ 另记一份（必须不绿）。"""
+        skipped.append("%s（%s）" % (name, why))
+        if isinstance(critical, list) and name in critical:
+            crit_skip.append("%s（%s）" % (name, why))
 
     for name in sorted(names):
         cat = cat_of(name)
@@ -84,20 +108,20 @@ def select(manifest, names, flt, probes, env, exists=os.path.exists):
             if not fnmatch.fnmatch(name, flt):
                 continue
         elif not (probes or c.get("default")):
-            continue
+            continue                        # 不在本轮范围 ⇒ 不算"被跳过"（不是 off 态）
 
         # ⚠️ 两种输入机制并存 = 两处口径会分叉 ⇒ 旧的 requires_env 必须迁进 inputs，见到就报
         if "requires_env" in e:
             errors.append("%s 还在用 requires_env（已并入 inputs，请迁移）" % name)
 
         if e.get("manual"):
-            skipped.append("%s（%s）" % (name, e.get("why", "人工套件")))
+            _skip(e, name, e.get("why", "人工套件"))
             continue
         miss = [s for s in (input_state(i, env, exists) for i in inputs.get(name, [])) if s]
         if miss:
             why = "；".join(miss)
             note = exc.get(name, {}).get("why", "")
-            skipped.append("%s（%s%s）" % (name, why, "：" + note if note else ""))
+            _skip(e, name, why + ("：" + note if note else ""))
             continue
         # ★ per-suite timeout 覆盖（2026-10-18，compile 批）：exceptions 里 "timeout": N
         #   覆盖类别默认（首例 accept-compile-extension：首编要拉 81 MB 工具链 + sysroot 解包，
@@ -109,7 +133,7 @@ def select(manifest, names, flt, probes, env, exists=os.path.exists):
     for cat, names_ in sorted(missing_cats.items()):
         errors.append("清单缺类别定义 %s：%d 个套件（例：%s）"
                       % (cat, len(names_), ", ".join(names_[:3])))
-    return rows, skipped, errors
+    return rows, skipped, errors, crit_skip
 
 
 def load_manifest(path):
@@ -214,7 +238,7 @@ def main(argv):
     except (OSError, ValueError) as e:
         print("FATAL: 清单读不了（%s）：%r" % (man_p, e), file=sys.stderr)
         return 2
-    rows, skipped, errors = select(man, suite_names(repo), flt, probes, os.environ)
+    rows, skipped, errors, crit_skip = select(man, suite_names(repo), flt, probes, os.environ)
     if errors:
         print("FATAL: 清单有问题：" + "；".join(errors), file=sys.stderr)
         return 2
@@ -225,6 +249,9 @@ def main(argv):
             fh.write("; ".join(skipped))
         with open(os.path.join(logdir, ".matched.txt"), "w", encoding="utf-8") as fh:
             fh.write(str(len(rows) + len(skipped)))
+        # ★ #20③ B：在范围内却被跳过的 critical 套件 —— sweep.sh 读它把这一轮判成不绿
+        with open(os.path.join(logdir, ".critical-skipped.txt"), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(crit_skip))
     return 0
 
 
@@ -238,6 +265,9 @@ _MAN = {
     "inputs": {"probe-b": [{"kind": "path", "env": "P_DIR", "value": "/外/部/目录",
                             "why": "产物在仓库外"}],
                "probe-c": [{"kind": "env", "value": "PLAYWRIGHT_BROWSERS_PATH", "why": "要另装浏览器"}]},
+    # #20③ B：probe-b 是"缺了就是环境坏了"的那类；probe-a 是人工套件（不登记 ——
+    # 真人工套件缺了不算环境坏）；accept-x 用来验"不在范围 ⇒ 合法没跑"。
+    "critical": ["probe-b", "accept-x"],
 }
 _NAMES = ["accept-x", "probe-a", "probe-b", "probe-c", "bench-d", "helper.mjs"]
 _NOEXIST = lambda _p: False        # noqa: E731   —— 造"路径不存在"的探针
@@ -246,6 +276,11 @@ _ALLEXIST = lambda _p: True        # noqa: E731
 
 def _sel(names=None, probes=True, env=None, exists=_ALLEXIST, flt=""):
     return select(_MAN, names or _NAMES, flt, probes, env or {}, exists)
+
+
+def _sel_crit(man=None, exists=_ALLEXIST, flt=""):
+    """critical 用例专用：可用自造的清单（验 typo 报错那条）。"""
+    return select(man or _MAN, _NAMES, flt, True, {}, exists)
 
 
 CASES = [
@@ -296,6 +331,19 @@ CASES = [
     ("★ **值里有空白 ⇒ 拒绝**（`env $inputs` 未加引号展开会静默传错，宁可响亮失败）",
      lambda: emit_inputs({"A": "/a b"})[1] != [] and emit_inputs({"A": "/ok"})[1] == []),
     ("★ 空值也拒绝（`VAR=` 会让探针以为设过了）", lambda: emit_inputs({"A": ""})[1] != []),
+    # ★ #20③ B（2026-10-18）：critical 套件被跳过 ⇒ 这一轮必须不绿。
+    #   实测动机：probe-lane 曾因清单里登记的产物随档删除而被 sweep **永久跳过**，
+    #   summary 仍报 "0 FAIL" —— "off 不是通过"的跨套件版本。
+    ("★ critical 套件**缺输入被跳过** ⇒ 单独报出（调用方据此判不绿）",
+     lambda: _sel_crit(exists=_NOEXIST)[3] != []
+     and any(s.startswith("probe-b") for s in _sel_crit(exists=_NOEXIST)[3])),
+    ("★ critical 套件**输入齐备 ⇒ 不许报**（反向：别把 critical 写成恒不绿）",
+     lambda: _sel_crit(exists=_ALLEXIST)[3] == []),
+    ("★ critical 套件**不在本轮范围**（filter 不匹配）⇒ 不算被跳过（合法没跑，不是 off）",
+     lambda: _sel_crit(exists=_NOEXIST, flt="accept-*")[3] == []),
+    ("★ critical 里登记了**不存在的套件** ⇒ 报错（改名残留会让断言永远没人满足）",
+     lambda: any("不存在的套件" in e for e in _sel_crit(
+         man={"categories": _MAN["categories"], "critical": ["probe-gone"]})[2])),
 ]
 
 

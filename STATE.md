@@ -3,6 +3,51 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-18 · 多 TU + #20③ B/C 批）
+
+- **★ 多 TU 编译落地（v2）+ 交互升级（用户点令「必须升级交互」）**：
+  v1 只编主 TU ⇒ `miscellaneous` 的 `partint` 模块从未出现。现按**容器模块表**编全：
+  · **模块分组是数据**：容器 `build-pkg-oct.sh` 那张手写表 → `build/pkg-module-table.json`
+    （闸门 `check-pkg-module-table.py` 逐条对账，自证 **12/0**；真仓 **6 包 / 27 模块**一致）。
+    客户端优先读站点 `assets/pkg-module-table.json`，**扫 DEFUN 只作兜底**。
+    **判据**：`miscellaneous/sample.cc` 在 11.3.0 头下编不过（`rand_uniform` 签名变了），
+    而容器表本来就不列它 ⇒ "含 DEFUN 就该编"是错的（会让用户误判工具链坏）。
+  · **产物名 = 源 basename**（不是第一个 DEFUN 名）：证据 = 现役
+    `assets/octdir/miscellaneous/partint.oct` 的导出表同时有 `Gpartcnt` 与 `Gpartint`。
+  · **编排抽成深模块 `bridge/multi-tu.mjs`**（纯逻辑：分组/命名/编序/链接拼装/basename 摊平；
+    runtime 注入）。**两个 adapter**：浏览器 `compile-worker.mjs` + **本地台
+    `test/local/compile-local.mjs`**（`--selftest` 6/0）。后者是交互升级的落点：
+    浏览器一轮 **8 分钟** → 本地台 **8~14 秒**，且失败拿到完整 stderr（不再是一句 `Aborted()`）。
+  · **验收 `accept-compile-extension` 16/0**（v1 是 11/0）：新增 C8a 编出容器表全部模块 /
+    C8b 产物名 = 源 basename / C8c 同源第二 DEFUN 也在 / C8d 第二模块被识别
+    （v1 的边界：它压根不存在）/ C8e 调用语义**如实记**为与 C2c 同一已知边界（工单 65 重链批）。
+  · **本批五条机械知识**（`NOTES-client-compile-design.md` §12）：clang `callMain` 每实例
+    只能调一次（`too many signal callbacks`）/ emscripten abort 抛异常须 try-catch /
+    `collected` 要清空不要替换 / lld 需 `-flavor wasm` 且 FS 独立须各装 sysroot /
+    源必须摊平成 basename（`#include "./config.h"` 依赖同目录）。
+
+- **★ Einfacht #20③ 两条本仓承诺已落**：
+  · **B（critical 套件被跳过 ⇒ 本轮不绿）**：`manifest.json` 新增 `critical` 名单 +
+    `critical_note`（登记门槛：只登记"缺了就是环境坏了"的，依赖额外站点资产的**不登记**）。
+    选片器把"在范围内却被跳过"的 critical 单独报出（自证 **20→24/0**，含三条反向）；
+    `sweep.sh` 两条路径都判 rc=1（含原先恒 rc=0 的"全被跳过"早退分支）。
+    **实测**：`SITE_DIR=/nonexistent probe-lane` ⇒ rc=1 并点名；范围外 ⇒ rc=0（合法没跑）。
+    动机 = 那一次真事：`probe-lane` 曾因清单登记随档删除而被永久跳过、summary 仍报 0 FAIL。
+  · **C（lanes.json 单源）**：新建 `build/lanes.json`（档知识的**唯一声明**：9 个车道名 /
+    3 个站内档 / 1 个死档 / 三线产品线 / 回退优先级）+ 对账器
+    `build/113/check-lanes-single-source.py`（自证 **15/0**，对账四个消费方：
+    `lane.js` 的 FILES/order/覆盖正则、`gen-lanes.sh`、`check-lane-purity.py`、`plugins.json`）。
+    真仓对账**当场抓出一处真缺口**：`LANE_EXPECT` 缺 `IllegalPerformance`（docstring 的三线
+    枚举里有、表里没有 ⇒ 用那条线跑纯度检查会被当"陌生名"拒）—— 已补。
+
+- **★ 内容仓 `mail/042` §③ 的追问：答案是 (a) 信还没发出（已补发）**：
+  原 STATE 写"已上报生产者仓"时信**确实没发**。查证还翻出更硬的事实：**已发布的 v0.1.2
+  资产里也没有 `compile-core.mjs`**（tar 内 manifest 与 content-list 都是 13 条；
+  工作树才是 14 条）。根因 = 时序 —— 生产者修打包脚本的 `149e72b`（10-15 **14:47**）
+  晚于 v0.1.2 的 manifest 生成（**14:31**）与发布（**14:39**）⇒ **修了没重发**。
+  已补发（宿主 `mail/044` → LLVM-wasm `mail/013`；宿主 `mail/045` → 内容仓 `mail/042`），
+  三处不实断言（STATE / `provision-llvm-wasm.sh` 注释与 say 行 / NOTES §11）已改成可复跑的事实。
+
 ## 现在是什么（2026-10-18 · compile/diagnostics 批）
 
 - **★ B 线落地：`compile:true` + `diagnostics`（内容仓 `mail/039` 待办① 的排期兑现）**：
@@ -970,7 +1015,7 @@
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 50 | |
-| 最近一次**全绿**回归 | `20261018-095504` · **0 套 / 0 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 1 套 / 33 PASS） |  |
+| 最近一次**全绿**回归 | `20261018-231217-mtu` · **55 套 / 1,247 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 29 套 / 274 PASS、基准 3 套（按契约无汇总行）） | http://127.0.0.1:8768/ |
 | 交付包 | `octave-full-wasm-site-20261018` · tar.zst 83,980,527 B · `5136277bb6ae47b6…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

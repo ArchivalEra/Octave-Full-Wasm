@@ -57,9 +57,13 @@ READOBJ_CANDIDATES = (
 #   base=wasm32 产物、w64/w64-base=wasm64 产物、w64-base 是回退格（不是产品线）。
 #   **threads（wasm32+atomics 多线程）是畸形档，已删 —— 出现即必红。**
 LANE_EXPECT = {
-    # 产品线（三线）
+    # 产品线（三线）—— 表必须与上面那段权威枚举逐条对应（单源对账器 R6 盯着：
+    # build/113/check-lanes-single-source.py。★ 2026-10-18 补上 IllegalPerformance：
+    # 它一直在 docstring 的枚举里、却不在本表 ⇒ 用它跑纯度检查会被当"陌生名"拒，
+    # 而它是 non-free 线（wasm64 多线程 + Rust 补丁）的合法车道名。
     "wasm32-final": "wasm32",
     "master": "wasm64",
+    "IllegalPerformance": "wasm64",
     # 站点档（展示层；base=wasm32 线产物，w64/w64-base=wasm64 线产物）
     "base": "wasm32",
     "w64": "wasm64",

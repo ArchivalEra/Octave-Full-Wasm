@@ -53,10 +53,12 @@ page_files () {
   # ★ compile-worker.mjs（2026-10-18，compile 批）：assets-loader 的 compileExtension
   #   用 `new Worker('compile-worker.mjs')` ⇒ 缺它 = B 线整条 404（页面其它功能不受影响，
   #   所以这是**必须靠清单守**的静默缺失）。
+  # ★ multi-tu.mjs（2026-10-18，多 TU 批）：compile-worker 的 import —— 漏了同样
+  #   表现为「Worker 起不来」（浏览器只给 onerror，拿不到原因；实测踩到）。
   for f in index.html assets-loader.js octave-core.js lane.js queue.js p5canvas.js \
            octave-worker.js webaudio.js webaudiorec.js webfilepick.js webnet.js \
            octave-page.js octave-embed.js embed-demo.html \
-           compile-worker.mjs; do
+           compile-worker.mjs multi-tu.mjs; do
     printf '%s\n' "$f"
   done
 }

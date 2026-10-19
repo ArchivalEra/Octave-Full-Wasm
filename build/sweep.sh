@@ -58,6 +58,14 @@ if [ "$NSEL" = "0" ]; then
   echo "匹配到 $NMATCH 套，但**按清单全是人工套件**，本次跳过："
   cat "$LOGDIR/.skipped.txt"; echo
   echo "（人工套件的判据：不产汇总行，或依赖特定环境；详见 test/browser/manifest.json）"
+  # ★ #20③ B：这条早退以前恒 rc=0 —— 而"全被跳过"正是假绿最纯粹的形状
+  #   （实测动机：probe-lane 曾因产物随档删除被永久跳过、summary 仍报 0 FAIL）。
+  #   critical 在范围内却被跳过 ⇒ 不许绿。
+  if [ -s "$LOGDIR/.critical-skipped.txt" ]; then
+    echo "★ critical 套件被跳过（本轮不绿 —— off 不是通过）："
+    sed 's/^/    /' "$LOGDIR/.critical-skipped.txt"
+    exit 1
+  fi
   exit 0
 fi
 
@@ -189,11 +197,26 @@ done < "$SEL"
 SKIPPED="$(cat "$LOGDIR/.skipped.txt" 2>/dev/null || true)"
 [ -n "$SKIPPED" ] && echo "按清单跳过的人工套件：$SKIPPED"
 
+# ★ #20③ B（2026-10-18，Einfacht #20 裁决）：**critical 套件被跳过 ⇒ 这一轮不绿**。
+#   动机是实测过的假绿：`probe-lane`（三线纪律的核心闸门）曾因清单里登记的产物随档删除
+#   而被 sweep **永久跳过**，summary 仍报 "0 FAIL"。跳过 = off，off 不是通过（C2 纪律）。
+#   "不在本轮范围"（filter 不匹配 / 类别非 default 且未开 PROBES）**不算**跳过 ——
+#   那是合法的没跑，不是 off；选片器只在范围内才记 critical_skipped。
+CRIT_SKIPPED="$(cat "$LOGDIR/.critical-skipped.txt" 2>/dev/null | grep -c . || true)"
+
 echo "================================================================"
 echo "合计：$nrun 套 / $total_pass PASS / $total_fail FAIL"
+if [ "${CRIT_SKIPPED:-0}" -gt 0 ] 2>/dev/null; then
+  echo "★ critical 套件被跳过（本轮不绿 —— off 不是通过）："
+  sed 's/^/    /' "$LOGDIR/.critical-skipped.txt"
+  nbad=$((nbad + CRIT_SKIPPED))
+fi
 if [ -n "$badlist" ]; then
   echo "有问题的套件：$badlist"
   exit 1
+fi
+if [ "${CRIT_SKIPPED:-0}" -gt 0 ] 2>/dev/null; then
+  exit 1                       # 全绿但 critical 缺位 ⇒ 仍不许报"全绿"
 fi
 echo "全绿"
 exit 0

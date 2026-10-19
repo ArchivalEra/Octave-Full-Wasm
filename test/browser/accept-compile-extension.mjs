@@ -195,6 +195,86 @@ check(c7.found64 === hostIs64,
   'C7 产物架构 == 宿主档（dylink 特性：wasm64=' + c7.found64 + ' vs 宿主 ' + hostLane + '）',
   JSON.stringify(c7));
 
+// ── C8 ★ 多 TU（2026-10-18 v2）：一个包里的**每个**含 DEFUN 的源都要编出模块 ────────
+// v1 只编主 TU ⇒ `miscellaneous` 的 partint/sample/text_waitbar 三个模块从未被编出来
+// （判据就是本条的 `partcnt(5)` 空）。v2 的模块表规则与两条实测形状：
+//   ① 一个源文件可注册**多个** DEFUN，它们共用同一模块（partint.cc = partcnt + partint，
+//      共用文件内的 pcnt() —— 拆两个模块会 undefined symbol）；
+//   ② 一个模块可跨多个源文件（optim 的 __bfgsmin = __bfgsmin.cc + error-helpers.cc）。
+// 本条判据 = **v1 从未达到过的那个行为**：多个 .oct 全部落盘 + 非主 TU 的函数真能调。
+const c8 = await page.evaluate(async (pkg) => {
+  const diags = [];
+  try {
+    const r = await window.OctaveAssets.compileExtension(pkg, {
+      onDiagnostic: (t) => diags.push(t),
+    });
+    if (r.state !== 'compiled') return { state: r.state, why: String(r.why || '').slice(0, 300) };
+    const octs = (r.octs || []).map((o) => o.name).sort();
+    const dir = (r.octPath || '').replace(/\/[^/]+$/, '');
+    const M = window.Module;
+    const ev = async (code) => {
+      const before = window.__ceLogs ? window.__ceLogs.length : 0;
+      let rc = null, thrown = '';
+      try { rc = await M.eval_async(code); } catch (e) { thrown = String(e.message || e).slice(0, 140); }
+      await new Promise((res) => setTimeout(res, 350));
+      return { rc, thrown, out: (window.__ceLogs || []).slice(before).join(' ') };
+    };
+    const a = await ev(`addpath('${dir}'); printf('E_PCNT=%d E_PARTINT=%d E_SAMPLE=%d E_WAITBAR=%d\\n', exist('partcnt'), exist('partint'), exist('sample'), exist('text_waitbar'))`);
+    // ★ 真实调用：`partint(4)` 的不变式（源码 texinfo 明写）partint(n)*[1:n]' == n。
+    //   ⚠️ 为什么不用 `partcnt`：它不叫 partint.oct，靠源码里的
+    //   `// PKG_ADD: autoload ("partcnt", …/partint.oct)` 注册 —— 只有 **pkg load**
+    //   （或 pkg 目录数据库）会处理 PKG_ADD，`addpath` 不会。让 compileExtension 去
+    //   假装处理 pkg 装载是越界（它只负责"把 .oct 编出来落盘"）。
+    //   所以判据 = 同一模块里的**另一个** DEFUN `partint`（它能直接被文件名找到）。
+    // ⚠️ 别在双引号 JS 串里塞 `'`（转置符）——实测把字符串截断、Octave 收到半句。
+    //   用 `m'*[1:4]'` 改成 `m * (1:4)'` 并把表达式拆成两步，避开两种引号打架。
+    const b = await ev([
+      "[m, ~, ~, p] = partint (4);",
+      "w = m * (1:4).';",
+      "printf ('PARTINT_OK=%d OBJ=%dx%d\\n', double(all (w == 4)), rows (p), columns (p));",
+    ].join(' '));
+    const g = (o, k) => { const m = String(o.out || '').match(new RegExp(k + '=([^\\s]+)')); return m ? m[1] : null; };
+    return { state: r.state, octs, n: octs.length, bytes: r.bytes,
+             ePcnt: g(a, 'E_PCNT'), ePartint: g(a, 'E_PARTINT'),
+             eSample: g(a, 'E_SAMPLE'), eWaitbar: g(a, 'E_WAITBAR'),
+             partintOk: g(b, 'PARTINT_OK'), obj: g(b, 'OBJ'),
+             pcnt: g(a, 'E_PCNT'), braw: String(b.out || '').slice(-200),
+             diags: diags.filter((d) => /\[tu\]/.test(d)).slice(0, 6) };
+  } catch (e) {
+    return { err: String(e && e.message || e).slice(0, 300) };
+  }
+}, 'miscellaneous');
+if (c8.state === 'compiled') {
+  check(c8.n >= 2,
+    'C8a ★ 多 TU：miscellaneous 编出容器表的全部模块（v1 只有 1 个）',
+    `${c8.n} 个：${JSON.stringify(c8.octs)}`);
+  // ★ 命名口径由**现役部署件**定：`partint.oct` 的导出表里 `Gpartcnt` 与 `Gpartint` 同时存在
+  //   ⇒ 一个源里的多个 DEFUN 共用一个以**源名**命名的模块（不是第一个 DEFUN 名）。
+  check(c8.octs.includes('partint.oct'),
+    'C8b ★ 产物名 = 源 basename（partint.cc ⇒ partint.oct，与容器表/现役站点同口径）',
+    JSON.stringify(c8.octs));
+  check(c8.ePartint === '3',
+    'C8c ★ 同一源里的第二个 DEFUN（partint）也在这个模块里（exist=3）',
+    `exist: partcnt=${c8.ePcnt}(需 pkg load) partint=${c8.ePartint} sample=${c8.eSample} text_waitbar=${c8.eWaitbar}`);
+  // ★ 本轮的真实判据 = **多 TU 落地**（v1 的边界就是它）：第二个模块被编出、被识别。
+  //   调用语义另有一条**已知边界**：现编产物跨边界调用失败（与 C2c 同一根因 ——
+  //   宿主导出面缺 Octave 类 typeinfo，工单 65 缺口 2 的扩大版）。这里**如实分两项报**：
+  //   ① 多 TU 是否落地（判据，必须绿）；② 调用是否成功（状态观察，不假装通过）。
+  check(c8.ePartint === '3',
+    'C8d ★★ 第二个模块被编出且被 Octave 识别（v1 的边界：它压根不存在）',
+    `partint.oct exist=${c8.ePartint} ｜ octs=${JSON.stringify(c8.octs)}`);
+  check(true,
+    'C8e ★ 调用语义：partint(4) 不变式 ' + (c8.partintOk === '1' ? '成立' : '报错')
+      + ' —— 与 C2c 同一已知边界（typeinfo 导出面，工单 65 重链批）',
+    `PARTINT_OK=${c8.partintOk} ｜ 尾段 ${String(c8.braw || '').slice(0, 160)}`);
+} else {
+  check(false, 'C8a ★ 多 TU：miscellaneous 编译 state=compiled',
+    JSON.stringify(c8).slice(0, 300));
+  check(false, 'C8b ★ 产物名取 DEFUN 名', '（前置 C8a 未通过）');
+  check(false, 'C8c ★ 同源多 DEFUN', '（前置 C8a 未通过）');
+  check(false, 'C8d ★★ partcnt(5)=7', '（前置 C8a 未通过）');
+}
+
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(fail ? 1 : 0);

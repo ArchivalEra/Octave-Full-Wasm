@@ -121,6 +121,18 @@ HISTORY §5.108），**文件名逐字相同**、靠**子目录**区分（Emscri
 单线程回退格——**不是产品线**）。站点只是展示层：**试验场绑定三个分支**（wasm32-final /
 master / IllegalPerformance），不许往站点加格（死档断言在 `check-lane-purity.py` 的 DEAD_LANES）。
 **证据：** `bridge/lane.js`（`FILES` 表）+ `build/gen-lanes.sh` + `build/113/check-lane-purity.py`
++ `build/lanes.json`（**档知识的唯一声明**；四个消费方由 `check-lanes-single-source.py` 对账）
+
+### 档知识单一产地（`build/lanes.json`）
+档名 / 架构 / 站点目录 / 能力前提 / 死档 / 回退优先级的**唯一声明**（Einfacht #20③ C）。
+它是**数据不是运行期依赖**：浏览器里的选档必须同步（不能 fetch），所以站点仍读生成的
+`lanes.js`；`lanes.json` 的职责是让对账器
+`build/113/check-lanes-single-source.py`（自证 15/0）逐条盯住四个消费方
+（`lane.js` 的 FILES/order/覆盖正则、`gen-lanes.sh`、`check-lane-purity.py`、`plugins.json`）。
+**判据：** 加一档 = 加一条数据；对账器红了就改消费方，**别改数据去迁就代码**。
+**为什么有它（实测）：** 三线裁决删 `threads` 时档知识散在六处，漏改一处 =
+核心闸门 `probe-lane` 被 sweep 永久跳过、summary 仍报 0 FAIL（一次假绿）。
+**证据：** `build/lanes.json` + `build/113/check-lanes-single-source.py --selftest`
 
 ### 档清单（`lanes.js`）
 **选档的第三根轴**：站点**真的**部署了哪几档，由 `gen-lanes.sh` 按磁盘生成、页面**同步**读

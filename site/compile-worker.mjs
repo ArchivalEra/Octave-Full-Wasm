@@ -31,6 +31,8 @@ const log = (text) => post({ type: 'log', text });
 
 let clangMod = null;
 let sysrootFiles = null;
+let octincFiles = null;         // Octave 头（解包一次，逐实例灌入）
+let clangUrls = null;           // { glue, wasm }（freshClang 用；字节在 _assetCache）
 let lldMod = null;              // ★ 懒：首链才实例化
 let lldArgs = null;             // { glue, wasm }（init 只记住 URL，不 fetch）
 let lastErr = [];
@@ -43,19 +45,36 @@ async function sha256Hex(buf) {
 }
 
 // 与生产者 worker 同款（UMD glue 重导出 + 自己 instantiateWasm 绕开两个实测坑）。
+// ★ 2026-10-18 多 TU 实测：**每次 callMain 都要一个全新实例**。
+//   clang 每次 run 会注册 signal handler，同一个 Module 上第二次 callMain 直接
+//   `LLVM ERROR: too many signal callbacks already registered` ⇒ abort()。
+//   v1 永远只编一个 TU，所以这条从没暴露过（与 lld 的 latch 是同族但不同机制：
+//   lld 是"特性集被记住"，clang 是"信号回调只能注册一次"）。
+//   因此本函数按 URL **缓存字节**（不重下，网络代价仍是 66 MB 一次），实例每次新造。
+const _assetCache = new Map();       // url → ArrayBuffer（wasm）/ string（glue）
+async function loadAsset (url) {
+  if (!_assetCache.has(url)) {
+    const r = await fetch(url);
+    _assetCache.set(url, url.endsWith('.wasm') ? await r.arrayBuffer() : await r.text());
+    const n = url.endsWith('.wasm') ? _assetCache.get(url).byteLength : _assetCache.get(url).length;
+    bytesSeen[url.includes('lld') ? 'lld' : 'clang'] += n;
+    log(`  ${url.split('/').pop()}: ${n} B（已缓存，复编不重下）`);
+  }
+  return _assetCache.get(url);
+}
+
 async function instantiate (glueUrl, wasmUrl, importObject) {
-  const glueText = await (await fetch(glueUrl)).text();
-  const wasmBytes = await (await fetch(wasmUrl)).arrayBuffer();
-  bytesSeen[wasmUrl.includes('lld') ? 'lld' : 'clang'] += wasmBytes.byteLength;
-  log(`  ${glueUrl.split('/').pop()}: glue ${glueText.length} B, wasm ${wasmBytes.byteLength} B`);
+  const glueText = await loadAsset(glueUrl);
+  const wasmBytes = await loadAsset(wasmUrl);
   const wrapped = `${glueText}\nexport default createToolChain;`;
   const blob = URL.createObjectURL(new Blob([wrapped], { type: 'text/javascript' }));
   const mod = await import(blob);
   const factory = mod.default;
-  return factory({
+  const errs = [];                   // 每个实例自己的 stderr（别跨实例共享，会串）
+  const inst = await factory({
     ...(importObject || {}),
     wasmBinary: wasmBytes,
-    printErr: (s) => { lastErr.push(String(s).slice(0, 300)); },
+    printErr: (s) => { const t = String(s).slice(0, 300); errs.push(t); lastErr.push(t); },
     locateFile: () => wasmUrl,
     instantiateWasm: (info, receive) => {
       WebAssembly.instantiate(wasmBytes, info).then(
@@ -64,6 +83,8 @@ async function instantiate (glueUrl, wasmUrl, importObject) {
     },
     noInitialRun: true,
   });
+  inst.collected = errs;             // 与生产者的字段名对齐（detail 取它）
+  return inst;
 }
 
 function installFiles (fs, files) {
@@ -103,12 +124,9 @@ async function init (msg) {
   log(`sysroot verified (${got.slice(0, 12)}…), ${sysrootFiles.size} files`);
 
   log('phase 2/3: clang');
-  clangMod = await instantiate(msg.clangGlueUrl, msg.clangWasmUrl);
-  installFiles(clangMod.FS, sysrootFiles);
-  // ★ Octave 头必须装进 **clang 的 FS**（编译在 worker 里跑，页面 FS 它看不见）。
-  //   取 assets/octinc/octave-headers.tar.gz（tar 根 = ./octave/…）⇒ 解到 /src/octinc 后
-  //   路径为 /src/octinc/octave/oct.h ⇒ `-I /src/octinc` 正好解析 <octave/oct.h>。
   configMacros = msg.configMacros || null;   // 25 宏：源里 "./config.h" 的内容
+  // ★ Octave 头与 sysroot 的解包结果**各只做一次**（tar 解包是 CPU 活，字节已缓存）；
+  //   每个 clang 实例只是把这些文件灌进自己的 FS（见 freshClang）。
   if (msg.octincTarUrl) {
     log('phase 2b: octave headers');
     const incBuf = new Uint8Array(await (await fetch(msg.octincTarUrl)).arrayBuffer());
@@ -123,24 +141,38 @@ async function init (msg) {
     } else {
       throw new Error('本浏览器没有 DecompressionStream —— 换未压缩头 tar 或升级浏览器');
     }
-    const incFiles = readTar(raw);
-    // ⚠️ installFiles 恒写 `/<rel>`；头要落 **/src/octinc/<rel>**（-I /src/octinc 才能解析
-    //   <octave/oct.h>）。成员名带 `./` 前缀 ⇒ 逐条规范化后加前缀。
-    let n = 0;
-    for (const [rel, data] of incFiles) {
-      const clean = rel.replace(/^\.\//, '').replace(/\/+$/, '');
-      if (!clean) continue;
-      const dst = '/src/octinc/' + clean;
-      const dir = dst.slice(0, dst.lastIndexOf('/'));
-      if (dir) clangMod.FS.mkdirTree(dir);
-      try { clangMod.FS.writeFile(dst, data); n++; } catch (e) { /* 目录项跳过 */ }
-    }
-    log(`octave headers installed: ${n} files → /src/octinc/`);
+    octincFiles = readTar(raw);
+    log(`octave headers: ${octincFiles.size} members（解包一次，逐实例灌入）`);
   }
+  clangUrls = { glue: msg.clangGlueUrl, wasm: msg.clangWasmUrl };   // 必须在 freshClang 之前
+  clangMod = await freshClang();
   log('clang ready（lld 未拉 —— 首次链接时才取）');
 
   lldArgs = { glue: msg.lldGlueUrl || null, wasm: msg.lldWasmUrl || null };
   post({ type: 'ready', bytes: { clang: bytesSeen.clang, sysroot: bytesSeen.sysroot } });
+}
+
+// ── ★ 每个编译动作一首新 clang 实例（2026-10-18 多 TU 实测）─────────────────
+// `LLVM ERROR: too many signal callbacks already registered` —— clang 每次 run 注册
+// signal handler，同实例第二次 callMain 直接 abort。v1 只编一个 TU 所以没暴露。
+// 字节已缓存（loadAsset），新实例的代价 = 实例化 + 把 sysroot/头灌进新 FS。
+async function freshClang () {
+  if (!clangUrls) throw new Error('freshClang: clang URLs 未初始化（init 未跑？）');
+  const inst = await instantiate(clangUrls.glue, clangUrls.wasm);
+  installFiles(inst.FS, sysrootFiles);
+  if (octincFiles) {
+    let n = 0;
+    for (const [rel, data] of octincFiles) {
+      const clean = rel.replace(/^\.\//, '').replace(/\/+$/, '');
+      if (!clean) continue;
+      const dst = '/src/octinc/' + clean;
+      const dir = dst.slice(0, dst.lastIndexOf('/'));
+      if (dir) inst.FS.mkdirTree(dir);
+      try { inst.FS.writeFile(dst, data); n++; } catch (e) { /* 目录项跳过 */ }
+    }
+    inst.octincCount = n;
+  }
+  return inst;
 }
 
 // ── ② lld 懒加载（首链才付 31.8 MB）─────────────────────────────────────────
@@ -157,7 +189,70 @@ async function _ensureLld (target, override) {
   return mod;
 }
 
+// ── 多 TU 编排（v2）──────────────────────────────────────────────────────────
+// 为什么在 worker 里做、而不改生产者的 compile-core.mjs：那个文件是 **vendored**
+// （`provision-llvm-wasm.sh` 逐件核 sha 从 bundle 取），改它 = 下次 provision 覆盖掉，
+// 而且是"两处产地"。本 worker 已经是"本仓自建的分阶段适配器"，多 TU 编排属于同一层。
+//
+// 用到的两个生产者导出（abi.mjs 的旗标拼装 = 单一产地，不复制）：
+//   compileArgv({triple, files, abi, defines, includes, extra})  → argv（编译一个 TU）
+//   linkArgv({target, abi, hasCrt, objPath})                     → argv（链接）
+// ⚠️ linkArgv 只有一个 objPath 参数（生产者口径 = 单 TU）。多对象时我们**自己拼**
+//   对象列表部分，其余旗标仍经 linkArgv 原样取用 —— 这样"链接旗标"仍只有一个产地。
+// ── 多 TU：**委托给深模块** `bridge/multi-tu.mjs`（2026-10-18 交互升级）──────────
+// 为什么不再在本文件里写编排：这条逻辑此前只活在浏览器 Worker 里 ⇒ 每次"改一行 → 验证"
+// 都要付 8 分钟往返（拉 66 MB + 起页面 + 编 + 回读），失败还只回一句 `Aborted()`。
+// 编排与"跑在谁的 wasm 里"无关 —— 抽成深模块后，本地台（test/local/compile-local.mjs）
+// 用同一份逻辑跑，**8 秒一轮**且拿到完整 stderr。本 worker 现在只是它的一个 adapter：
+//   · clang()/lld() 每次新实例（字节已缓存，见 _assetCache）；
+//   · prepare() 把 config.h + 摊平后的源灌进**这艘新实例**的 FS。
+import { compileAllModules } from './multi-tu.mjs';
+
+async function compileMany (msg) {
+  // abi 两函数由生产者 driver 提供（单一产地）；深模块只负责编排
+  const abiMod = await import('./assets/llvm/driver/abi.mjs');
+  const flat = {};
+  for (const [name, text] of Object.entries(msg.files || {})) {
+    flat[String(name).replace(/^\.\//, '').split('/').pop()] = text;
+  }
+  const r = await compileAllModules({
+    targetsAvailable: () => ['wasm32', 'wasm64'].filter((a) =>
+      sysrootFiles.has(`sysroot/lib/${a}-emscripten/pic/crtbegin-mt.o`)),
+    clang: () => freshClang(),          // ★ 每 TU 新实例（实测：复用会 LLVM ERROR）
+    lld: (t) => _ensureLld(t, msg.lld),
+    log,
+  }, {
+    target: msg.target, abi: msg.abi, abiModule: abiMod,
+    files: msg.files, modules: msg.modules,
+    define: msg.define, include: msg.include, flags: msg.flags,
+    // 每艘新 clang 实例都要重灌（FS 每实例独立）
+    prepare(inst) {
+      inst.FS.mkdirTree('/src');
+      inst.FS.mkdirTree('/out');
+      if (configMacros) {
+        const lines = Object.keys(configMacros).map((k) => '#define ' + k + ' ' + configMacros[k]);
+        inst.FS.writeFile('/src/config.h', lines.join('\n'));
+      }
+      for (const [base, text] of Object.entries(flat)) inst.FS.writeFile('/src/' + base, text);
+    },
+    hostBytes: msg.hostWasmBytes,
+  });
+  return r;
+}
+
+
 async function compile (msg) {
+  // ── 多 TU（v2，2026-10-18）：`files` 里**每个含 DEFUN_DLD 的源**都要进链接 ────────
+  // v1 只编 `Object.keys(files)[0]`（compile-core 的口径）⇒ `miscellaneous` 的
+  // partint/sample/text_waitbar 三个模块从未被编出来（判据 `partint(5)` 空）。
+  // 真实包的分组规则（不是"每个 .cc 一个模块"，也不是"全链一个模块"）：
+  //   · 一个 .cc 里可以有**多个 DEFUN_DLD**（真实包确有）；
+  //   · 一个模块可以**跨多个 .cc**（optim 的 `__bfgsmin` = __bfgsmin.cc + error-helpers.cc，
+  //     statistics 的 svmtrain = svmtrain.cc + svm.cpp + svm_model_octave.cc）。
+  // 所以我们不再靠源文件名猜分组，而是接受**显式模块表**（`msg.modules`）：
+  //   [{name:'partcnt', sources:['partint.cc'], main:'partint.cc'}, …]
+  // 表缺席 ⇒ 退回 v1 单 TU 路径（compile-core 编排，不复制它）。
+  if (Array.isArray(msg.modules) && msg.modules.length) return compileMany(msg);
   const r = await compileWith({
     targetsAvailable: () => ['wasm32', 'wasm64'].filter((a) =>
       sysrootFiles.has(`sysroot/lib/${a}-emscripten/pic/crtbegin-mt.o`)),

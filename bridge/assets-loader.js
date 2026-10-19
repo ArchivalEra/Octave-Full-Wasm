@@ -526,17 +526,83 @@
       });
     }
 
-    // ③ workerCompile(worker, files, target)：发 compile 请求；files 的**主 TU 排首位**
-    //    （compile-core 只编第一个键 —— 实测门槛 1）。源走 worker 的 source（单 TU），
-    //    多 TU 包先只编主 TU（v1 边界，diagnostics 里明说）。
-    function workerCompile(w, files, target, log) {
+    // ②c 模块表（站点资产 `assets/pkg-module-table.json`，由 build/pkg-module-table.json
+    //     上站）：包名 ⇒ [{name, sources:[…]}]。缺失 ⇒ 走 DEFUN 扫描兜底（不阻断编译）。
+    var _moduleTables = null;
+    function loadModuleTables() {
+      if (_moduleTables) return Promise.resolve(_moduleTables);
+      return fetchJSON('assets/pkg-module-table.json')
+        .then(function (d) {
+          _moduleTables = (d && d.module_table) || {};
+          return _moduleTables;
+        })
+        .catch(function () { _moduleTables = {}; return _moduleTables; });
+    }
+
+    // ③ workerCompile(worker, files, target, log)：发 compile 请求。
+    //    ★ v2（2026-10-18 多 TU 批）：模块表**优先来自数据**，扫 DEFUN 只作兜底。
+    //    为什么数据优先（实测）：`miscellaneous` 的 `sample.cc` 在 11.3.0 头下编不过
+    //    （`OCTAVE__RAND_UNIFORM()` 零参调用 vs 11.3.0 的 `rand_uniform(n, p)`），
+    //    而容器 `build-pkg-oct.sh` 的模块表**本来就没列它**（现役站点只有
+    //    cell2cell.oct + partint.oct）。靠扫 DEFUN 全编会造出"编译失败"，让人误判工具链坏。
+    //    数据的产地 = `build/pkg-module-table.json`（容器表的对账副本，闸门
+    //    `check-pkg-module-table.py` 盯着）；站点侧随 `assets/manifest*` 或 catalog 走。
+    //    ⚠️ 产物名 = **源 basename**（不是 DEFUN 名）：现役
+    //    `assets/octdir/miscellaneous/partint.oct` 的导出表同时有 `Gpartcnt` 与
+    //    `Gpartint` ⇒ 一个源里的多个 DEFUN 共用一个以**源名**命名的模块。
+    function moduleTable(files, log, pkgName) {
+      var mods = [];
+      // ① 数据表（站点资产；已由 loadModuleTables 预取到 _moduleTables）
+      var tbl = (pkgName && _moduleTables && _moduleTables[pkgName]) || null;
+      if (tbl && tbl.length) {
+        mods = tbl.map(function (m) { return { name: m.name, sources: m.sources.slice() }; });
+        log('[tu] 模块表来自数据（' + mods.length + '）：' + mods.map(function (m) { return m.name; }).join(', '));
+        return mods;
+      }
+      // ② 兜底：扫 DEFUN，按**源 basename** 建模块（多 DEFUN 共用一个模块）
+      var cc = Object.keys(files).filter(function (n) { return /\.(cc|cpp|c)$/.test(n); });
+      cc.forEach(function (rel) {
+        var text = String(files[rel] || '');
+        var names = [];
+        var re = /DEFUN_DLD\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)/g, m;
+        while ((m = re.exec(text)) !== null) names.push(m[1]);
+        if (!names.length) return;
+        var base = String(rel).replace(/^\.\//, '').split('/').pop().replace(/\.[^.]+$/, '');
+        mods.push({ name: base + '.oct', sources: [rel], defuns: names });
+      });
+      if (!mods.length) return null;
+      var withDefun = {};
+      mods.forEach(function (m) { withDefun[m.sources[0]] = 1; });
+      var helpers = cc.filter(function (rel) { return !withDefun[rel]; });
+      if (helpers.length) {
+        mods[0].sources = mods[0].sources.concat(helpers);
+        log('[tu] 辅助源并进 ' + mods[0].name + '：' + helpers.join(', '));
+      }
+      log('[tu] 模块表来自 DEFUN 扫描（兜底，' + mods.length + '）：'
+          + mods.map(function (m) {
+              return m.name + (m.defuns.length > 1 ? '[' + m.defuns.join('+') + ']' : '');
+            }).join(', '));
+      return mods;
+    }
+
+    function workerCompile(w, files, target, log, pkgName) {
       var names = Object.keys(files).sort(function (a, b) {
-        // 主 TU 优先：与包同名的 .cc、__开头的 DEFUN 宿主、再其余
         var score = function (n) { return /__/.test(n) ? 0 : (/^[^/]+\.cc$/.test(n) ? 1 : 2); };
         return score(a) - score(b);
       });
       var main = names[0];
-      if (names.length > 1) log('[v1] 多 TU 包只编主 TU：' + main + '（其余 ' + (names.length - 1) + ' 个暂不编）');
+      var mods = moduleTable(files, log, pkgName);
+      var req = { type: 'compile', source: files[main], target: target,
+                  abi: { exceptions: 'wasm-legacy', pthread: true, memory64: target === 'wasm64' },
+                  // ★ 两个 include 根（与容器同口径）：`octinc` 解 <octave/oct.h>，
+                  //   `octinc/octave` 解 <randmtzig.h> 这类扁平内部头（sample.cc 实测缺它）
+                  define: ['HAVE_CONFIG_H=1'],
+                  include: ['/src/octinc', '/src/octinc/octave'], flags: ['-std=c++17'],
+                  // lld 两件（worker 首链时才拉；不从 init 提前取）
+                  lld: { wasmUrl: 'assets/llvm/lld-wasm-only.wasm',
+                         glueUrl: 'assets/llvm/lld-wasm-only.js' } };
+      if (mods) { req.modules = mods; req.files = files; }
+      else if (names.length > 1) log('[v1] 无 DEFUN 可识别 ⇒ 只编主 TU：' + main);
       return new Promise(function (resolve, reject) {
         w.onmessage = function (ev) {
           var m = ev.data || {};
@@ -544,19 +610,17 @@
           if (m.type === 'result') { w.onmessage = null; resolve(m); }
         };
         w.onerror = function (e) { reject(errCode('MODULE_NOT_READY', '编译 Worker 崩了：' + (e.message || '?'))); };
-        w.postMessage({ type: 'compile', source: files[main], target: target,
-                        abi: { exceptions: 'wasm-legacy', pthread: true, memory64: target === 'wasm64' },
-                        define: ['HAVE_CONFIG_H=1'], include: ['/src/octinc'], flags: ['-std=c++17'],
-                        // lld 两件（worker 首链时才拉；不从 init 提前取）
-                        lld: { wasmUrl: 'assets/llvm/lld-wasm-only.wasm',
-                               glueUrl: 'assets/llvm/lld-wasm-only.js' } });
+        w.postMessage(req);
       });
     }
 
-    // ④ guessOctName(name, files)：产物文件名 = Octave 按文件名找模块（门槛 3）。
+    // ④ guessOctName(name, files)：**单模块包**的产物文件名（多模块走 r.modules[].name）。
     //    规则（build-pkg-oct.sh 的模块表口径）：主 TU 去扩展名；__bfgsmin.cc 的 DEFUN 是
-    //    __bfgsmin（单下划线）—— 但那是逐包表知识；v1 通用规则 = 主 TU basename。
+    //    __bfgsmin（单下划线）—— 但那是逐包表知识；通用兜底 = 主 TU basename。
+    //    ⚠️ 有 DEFUN 时**必须**用 DEFUN 名：`partint.cc` ⇒ `partcnt.oct`（实测反例）。
     function guessOctName(name, files) {
+      var mods = moduleTable(files, function () {}, name);
+      if (mods && mods.length === 1) return mods[0].name;
       var names = Object.keys(files).sort(function (a, b) {
         var score = function (n) { return /__/.test(n) ? 0 : (/^[^/]+\.cc$/.test(n) ? 1 : 2); };
         return score(a) - score(b);
@@ -728,11 +792,18 @@
         };
         // 幂等：同包编过（本会话）⇒ 直接回缓存（§4.2 "同 pin 键直接返回"的会话内形态）
         if (_compiled[name]) {
+          // ★ 缓存返回**与首次返回同形**（octs/bytes/symbolGap 都要带上）：
+          //   第一版只回 octPath ⇒ 第二次调用的调用方看到 `octs: undefined`，
+          //   "同一事实两个出口两个答案"（N6 教训）。实测：多 TU 套件第二次拿到空数组。
+          var c0 = _compiled[name];
           return Promise.resolve({ state: 'compiled', name: name, cached: true,
-                                   diagnostics: _compiled[name].diagnostics,
-                                   octPath: _compiled[name].octPath });
+                                   diagnostics: c0.diagnostics,
+                                   octPath: c0.octPath, octs: c0.octs || null,
+                                   bytes: c0.bytes, symbolGap: c0.symbolGap || null });
         }
-        return API.catalog().then(function (cat) {
+        // ★ 模块表与 catalog 都是"按包取知识"，一起预取（缺表不阻断 ⇒ DEFUN 兜底）
+        return Promise.all([API.catalog(), loadModuleTables()]).then(function (both) {
+          var cat = both[0];
           // ── 判 kinds：包必须带 src（B 的对象是 src/*.cc；纯 .m 包 ⇒ m-only 软失败，明说）
           var p = _catalogByName[name];
           if (!p) throw errCode('NOT_IN_ANY_LIST', '货架上没有包：' + name);
@@ -792,7 +863,7 @@
                 onProgress({ phase: 'toolchain', name: name });
                 return toolchainWorker(target, pushDiag).then(function (worker) {
                   onProgress({ phase: 'compile', name: name });
-                  return workerCompile(worker, srcFiles, target, pushDiag).then(function (r) {
+                  return workerCompile(worker, srcFiles, target, pushDiag, name).then(function (r) {
                     if (!r.ok) {
                       // 编失败 ⇒ m-only 软失败 + 明说哪一件没成（§6.3 反向：不许静默当成功）
                       return { state: 'm-only', name: name, stage: r.error ? 'compile' : 'link',
@@ -801,8 +872,15 @@
                                diagnostics: diags };
                     }
                     // ── 落盘 + addpath + 同步 pkg 库（compileAndLand；§4.2）
-                    pushDiag('[land] 编译成功 ' + (r.moduleBytes ? r.moduleBytes.length : '?') + ' B，开始落盘');
-                    var octName = guessOctName(name, srcFiles);
+                    //    ★ v2：多模块时**逐个写**（r.modules 里每个 ok 的模块各一个 .oct）；
+                    //    单模块包与 v1 完全等价（r.moduleBytes + guessOctName 的 DEFUN 优先规则）。
+                    var built = (r.modules || []).filter(function (m) { return m.ok; });
+                    var toLand = built.length
+                      ? built.map(function (m) { return { name: m.name, bytes: m.moduleBytes }; })
+                      : [{ name: guessOctName(name, srcFiles), bytes: r.moduleBytes }];
+                    pushDiag('[land] 编译成功 ' + toLand.length + ' 个模块（'
+                             + toLand.map(function (t) { return t.name + ' ' + t.bytes.length + 'B'; }).join(', ')
+                             + '），开始落盘');
                     var landDir = OCTAVE_M + '/forge/' + name + '/oct-' + target;
                     // ★ 门槛 2（设计稿 §10 实测）：嵌套路径必须**逐级建父目录**，否则
                     //   writeFile 报 `ErrnoError errno=44`。旧代码把 mkdirTree 的失败吞进
@@ -810,23 +888,31 @@
                     try { M.FS.mkdirTree(landDir); } catch (e) {
                       throw errCode('UNPACK_FAILED', '建不了落盘目录 ' + landDir + '：' + (e && e.message));
                     }
-                    try {
-                      M.FS.writeFile(landDir + '/' + octName, new Uint8Array(r.moduleBytes));
-                      pushDiag('[land] 写盘 OK → ' + landDir + '/' + octName);
-                    } catch (e) {
-                      throw errCode('UNPACK_FAILED', '写 .oct 失败（' + landDir + '/' + octName + '）：'
-                                    + (e && (e.message || e.name) || e));
-                    }
+                    var landed = [];
+                    toLand.forEach(function (t) {
+                      var rel = landDir + '/' + t.name;
+                      try {
+                        M.FS.writeFile(rel, new Uint8Array(t.bytes));
+                        landed.push({ name: t.name, path: rel, bytes: t.bytes.length });
+                        pushDiag('[land] 写盘 OK → ' + rel);
+                      } catch (e) {
+                        throw errCode('UNPACK_FAILED', '写 .oct 失败（' + rel + '）：'
+                                      + (e && (e.message || e.name) || e));
+                      }
+                    });
                     addPaths([landDir]);
                     pushDiag('[land] addpath OK');
                     try {
                       M.eval_string("if (exist('__pkgfix_sync_db__') == 2) try; __pkgfix_sync_db__ (); catch; end; end");
                     } catch (e) {}
-                    _compiled[name] = { octPath: landDir + '/' + octName, diagnostics: diags.slice() };
+                    var _totalBytes = toLand.reduce(function (a, t) { return a + t.bytes.length; }, 0);
+                    _compiled[name] = { octPath: landed[0].path, octs: landed, bytes: _totalBytes,
+                                        symbolGap: r.gap || null, diagnostics: diags.slice() };
                     onProgress({ phase: 'done', name: name });
                     return { state: 'compiled', name: name,
-                             octPath: landDir + '/' + octName,
-                             bytes: r.moduleBytes.length,
+                             octPath: landed[0].path,
+                             octs: landed,
+                             bytes: toLand.reduce(function (a, t) { return a + t.bytes.length; }, 0),
                              symbolGap: r.gap || null,
                              diagnostics: diags };
                   });
