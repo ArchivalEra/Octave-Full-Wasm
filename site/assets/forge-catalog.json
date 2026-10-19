@@ -426,6 +426,20 @@
    ]
   },
   {
+   "name": "llvm-wasm",
+   "version": "6.0.12",
+   "form": "tree",
+   "content": [],
+   "consumer": [
+    "octave"
+   ],
+   "sha256": "198e84c4baeb3ce4c8d11cbbef75f072ec61db1b527df0ee2c90c9a4ffc72a85",
+   "url": "assets/llvm/clang.wasm",
+   "size": 122922700,
+   "deps": [],
+   "note": "浏览器内编 .oct 的工具链能力层（clang/lld/sysroot 两档/driver）；含 `src` 的源码包在装载前需要它（用户裁决 2026-10-18）。字节由 build/113/provision-llvm-wasm.sh 供给（sha 见 upstream-lock.json 的 llvm-wasm 条）"
+  },
+  {
    "name": "matgeom",
    "version": "1.2.4",
    "size": 572364,

@@ -71,7 +71,13 @@ check(b12.ok && b12.hasTriple && b12.hasDescKeys,
 const b3 = await page.evaluate(async () => {
   const list = await window.OctaveAssets.browse();
   const sy = list.find(e => e.name === 'symbolic');
-  const noDesc = list.filter(e => e.name !== 'pyodide' && !(e.description || '').length)
+  // ⚠️ 排除口径 = **能力层**（form:'tree'），不是按名字硬编码：能力层不是货架包，
+  //   没有 description 是正当的（pyodide 先例 + 2026-10-19 新增的 llvm-wasm）。
+  //   第一版只写死 'pyodide' ⇒ llvm-wasm 进表后 B3c 假红（这条实测抓到）。
+  //   ⚠️ 第二版先用 e.form 也错了：Entry 的 form 在 **detail.form** 里（顶层没有）
+  //   ⇒ 过滤恒真。判据：读 detail.form。
+  const noDesc = list
+    .filter(e => (!e.detail || e.detail.form !== 'tree') && !(e.description || '').length)
     .map(e => e.name);
   return {
     syDesc: sy ? sy.description : null,

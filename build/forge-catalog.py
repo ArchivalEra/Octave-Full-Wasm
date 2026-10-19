@@ -343,6 +343,63 @@ def capability_entries(site):
         "note": "共享能力层（符号计算等需要真 Python 的包靠 deps 边指向它）；"
                 "字节由 build/113/provision-pyodide.sh 供给，sha 见 upstream-lock.json + 该脚本",
     })
+    # ★ 第二个能力层 = clang 工具链（浏览器内自编 .oct，2026-10-19）。
+    #   内容仓 `mail/040` §③ 的请求：`llvm-wasm` 已上站（assets/llvm/）却**不在表里**
+    #   ⇒ 用户裁决⑤（"含 src 的源码包装载的必要条件 = LLVM 已下载"）**没有数据源**。
+    #   形状取 **pyodide 先例**（装配器从站点实际存在的字节产合成条目），
+    #   而不是把生产者 `content-list.json` 的 14 条逐件表原样并进来 —— 理由两条（实测）：
+    #     ① 14 条散成 14 个 pack 不是"一个能力层"，与 pyodide 的形状不一致；
+    #     ② 那种并入的 url 前缀是 `assets/llvm-wasm/`，而站点实际是 `assets/llvm/`
+    #        ⇒ stage 落点（assets/forge/）与目录 url 两处口径分叉，"stage 成功"与
+    #        "R7b 报 404"会同时为真（本批实测踩到：14 件 stage 完仍 14 条红）。
+    #   sha 取**主件**（clang.wasm）—— 与 pyodide 取 pyodide.asm.wasm 同款；
+    #   size = 整树预算（裁决：form:tree 的 size 是整树，url 指树里主件）。
+    lw_root = os.path.join(site, "assets", "llvm")
+    lw_main = os.path.join(lw_root, "clang.wasm")
+    if not os.path.isdir(lw_root):
+        problems.append("能力层缺失：assets/llvm/ 不在站点（跑 build/113/provision-llvm-wasm.sh fetch）")
+    elif not os.path.isfile(lw_main):
+        problems.append("能力层残缺：assets/llvm/clang.wasm 不在（provision 未完成？）")
+    else:
+        total = 0
+        for base, _dirs, files in os.walk(lw_root):
+            for f in files:
+                try:
+                    total += os.path.getsize(os.path.join(base, f))
+                except OSError:
+                    pass
+        # 版本从站点上的工具链 manifest 读（**不硬编码** —— pyodide 那条的 "314.0.7"
+        # 是硬编码的先例；这里按"能读就读，读不到就不编"的原则办）。
+        lw_ver = ""
+        try:
+            with open(os.path.join(lw_root, "manifest.json"), encoding="utf-8") as fh:
+                _m = json.load(fh)
+            # emcc 版本串形如 "emcc (Emscripten …) 6.0.12 (5488e08…)" ⇒ 取**数字版本**
+            # （`.split()[1]` 会得到 "(Emscripten" —— 实测踩到，已改成正则取 x.y.z）
+            _emcc = ((_m.get("toolchain") or {}).get("emcc") or "")
+            _mv = re.search(r"\b(\d+\.\d+\.\d+)\b", _emcc)
+            lw_ver = _mv.group(1) if _mv else ""
+        except (OSError, ValueError, IndexError):
+            lw_ver = ""
+        if not lw_ver:
+            problems.append("能力层 llvm-wasm 的版本读不到（assets/llvm/manifest.json 缺 emcc 版本？）"
+                            "—— 不编版本号（同 §产地纪律：读不到就不编）")
+        else:
+            entries.append({
+                "name": "llvm-wasm",
+                "version": lw_ver,
+                "form": "tree",
+                "content": [],
+                "consumer": ["octave"],
+                "sha256": _file_sha_or_empty(lw_main),
+                "url": "assets/llvm/clang.wasm",
+                "size": total,
+                "deps": [],
+                "note": "浏览器内编 .oct 的工具链能力层（clang/lld/sysroot 两档/driver）；"
+                        "含 `src` 的源码包在装载前需要它（用户裁决 2026-10-18）。"
+                        "字节由 build/113/provision-llvm-wasm.sh 供给"
+                        "（sha 见 upstream-lock.json 的 llvm-wasm 条）",
+            })
     return entries, problems
 
 
@@ -1029,6 +1086,41 @@ def _selftest():
         bd, site, ent = _stage_query_url(with_bytes=False)
         return len(stage_upstream_bytes(site, ent, bd, check_only=False)) == 1
     cases.append(("★ stage 反向：带 query 且真名字节不在 ⇒ 仍必报（不静默）", _stage_query_missing))
+    # ★ 能力层 llvm-wasm（内容仓 mail/040 §③ 的补全）：装配器从**站点实际存在的字节**
+    #   产合成条目（pyodide 先例）。三条用例：正常产条目 / 字节缺 ⇒ 点名 / 版本按数字取。
+    def _cap_llvm_ok(**kw):
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "assets", "pyodide", "pyodide"))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            lw = os.path.join(d, "assets", "llvm")
+            os.makedirs(lw)
+            open(os.path.join(lw, "clang.wasm"), "wb").write(b"CW")
+            json.dump({"toolchain": {"emcc": "emcc (Emscripten gcc/clang-like replacement"
+                                       " + linker emulating GNU ld) 6.0.12 (5488e0871d46)"}},
+                      open(os.path.join(lw, "manifest.json"), "w"))
+            ents, probs = capability_entries(d)
+            e = [x for x in ents if x["name"] == "llvm-wasm"]
+            assert not probs, probs
+            assert len(e) == 1 and e[0]["form"] == "tree" and e[0]["content"] == []
+            assert e[0]["version"] == "6.0.12", e[0]["version"]          # 不是 "(Emscripten"
+            assert e[0]["url"] == "assets/llvm/clang.wasm"
+            assert e[0]["size"] >= 2 and e[0]["sha256"]
+            return True
+
+    def _cap_llvm_missing():
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "assets", "pyodide", "pyodide"))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            ents, probs = capability_entries(d)   # 没有 assets/llvm/
+            return (not [e for e in ents if e["name"] == "llvm-wasm"]
+                    and any("assets/llvm/" in x for x in probs))
+
+    cases.append(("★ 能力层 llvm-wasm：从站点字节产条目（版本取数字 6.0.12 不取 \"(Emscripten\"）",
+                  _cap_llvm_ok))
+    cases.append(("★ 能力层 llvm-wasm 反向：assets/llvm/ 不在 ⇒ 点名（不静默缺能力层）",
+                  _cap_llvm_missing))
     cases.append(("★ stage：空条目 ⇒ 无问题（零值不报错，由调用方 guard）",
                   lambda: stage_upstream_bytes(tempfile.mkdtemp(), [], tempfile.mkdtemp()) == []))
 
