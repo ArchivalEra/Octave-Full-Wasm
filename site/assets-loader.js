@@ -266,7 +266,19 @@
                           + (e && e.message ? e.message : e));
         });
       }
-      return Promise.reject(new Error('未知的能力层：' + p.name + '（本构建只实现了 pyodide）'));
+      // ★ mail/049 契约事故修正（2026-10-20）：旧文案「未知的能力层」是误导——
+      //   llvm-wasm 不是「未知」，是**不归 install 管**（执行域错配：工具链是
+      //   compile-worker 的编译现场用的，不是 MEMFS/addpath 语义——方案 B 裁决，
+      //   工具链归 DownloadStore + compile-worker）。role 字段进 schema 后这里
+      //   先读 role（表未升级时按 name 白名单兜底，两层都指向同一个答案）。
+      var isToolchain = (p.role === 'toolchain') || (p.name === 'llvm-wasm');
+      if (isToolchain) {
+        return Promise.reject(errCode('NOT_INSTALLABLE',
+          p.name + ' 是编译工具链（clang/lld/sysroot），由下载管理（DownloadStore）'
+          + ' + 编译 Worker 使用——不走装载。UI 侧请走下载界面。'));
+      }
+      return Promise.reject(errCode('LAYER_NOT_IMPLEMENTED',
+        '该能力层的装载尚未实现：' + p.name + '（当前已实现：pyodide 语言桥）'));
     }
 
     function loadOne(name, seen) {

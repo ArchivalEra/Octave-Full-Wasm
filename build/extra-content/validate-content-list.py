@@ -239,15 +239,30 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
         #     ① 纯 .m（content 不含 oct，且 form 不是 oct/octdir）⇒ **不许带** arch（无架构概念）
         #     ② 含 .oct ⇒ **必须带**，取值 ∈ 词表
         #     ③ 能力层（form:tree）⇒ **不许带**（自带运行时，架构与宿主无关）
+        # ★ kind/role 词表校验（mail/047 + mail/049 Q1，2026-10-20）：
+        #   非法值必须报（词表钉死，不静默当未知键处理——未知键通道是 fail-closed 撤条目，
+        #   而已知键的非法值是**表错了**，两种报法都要响）。
+        if "kind" in e and e["kind"] not in ("src", "pre", "engine"):
+            probs.append("%s kind=%r 不在词表 [src, pre, engine] 里" % (tag, e["kind"]))
+        if "role" in e and e["role"] not in ("package", "toolchain", "language-bridge"):
+            probs.append("%s role=%r 不在词表 [package, toolchain, language-bridge] 里" % (tag, e["role"]))
+        # ★ kind:'engine'（mail/047，2026-10-20）：arch = lane 值（索引键不是版本轴，
+        #   mail/031 裁决）——arch 的合法面按 kind 扩词表，且 engine 条目**必须带** arch。
+        kind = e.get("kind")
+        engine_lane_enum = ["wasm32", "wasm64", "wasm32-final", "master", "IllegalPerformance", "omc"]
+        eff_enum = arch_enum + (engine_lane_enum if kind == "engine" else [])
         if "arch" in e:
-            if e["arch"] not in arch_enum:
-                probs.append("%s arch=%r 不在词表 %s 里" % (tag, e["arch"], arch_enum))
-            needs_arch = ("oct" in (e.get("content") or [])) or (e.get("form") in ("oct", "octdir"))
+            if e["arch"] not in eff_enum:
+                probs.append("%s arch=%r 不在词表 %s 里" % (tag, e["arch"], eff_enum))
+            needs_arch = ("oct" in (e.get("content") or [])) or (e.get("form") in ("oct", "octdir")) \
+                or (kind == "engine")
             if not needs_arch:
                 why = ("能力层（form:tree）自带运行时，架构与宿主无关" if e.get("form") == "tree"
                        else "纯 .m 条目没有架构概念（任何档都能装）")
                 probs.append("%s 带了 arch=%r 但本条目**不需要架构标注** —— %s（裁决 2026-10-16）"
                              % (tag, e["arch"], why))
+        elif kind == "engine":
+            probs.append("%s kind:'engine' 条目**必须带** arch（= lane 值，索引键）" % tag)
         else:
             needs_arch = ("oct" in (e.get("content") or [])) or (e.get("form") in ("oct", "octdir"))
             if needs_arch:
@@ -289,6 +304,37 @@ def selftest():
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "pyodide", "version": "314.0.7", "sha256": "b" * 64,
              "url": "assets/pyodide/core.tar.bz2", "form": "tree"}]}, schema=schema), True)
+    # ★ mail/047 + mail/049 Q1（2026-10-20）：kind / role 新键的正反用例
+    add("kind:'engine' + role:'toolchain' + arch=lane 值 ⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "optional_keys": ["kind", "role"],
+         "entries": [
+            {"name": "llvm-wasm", "version": "1", "sha256": "b" * 64,
+             "url": "assets/llvm/clang.wasm", "form": "file", "content": [],
+             "kind": "engine", "role": "toolchain", "arch": "wasm64"}]}, schema=schema), True)
+    add("★ kind:'engine' 缺 arch ⇒ 必须报（lane 是索引键）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "optional_keys": ["kind", "role"],
+         "entries": [
+            {"name": "llvm-wasm", "version": "1", "sha256": "b" * 64,
+             "url": "assets/llvm/clang.wasm", "form": "file", "content": [],
+             "kind": "engine", "role": "toolchain"}]}, schema=schema), False)
+    add("★ kind:'engine' 的 arch 用了非 lane 值（如 semver）⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "optional_keys": ["kind", "role"],
+         "entries": [
+            {"name": "llvm-wasm", "version": "1", "sha256": "b" * 64,
+             "url": "assets/llvm/clang.wasm", "form": "file", "content": [],
+             "kind": "engine", "role": "toolchain", "arch": "1.6.3"}]}, schema=schema), False)
+    add("★ role:'toolchain' 不再被当未知键（产地升级后合法）⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0",
+         "entries": [
+            {"name": "x", "version": "1", "sha256": "b" * 64,
+             "url": "assets/x.wasm", "form": "file", "content": ["m"],
+             "role": "package"}]}, schema=schema), True)
+    add("★ role 非法值 ⇒ 必须报（词表钉死）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0",
+         "entries": [
+            {"name": "x", "version": "1", "sha256": "b" * 64,
+             "url": "assets/x.wasm", "form": "file", "content": ["m"],
+             "role": "middleware"}]}, schema=schema), False)
     add("声明 optional_keys 后，未知键可忽略 ⇒ 不报", lambda: check_table(
         {**_good(schema),
          "entries": [{**_good(schema)["entries"][0], "x_future": 1}],

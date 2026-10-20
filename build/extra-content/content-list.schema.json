@@ -1,401 +1,419 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ArchivalEra/Octave-Full-Wasm/build/extra-content/content-list.schema.json",
-  "title": "content-list/v2 — 额外内容清单（三仓统一接缝的记录形状）",
-  "description": "权威形状。产地 = 本文件（宿主仓 build/extra-content/）。设计判决见 build/113/NOTES-extra-content-seam.md §2（记录形状）与 §4（产地）。校验器 validate-content-list.py 从本文件读 enum（单一产地，防漂移）。",
-  "type": "object",
-  "required": [
-    "schema",
-    "octave"
-  ],
-  "anyOf": [
-    {
-      "required": [
-        "entries"
-      ]
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://github.com/ArchivalEra/Octave-Full-Wasm/build/extra-content/content-list.schema.json",
+ "title": "content-list/v2 — 额外内容清单（三仓统一接缝的记录形状）",
+ "description": "权威形状。产地 = 本文件（宿主仓 build/extra-content/）。设计判决见 build/113/NOTES-extra-content-seam.md §2（记录形状）与 §4（产地）。校验器 validate-content-list.py 从本文件读 enum（单一产地，防漂移）。",
+ "type": "object",
+ "required": [
+  "schema",
+  "octave"
+ ],
+ "anyOf": [
+  {
+   "required": [
+    "entries"
+   ]
+  },
+  {
+   "required": [
+    "packs"
+   ]
+  }
+ ],
+ "properties": {
+  "schema": {
+   "type": "integer",
+   "minimum": 1,
+   "description": "记录版本。消费者读 schema ≤ 自己能理解的上限；更高 ⇒ 条目级 quarantine（见 validate 的 --max-schema）。"
+  },
+  "octave": {
+   "type": "string",
+   "description": "该表按哪个 Octave 版本解析（生产者侧已过滤；宿主据此判兼容）。"
+  },
+  "entries": {
+   "type": "array",
+   "minItems": 1,
+   "description": "规范键。能力层（Pyodide/clang）= form:\"tree\" 的**普通条目**，进同一张 deps 图（接缝 §2：不引入新字段）。**「普通」= 它不特殊（同一套遍历、同一张图），不是「物理上只能一条」** —— 裁决 2026-10-15（回应内容仓 mail/009 待确认②：LLVM-wasm 的 clang 工具链出 **13 条**，逐文件许可三档 + 逐文件 sha256 才让两档 sysroot 复用可见；统一成一条必然对两档之一说谎）。条数与形态限制由**消费者遍历**决定，不由 schema 条数决定。",
+   "items": {
+    "$ref": "#/$defs/entry"
+   }
+  },
+  "packs": {
+   "type": "array",
+   "minItems": 1,
+   "description": "**兼容别名**（= entries）。现役站点目录 `assets/forge-catalog.json` 与 loader 读的是这个键；两者语义相同，表里**只许出现一个**。",
+   "items": {
+    "$ref": "#/$defs/entry"
+   }
+  },
+  "optional_keys": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "★ 协商规则（接缝 §2）：本表声明**哪些非规范键可被旧消费者忽略**。不在本清单里的未知键 ⇒ 该条目必须被撤下（fail-closed）。『忽略是礼遇，不是默认』。"
+  },
+  "producer": {
+   "type": "object",
+   "required": [
+    "id"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "生产者标识（octave-extra-content / llvm-wasm / …）"
     },
-    {
-      "required": [
-        "packs"
-      ]
+    "pin": {
+     "type": "string",
+     "description": "身份自述。**建议形态（裁决 2026-10-14，回应内容仓 mail/007 缺口③）**：`release:<tag>` / `commit:<sha>` / `submodule:<sha>` —— **前缀自述类型**，让读的人一眼看出 pin 指的是『已发布的 tag』还是『某个 commit』。⚠️ 实测教训：LLVM-wasm 的表写 `pin: \"v0.1.2\"` 而该版本**四处皆无**（本地 tag/远端 tag/gh release/磁盘 bundle）—— 它是『预示』。形状合法（自由字符串）但**无判据可拦**；前缀至少让类型可见，而 `release:` 前缀给未来留一条『可核 release 存在性』的路（本批不实现，登记为悬案）。"
     }
-  ],
-  "properties": {
-    "schema": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "记录版本。消费者读 schema ≤ 自己能理解的上限；更高 ⇒ 条目级 quarantine（见 validate 的 --max-schema）。"
+   },
+   "description": "谁产的这张表 + 它的身份怎么钉。"
+  },
+  "note": {
+   "type": "string"
+  }
+ },
+ "$defs": {
+  "entry": {
+   "type": "object",
+   "required": [
+    "name",
+    "version",
+    "sha256",
+    "url"
+   ],
+   "properties": {
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "description": "唯一键（deps 指它）"
     },
-    "octave": {
+    "version": {
+     "type": "string",
+     "minLength": 1
+    },
+    "sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "fail-closed 的唯一依据（三段：采购/装配/客户端各核一次）"
+    },
+    "url": {
+     "type": "string",
+     "minLength": 1,
+     "description": "交付路径。站点态**必为同源相对**（COEP 拦跨域）；生产者态可以是上游绝对 URL（『重取入口』），宿主装配时改写为同源。校验器两种都接受，`--site` 模式强制同源。"
+    },
+    "upstream_url": {
+     "type": "string",
+     "description": "出处（记账用，不参与运行期）"
+    },
+    "size": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "可选（进度条；**不作为第二断言** —— fail-closed 的唯一依据是 sha256）。**口径由 `form` 决定**（裁决 2026-10-15，回应内容仓 mail/009 的独立发现）：单文件形态（pkg/oct/file/js）= **`url` 指向的那个文件的字节**；**`form:\"tree\"` 的 `size` = 整棵树的字节预算**（= `url` 所在目录所有文件的字节和）—— 因为能力层要回答的是「闭包还要拉多少」这个**总量**问题，而 `url` 只是树里的一个锚（现役 pyodide 即此形态：size 22,013,349 = `assets/pyodide/` 整目录，url 指树里的主 wasm 9,598,218，两者**不是同一个对象，都是有意的**）。⇒ 站点闸门据此判 sanity：单文件 `size` 必须 == 字节数；`tree` 的 `size` 必须 ≥ `url` 锚的字节数（整树不可能小于其中一件）。"
+    },
+    "form": {
+     "type": "string",
+     "enum": [
+      "pkg",
+      "tree",
+      "oct",
+      "octdir",
+      "file",
+      "js"
+     ],
+     "description": "投送形态（供给期从字节派生，不是作者手写）。能力层 = \"tree\"。"
+    },
+    "content": {
+     "type": "array",
+     "items": {
       "type": "string",
-      "description": "该表按哪个 Octave 版本解析（生产者侧已过滤；宿主据此判兼容）。"
+      "enum": [
+       "m",
+       "src",
+       "oct"
+      ]
+     },
+     "description": "内容构成（= 旧 kinds 的语义）。**只对 `form:\"pkg\"` 有意义**（包里有什么源：m/src/oct）；**能力层（`form:\"tree\"`）与单文件形态留空数组 `[]`** —— 裁决 2026-10-14（回应内容仓 mail/007 缺口①）：`content` 的语义是『包里有哪类源』，wasm/js 不是它的同类；硬塞进枚举会让这个轴变成『什么都有』的垃圾桶。⇒ **不扩枚举**；能力层条目 `content: []`（本仓 golden/toolchain.json 即此形态，作示范）。"
     },
-    "entries": {
-      "type": "array",
-      "minItems": 1,
-      "description": "规范键。能力层（Pyodide/clang）= form:\"tree\" 的**普通条目**，进同一张 deps 图（接缝 §2：不引入新字段）。**「普通」= 它不特殊（同一套遍历、同一张图），不是「物理上只能一条」** —— 裁决 2026-10-15（回应内容仓 mail/009 待确认②：LLVM-wasm 的 clang 工具链出 **13 条**，逐文件许可三档 + 逐文件 sha256 才让两档 sysroot 复用可见；统一成一条必然对两档之一说谎）。条数与形态限制由**消费者遍历**决定，不由 schema 条数决定。",
-      "items": {
-        "$ref": "#/$defs/entry"
-      }
+    "arch": {
+     "type": "string",
+     "enum": [
+      "wasm32",
+      "wasm64"
+     ],
+     "description": "**目标架构 —— 只在「要 dlopen 进宿主的东西」上标**（裁决 2026-10-16，用户点令「楚河汉界：wasm32 引擎只能装 32 的额外内容，IP 线与 64 线都要兼容 64 的额外内容」）。**派生值，不是作者手写**（与 `form` 同例）：从 `.oct` 字节的 `dylink.0` 段 TARGET_FEATURES 子节读（`build/113/oct-arch.py`，纯 stdlib；判据 = wasm64 模块在该段声明特性名 `wasm64`，这正是 emscripten 加载器判 `incorrect architecture` 的机制）。⚠️ **不从目录名推**（`oct-w64/` ⇒ 猜 wasm64）：本仓实测过「判别看包内实际带什么、不能看目录名推」（NOTES-forge-ondemand §分叉）。**三档语义**（每档都有实测支撑）：① **纯 `.m` 包（`content` 不含 `oct`）⇒ 不带本字段**（无架构概念，任何档都能装 —— 现役货架 10 包全属此）；② **含 `.oct` 的条目（`content` 含 `oct`，或 `form` = `oct`/`octdir`）⇒ 必须带**，且必须与**宿主档**一致（错档 = `incorrect architecture (wasm32 vs wasm64)`，AGENTS 记过）；③ **能力层（`form:「tree」`，Pyodide/clang）⇒ 不带**（它**自带运行时**，那个 wasm 有自己的架构，与宿主无关 —— 实测反例：**Pyodide 是 wasm32，却在 w64 档页面上跑通**，8761 上 `accept-symbolic-seam` 9/0）。⇒ **这条界不是「w64 档只收 wasm64 内容」**：受约束的只有「要 dlopen 进宿主」的那一类。"
     },
-    "packs": {
-      "type": "array",
-      "minItems": 1,
-      "description": "**兼容别名**（= entries）。现役站点目录 `assets/forge-catalog.json` 与 loader 读的是这个键；两者语义相同，表里**只许出现一个**。",
-      "items": {
-        "$ref": "#/$defs/entry"
-      }
+    "kinds": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "**兼容视图**（= content 的旧名）。旧消费者照读；新代码用 content。"
     },
-    "optional_keys": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "★ 协商规则（接缝 §2）：本表声明**哪些非规范键可被旧消费者忽略**。不在本清单里的未知键 ⇒ 该条目必须被撤下（fail-closed）。『忽略是礼遇，不是默认』。"
+    "deps": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "依赖边（包 → 包，或 包 → 能力层条目）。闭包由消费者解析；**不加新字段**表达能力层需求（接缝 §2）。"
     },
-    "producer": {
-      "type": "object",
-      "required": [
-        "id"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "生产者标识（octave-extra-content / llvm-wasm / …）"
-        },
-        "pin": {
-          "type": "string",
-          "description": "身份自述。**建议形态（裁决 2026-10-14，回应内容仓 mail/007 缺口③）**：`release:<tag>` / `commit:<sha>` / `submodule:<sha>` —— **前缀自述类型**，让读的人一眼看出 pin 指的是『已发布的 tag』还是『某个 commit』。⚠️ 实测教训：LLVM-wasm 的表写 `pin: \"v0.1.2\"` 而该版本**四处皆无**（本地 tag/远端 tag/gh release/磁盘 bundle）—— 它是『预示』。形状合法（自由字符串）但**无判据可拦**；前缀至少让类型可见，而 `release:` 前缀给未来留一条『可核 release 存在性』的路（本批不实现，登记为悬案）。"
-        }
-      },
-      "description": "谁产的这张表 + 它的身份怎么钉。"
+    "requires": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "平台/版本约束串（如 'octave (>= 4.0.0)'）。"
+    },
+    "license": {
+     "type": [
+      "string",
+      "object"
+     ],
+     "description": "许可（spdx 串或对象）。**裁决 2026-10-15（回应内容仓 mail/009 待确认①：LLVM-wasm 的混合许可 `\"mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)\"`）：保持自由字符串，不收紧成 SPDX 枚举**。判据：枚举只能表达「单一 SPDX 标识」，而真实发布的产物**逐文件混合**（clang/lld = Apache-2.0 WITH LLVM-exception、glue js = MIT OR NCSA、driver = AGPL）⇒ 收紧会逼生产者**说谎或拆条**，而许可台账的价值恰在「如实」。⚠️ 诚实边界：因此**没有机器判据能核「许可写对了没」**——它是记账字段，不参与 fail-closed（唯一 fail-closed 依据是 sha256）；机器只查**类型**（string | object，拒数字/数组，见校验器）。将来若要有判据，方向是**另加可选结构**（如 `license_files: [url…]` 指到许可原文）而不是改本字段的词表。"
     },
     "note": {
-      "type": "string"
+     "type": "string"
+    },
+    "description": {
+     "type": "string",
+     "description": "★ 包级静态描述（规范键，2026-10-17 定稿；内容仓 mail/029 出、mail/030 Q2 裁『内联』——实测 13 包共 865 字节，不构成拆分文件的理由，且它是 UI 卡片的**首屏数据**（每卡片都渲染），拆出去 = 每卡片一次额外 fetch，方向反了；`desc_url` 拆分方案不采（0.9 KB 为它引入第二个 catalog 的 schema/协商/缺件语义，复杂度远超收益；将来真出现大文本再议，判据 = 单包描述 > 若干 KB）。**包级一条**（上游索引口径；上游无逐版数据 ⇒ 逐版不编）。合法缺省 `\"\"`。数据源 = 生产者档案 `upstream.description`，`--emit` 摊平到条目级。"
+    },
+    "links": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/link"
+     },
+     "description": "★ 包级文档链接（规范键，2026-10-17 定稿；与 `description` 同批，同裁『内联但瘦身』）。供 UI 面板『主页/新闻/仓库』链；合法缺省 `[]`。**瘦身口径**（内容仓 mail/030 Q2 裁决②）：`label`+`url` 为规范结构；`icon`（上游索引的 Font Awesome class）**非规范** —— UI 有自己的图标体系；携带它不撤条目（`additionalProperties: true`，兼容过渡期），但消费端**不作承诺**。"
+    },
+    "consumer": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "enum": [
+       "octave",
+       "omc"
+      ]
+     },
+     "description": "消费面（数组 + **包含语义**：消费端环境 ∈ consumer 即可用，非全等——mail/048 重申钓鱼 D7/U-3 根因）。缺省 ['octave']。"
+    },
+    "versions": {
+     "type": "array",
+     "minItems": 1,
+     "description": "★ 版本候选集（裁决 2026-10-16，用户点令「每个版本各自带一个是否兼容的属性」；内容仓 mail/018 §② 裁『出，且只出已 stage 字节的版本』）。**同一 name 的多个版本各为一条候选**，三属性（fromSource/compatible/installed）按候选求值 —— 不引入第四个属性、不存储每版 compatible 布尔（会漂：实测 statistics 1.7.3 曾声明 ['m','oct'] 而真字节 0 个 .oct）。**三条不变量**（校验器逐条判）：① 非空且 version 两两不重复；② 条目顶层标量（version/sha256/url）必须**恰好等于某个候选**（逐字 —— 防两处各写一份漂移）；③ `stage:\"staged\"` 的候选**必须带派生轴**（form/content；content 含 oct ⇒ 必带 arch），派生不出来 ⇒ 只能以 `stage:\"withheld\"` + `withheld_cause` 出现（**不许编**）。**兼容礼遇**：旧消费者可经 `optional_keys` 忽略本键（本仓既有协商规则）；未声明 ⇒ fail-closed 撤条目。",
+     "items": {
+      "$ref": "#/$defs/candidate"
+     }
+    },
+    "artifacts": {
+     "type": "array",
+     "description": "★ **预编译件**（判决 2026-10-18，`build/113/NOTES-release-model.md` §4）：宿主构建的 `.oct` 二进制，**逐架构一份**。**为什么不塞进 `versions[]`**：`versions[]` 的语义是**上游 tarball 候选**（顶层标量 == 某候选逐字），而 artifact 是**我们自己构建的字节**——混进去会破坏那条不变量，且让 `stage` 出现两种含义。**发布单位 = `(name, version, arch)` 三元组**（不是单个文件、不是整个包集）；`control` 的 9 个 `.oct` 是一个 artifact 的**内容**，不是 9 个发布物。**三条不变量**（校验器逐条判）：① 同一 entry 内 `(arch, octave, toolchain, recipe)` **不得重复**（一个架构一个配方只许一份 —— 想要第二份必须换 `recipe` 且显式可见，不许静默替换）；② **版本锚定**：artifact **没有自己的 version 字段** —— 它只可能附着在 entry 顶层 `version`（= 某个已发布的源码候选）上，即「预编译件永远属于某个已发布源码版本」；③ **不许编**：`arch` 必须由字节派生（`build/113/oct-arch.py` 读 `dylink.0`），`files` 必须与站点字节相符，派生不出/字节不在 ⇒ `stage` 用 withheld + `withheld_cause`（不许写一个猜的 arch）。**架构不进版本号**：版本号是上游事实（`optim 1.6.3`），架构是我们的构建矩阵 —— 把架构塞进版本号会产生 `optim-1.6.3-wasm32` 这种**上游不存在的版本**，那正是坏模型。**产地**：内容仓**不声明**本键（它不构建、量不出 sha），宿主装配时补上（与 staged 语义同一条纪律：字节在谁那谁记）。",
+     "items": {
+      "$ref": "#/$defs/artifact"
+     }
+    },
+    "kind": {
+     "type": "string",
+     "enum": [
+      "src",
+      "pre",
+      "engine"
+     ],
+     "description": "条目性质（mail/047 提单，2026-10-20）：src=源码包（现场编译）；pre=预编译件；engine=引擎/工具链条目（arch=lane 值，如 wasm32/wasm64/master…——arch 本来就是索引键不是版本轴，宿主 mail/031 裁决）。缺省 = 按 form/content 推导（向后兼容：旧消费者不声明 optional 时 fail-closed 撤条目——optional_keys 协商照旧）。engine 条目的逐件 sha 权威 = 产物自证（<lane>/octave.build.json 的 measured.files），entry 只放入口清单 + 总字节，不复制 per-file sha（不造第二产地）。"
+    },
+    "role": {
+     "type": "string",
+     "enum": [
+      "package",
+      "toolchain",
+      "language-bridge"
+     ],
+     "description": "消费角色（mail/049 Q1 提单，2026-10-20）：package=函数包（缺省，走 install）；toolchain=编译工具链（不走装载——DownloadStore + compile-worker 的执行域，消费端对 role:'toolchain' 必须拒绝 install 并指路下载界面）；language-bridge=语言桥（如 pyodide，走 installLayer）。缺省 = package。form 是形态不是角色（049 事故根因：llvm-wasm 与函数包同 form:'tree' 混列）。"
     }
+   },
+   "additionalProperties": true
   },
-  "$defs": {
-    "entry": {
-      "type": "object",
-      "required": [
-        "name",
-        "version",
-        "sha256",
-        "url"
-      ],
-      "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "description": "唯一键（deps 指它）"
-        },
-        "version": {
-          "type": "string",
-          "minLength": 1
-        },
-        "sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$",
-          "description": "fail-closed 的唯一依据（三段：采购/装配/客户端各核一次）"
-        },
-        "url": {
-          "type": "string",
-          "minLength": 1,
-          "description": "交付路径。站点态**必为同源相对**（COEP 拦跨域）；生产者态可以是上游绝对 URL（『重取入口』），宿主装配时改写为同源。校验器两种都接受，`--site` 模式强制同源。"
-        },
-        "upstream_url": {
-          "type": "string",
-          "description": "出处（记账用，不参与运行期）"
-        },
-        "size": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "可选（进度条；**不作为第二断言** —— fail-closed 的唯一依据是 sha256）。**口径由 `form` 决定**（裁决 2026-10-15，回应内容仓 mail/009 的独立发现）：单文件形态（pkg/oct/file/js）= **`url` 指向的那个文件的字节**；**`form:\"tree\"` 的 `size` = 整棵树的字节预算**（= `url` 所在目录所有文件的字节和）—— 因为能力层要回答的是「闭包还要拉多少」这个**总量**问题，而 `url` 只是树里的一个锚（现役 pyodide 即此形态：size 22,013,349 = `assets/pyodide/` 整目录，url 指树里的主 wasm 9,598,218，两者**不是同一个对象，都是有意的**）。⇒ 站点闸门据此判 sanity：单文件 `size` 必须 == 字节数；`tree` 的 `size` 必须 ≥ `url` 锚的字节数（整树不可能小于其中一件）。"
-        },
-        "form": {
-          "type": "string",
-          "enum": [
-            "pkg",
-            "tree",
-            "oct",
-            "octdir",
-            "file",
-            "js"
-          ],
-          "description": "投送形态（供给期从字节派生，不是作者手写）。能力层 = \"tree\"。"
-        },
-        "content": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "m",
-              "src",
-              "oct"
-            ]
-          },
-          "description": "内容构成（= 旧 kinds 的语义）。**只对 `form:\"pkg\"` 有意义**（包里有什么源：m/src/oct）；**能力层（`form:\"tree\"`）与单文件形态留空数组 `[]`** —— 裁决 2026-10-14（回应内容仓 mail/007 缺口①）：`content` 的语义是『包里有哪类源』，wasm/js 不是它的同类；硬塞进枚举会让这个轴变成『什么都有』的垃圾桶。⇒ **不扩枚举**；能力层条目 `content: []`（本仓 golden/toolchain.json 即此形态，作示范）。"
-        },
-        "arch": {
-          "type": "string",
-          "enum": [
-            "wasm32",
-            "wasm64"
-          ],
-          "description": "**目标架构 —— 只在「要 dlopen 进宿主的东西」上标**（裁决 2026-10-16，用户点令「楚河汉界：wasm32 引擎只能装 32 的额外内容，IP 线与 64 线都要兼容 64 的额外内容」）。**派生值，不是作者手写**（与 `form` 同例）：从 `.oct` 字节的 `dylink.0` 段 TARGET_FEATURES 子节读（`build/113/oct-arch.py`，纯 stdlib；判据 = wasm64 模块在该段声明特性名 `wasm64`，这正是 emscripten 加载器判 `incorrect architecture` 的机制）。⚠️ **不从目录名推**（`oct-w64/` ⇒ 猜 wasm64）：本仓实测过「判别看包内实际带什么、不能看目录名推」（NOTES-forge-ondemand §分叉）。**三档语义**（每档都有实测支撑）：① **纯 `.m` 包（`content` 不含 `oct`）⇒ 不带本字段**（无架构概念，任何档都能装 —— 现役货架 10 包全属此）；② **含 `.oct` 的条目（`content` 含 `oct`，或 `form` = `oct`/`octdir`）⇒ 必须带**，且必须与**宿主档**一致（错档 = `incorrect architecture (wasm32 vs wasm64)`，AGENTS 记过）；③ **能力层（`form:「tree」`，Pyodide/clang）⇒ 不带**（它**自带运行时**，那个 wasm 有自己的架构，与宿主无关 —— 实测反例：**Pyodide 是 wasm32，却在 w64 档页面上跑通**，8761 上 `accept-symbolic-seam` 9/0）。⇒ **这条界不是「w64 档只收 wasm64 内容」**：受约束的只有「要 dlopen 进宿主」的那一类。"
-        },
-        "kinds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "**兼容视图**（= content 的旧名）。旧消费者照读；新代码用 content。"
-        },
-        "deps": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "依赖边（包 → 包，或 包 → 能力层条目）。闭包由消费者解析；**不加新字段**表达能力层需求（接缝 §2）。"
-        },
-        "requires": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "平台/版本约束串（如 'octave (>= 4.0.0)'）。"
-        },
-        "license": {
-          "type": [
-            "string",
-            "object"
-          ],
-          "description": "许可（spdx 串或对象）。**裁决 2026-10-15（回应内容仓 mail/009 待确认①：LLVM-wasm 的混合许可 `\"mixed (see LICENSE-LLVM.txt, LICENSE-EMSCRIPTEN.txt)\"`）：保持自由字符串，不收紧成 SPDX 枚举**。判据：枚举只能表达「单一 SPDX 标识」，而真实发布的产物**逐文件混合**（clang/lld = Apache-2.0 WITH LLVM-exception、glue js = MIT OR NCSA、driver = AGPL）⇒ 收紧会逼生产者**说谎或拆条**，而许可台账的价值恰在「如实」。⚠️ 诚实边界：因此**没有机器判据能核「许可写对了没」**——它是记账字段，不参与 fail-closed（唯一 fail-closed 依据是 sha256）；机器只查**类型**（string | object，拒数字/数组，见校验器）。将来若要有判据，方向是**另加可选结构**（如 `license_files: [url…]` 指到许可原文）而不是改本字段的词表。"
-        },
-        "note": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string",
-          "description": "★ 包级静态描述（规范键，2026-10-17 定稿；内容仓 mail/029 出、mail/030 Q2 裁『内联』——实测 13 包共 865 字节，不构成拆分文件的理由，且它是 UI 卡片的**首屏数据**（每卡片都渲染），拆出去 = 每卡片一次额外 fetch，方向反了；`desc_url` 拆分方案不采（0.9 KB 为它引入第二个 catalog 的 schema/协商/缺件语义，复杂度远超收益；将来真出现大文本再议，判据 = 单包描述 > 若干 KB）。**包级一条**（上游索引口径；上游无逐版数据 ⇒ 逐版不编）。合法缺省 `\"\"`。数据源 = 生产者档案 `upstream.description`，`--emit` 摊平到条目级。"
-        },
-        "links": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/link"
-          },
-          "description": "★ 包级文档链接（规范键，2026-10-17 定稿；与 `description` 同批，同裁『内联但瘦身』）。供 UI 面板『主页/新闻/仓库』链；合法缺省 `[]`。**瘦身口径**（内容仓 mail/030 Q2 裁决②）：`label`+`url` 为规范结构；`icon`（上游索引的 Font Awesome class）**非规范** —— UI 有自己的图标体系；携带它不撤条目（`additionalProperties: true`，兼容过渡期），但消费端**不作承诺**。"
-        },
-        "consumer": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "octave",
-              "omc"
-            ]
-          },
-          "description": "消费面：这条内容交给哪个引擎消费（裁决 2026-10-14，回应内容仓 mail/007 缺口②，源自 OpenModelica）。**为什么进数据不进文档**：UI 拿到混合表要知道 `optim` 交 Octave、`Modelica` 交 omc —— 这类判断放数据里才能被机器查；放文档里就回到手抄（本仓 doctrine）。取值：`octave`（pkg install + addpath 那套）/ `omc`（omc_vfs_load_zip → MODELICAPATH → loadModel）。**可选**（旧表没有它 ⇒ 默认归 `octave`，因为现役全是 Octave 侧内容）。"
-        },
-        "versions": {
-          "type": "array",
-          "minItems": 1,
-          "description": "★ 版本候选集（裁决 2026-10-16，用户点令「每个版本各自带一个是否兼容的属性」；内容仓 mail/018 §② 裁『出，且只出已 stage 字节的版本』）。**同一 name 的多个版本各为一条候选**，三属性（fromSource/compatible/installed）按候选求值 —— 不引入第四个属性、不存储每版 compatible 布尔（会漂：实测 statistics 1.7.3 曾声明 ['m','oct'] 而真字节 0 个 .oct）。**三条不变量**（校验器逐条判）：① 非空且 version 两两不重复；② 条目顶层标量（version/sha256/url）必须**恰好等于某个候选**（逐字 —— 防两处各写一份漂移）；③ `stage:\"staged\"` 的候选**必须带派生轴**（form/content；content 含 oct ⇒ 必带 arch），派生不出来 ⇒ 只能以 `stage:\"withheld\"` + `withheld_cause` 出现（**不许编**）。**兼容礼遇**：旧消费者可经 `optional_keys` 忽略本键（本仓既有协商规则）；未声明 ⇒ fail-closed 撤条目。",
-          "items": {
-            "$ref": "#/$defs/candidate"
-          }
-        },
-        "artifacts": {
-          "type": "array",
-          "description": "★ **预编译件**（判决 2026-10-18，`build/113/NOTES-release-model.md` §4）：宿主构建的 `.oct` 二进制，**逐架构一份**。**为什么不塞进 `versions[]`**：`versions[]` 的语义是**上游 tarball 候选**（顶层标量 == 某候选逐字），而 artifact 是**我们自己构建的字节**——混进去会破坏那条不变量，且让 `stage` 出现两种含义。**发布单位 = `(name, version, arch)` 三元组**（不是单个文件、不是整个包集）；`control` 的 9 个 `.oct` 是一个 artifact 的**内容**，不是 9 个发布物。**三条不变量**（校验器逐条判）：① 同一 entry 内 `(arch, octave, toolchain, recipe)` **不得重复**（一个架构一个配方只许一份 —— 想要第二份必须换 `recipe` 且显式可见，不许静默替换）；② **版本锚定**：artifact **没有自己的 version 字段** —— 它只可能附着在 entry 顶层 `version`（= 某个已发布的源码候选）上，即「预编译件永远属于某个已发布源码版本」；③ **不许编**：`arch` 必须由字节派生（`build/113/oct-arch.py` 读 `dylink.0`），`files` 必须与站点字节相符，派生不出/字节不在 ⇒ `stage` 用 withheld + `withheld_cause`（不许写一个猜的 arch）。**架构不进版本号**：版本号是上游事实（`optim 1.6.3`），架构是我们的构建矩阵 —— 把架构塞进版本号会产生 `optim-1.6.3-wasm32` 这种**上游不存在的版本**，那正是坏模型。**产地**：内容仓**不声明**本键（它不构建、量不出 sha），宿主装配时补上（与 staged 语义同一条纪律：字节在谁那谁记）。",
-          "items": {
-            "$ref": "#/$defs/artifact"
-          }
-        }
-      },
-      "additionalProperties": true
+  "artifact": {
+   "type": "object",
+   "required": [
+    "arch",
+    "form",
+    "files"
+   ],
+   "properties": {
+    "arch": {
+     "type": "string",
+     "enum": [
+      "wasm32",
+      "wasm64"
+     ],
+     "description": "目标架构（**派生值**，从 `.oct` 字节的 `dylink.0` TARGET_FEATURES 读，不看目录名）。与条目级 `arch` 三档语义不同：artifact 的 arch 是**必需**的——它就是这个 artifact 的身份键。"
     },
-    "artifact": {
-      "type": "object",
-      "required": [
-        "arch",
-        "form",
-        "files"
-      ],
-      "properties": {
-        "arch": {
-          "type": "string",
-          "enum": [
-            "wasm32",
-            "wasm64"
-          ],
-          "description": "目标架构（**派生值**，从 `.oct` 字节的 `dylink.0` TARGET_FEATURES 读，不看目录名）。与条目级 `arch` 三档语义不同：artifact 的 arch 是**必需**的——它就是这个 artifact 的身份键。"
-        },
-        "octave": {
-          "type": "string",
-          "description": "对哪版 Octave 头编的（如 `11.3.0`）。**跨大版本 ABI 是赌博**：现役 28 个 `.oct` 曾是 7.2 时代产物（HISTORY §10.6），2026-10-18 全量重编为 11.3.0。"
-        },
-        "toolchain": {
-          "type": "string",
-          "description": "构建工具链标识（如 `emcc 6.0.12`）。**溯源标签，不是可复现承诺**：同一配方重编的 sha 会变（emcc/ccache 状态），发布判据只能锚当次字节的 sha。"
-        },
-        "recipe": {
-          "type": "string",
-          "description": "构建配方标识（如 `O2`）。预编译批 A/B 实测：`-O3` 体积 +11% 零收益、LTO 弄坏 dlopen、`wasm-opt` 无感 ⇒ 现役唯一配方 = `O2`（`build/113/NOTES-pkg-precompile.md`）。**同一 arch 想要第二个配方 ⇒ 必须换这个值**（唯一性不变量）。"
-        },
-        "form": {
-          "type": "string",
-          "enum": [
-            "oct",
-            "octdir"
-          ],
-          "description": "投送形态：`octdir` = 一包一组 `.oct`（现役全部）；`oct` = 单文件。"
-        },
-        "files": {
-          "type": "array",
-          "minItems": 1,
-          "description": "**逐文件 sha256**（fail-closed 的唯一依据 —— 与 `versions[]` 同款三段核对：装配/站点闸门/客户端各核一次）。",
-          "items": {
-            "type": "object",
-            "required": [
-              "name",
-              "sha256"
-            ],
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "sha256": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
-              },
-              "size": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "additionalProperties": true
-          }
-        },
-        "url": {
-          "type": "string",
-          "description": "站点上的目录（同源相对，如 `assets/octdir/optim/`）。"
-        },
-        "stage": {
-          "type": "string",
-          "enum": [
-            "staged",
-            "withheld"
-          ],
-          "description": "staged = 字节在站点且 sha 相符；withheld = 未 stage（须带 `withheld_cause`，且**不带** files/arch 之外的派生值）。"
-        },
-        "withheld_cause": {
-          "type": "string",
-          "description": "withheld 的原因（如 `bytes-not-staged` / `arch-underivable`）。"
-        }
-      },
-      "additionalProperties": true
+    "octave": {
+     "type": "string",
+     "description": "对哪版 Octave 头编的（如 `11.3.0`）。**跨大版本 ABI 是赌博**：现役 28 个 `.oct` 曾是 7.2 时代产物（HISTORY §10.6），2026-10-18 全量重编为 11.3.0。"
     },
-    "link": {
-      "type": "object",
-      "required": [
-        "label",
-        "url"
-      ],
-      "properties": {
-        "label": {
-          "type": "string",
-          "description": "人读的链接名（如 news / repository / GPL-3.0-or-later）"
-        },
-        "url": {
-          "type": "string",
-          "description": "链接目标（外部绝对 URL；**不是**交付路径 —— 与 `url` 的两段式无关，它不参与同源改写）"
-        }
-      },
-      "additionalProperties": true
+    "toolchain": {
+     "type": "string",
+     "description": "构建工具链标识（如 `emcc 6.0.12`）。**溯源标签，不是可复现承诺**：同一配方重编的 sha 会变（emcc/ccache 状态），发布判据只能锚当次字节的 sha。"
     },
-    "candidate": {
+    "recipe": {
+     "type": "string",
+     "description": "构建配方标识（如 `O2`）。预编译批 A/B 实测：`-O3` 体积 +11% 零收益、LTO 弄坏 dlopen、`wasm-opt` 无感 ⇒ 现役唯一配方 = `O2`（`build/113/NOTES-pkg-precompile.md`）。**同一 arch 想要第二个配方 ⇒ 必须换这个值**（唯一性不变量）。"
+    },
+    "form": {
+     "type": "string",
+     "enum": [
+      "oct",
+      "octdir"
+     ],
+     "description": "投送形态：`octdir` = 一包一组 `.oct`（现役全部）；`oct` = 单文件。"
+    },
+    "files": {
+     "type": "array",
+     "minItems": 1,
+     "description": "**逐文件 sha256**（fail-closed 的唯一依据 —— 与 `versions[]` 同款三段核对：装配/站点闸门/客户端各核一次）。",
+     "items": {
       "type": "object",
       "required": [
-        "version",
-        "sha256",
-        "url"
+       "name",
+       "sha256"
       ],
       "properties": {
-        "version": {
-          "type": "string",
-          "minLength": 1,
-          "description": "候选版本（条目内唯一）"
-        },
-        "sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$",
-          "description": "fail-closed 唯一依据（同条目级语义）"
-        },
-        "url": {
-          "type": "string",
-          "minLength": 1,
-          "description": "交付路径（站点态必同源相对）"
-        },
-        "size": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "可选（进度条；不作为第二断言）"
-        },
-        "stage": {
-          "type": "string",
-          "enum": [
-            "staged",
-            "withheld"
-          ],
-          "description": "staged=字节已在站点；withheld=字节未 stage（须带 withheld_cause；**不带派生轴**）"
-        },
-        "withheld_cause": {
-          "type": "string",
-          "description": "withheld 的原因（如 bytes-not-staged）"
-        },
-        "form": {
-          "type": "string",
-          "enum": [
-            "pkg",
-            "tree",
-            "oct",
-            "octdir",
-            "file",
-            "js"
-          ],
-          "description": "派生轴（仅 staged 候选）：同条目级 form 语义"
-        },
-        "content": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "m",
-              "src",
-              "oct"
-            ]
-          },
-          "description": "派生轴（仅 staged 候选）：同条目级 content 语义（三档 arch 语义同条目级）"
-        },
-        "arch": {
-          "type": "string",
-          "enum": [
-            "wasm32",
-            "wasm64"
-          ],
-          "description": "派生轴（仅 staged 且 content 含 oct 的候选）：同条目级 arch 三档语义"
-        },
-        "requires": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "版本约束串（如 'octave (>= 8.1.0)'）—— 逐候选"
-        }
+       "name": {
+        "type": "string",
+        "minLength": 1
+       },
+       "sha256": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+       },
+       "size": {
+        "type": "integer",
+        "minimum": 0
+       }
       },
       "additionalProperties": true
+     }
+    },
+    "url": {
+     "type": "string",
+     "description": "站点上的目录（同源相对，如 `assets/octdir/optim/`）。"
+    },
+    "stage": {
+     "type": "string",
+     "enum": [
+      "staged",
+      "withheld"
+     ],
+     "description": "staged = 字节在站点且 sha 相符；withheld = 未 stage（须带 `withheld_cause`，且**不带** files/arch 之外的派生值）。"
+    },
+    "withheld_cause": {
+     "type": "string",
+     "description": "withheld 的原因（如 `bytes-not-staged` / `arch-underivable`）。"
     }
+   },
+   "additionalProperties": true
+  },
+  "link": {
+   "type": "object",
+   "required": [
+    "label",
+    "url"
+   ],
+   "properties": {
+    "label": {
+     "type": "string",
+     "description": "人读的链接名（如 news / repository / GPL-3.0-or-later）"
+    },
+    "url": {
+     "type": "string",
+     "description": "链接目标（外部绝对 URL；**不是**交付路径 —— 与 `url` 的两段式无关，它不参与同源改写）"
+    }
+   },
+   "additionalProperties": true
+  },
+  "candidate": {
+   "type": "object",
+   "required": [
+    "version",
+    "sha256",
+    "url"
+   ],
+   "properties": {
+    "version": {
+     "type": "string",
+     "minLength": 1,
+     "description": "候选版本（条目内唯一）"
+    },
+    "sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "fail-closed 唯一依据（同条目级语义）"
+    },
+    "url": {
+     "type": "string",
+     "minLength": 1,
+     "description": "交付路径（站点态必同源相对）"
+    },
+    "size": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "可选（进度条；不作为第二断言）"
+    },
+    "stage": {
+     "type": "string",
+     "enum": [
+      "staged",
+      "withheld"
+     ],
+     "description": "staged=字节已在站点；withheld=字节未 stage（须带 withheld_cause；**不带派生轴**）"
+    },
+    "withheld_cause": {
+     "type": "string",
+     "description": "withheld 的原因（如 bytes-not-staged）"
+    },
+    "form": {
+     "type": "string",
+     "enum": [
+      "pkg",
+      "tree",
+      "oct",
+      "octdir",
+      "file",
+      "js"
+     ],
+     "description": "派生轴（仅 staged 候选）：同条目级 form 语义"
+    },
+    "content": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "enum": [
+       "m",
+       "src",
+       "oct"
+      ]
+     },
+     "description": "派生轴（仅 staged 候选）：同条目级 content 语义（三档 arch 语义同条目级）"
+    },
+    "arch": {
+     "type": "string",
+     "enum": [
+      "wasm32",
+      "wasm64"
+     ],
+     "description": "派生轴（仅 staged 且 content 含 oct 的候选）：同条目级 arch 三档语义"
+    },
+    "requires": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "版本约束串（如 'octave (>= 8.1.0)'）—— 逐候选"
+    }
+   },
+   "additionalProperties": true
   }
+ }
 }
