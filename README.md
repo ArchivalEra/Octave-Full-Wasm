@@ -163,6 +163,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **Release model defined (2026-10-18)**: a package is released as an **artifact** = `(name, version, arch)` — not as a pile of files, and **not as a second version number**: the version is the upstream fact (`optim 1.6.3`) while the architecture is a build-matrix index key, so there is no `optim-1.6.3-wasm32` pseudo-version. The shipped catalog now carries `artifacts[]` (per-architecture, per-file sha256, derived `arch`, plus `octave`/`toolchain`/`recipe` provenance) — currently **5 packages × 2 architectures = 10 release units**. Gate R13 reconciles every artifact file against the site bytes (missing, extra, or sha drift ⇒ red). See `build/113/NOTES-release-model.md`.
 
+**kind/role line closed (2026-10-20, mail/055)**: the content repo's acceptance letter confirms 15/15 entries self-describe — 13 packages, llvm-wasm (toolchain), pyodide (language-bridge, the Q1 vocabulary's third value in first use) — with kind semantics correct (engine carries it, bridges default). The line closed in three days from ticket to done (047 ticket → 050 schema → 052 engine entry → 053 missed label → 054 fix), the acceptance ledger reading: schema origin + semantic copy + table data + loader judge all aligned, zero hard-coded name checks. No outstanding items on either side; the UI reads the completed table whenever it wires up.
+
 **pyodide role:'language-bridge' (2026-10-20, mail/053 catch)**: the content repo's acceptance letter caught the one mislabeled entry — pyodide carried neither role nor kind while every other entry self-describes. It now carries `role:"language-bridge"` (the Q1 vocabulary's third value in first use; kind stays absent — it's not an engine and compiles nothing). The "zero hard-coded name checks" discipline is now complete across all 15 entries: 13 shelf packages say `package`, llvm-wasm says `toolchain`, pyodide says `language-bridge`. Verified: three sites rebaked with the gate green ×3, five pyodide-path suites zero-red (symbolic-seam 9/0 through content-attributes 14/0 — the install('symbolic') → pyodide-then-symbolic closure untouched), gates 48/48, parity consistent.
 
 **Engine entry in the catalog (2026-10-20, mail/051 fulfillment)**: the content repo finished its side (role-emitting commit `7dfe77e`), so the shelf pin bumped and the assembler now emits `role` on every pack entry (13/13 `role:"package"`, explicit self-description matching the producer's emit). The llvm-wasm entry itself is upgraded to **`kind:"engine"` + `role:"toolchain"`** with `arch` = the **lane value** (`w64` — an index key, not a version axis; read from the site's deployed lanes.js, never hand-copied). Three judge-sites adjusted in lockstep: the port validator's engine lane-vocabulary gained the site-lane names (base/w64), the R10 byte-reconciliation gate exempts engine entries (clang.wasm living outside assets/oct*/ is design, not drift), and the loader's hard arch gate exempts `kind:'engine'` — measured catch: `w64` vs `wasm64` are different vocabularies, so a literal compare false-positives; the "one-line-one-arch" ruling governs `.oct`s that dlopen into the host, while the engine is the compile-worker's input, outside that semantics. `install('llvm-wasm')` now rejects via `NOT_INSTALLABLE` straight off the `role` field (the name-based fallback retired). Nine regression suites green (arch-boundary A2 flipped: an engine's lane-valued arch is legal luggage), gates 48/48, three sites rebaked, parity consistent.
@@ -317,8 +319,8 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (494490 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (65940 bytes)
-- `README.zh.md` (59953 bytes)
+- `README.de.md` (66673 bytes)
+- `README.zh.md` (60480 bytes)
 - `STATE.md` (114866 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (76404 bytes)
