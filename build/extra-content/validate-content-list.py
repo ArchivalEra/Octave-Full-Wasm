@@ -249,7 +249,11 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
         # ★ kind:'engine'（mail/047，2026-10-20）：arch = lane 值（索引键不是版本轴，
         #   mail/031 裁决）——arch 的合法面按 kind 扩词表，且 engine 条目**必须带** arch。
         kind = e.get("kind")
-        engine_lane_enum = ["wasm32", "wasm64", "wasm32-final", "master", "IllegalPerformance", "omc"]
+        # lane 值全集 = 产品线名（wasm32-final/master/IllegalPerformance）∪ 构建档名
+        # （wasm32/wasm64）∪ 站点档名（base/w64——两格站的部署事实，gen-lanes 的清单值）
+        # ∪ omc。engine 条目的 arch 从这取（索引键，非版本轴）。
+        engine_lane_enum = ["wasm32", "wasm64", "wasm32-final", "master",
+                            "IllegalPerformance", "base", "w64", "omc"]
         eff_enum = arch_enum + (engine_lane_enum if kind == "engine" else [])
         if "arch" in e:
             if e["arch"] not in eff_enum:

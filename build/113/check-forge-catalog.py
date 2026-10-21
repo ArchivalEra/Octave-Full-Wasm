@@ -288,6 +288,14 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
         want = p_.get("arch")
         if not want:
             continue
+        # ★ kind:'engine' 的 arch = lane 值（索引键——mail/047/031 裁决），**不是**
+        #   wasm32/wasm64 架构字面量 ⇒ R10 的"对 .oct 目录字节"判据不适用
+        #   （引擎的 url 指 clang.wasm，不在 assets/oct*/ 下是**设计形状**，非缺陷）。
+        if p_.get("kind") == "engine":
+            if want not in ("wasm32", "wasm64"):
+                print("note: R10 `%s` kind:engine 的 arch=%s 是 lane 值（索引键，"
+                      "非架构字面量）⇒ 跳过字节对档" % (p_.get("name"), want), file=sys.stderr)
+                continue
         if not site_arch:
             print("note: R10 站点没有任何 assets/oct* 目录 ⇒ 无法核 `%s` 的 arch（跳过，"
                   "不是通过）" % p_.get("name"), file=sys.stderr)

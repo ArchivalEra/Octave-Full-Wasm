@@ -252,6 +252,12 @@ def resolve(shelf, octave, allow_unverified, cache=None):
             #   宿主替它删键 = 两个产地各写一半，端口纪律不许）。
             "description": (e.get("upstream") or {}).get("description", "") or "",
             "links": list((e.get("upstream") or {}).get("links") or []),
+            # ★ role（内容仓 mail/051 --emit 落地，2026-10-20 消费）：消费角色标注。
+            #   货架包 = 函数包 ⇒ 恒 "package"（与内容仓 --emit 同款**显式自描述**——
+            #   两产地同答案不是漂移，是同一事实的约定值；schema 缺省也是 package，
+            #   写出来是让旧消费者免推断）。toolchain/language-bridge 只出现在宿主
+            #   的 tree 条目（capability_entries）。档案若未来真带 role 字段则以档案为准。
+            **({"role": e["role"]} if isinstance(e.get("role"), str) else {"role": "package"}),
             # 端口 schema 2 两轴（接缝 §2）：`form`/`content` 从字节/kinds **派生**；
             # `kinds` **保留为兼容视图**（旧 loader 与旧套件照读 —— 判据：不改它们也全绿）。
             "form": derive_form(v.get("kinds") or []),
@@ -301,6 +307,27 @@ def assemble(packs, site, check_only=False):
             bad.append("%s：装配后 sha 不符（写盘坏了？）" % p["name"])
     return bad
 
+
+
+def _host_lane_of_site(site):
+    """从站点 lanes.js 读**部署的主档**（引擎条目的 arch=lane 值）。
+
+    判据：lanes.js 的 __octaveLanes 列表里**第一个 wasm64 系档**（两格站 = w64）；
+    没有清单/没有 wasm64 档 ⇒ 返回 None（调用方落缺省 "wasm64" 并在 note 里如实说）。
+    为什么不手抄：lane 是部署事实，三线裁决后站点只有 base/w64 两格，读盘是唯一产地。
+    """
+    import re as _re
+    try:
+        with open(os.path.join(site, "lanes.js"), encoding="utf-8") as fh:
+            txt = fh.read()
+        m = _re.search(r"__octaveLanes\s*=\s*(\[[^\]]*\])", txt)
+        lanes = json.loads(m.group(1)) if m else []
+        for lane in lanes:
+            if "w64" in str(lane):
+                return str(lane)
+    except (OSError, ValueError):
+        pass
+    return None
 
 def capability_entries(site):
     """**能力层条目**（接缝 §2/§5④）：`form:"tree"` 的普通条目，进同一张 `deps` 图。
@@ -390,6 +417,15 @@ def capability_entries(site):
                 "version": lw_ver,
                 "form": "tree",
                 "content": [],
+                # ★ kind/role（mail/047 + mail/049 Q1，2026-10-20）：引擎条目 + 工具链角色。
+                #   kind:'engine' ⇒ arch = lane 值（索引键不是版本轴——mail/031 裁决）；
+                #   role:'toolchain' ⇒ 消费端**不走 install**（指路 DownloadStore）——
+                #   assets-loader 的 NOT_INSTALLABLE 判据读这个键（表升级后 name 兜底退役）。
+                "kind": "engine",
+                "role": "toolchain",
+                "arch": (os.environ.get("ENGINE_ARCH")
+                         or _host_lane_of_site(site)
+                         or "wasm64"),
                 "consumer": ["octave"],
                 "sha256": _file_sha_or_empty(lw_main),
                 "url": "assets/llvm/clang.wasm",

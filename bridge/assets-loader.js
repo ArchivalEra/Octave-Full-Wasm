@@ -1039,9 +1039,16 @@
             plan.push(p);
           })(name);
           onProgress({ phase: 'plan', plan: plan.map(function (p) { return p.name; }) });
-          // ★ 架构检查（含在闭包里，覆盖 deps 闭包里的每一条 —— 能力层条目不带 arch ⇒ 自然豁免）
+          // ★ 架构检查（含在闭包里，覆盖 deps 闭包里的每一条 —— 能力层条目不带 arch ⇒ 自然豁免）。
+          //    ★ kind:'engine' 条目**也豁免**（2026-10-20，mail/047 落地表后实测翻出）：
+          //    它的 arch = **lane 值**（w64/base —— 索引键非架构字面量，mail/031 裁决），
+          //    与宿主档名（wasm64/wasm32）**不同词表** ⇒ 字面比对必假红。楚河汉界管的是
+          //    "要 dlopen 进宿主的 .oct"（工单 66 的语义）；引擎（clang.wasm）是
+          //    compile-worker 的编译现场输入，不在那个语义里。role:'toolchain' 的
+          //    NOT_INSTALLABLE 拒绝在 installLayer 层（更早/更准确）。
           if (hostArch) {
             for (var _pi = 0; _pi < plan.length; _pi++) {
+              if (plan[_pi].kind === 'engine') continue;
               var _pa = plan[_pi].arch;
               if (_pa && _pa !== hostArch) {
                 var _m = '架构不匹配：' + plan[_pi].name + ' 需要 ' + _pa

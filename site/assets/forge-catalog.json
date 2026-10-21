@@ -2,7 +2,7 @@
  "schema": 2,
  "octave": "11.3.0",
  "generated_by": "build/forge-catalog.py",
- "shelf_commit": "285af2ff20bc8b39c7fd6e26173b08fb8088636f",
+ "shelf_commit": "7dfe77efff43384080d32216ec1940f6889a66fc",
  "note": "Forge 按需拉取目录（客户端读它，不下载包字节）。字节在同源 assets/forge/。",
  "packs": [
   {
@@ -55,6 +55,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(cgi)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m"
@@ -318,6 +319,7 @@
      "url": "https://github.com/pr0m1th3as/datatypes/issues"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -381,6 +383,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(geometry)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -430,12 +433,15 @@
    "version": "6.0.12",
    "form": "tree",
    "content": [],
+   "kind": "engine",
+   "role": "toolchain",
+   "arch": "w64",
    "consumer": [
     "octave"
    ],
    "sha256": "198e84c4baeb3ce4c8d11cbbef75f072ec61db1b527df0ee2c90c9a4ffc72a85",
    "url": "assets/llvm/clang.wasm",
-   "size": 122922700,
+   "size": 122980779,
    "deps": [],
    "note": "浏览器内编 .oct 的工具链能力层（clang/lld/sysroot 两档/driver）；含 `src` 的源码包在装载前需要它（用户裁决 2026-10-18）。字节由 build/113/provision-llvm-wasm.sh 供给（sha 见 upstream-lock.json 的 llvm-wasm 条）"
   },
@@ -494,6 +500,7 @@
      "url": "https://github.com/mattools/matGeom/issues"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m"
@@ -553,6 +560,7 @@
      "url": "https://github.com/gnu-octave/octave-miscellaneous/issues"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -663,6 +671,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(nan)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -732,6 +741,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(optim)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -880,6 +890,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(quaternion)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m"
@@ -938,6 +949,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(splines)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m"
@@ -1003,6 +1015,7 @@
      "url": "https://github.com/gnu-octave/statistics/issues"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -1158,6 +1171,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(struct)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",
@@ -1313,6 +1327,7 @@
      "url": "https://github.com/gnu-octave/symbolic/issues"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m"
@@ -1374,6 +1389,7 @@
      "url": "https://savannah.octave.org/?Action=get&Format=HTMLCSS&Title=[octave%20forge]%20(tsa)"
     }
    ],
+   "role": "package",
    "form": "pkg",
    "content": [
     "m",

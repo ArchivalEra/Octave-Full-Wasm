@@ -64,13 +64,17 @@ const cat = await page.evaluate(async () => {
   try {
     const c = await window.OctaveAssets.catalog();
     return { ok: true, packs: (c.packs || c.entries || []).map(p => ({
-      name: p.name, form: p.form, content: p.content || p.kinds || [], arch: p.arch || null })) };
+      name: p.name, form: p.form, kind: p.kind || null,
+      content: p.content || p.kinds || [], arch: p.arch || null })) };
   } catch (e) { return { ok: false, err: String(e).slice(0, 200) }; }
 });
 if (!cat.ok) { check(false, 'A2 catalog() 可读', cat.err); }
 else {
   const withArch = cat.packs.filter(p => p.arch);
-  const plainMWithArch = cat.packs.filter(p => p.arch && !(p.content || []).includes('oct'));
+  // ★ kind:'engine' 的 arch = lane 值（mail/047，2026-10-20）——合法携带，但**不在
+  //   本判据的账上**（它不是"要 dlopen 进宿主的 .oct"，是引擎索引键）。
+  const plainMWithArch = cat.packs.filter(
+    p => p.arch && p.kind !== 'engine' && !(p.content || []).includes('oct'));
   check(plainMWithArch.length === 0,
     'A2 纯 .m / 能力层条目一律**不带** arch（不许被架构界误拦）',
     `带 arch 的条目 ${withArch.length} 个，其中非 oct 的 ${plainMWithArch.length} 个`
