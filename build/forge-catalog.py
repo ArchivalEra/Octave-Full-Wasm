@@ -361,6 +361,10 @@ def capability_entries(site):
         "name": "pyodide",
         "version": "314.0.7",
         "form": "tree",
+        # ★ role:'language-bridge'（2026-10-20 内容仓 mail/053 漏标补）：它是**语言桥**
+        #   （installLayer 的 pyodide 实现接真 Python 运行时），不是函数包——按 Q1 词表
+        #   显式自描述，消费端零硬编码名字判断。kind 缺省（不是 engine——不编 .oct）。
+        "role": "language-bridge",
         "content": [],                       # 裁决①：能力层留空（content 只对包有意义）
         "consumer": ["octave"],              # 裁决②：消费面
         "sha256": _file_sha_or_empty(py_wasm),

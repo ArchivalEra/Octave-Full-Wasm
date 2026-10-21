@@ -1,13 +1,13 @@
 {
  "schema": 1,
- "generated": "2026-10-21T10:56:15+0800",
+ "generated": "2026-10-21T11:47:05+0800",
  "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
  "facts": {
   "wasm_v128": {
    "value": 4752,
    "cmd": "读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128",
    "source": "site/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "SIMD 判据；非 SIMD 那版是 0",
    "replay": false
@@ -16,7 +16,7 @@
    "value": 710,
    "cmd": "读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.exported_functions",
    "source": "site/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "M2 保活集大小（M1 约 44987）",
    "replay": false
@@ -25,7 +25,7 @@
    "value": 8,
    "cmd": "读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.fonts",
    "source": "site/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -33,7 +33,7 @@
    "value": true,
    "cmd": "读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.jspi_entry",
    "source": "site/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "B 姿势的可挂起入口在不在",
    "replay": false
@@ -42,49 +42,49 @@
    "value": "1ed3e528561e44750200e9a862bb410c381d639e19f8079a94270b38c9fa6b00",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm | cut -d' ' -f1",
    "source": "site/octave.wasm",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "wasm_bytes": {
    "value": 29632229,
    "cmd": "stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm",
    "source": "site/octave.wasm",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "js_sha": {
    "value": "caac68bf6201585928cdcc39b69ad20f00370bf810770931dd04f5518881154c",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/site/octave.js | cut -d' ' -f1",
    "source": "site/octave.js",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "data_sha": {
    "value": "f250530ae5abe37869d08ff214f91de6ee8a6acc72585a281ca2cd8779d61ac3",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/site/octave.data | cut -d' ' -f1",
    "source": "site/octave.data",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "build_json_sha": {
    "value": "d953d7a7929754be30ea7455b350d4909cd914de77f8b2992345744673e4a52b",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json | cut -d' ' -f1",
    "source": "site/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "matrix_page_sha": {
    "value": "54a7e1c261a2df2ffd5c206403229761886a463f15239b7c339914e2f4283382",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/site/matrix-android.html | cut -d' ' -f1",
    "source": "site/matrix-android.html",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "env_vars": {
    "value": 33,
    "cmd": "grep -oE '\\$\\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh | sort -u（去掉位置参数）",
    "source": "build/113/link-web.sh",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "replay": false
   },
@@ -92,7 +92,7 @@
    "value": 55,
    "cmd": "数 /mnt/hdd/octave-wasm-build/sweep-logs/20261019-174807 里带汇总行的套件（且 0 FAIL）",
    "source": "sweep-logs/20261019-174807",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-18",
    "replay": false
   },
@@ -100,7 +100,7 @@
    "value": 1247,
    "cmd": "同上，把每个套件的 PASS 相加",
    "source": "sweep-logs/20261019-174807",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "note": "最近一次**全绿**扫描的 PASS 合计",
    "replay": false
@@ -109,7 +109,7 @@
    "value": 17,
    "cmd": "find /mnt/hdd/octave-wasm-build/site/assets/oct-w64 -name '*.oct' | wc -l",
    "source": "site/assets/oct-w64",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "note": "w64 档 `assets/oct-w64/` 条数",
    "replay": false
@@ -118,7 +118,7 @@
    "value": 28,
    "cmd": "find /mnt/hdd/octave-wasm-build/site/assets/octdir-w64 -name '*.oct' | wc -l",
    "source": "site/assets/octdir-w64",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-17",
    "note": "w64 档 `assets/octdir-w64/` 条数",
    "replay": false
@@ -127,7 +127,7 @@
    "value": 17,
    "cmd": "find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' | wc -l",
    "source": "site/assets/oct",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "note": "基础档 `assets/oct/` 条数"
   },
@@ -135,7 +135,7 @@
    "value": 28,
    "cmd": "find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' | wc -l",
    "source": "site/assets/octdir",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "基础档 `assets/octdir/` 条数"
   },
@@ -143,7 +143,7 @@
    "value": 33,
    "cmd": "SITE_DIR=<站点> sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log",
    "source": "probe-lane.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "选档探针的 PASS 数（FAIL 必须 0）；站点四格/双档不同 ⇒ 看 cmd 的 SITE_DIR",
    "replay": false
@@ -152,7 +152,7 @@
    "value": 0,
    "cmd": "同上（脚本结尾的 `=== N PASS / M FAIL ===`）",
    "source": "probe-lane.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -160,7 +160,7 @@
    "value": "ok",
    "cmd": "python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.build.json）",
    "source": "octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -168,21 +168,21 @@
    "value": "e570905ecc8927bf79f1bda4451dbed05f7f1d0713ff4c850b0c9d4b63953cea",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm | cut -d' ' -f1",
    "source": "octave.wasm",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "e2_single_wasm_bytes": {
    "value": 29495868,
    "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm",
    "source": "octave.wasm",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "e2_threaded_verdict": {
    "value": "ok",
    "cmd": "python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.build.json）",
    "source": "octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -190,21 +190,21 @@
    "value": "bce7e4cc252d648162edd10740ed030828a85c6899d2f8db76d8a511c93b49e9",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm | cut -d' ' -f1",
    "source": "octave.wasm",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "e2_threaded_wasm_bytes": {
    "value": 29908917,
    "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm",
    "source": "octave.wasm",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03"
   },
   "e2_matmul500_s": {
    "value": 0.021,
    "cmd": "E2 单线程站点跑 bench-core.mjs（见 NOTES 的 A/B 表）",
    "source": "e2-logs/e2-measure-s.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -212,7 +212,7 @@
    "value": 0.04,
    "cmd": "现役车道站点跑同一个 bench-core.mjs",
    "source": "e2-logs/lane-bench.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -220,7 +220,7 @@
    "value": 0.043,
    "cmd": "同 E2 那一行",
    "source": "e2-logs/e2-measure-s.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -228,7 +228,7 @@
    "value": 0.06,
    "cmd": "同车道那一行",
    "source": "e2-logs/lane-bench.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -236,7 +236,7 @@
    "value": 1.9,
    "cmd": "上面两行的比值（车道 / E2）",
    "source": "派生",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -244,7 +244,7 @@
    "value": 1.4,
    "cmd": "上面两行的比值（车道 / E2）",
    "source": "派生",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -252,7 +252,7 @@
    "value": 0.006,
    "cmd": "E2 线程版站点跑 bench-core.mjs（该轮 300s 超时收尾，只到前几项）",
    "source": "e2-logs/e2-bench.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -260,7 +260,7 @@
    "value": 0.02,
    "cmd": "同上",
    "source": "e2-logs/e2-bench.log",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -268,7 +268,7 @@
    "value": 6.7,
    "cmd": "车道 / 线程版（派生）",
    "source": "派生",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -276,7 +276,7 @@
    "value": 124,
    "cmd": "timeout 600 sh test/browser/run.sh ...accept-113-oct.mjs <E2 线程版站点>; echo $?",
    "source": "e2-logs/e2-oct-threaded.rc",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -284,7 +284,7 @@
    "value": "ok",
    "cmd": "python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts/octave.build.json）",
    "source": "w64-artifacts/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "只有 ok 才可部署（fail-closed）",
    "replay": false
@@ -293,7 +293,7 @@
    "value": true,
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.wasm64",
    "source": "w64-artifacts/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "wasm 内存段 limits flags bit2 = 1 ⇒ 真 64 位",
    "replay": false
@@ -302,7 +302,7 @@
    "value": true,
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.threads.shared_memory",
    "source": "w64-artifacts/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "目标形态 = memory64 **+ 多线程**（shared 是这个轴的硬身份）",
    "replay": false
@@ -311,7 +311,7 @@
    "value": "mimalloc",
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 declared.malloc / measured.malloc",
    "source": "w64-artifacts/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "现役 w64 的分配器（工单 59 起 = mimalloc，由 relink.sh w64 模式表声明）",
    "replay": false
@@ -320,7 +320,7 @@
    "value": 6295,
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.simd.v128",
    "source": "w64-artifacts/octave.build.json",
-   "measured_at": "2026-10-21T10:56:13+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "replay": false
   },
@@ -328,7 +328,7 @@
    "value": 6,
    "cmd": "<重活：产物 + test/fixtures/relaxed_madd_min.wasm 各数 fd 87 02>",
    "source": "/mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm 的字节级 f64x2.relaxed_madd 计数（×dd 87 02）",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "note": "relaxed-simd FMA 指令数（工单 52）。⚠ 量法本身有生命周期：`grep relaxed_madd` 是**被证伪的量法**（见 build/instruments.json）——本键的 cmd 已避开它（字节级）。calibrate= 用已知含它的样本自证。",
    "replay": false,
@@ -339,7 +339,7 @@
    "value": 757,
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.exported_functions",
    "source": "w64-artifacts/octave.build.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "replay": false
   },
@@ -347,14 +347,14 @@
    "value": "0225d0b374f3bed931dd61333476c4133c0526e35d0aa509a053fe0b7e39a82c",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm | cut -d' ' -f1",
    "source": "w64-artifacts/octave.wasm",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19"
   },
   "w64_build_recipe_ok": {
    "value": "ok",
    "cmd": "python3 build/113/witness-build-inputs.py",
    "source": "build/build-inputs.json 的声明式检查 vs 仓库配方文件",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "构建**输入**的不变式（配方层）：link-web.sh 无 -flto / 含 -fwasm-exceptions；w64 车道含 -sMEMORY64=1。把「输入」也当事实，由同一批复跑闸门核对 ——由同一批复跑闸门每提交核对。",
    "replay": false,
@@ -365,7 +365,7 @@
    "value": "match",
    "cmd": "<重链 w64 后：python3 build/113/witness-build-provenance.py w64>",
    "source": "site/w64/octave.build.json 的 tool.script_sha256 vs build/113/link-web.sh",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "note": "贵事实的便宜见证：部署件记录的构建脚本 sha 必须 == 仓库现役脚本。做不到就 DRIFT（来源漂移）。注意**旧档**（base/w64-base）建造时间不同、记录 sha 各异 ⇒ 只对活跃迭代并每批重链的 w64 档断言。",
    "replay": false,
@@ -376,14 +376,14 @@
    "value": 31246819,
    "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm",
    "source": "w64-artifacts/octave.wasm",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19"
   },
   "w64_cand_verdict": {
    "value": "ok",
    "cmd": "python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.build.json）",
    "source": "w64-artifacts-mimalloc/octave.build.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "候选产物：verdict=ok + 全量验收全绿 ⇒ 可发运（发运=产品决定）",
    "replay": false
@@ -392,7 +392,7 @@
    "value": "mimalloc",
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc 的 declared.malloc / measured.malloc",
    "source": "w64-artifacts-mimalloc/octave.build.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "分配器（产物探针 = 导出段里的 mi_version；工单 59；mimalloc 工单 57 实测 −27%）。★ witness = #5 档对**产物**的便宜复查（Einfacht #9 提了即撤：机制不缺，witness/calibrate 现有档位已覆盖）——每提交重读候选产物导出段，旋钮没生效/产物被换 ⇒ 见证红。",
    "replay": false,
@@ -403,7 +403,7 @@
    "value": 751,
    "cmd": "读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc 的 measured.exported_functions",
    "source": "w64-artifacts-mimalloc/octave.build.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "replay": false
   },
@@ -411,7 +411,7 @@
    "value": "01fb52fc3b5dde30a81c550619bfacc752c27bb1cdef29d3b827424749f48e73",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.wasm | cut -d' ' -f1",
    "source": "w64-artifacts-mimalloc/octave.wasm",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "replay": false
   },
@@ -419,7 +419,7 @@
    "value": 30984954,
    "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.wasm",
    "source": "w64-artifacts-mimalloc/octave.wasm",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "replay": false
   },
@@ -427,7 +427,7 @@
    "value": "exp_inline 23.6%",
    "cmd": "读 /mnt/hdd/octave-wasm-build/hotpath-logs/20261005-142643/report.json 的 hotspots[0]（重活 ⇒ 不逐字复跑）",
    "source": "/mnt/hdd/octave-wasm-build/hotpath-logs/20261005-142643/report.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "replay": false,
    "note": "仪器热点的 top（lane=w64 kind=cpu 采样 8845 个；未归因 0.0%）"
@@ -436,7 +436,7 @@
    "value": "ok",
    "cmd": "python3 build/113/hotpath.py calibrate",
    "source": "test/fixtures/hotpath-known-hot{,,-stripped}.wasm 的 name 段断言",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-03",
    "replay": false,
    "witness": "python3 build/113/hotpath.py calibrate",
@@ -447,7 +447,7 @@
    "value": 1.094,
    "cmd": "sh test/fixtures/rustfill-spike/run-spike.sh（读 w64-logs/rustfill-spike.log 的比值行）",
    "source": "w64-logs/rustfill-spike.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "Rust slice::fill / C++ 标量 fill 的 2^24 填充比值（<1 = Rust 快）；实测 >1 ⇒ 候选②否决——带宽绑定热点换语言无益",
    "replay": false
@@ -456,7 +456,7 @@
    "value": 352.0,
    "cmd": "sh test/fixtures/rustsort-spike/run-spike.sh（读 w64-logs/rustsort-spike.log）",
    "source": "w64-logs/rustsort-spike.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "octave_sort<double>（timsort）2M 随机 doubles 排序",
    "replay": false
@@ -465,7 +465,7 @@
    "value": 87.0,
    "cmd": "同上",
    "source": "w64-logs/rustsort-spike.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "Rust driftsort（stable）同负载",
    "replay": false
@@ -474,7 +474,7 @@
    "value": 0.249,
    "cmd": "派生：cand ÷ base",
    "source": "派生（rustsort-spike.log）",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "内核比值（<0.867 = ≥1.15× 加速门槛）；实测 0.247 = 4× ⇒ ADOPT",
    "replay": false
@@ -483,7 +483,7 @@
    "value": 165,
    "cmd": "bash build/113/sort-ab.sh /mnt/hdd/octave-wasm-build/site-illegalperf /mnt/hdd/octave-wasm-build/site-illegalperf-baseline 3（读 w64-logs/rust-sort-ab.log）",
    "source": "w64-logs/rust-sort-ab.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "候选（rust_sort 开）2M 随机 double 排序墙钟中位（含 rand；w64 槽 COI）",
    "replay": false
@@ -492,7 +492,7 @@
    "value": 326,
    "cmd": "同上",
    "source": "w64-logs/rust-sort-ab.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "对照（同树旋钮关）同负载墙钟中位",
    "replay": false
@@ -501,7 +501,7 @@
    "value": 0.506,
    "cmd": "派生：候选 ÷ 对照（asc 中位）",
    "source": "派生（rust-sort-ab.log）",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "asc 端到端比值（<0.867 = ≥1.15× 门槛）⇒ 实测 2.0× ADOPT",
    "replay": false
@@ -510,7 +510,7 @@
    "value": 0.551,
    "cmd": "派生：候选 ÷ 对照（desc 中位）",
    "source": "派生（rust-sort-ab.log）",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "desc 端到端比值（同门槛）",
    "replay": false
@@ -519,7 +519,7 @@
    "value": 0.105,
    "cmd": "sh test/browser/run.sh test/browser/bench-lanes.mjs <8761> w64（读 w64-logs/bench-IP-vs-NEXT.log）",
    "source": "w64-logs/bench-IP-vs-NEXT.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "IllegalPerformance(8761) sort 2e6 中位",
    "replay": false
@@ -528,7 +528,7 @@
    "value": 0.237,
    "cmd": "同（<8869>）",
    "source": "w64-logs/bench-IP-vs-NEXT.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "wasm64-NEXT(8869) sort 2e6 中位",
    "replay": false
@@ -537,7 +537,7 @@
    "value": 0.443,
    "cmd": "派生：IP ÷ NEXT",
    "source": "派生",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "sort 2e6 比值（<1 = IP 快）",
    "replay": false
@@ -546,7 +546,7 @@
    "value": 2,
    "cmd": "for l in w64 base; do sh test/browser/run.sh test/browser/probe-locale.mjs \"http://127.0.0.1:8761/?lane=$l\"; done （读 w64-logs/locale-all-lanes.log 的 '8 PASS / 0 FAIL' 计数）",
    "source": "w64-logs/locale-all-lanes.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-17",
    "note": "locale 确定性契约通过的车道数（应=4）。契约 = 报错英文 + 数字 C locale (sprintf('%.3f',3.14159)=='3.142')；机制 = 无 NLS .mo + interpreter.cc 强制 LC_NUMERIC/LC_TIME='C'。issue #4 方案 A 的可测形态",
    "replay": false
@@ -555,7 +555,7 @@
    "value": 2.1,
    "cmd": "bash test/fixtures/xpow-spike/run-spike.sh（读 w64-logs/xpow-spike.log）",
    "source": "w64-logs/xpow-spike.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "elem_xpow 驱动层（octave_quit + 逐元素索引）占 base 的百分比 = 候选④的绝对天花板；实测 ~2% ≪ 15%（1.15× 门槛）⇒ 候选④排除",
    "replay": false
@@ -564,7 +564,7 @@
    "value": 0.988,
    "cmd": "同上（cand/base）",
    "source": "w64-logs/xpow-spike.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "Rust 紧循环 vs Octave 形状驱动的比值（含同一 libm pow）",
    "replay": false
@@ -573,7 +573,7 @@
    "value": 19.1,
    "cmd": "python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6; tic; for k=1:10, y=fft(x); end' --lane w64",
    "source": "w64-logs/hotpath-final3.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "fft 热点里 blk_trans（8×8 分块转置）自占比——纯数据置换=带宽绑定",
    "replay": false
@@ -582,7 +582,7 @@
    "value": 48.9,
    "cmd": "python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6+0.1; tic; for k=1:20, y=sqrt(x)+x.^0.7; end' --lane w64（读 w64-logs/hotpath-final3.log）",
    "source": "w64-logs/hotpath-final3.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "x.^y 热点里 libm 超越函数（exp+pow+log）合计自占比——IEEE 钉死不可换",
    "replay": false
@@ -591,7 +591,7 @@
    "value": 39.5,
    "cmd": "同上（elem_xpow + do_rc_map）",
    "source": "w64-logs/hotpath-final3.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "x.^y 热点里 Octave C++ 驱动（elem_xpow 逐元素 + do_rc_map 复数重启）合计——唯一残余可缝轴（有界，候选④；需 G6 延迟断言）",
    "replay": false
@@ -600,7 +600,7 @@
    "value": "f6fec91fc7a0f4b8b678c0d98c2453992dca4e91fcf82cb154e444770ba4a4c0",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm | cut -d' ' -f1",
    "source": "artifacts-w64-rust-on/octave.wasm（site-illegalperf w64 槽同源）",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "rust-sort 候选产物 sha；2026-10-07 已发运（用户批准，8761 w64 档同 sha）",
    "replay": false
@@ -609,7 +609,7 @@
    "value": 1.001,
    "cmd": "sh test/fixtures/emcc6-probe/run-probe.sh 1（读 w64-logs/emcc6-probe.log 的 geomean 行）",
    "source": "w64-logs/emcc6-probe.log",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-04",
    "note": "emcc 6.0.10/5.0.7 每调用几何均值（<1 = 6 更快）；实测 ≈1.00 ⇒ 工具链升级无编译器红利",
    "replay": false
@@ -618,7 +618,7 @@
    "value": 19,
    "cmd": "git submodule status | wc -l",
    "source": ".gitmodules",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-10",
    "replay": false
   },
@@ -626,7 +626,7 @@
    "value": "f4bf15b792bf",
    "cmd": "git -C upstream/octave rev-parse --short=12 HEAD",
    "source": ".gitmodules + upstream/octave",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-05",
    "note": "Octave wasm 分支（tarball 生成件 + 平台补丁）的 pin",
    "replay": false
@@ -635,7 +635,7 @@
    "value": 13,
    "cmd": "ls shelf/packages/*.json | wc -l",
    "source": "shelf/（submodule Octave-Extra-Content）",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-15",
    "note": "货架上的包档案数（每包一文件）"
   },
@@ -643,7 +643,7 @@
    "value": 13,
    "cmd": "grep -l '\"verified\": {' shelf/packages/*.json | wc -l",
    "source": "shelf/",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-15",
    "note": "已验证（--probe 实测过）的包数；未验证的默认不上架"
   },
@@ -651,7 +651,7 @@
    "value": 15,
    "cmd": "python3 -c \"import json;print(len(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs']))\"",
    "source": "site/assets/forge-catalog.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-19",
    "note": "站点货架上架的包数（客户端 catalog() 读它）"
   },
@@ -659,7 +659,7 @@
    "value": 0,
    "cmd": "python3 -c \"import json;print(len([p for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if 'oct' in (p.get('kinds') or [])]))\"",
    "source": "site/assets/forge-catalog.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-10",
    "note": "含**异架构预编译 .oct** 的包数（按需安装拒绝它们；见设计稿 §6A）"
   },
@@ -667,7 +667,7 @@
    "value": "7dfe77efff43",
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['shelf_commit'])\" | cut -c1-12",
    "source": "site/assets/forge-catalog.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-21",
    "note": "catalog 由哪一版货架（submodule commit）生成"
   },
@@ -675,7 +675,7 @@
    "value": "11.3.0",
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['octave'])\"",
    "source": "site/assets/forge-catalog.json",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-10",
    "note": "货架按哪个 Octave 版本过滤（应从 fork 的 configure.ac 读）"
   },
@@ -683,7 +683,7 @@
    "value": 57,
    "cmd": "python3 build/extra-content/validate-content-list.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'",
    "source": "build/extra-content/validate-content-list.py",
-   "measured_at": "2026-10-21T10:56:14+0800",
+   "measured_at": "2026-10-21T11:47:04+0800",
    "first_seen": "2026-10-21",
    "note": "content-list 端口校验器自证 PASS 数（形状/词表/协商规则/裁决①②/license 类型）"
   },
@@ -691,7 +691,7 @@
    "value": 6,
    "cmd": "python3 build/extra-content/check-content-port.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'",
    "source": "build/extra-content/check-content-port.py",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-15",
    "note": "端口闸门自证 PASS 数（golden 全过 + bad 全红 + 词表单一产地 + pkg/tree 两形态覆盖）"
   },
@@ -699,7 +699,7 @@
    "value": 38,
    "cmd": "python3 build/113/check-forge-catalog.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'",
    "source": "build/113/check-forge-catalog.py",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-18",
    "note": "站点货架闸门自证 PASS 数（R1–R8：含非货架域 R7 + size sanity R8）"
   },
@@ -707,7 +707,7 @@
    "value": 37,
    "cmd": "python3 build/forge-catalog.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'",
    "source": "build/forge-catalog.py",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-19",
    "note": "货架装配器自证 PASS 数（含上游表 stage 的 fail-closed 用例）"
   },
@@ -715,7 +715,7 @@
    "value": 0.964,
    "cmd": "sh build/113/bench-libm-spike.sh 8（读 w64-logs/libm-spike-verdict.txt 的 geomean 行）",
    "source": "w64-logs/libm-spike-verdict.txt",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-04",
    "note": "链接期标量 libm 替换（同源重编覆盖）的每调用几何均值；≥1.5 才值得注册插件 —— 实测 <1.0 ⇒ 负判决（wasm 无标量 FMA，见 NOTES-libm.md）",
    "replay": false
@@ -724,7 +724,7 @@
    "value": 4175689,
    "cmd": "llvm-objdump -d <w64>/octave.wasm | grep -c i64（由 build/113/build-w64-lane.sh facts 写出，容器内跑）",
    "source": "w64-logs/i64.txt",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "64 位的指令层证据（wasm32 版为 0）",
    "replay": false
@@ -733,7 +733,7 @@
    "value": 46,
    "cmd": "bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/llvm-readobj 逐个量）",
    "source": "w64-logs/oct-wasm64.txt",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "`.oct` 车道里 wasm64 的个数（side module 的指针宽度必须与主模块一致）",
    "replay": false
@@ -742,7 +742,7 @@
    "value": 46,
    "cmd": "同上（文件名：oct-wasm64.txt 的第二个数）",
    "source": "w64-logs/oct-wasm64.txt",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "车道 `.oct` 总数",
    "replay": false
@@ -751,7 +751,7 @@
    "value": 5242880000,
    "cmd": "sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log",
    "source": "mem-probe.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "单线程 memory64 分配 80000 页（非 COI 页，buffer 是 ArrayBuffer）",
    "replay": false
@@ -760,7 +760,7 @@
    "value": 8589934592,
    "cmd": "sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log",
    "source": "mem-probe.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "单线程 memory64 分配 131072 页",
    "replay": false
@@ -769,7 +769,7 @@
    "value": 5242880000,
    "cmd": "sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log",
    "source": "mem-probe.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "COI 页 shared memory64 分配 80000 页（buffer 是 SharedArrayBuffer）",
    "replay": false
@@ -778,7 +778,7 @@
    "value": 0,
    "cmd": "同上（脚本结尾的 `=== N PASS / M FAIL ===`）",
    "source": "mem-probe.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "内存探针 FAIL 数（必须 0；含 wasm32 上限 / index 陷阱 / BigInt 三条反证）",
    "replay": false
@@ -787,7 +787,7 @@
    "value": 4,
    "cmd": "数 w64-logs/floor-*.log 里 `· ① 页面 ready` 判据行的引擎名（去重）",
    "source": "w64-logs/floor-*.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "跑过的引擎：Chromium 154 / Chromium 125 / Firefox / WebKit（2026-10-01 实测）",
    "replay": false
@@ -796,7 +796,7 @@
    "value": 16,
    "cmd": "同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）",
    "source": "w64-logs/floor-*.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -804,7 +804,7 @@
    "value": 1557,
    "cmd": "E2_LANE=w64 docker exec o113 bash /src/bin/build-e2-lane.sh src patch build > w64-logs/e2-w64-build.log（读那行架构断言）",
    "source": "w64-logs/e2-w64-build.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "w64 车道线程版 OpenBLAS 归档里 wasm64 成员数",
    "replay": false
@@ -813,7 +813,7 @@
    "value": 0,
    "cmd": "同上",
    "source": "w64-logs/e2-w64-build.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "必须是 0（side module 的指针宽度必须与主模块一致）",
    "replay": false
@@ -822,7 +822,7 @@
    "value": 0.003,
    "cmd": "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/bench-ob-w64.log",
    "source": "w64-logs/bench-ob-w64.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "现役 w64（线程版 OpenBLAS NT=8，2026-10-02 上站）的矩阵乘 500² 中位数",
    "replay": false
@@ -831,7 +831,7 @@
    "value": 0.014,
    "cmd": "同上（8761 现役那轮）",
    "source": "w64-logs/bench-ob-w64.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "现役 w64（线程版 OpenBLAS NT=8）的 lu(800) 中位数",
    "replay": false
@@ -840,7 +840,7 @@
    "value": 15.3,
    "cmd": "派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项",
    "source": "派生（两个 bench 日志）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "OpenBLAS 版相对 refblas 版 w64 的加速倍数（历史对照：refblas 的现役地位已由 2026-10-02 NT=8 批取代）",
    "replay": false
@@ -849,7 +849,7 @@
    "value": 0.005,
    "cmd": "<交错 3 轮取中位：HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8861/ w64（×3 ⇒ w64-logs/bench-mi2-r1..3.log）>",
    "source": "w64-logs/bench-mi2-r1..3.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-04",
    "note": "候选（mimalloc，工单 59）产品级 matmul 500²；与现役的同窗配对见 w64_cand_vs_ship_*",
    "replay": false
@@ -858,7 +858,7 @@
    "value": 0.014,
    "cmd": "同上（lu 800）",
    "source": "w64-logs/bench-mi2-r1..3.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-04",
    "note": "候选（mimalloc）产品级 lu(800)",
    "replay": false
@@ -867,7 +867,7 @@
    "value": 0.574,
    "cmd": "同上（loop 1e6）",
    "source": "w64-logs/bench-mi2-r1..3.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-04",
    "note": "候选的纯解释器轴（分配器不该动它 —— 诚实记录，防「把好数字全记在头上」）",
    "replay": false
@@ -876,7 +876,7 @@
    "value": 1.25,
    "cmd": "派生：w64-logs/bench-mi2-r1..3.log 的中位 ÷ bench-ship2-r1..3.log 的中位",
    "source": "派生（两组交错日志）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-04",
    "note": "候选/现役 的 matmul500 比值（<1 = 候选更快；同窗配对，不是跨窗对比）",
    "replay": false
@@ -885,7 +885,7 @@
    "value": 1.0,
    "cmd": "派生：同上（lu 800）",
    "source": "派生（两组交错日志）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-04",
    "note": "候选/现役 的 lu800 比值",
    "replay": false
@@ -894,7 +894,7 @@
    "value": 0.003212,
    "cmd": "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "原生天花板（OpenBLAS 0.3.34 pthread）的 matmul500 中位数",
    "replay": false
@@ -903,7 +903,7 @@
    "value": 0.008517,
    "cmd": "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "原生天花板（OpenBLAS 0.3.34 pthread）的 matmul1024 中位数",
    "replay": false
@@ -912,7 +912,7 @@
    "value": 0.050018,
    "cmd": "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "原生天花板（OpenBLAS 0.3.34 pthread）的 matmul2000 中位数",
    "replay": false
@@ -921,7 +921,7 @@
    "value": 0.026146,
    "cmd": "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "原生天花板（OpenBLAS 0.3.34 pthread）的 lu800 中位数",
    "replay": false
@@ -930,7 +930,7 @@
    "value": 0.027249,
    "cmd": "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "系统默认 BLAS（netlib 参考实现，单线程）的 matmul 500² —— 用户手里的原生 Octave",
    "replay": false
@@ -939,7 +939,7 @@
    "value": 0.196202,
    "cmd": "sh build/113/bench-native.sh",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "netlib 参考实现的 matmul1000（用户手里的原生 Octave；机器空闲时跑，重活 ⇒ replay 豁免）",
    "replay": false
@@ -948,7 +948,7 @@
    "value": 0.25765,
    "cmd": "sh build/113/bench-native.sh",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "netlib 参考实现的 lu1500（用户手里的原生 Octave；机器空闲时跑，重活 ⇒ replay 豁免）",
    "replay": false
@@ -957,7 +957,7 @@
    "value": 0.04076,
    "cmd": "sh build/113/bench-native.sh",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "netlib 参考实现的 lu800（用户手里的原生 Octave；机器空闲时跑，重活 ⇒ replay 豁免）",
    "replay": false
@@ -966,7 +966,7 @@
    "value": 0.500141,
    "cmd": "sh build/113/bench-native.sh",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "netlib 参考实现的 loop1e6（用户手里的原生 Octave；机器空闲时跑，重活 ⇒ replay 豁免）",
    "replay": false
@@ -975,7 +975,7 @@
    "value": 0.009586,
    "cmd": "sh build/113/bench-native.sh",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "原生天花板（OpenBLAS 0.3.34 pthread）的 matmul1000 中位数；机器空闲时跑，重活 ⇒ replay 豁免",
    "replay": false
@@ -984,7 +984,7 @@
    "value": 0.040473,
    "cmd": "sh build/113/bench-native.sh",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "原生天花板（OpenBLAS 0.3.34 pthread）的 lu1500 中位数；机器空闲时跑，重活 ⇒ replay 豁免",
    "replay": false
@@ -993,7 +993,7 @@
    "value": 24,
    "cmd": "sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）",
    "source": "w64-logs/native-baseline.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "天花板后端的线程数（占比口径的一部分，必须如实记录）",
    "replay": false
@@ -1002,7 +1002,7 @@
    "value": 1.07,
    "cmd": "派生：w64-logs/native-baseline.json 的 openblas24.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500",
    "source": "派生（原生基线 ÷ 浏览器）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "浏览器 w64 占原生天花板的比值（占比仪表盘的表头）",
    "replay": false
@@ -1011,7 +1011,7 @@
    "value": 9.1,
    "cmd": "派生：w64-logs/native-baseline.json 的 netlib.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500",
    "source": "派生（原生基线 ÷ 浏览器）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "浏览器 w64 相对『系统默认 BLAS 的原生 Octave』的倍数",
    "replay": false
@@ -1020,7 +1020,7 @@
    "value": 0.38,
    "cmd": "派生：native-baseline.json 的 openblas24.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000",
    "source": "派生（原生基线 ÷ 浏览器）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "浏览器 w64 matmul1000 占原生天花板的比值（大矩阵是最吃线程的刻度）",
    "replay": false
@@ -1029,7 +1029,7 @@
    "value": 7.8,
    "cmd": "派生：native-baseline.json 的 netlib.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000",
    "source": "派生（原生基线 ÷ 浏览器）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "浏览器 w64 matmul1000 相对『用户手里的原生 Octave』的倍数",
    "replay": false
@@ -1038,7 +1038,7 @@
    "value": 3.8,
    "cmd": "派生：native-baseline.json 的 netlib.lu1500 ÷ bench-ob-w64.log 的 lu 1500",
    "source": "派生（原生基线 ÷ 浏览器）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "浏览器 w64 lu1500 相对『用户手里的原生 Octave』的倍数",
    "replay": false
@@ -1047,7 +1047,7 @@
    "value": 0.67,
    "cmd": "派生：native-baseline.json 的 netlib.loop1e6 ÷ bench-ob-w64.log 的 loop 1e6",
    "source": "派生（原生基线 ÷ 浏览器）",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "浏览器解释器循环相对原生的比值（<1 = 浏览器慢 —— 纯解释器轴是唯一明确输的）",
    "replay": false
@@ -1056,7 +1056,7 @@
    "value": 7.45,
    "cmd": "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/ > w64-logs/heap-ceiling.log",
    "source": "w64-logs/heap-ceiling.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "逐块 0.75 GiB 吃到 OOM 的**存活上限**（四档实测同为 1.49 GiB）",
    "replay": false
@@ -1065,7 +1065,7 @@
    "value": true,
    "cmd": "同上（探针结尾的 `W64_BIG_HEAP=` 行）",
    "source": "w64-logs/heap-ceiling.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "工单 31 的结算判据：抬了 MAXIMUM_MEMORY 之后必须变 yes",
    "replay": false
@@ -1074,7 +1074,7 @@
    "value": 0.048,
    "cmd": "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log",
    "source": "w64-logs/speed-w64.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "w64 档矩阵乘 500²：比 base 慢约 1.2×（i64 指针/索引的代价）",
    "replay": false
@@ -1083,7 +1083,7 @@
    "value": 0.079,
    "cmd": "HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log",
    "source": "w64-logs/speed-w64.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "w64 档 lu(800)：比 base 慢约 1.3×",
    "replay": false
@@ -1092,7 +1092,7 @@
    "value": 33,
    "cmd": "cd <dist 包目录> && python3 serve.py 8788；再 SITE_DIR=<dist 包目录> sh build/sweep.sh http://127.0.0.1:8788/ probe-lane > w64-logs/dist-probe-lane.log",
    "source": "w64-logs/dist-probe-lane.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "交付包**内部**的四格选档通过数（不只是字节相同）",
    "replay": false
@@ -1101,7 +1101,7 @@
    "value": 0,
    "cmd": "同上",
    "source": "w64-logs/dist-probe-lane.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "replay": false
   },
@@ -1109,7 +1109,7 @@
    "value": 0,
    "cmd": "同上",
    "source": "w64-logs/floor-*.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-03",
    "note": "必须 0；含「无 memory64 的引擎必须落 base」这条反向断言（threads 已删）",
    "replay": false
@@ -1118,7 +1118,7 @@
    "value": "ok",
    "cmd": "cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-ip.verdict",
    "source": "w64-logs/lane6012-ip.verdict",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-12",
    "note": "6.0.12 重链产物 verdict（w64 模式；只有 ok 可部署）"
   },
@@ -1126,7 +1126,7 @@
    "value": "ok",
    "cmd": "cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-master.verdict",
    "source": "w64-logs/lane6012-master.verdict",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-12",
    "note": "6.0.12 重链产物 verdict（w64 模式；只有 ok 可部署）"
   },
@@ -1134,7 +1134,7 @@
    "value": "ok",
    "cmd": "cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-wasm32.verdict",
    "source": "w64-logs/lane6012-wasm32.verdict",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-12",
    "note": "6.0.12 重链产物 verdict（product 模式；只有 ok 可部署）"
   },
@@ -1142,7 +1142,7 @@
    "value": 3,
    "cmd": "grep -l '^ok$' /mnt/hdd/octave-wasm-build/w64-logs/lane6012-*.verdict | wc -l",
    "source": "w64-logs/lane6012-*.verdict",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-12",
    "note": "三线中 verdict==ok 的条数（0 = 一条没成 ⇒ 那比「部分成功」更该红）"
   },
@@ -1150,7 +1150,7 @@
    "value": "OK",
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['device'])\"",
    "source": "w64-logs/probe-webgpu-capability.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "主线程 WebGPU 能否拿到 device（前提：安全上下文；**about:blank 探不出**）",
    "replay": false
@@ -1159,7 +1159,7 @@
    "value": "OK",
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['device'])\"",
    "source": "w64-logs/probe-webgpu-capability.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "**Worker 内**（DOM-free）能否拿到 WebGPU device —— 算力放 Worker 的前提",
    "replay": false
@@ -1168,7 +1168,7 @@
    "value": true,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['computeOK'])\"",
    "source": "w64-logs/probe-webgpu-capability.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "Worker 里**真跑 compute shader**并读回 [2,2,2,2]（不是只看 typeof）",
    "replay": false
@@ -1177,7 +1177,7 @@
    "value": true,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['webgl2'])\"",
    "source": "w64-logs/probe-webgpu-capability.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "Worker 内 OffscreenCanvas+webgl2 可用（渲染不依赖 DOM）",
    "replay": false
@@ -1186,7 +1186,7 @@
    "value": 3,
    "cmd": "python3 -c \"import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['hw'];print(sum(1 for k in ('serial','usb','hid') if d.get(k)))\"",
    "source": "w64-logs/probe-webgpu-capability.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "网页原生硬件接口可用数（WebSerial/USB/HID）—— MATLAB 要装驱动，这里是浏览器 API"
   },
@@ -1194,7 +1194,7 @@
    "value": "nvidia",
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['vendor'])\"",
    "source": "w64-logs/probe-webgpu-capability.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "实测 GPU 厂商（WebGPU **不挑厂商**：NVIDIA/AMD/Intel/Apple 同 API）"
   },
@@ -1202,7 +1202,7 @@
    "value": true,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][0]['result']['ok'])\"",
    "source": "w64-logs/probe-pyodide-sympy.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "Pyodide+SymPy 在 **COI** Worker 里起得来（符号计算路线的前提）",
    "replay": false
@@ -1211,7 +1211,7 @@
    "value": "cos(x)",
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][0]['result']['diff'])\"",
    "source": "w64-logs/probe-pyodide-sympy.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "**真算对**：`diff(sin(x),x)` 的符号结果（判据 = 恰好 `cos(x)`）",
    "replay": false
@@ -1220,7 +1220,7 @@
    "value": true,
    "cmd": "python3 -c \"import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'];print(d[1]['result']['ok'], d[1]['result']['diff'])\"",
    "source": "w64-logs/probe-pyodide-sympy.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "**无 COI**（发不了 COOP/COEP 的宿主）同样算对 ⇒ 基础档用户也有份",
    "replay": false
@@ -1229,7 +1229,7 @@
    "value": true,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][2]['result']['ok'])\"",
    "source": "w64-logs/probe-pyodide-sympy.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "反向断言：拿掉 SymPy 轮子 ⇒ 装载**响亮失败**（`ok` 必须为 False，不许静默）",
    "replay": false
@@ -1238,7 +1238,7 @@
    "value": 6757104,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['bytes']['disk']['coreTar'])\"",
    "source": "w64-logs/probe-pyodide-sympy.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "Pyodide core 压缩包字节（符号计算路线**站点新增交付**的下限口径）"
   },
@@ -1246,7 +1246,7 @@
    "value": 2757,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['importA_ms'])\"",
    "source": "w64-logs/sympy-pyc-ab.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "`import sympy` 耗时（**源码轮子**档；编译次数见 sympy_pyc_compile_calls）",
    "replay": false
@@ -1255,7 +1255,7 @@
    "value": 380,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['importB_ms'])\"",
    "source": "w64-logs/sympy-pyc-ab.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "`import sympy` 耗时（**.pyc 轮子**档，唯一变量 = 轮子里有没有 `__pycache__`）",
    "replay": false
@@ -1264,7 +1264,7 @@
    "value": 7.26,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['speedup'])\"",
    "source": "w64-logs/sympy-pyc-ab.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "派生：A÷B（>1 = 预编译更快 —— 用户问「能快几倍」的直接答案）",
    "replay": false
@@ -1273,7 +1273,7 @@
    "value": 0,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['sourceToCode']['B'])\"",
    "source": "w64-logs/sympy-pyc-ab.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": ".pyc 档的源码→字节码编译次数（**必须 ≈0**；不为 0 则 A/B 无效 ⇒ 探针 rc=2）",
    "replay": false
@@ -1282,7 +1282,7 @@
    "value": 3.28,
    "cmd": "python3 -c \"import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['bytes'];print(round(d['B']/d['A'],2))\"",
    "source": "w64-logs/sympy-pyc-ab.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "交付字节代价：.pyc 轮子 ÷ 源码轮子（**速度不是免费的**）"
   },
@@ -1290,7 +1290,7 @@
    "value": 2.01,
    "cmd": "python3 test/fixtures/sympy-perf/compare.py（读最后一行 JSON 的 geo）",
    "source": "w64-logs/sympy-perf-{native,pyodide}.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "**用户定论之问**：Pyodide ÷ 原生 CPython 的 CAS 几何均值（≈2× ⇒ 判『接近』）",
    "replay": false
@@ -1299,7 +1299,7 @@
    "value": 2276,
    "cmd": "python3 -c \"import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-perf-pyodide.json'))['timings'];print(round(d['load']+d['pkg']))\"",
    "source": "w64-logs/sympy-perf-pyodide.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "浏览器侧**冷启动**（Pyodide 装载 + 装 sympy 包）—— 与稳态倍数分开读",
    "replay": false
@@ -1308,7 +1308,7 @@
    "value": 7.4,
    "cmd": "python3 test/fixtures/sympy-perf/compare-pyc.py（读末行 JSON 的 import_s.speedup）",
    "source": "w64-logs/sympy-perf-pyodide{,-pyc}.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "**用户追加之问**：.pyc 轮子的 `import sympy` 加速（浏览器侧，同一份基准）",
    "replay": false
@@ -1317,7 +1317,7 @@
    "value": 1.29,
    "cmd": "python3 test/fixtures/sympy-perf/compare-pyc.py（读 cold_geo_speedup）",
    "source": "w64-logs/sympy-perf-pyodide{,-pyc}.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "每 op **首次调用**的几何均值加速（惰性子模块加载那段 —— 用户体感）",
    "replay": false
@@ -1326,7 +1326,7 @@
    "value": 0.99,
    "cmd": "python3 test/fixtures/sympy-perf/compare-pyc.py（读 steady_geo_ratio）",
    "source": "w64-logs/sympy-perf-pyodide{,-pyc}.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-14",
    "note": "**稳态对照**：≈1.0 = 如预期 .pyc 不改执行（预编译不是万能药）",
    "replay": false
@@ -1335,7 +1335,7 @@
    "value": 4,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['pass'])\"",
    "source": "w64-logs/probe-pyodide-sync.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-15",
    "note": "**前提实测**：wasm 里的 C 同步调 Pyodide（4 条：装载/版本/真算对/耗时）",
    "replay": false
@@ -1344,7 +1344,7 @@
    "value": 2288,
    "cmd": "python3 -c \"import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['result']['pyodideReadyMs'])\"",
    "source": "w64-logs/probe-pyodide-sync.json",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-19",
    "note": "Pyodide+sympy 冷启动（必须在 wasm 启动**之前**完成 —— 同步调用等不了 Promise）",
    "replay": false
@@ -1353,7 +1353,7 @@
    "value": 9,
    "cmd": "awk '/=== [0-9]+ PASS/{p=$2} END{print p}' /mnt/hdd/octave-wasm-build/w64-logs/accept-symbolic-seam.log",
    "source": "w64-logs/accept-symbolic-seam.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-15",
    "note": "★ **符号计算端到端**：`diff(sin(x),x)`=cos(x) + 类型往返 + 两条反向（真浏览器）",
    "replay": false
@@ -1362,7 +1362,7 @@
    "value": 0,
    "cmd": "awk '/=== [0-9]+ PASS/{f=$5} END{print f}' /mnt/hdd/octave-wasm-build/w64-logs/accept-symbolic-seam.log",
    "source": "w64-logs/accept-symbolic-seam.log",
-   "measured_at": "2026-10-21T10:56:15+0800",
+   "measured_at": "2026-10-21T11:47:05+0800",
    "first_seen": "2026-10-15",
    "note": "同上（**必须 0** —— 这条接缝的判据是「真算对」）",
    "replay": false

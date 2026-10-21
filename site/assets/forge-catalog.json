@@ -830,6 +830,7 @@
    "name": "pyodide",
    "version": "314.0.7",
    "form": "tree",
+   "role": "language-bridge",
    "content": [],
    "consumer": [
     "octave"
