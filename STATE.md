@@ -3,6 +3,40 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-25 · 收件箱清空 + 待办盘点，压缩前快照）
+
+- **★ 内容仓 `mail/090`（本仓收件 061）＝ 新 schema 提单，已记工单 69**：
+  `form:"tree"` 条目补**可选键 `files[]`**（UI 的下载闭包缺口：omc 的 JS 胶水件在表里
+  无 sha，`size`=目录和 ≠ 下载闭包）。**五条绑定**（可选键 tree 专属 / 值=下发闭包
+  `{bytes,sha256}` / **逐件 sha 唯一产地 = 生产者台账，装配只投影** / 无键合法向后兼容 /
+  校验器类型检查 + 正反自证）。本仓另裁一点：**`form:"file"` 带 `files` ⇒ 红**
+  （静默忽略 = 让错的键看起来合法，与 fail-closed 相反）。
+  **依赖**：OM 侧补 JS 台账键（内容仓 `091` 已请求）；补上之前可先只投影 bg.wasm 一件。
+
+- **★ 收件箱已清空（本轮无人值守连续处理 9 封：044–061）**，全部有落地物：
+  | 信 | 内容 | 落地 |
+  |---|---|---|
+  | 044 | gitignore 洞 + 投 UI 落错工作树 | `!mail/read/` 白名单 + 6 封补提交；两信补投 antigravity 侧（`host-` 前缀） |
+  | 045 | 音频播放链断（钓鱼执法） | 三层修复（缺件补编 + 38 aliases + sync-js 第三态 bug）→ 双站 50/0 |
+  | 046 | 音频复验收执 | 收执（无动作） |
+  | 047 | `kind:'engine'` schema 提单 | schema + 校验器 52→57/0；llvm-wasm 升 engine |
+  | 048 | mail/030 勘误（tree 键可缺省） | STATE 改口径 + 物证复核 |
+  | 049 | llvm-wasm 装载事故（「未知的能力层」） | 拒绝拆两路（NOT_INSTALLABLE / LAYER_NOT_IMPLEMENTED） |
+  | 051/053 | 引擎条目收执 + pyodide 漏标 | pyodide 补 `role:"language-bridge"`（15/15 自描述齐） |
+  | 055 | kind/role 线终局收执 | 收口记录（无动作） |
+  | 056/057/059/061 | omc 引擎条目 + MSL + consumer 裁定 + `files[]` 提单 | omc 上表、R14 兄弟目录不变量、MSL 并入（17 packs）、consumer 改 `["omc"]`、`files[]` 记工单 69 |
+
+- **剩余待办（本仓侧，按可开工性排序）**：
+  1. **工单 69**（`files[]`）—— 可立即开工的部分：schema + 校验器 + 投影 bg.wasm 一件；
+     完整形态等 OM 补 JS 台账键。
+  2. **工单 67**（CI 从未入库）—— `ready-for-agent`，`check-ci-bootstrap.sh` 已存在（rc=1 如实）；
+  3. **工单 63**（rustpatch 事实覆盖）—— `ready-for-agent`；
+  4. **多 TU 扩展**（compile v1 只编主 TU；判据 `partint(5)` 非空）—— 已有本地台（8s/轮）可做；
+  5. **Einfacht #20③ B/C 剩余**（critical 跳过已落；`lanes.json` 单源已落）—— 无剩余；
+  6. **工单 65**（typeinfo 重链）—— 已 resolved（2026-10-19）。
+  · **下游（非本仓）**：UI 刷新部署看 17 packs（我已发 `host-009` 给渲染口径）；
+    OM 补 JS 台账键；UI 的 #3/#4/#5 随后解锁。
+
 ## 现在是什么（2026-10-25 · MSL 并入 + consumer 裁定批，mail/059）
 
 - **★ MSL 并入站点表（内容仓 mail/059 §3，OM 出表方）**：
