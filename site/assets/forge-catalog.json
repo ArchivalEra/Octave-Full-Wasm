@@ -683,6 +683,23 @@
    ]
   },
   {
+   "name": "omc",
+   "version": "unversioned",
+   "form": "tree",
+   "kind": "engine",
+   "role": "toolchain",
+   "arch": "omc",
+   "content": [],
+   "consumer": [
+    "octave"
+   ],
+   "sha256": "8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001",
+   "url": "omc/OpenModelicaCompiler_bg.wasm",
+   "size": 74735455,
+   "deps": [],
+   "note": "OpenModelica 编译器 wasm（Modelica → 供 Octave 桥调用）；字节由 build/113/provision-omc.sh 供给（逐件 sha 对账 OM 台账 omc_web_wasm_sha）；**不走 install**（role:toolchain ⇒ 下载管理）；size = omc/ 目录字节和（MSL 等资产必须落兄弟目录，不许进此目录）；version 未由 OM 侧提供 ⇒ 标 unversioned（不编）"
+  },
+  {
    "name": "optim",
    "version": "1.6.3",
    "size": 422679,

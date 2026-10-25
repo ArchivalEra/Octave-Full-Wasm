@@ -273,8 +273,10 @@
       //   先读 role（表未升级时按 name 白名单兜底，两层都指向同一个答案）。
       var isToolchain = (p.role === 'toolchain') || (p.name === 'llvm-wasm');
       if (isToolchain) {
+        // 文案按**角色**说，不点名具体工具链内容（llvm-wasm 是 clang/lld/sysroot，
+        // omc 是 Modelica 编译器——第二例进来时旧文案会撒谎，mail/056 实测抓到）。
         return Promise.reject(errCode('NOT_INSTALLABLE',
-          p.name + ' 是编译工具链（clang/lld/sysroot），由下载管理（DownloadStore）'
+          p.name + ' 是编译工具链（role:toolchain），由下载管理（DownloadStore）'
           + ' + 编译 Worker 使用——不走装载。UI 侧请走下载界面。'));
       }
       return Promise.reject(errCode('LAYER_NOT_IMPLEMENTED',

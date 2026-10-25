@@ -295,6 +295,28 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
             if want not in ("wasm32", "wasm64"):
                 print("note: R10 `%s` kind:engine 的 arch=%s 是 lane 值（索引键，"
                       "非架构字面量）⇒ 跳过字节对档" % (p_.get("name"), want), file=sys.stderr)
+                # ★ R14（内容仓 mail/057 §2 兄弟目录硬约束，2026-10-25）：tree 条目的
+                #   `size` 必须等于 **url 所在目录**的实测字节和。动机（实测预算）：
+                #   MSL zip 若被 provision 进 omc/，引擎条目闭包预算会从 74.7MB 虚胀到
+                #   94MB+ —— 预算不诚实是 content 诚实纪律的同族。
+                u14 = p_.get("url") or ""
+                if u14:
+                    d14 = os.path.join(site_dir, os.path.dirname(u14))
+                    if os.path.isdir(d14):
+                        actual = 0
+                        for _b, _ds, _fs in os.walk(d14):
+                            for _f in _fs:
+                                try:
+                                    actual += os.path.getsize(os.path.join(_b, _f))
+                                except OSError:
+                                    pass
+                        declared = p_.get("size")
+                        if isinstance(declared, int) and actual != declared:
+                            problems.append(
+                                "R14 %s 的 size=%d ≠ url 所在目录（%s）实测 %d —— "
+                                "tree 条目 size 必须等于该目录字节和（兄弟目录硬约束："
+                                "MSL 等资产不许混进引擎目录）"
+                                % (p_.get("name"), declared, os.path.dirname(u14), actual))
                 continue
         if not site_arch:
             print("note: R10 站点没有任何 assets/oct* 目录 ⇒ 无法核 `%s` 的 arch（跳过，"
@@ -851,6 +873,37 @@ def _selftest():
         cases.append(("目录缺席（未装配/未同步镜像）⇒ SKIP 明说",
                       lambda d=d: (lambda r: r[0] == [] and any("尚未装配" in s for s in r[1]))(
                           check("site", "shelf", repo=d, sha_of=real_sha_of(data), has_oct=no_oct))))
+
+        # ★ R14（mail/057 §2 兄弟目录硬约束）：engine 条目 size == url 目录实测和；
+        #   混进别的资产（MSL zip）⇒ 必红。
+        def _r14_fixture(tmp3, extra=0):
+            d3 = _mk_fixture(tmp3, [_pack(sha=good_sha)], blob_sha=data)
+            omcd = os.path.join(d3, "site", "omc")
+            os.makedirs(omcd)
+            open(os.path.join(omcd, "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
+            if extra:
+                open(os.path.join(omcd, "msl-4.1.0.zip"), "wb").write(b"Z" * extra)
+            catp = os.path.join(d3, "site", "assets", "forge-catalog.json")
+            cd = json.load(open(catp))
+            cd["packs"].append({
+                "name": "omc", "version": "unversioned", "form": "tree",
+                "kind": "engine", "role": "toolchain", "arch": "omc",
+                "content": [], "consumer": ["octave"],
+                "sha256": hashlib.sha256(b"OMW").hexdigest(),
+                "url": "omc/OpenModelicaCompiler_bg.wasm",
+                "size": 3, "deps": []})
+            json.dump(cd, open(catp, "w"))
+            return d3
+
+        d14ok = _r14_fixture(os.path.join(tmp, "r14_ok"))
+        cases.append(("R14：engine 条目 size == url 目录实测和 ⇒ 不报（兄弟目录干净）",
+                      lambda d=d14ok: not any("R14" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        d14bad = _r14_fixture(os.path.join(tmp, "r14_bad"), extra=5)
+        cases.append(("★ R14 反向：MSL 类资产混进 omc/ ⇒ size 与目录实测不符 ⇒ 必须报"
+                      "（兄弟目录硬约束）",
+                      lambda d=d14bad: any("R14" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
 
         bad = 0
         for label, fn in cases:

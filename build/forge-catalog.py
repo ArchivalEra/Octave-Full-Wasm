@@ -440,6 +440,46 @@ def capability_entries(site):
                         "字节由 build/113/provision-llvm-wasm.sh 供给"
                         "（sha 见 upstream-lock.json 的 llvm-wasm 条）",
             })
+    # ★ 第三个能力层 = OMC 引擎（内容仓 mail/056/057，2026-10-25）：OpenModelica 编译器
+    #   wasm —— 编译 Modelica 供 Octave 桥调用。**第二个 kind:'engine'**。
+    #   字节产地 = OM 仓部署盘（provision-omc.sh 拷进站点 omc/，逐件 sha 与 OM 台账
+    #   omc_web_wasm_sha 对账）；**MSL 等资产不许进 omc/**（mail/057 §2 兄弟目录硬约束：
+    #   tree 的 size = url 所在目录字节和，MSL 进来会把预算从 74.7MB 虚胀到 94MB+）。
+    omc_root = os.path.join(site, "omc")
+    omc_main = os.path.join(omc_root, "OpenModelicaCompiler_bg.wasm")
+    if not os.path.isdir(omc_root):
+        problems.append("能力层缺失：omc/ 不在站点（跑 build/113/provision-omc.sh fetch）")
+    elif not os.path.isfile(omc_main):
+        problems.append("能力层残缺：omc/OpenModelicaCompiler_bg.wasm 不在（provision 未完成？）")
+    else:
+        total = 0
+        for base, _dirs, files in os.walk(omc_root):
+            for f in files:
+                try:
+                    total += os.path.getsize(os.path.join(base, f))
+                except OSError:
+                    pass
+        entries.append({
+            "name": "omc",
+            # ⚠️ OM 侧未给版本串 —— 这里**如实占位**并在 note 说明，不编 semver
+            #   （"编一个看起来像版本的东西"正是产地纪律禁止的）。
+            "version": "unversioned",
+            "form": "tree",
+            "kind": "engine",
+            "role": "toolchain",
+            "arch": "omc",              # lane 值（内容仓 mail/056：部署事实 = 单档）
+            "content": [],
+            "consumer": ["octave"],
+            "sha256": _file_sha_or_empty(omc_main),
+            "url": "omc/OpenModelicaCompiler_bg.wasm",
+            "size": total,
+            "deps": [],
+            "note": "OpenModelica 编译器 wasm（Modelica → 供 Octave 桥调用）；"
+                    "字节由 build/113/provision-omc.sh 供给（逐件 sha 对账 OM 台账 "
+                    "omc_web_wasm_sha）；**不走 install**（role:toolchain ⇒ 下载管理）；"
+                    "size = omc/ 目录字节和（MSL 等资产必须落兄弟目录，不许进此目录）；"
+                    "version 未由 OM 侧提供 ⇒ 标 unversioned（不编）",
+        })
     return entries, problems
 
 
@@ -1133,6 +1173,8 @@ def _selftest():
         with _tf.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, "assets", "pyodide", "pyodide"))
             open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            os.makedirs(os.path.join(d, "omc"))
+            open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OM")
             lw = os.path.join(d, "assets", "llvm")
             os.makedirs(lw)
             open(os.path.join(lw, "clang.wasm"), "wb").write(b"CW")
@@ -1153,12 +1195,52 @@ def _selftest():
         with _tf.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, "assets", "pyodide", "pyodide"))
             open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            os.makedirs(os.path.join(d, "omc"))
+            open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OM")
             ents, probs = capability_entries(d)   # 没有 assets/llvm/
             return (not [e for e in ents if e["name"] == "llvm-wasm"]
                     and any("assets/llvm/" in x for x in probs))
 
     cases.append(("★ 能力层 llvm-wasm：从站点字节产条目（版本取数字 6.0.12 不取 \"(Emscripten\"）",
                   _cap_llvm_ok))
+    # ★ omc 引擎条目（内容仓 mail/056/057，2026-10-25）
+    def _cap_omc_ok():
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            for sub in (("assets", "pyodide", "pyodide"), ("assets", "llvm"), ("omc",)):
+                os.makedirs(os.path.join(d, *sub))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            open(os.path.join(d, "assets", "llvm", "clang.wasm"), "wb").write(b"CW")
+            json.dump({"toolchain": {"emcc": "emcc 6.0.12 (x)"}},
+                      open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
+            open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
+            open(os.path.join(d, "omc", "OpenModelicaCompiler.js"), "wb").write(b"JS")
+            ents, probs = capability_entries(d)
+            assert not probs, probs
+            e = [x for x in ents if x["name"] == "omc"]
+            assert len(e) == 1
+            assert e[0]["kind"] == "engine" and e[0]["role"] == "toolchain"
+            assert e[0]["arch"] == "omc", e[0]["arch"]     # lane 值，不是 wasm32/wasm64
+            assert e[0]["url"] == "omc/OpenModelicaCompiler_bg.wasm"
+            assert e[0]["size"] == 5, e[0]["size"]         # 整目录字节和（OMW+JS）
+            return True
+
+    def _cap_omc_missing():
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            for sub in (("assets", "pyodide", "pyodide"), ("assets", "llvm")):
+                os.makedirs(os.path.join(d, *sub))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            open(os.path.join(d, "assets", "llvm", "clang.wasm"), "wb").write(b"CW")
+            json.dump({"toolchain": {"emcc": "emcc 6.0.12 (x)"}},
+                      open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
+            ents, probs = capability_entries(d)   # 没有 omc/
+            return (not [e for e in ents if e["name"] == "omc"]
+                    and any("omc/" in x for x in probs))
+
+    cases.append(("★ 能力层 omc：kind:engine + role:toolchain + arch=lane 值 + size=整目录",
+                  _cap_omc_ok))
+    cases.append(("★ 能力层 omc 反向：omc/ 不在 ⇒ 点名", _cap_omc_missing))
     cases.append(("★ 能力层 llvm-wasm 反向：assets/llvm/ 不在 ⇒ 点名（不静默缺能力层）",
                   _cap_llvm_missing))
     cases.append(("★ stage：空条目 ⇒ 无问题（零值不报错，由调用方 guard）",
