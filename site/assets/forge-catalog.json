@@ -616,6 +616,23 @@
    ]
   },
   {
+   "name": "modelica-standard-library",
+   "version": "4.1.0+maint.om",
+   "form": "file",
+   "sha256": "a97d8d94ca7f7960f7f1c209613a35d65bcfa2426660e5052617e71326308535",
+   "url": "assets/msl/msl-4.1.0-maint.om.zip",
+   "upstream_url": "https://github.com/OpenModelica/OpenModelica-ModelicaStandardLibrary/archive/8df0769a9cee6ad04ddfff95faee64cd70f662ec.zip",
+   "size": 19482938,
+   "content": [],
+   "consumer": [
+    "omc"
+   ],
+   "role": "package",
+   "license": "BSD-3-Clause (Modelica Association); sublibrary licenses in Modelica/Resources/Licenses/",
+   "deps": [],
+   "note": "Modelica 标准库（跨域物理域）。挂载配方：omc_vfs_load_zip('/.openmodelica/libraries', zip) 一次调用即装（MODELICAPATH 经 omc_set_env 不生效，实测）；判据 loadModel(Modelica)=true / getVersion(Modelica)=\"4.1.0\" / 反向 loadModel(NoSuchPackageXYZ) 必败。版本锚 8df0769a（上游索引版本串）。安装形状重打包，与 GitHub 源 zip 字节不等（源是仓库快照）。"
+  },
+  {
    "name": "nan",
    "version": "3.7.2",
    "size": 257606,
@@ -691,7 +708,7 @@
    "arch": "omc",
    "content": [],
    "consumer": [
-    "octave"
+    "omc"
    ],
    "sha256": "8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001",
    "url": "omc/OpenModelicaCompiler_bg.wasm",

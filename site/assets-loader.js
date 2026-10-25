@@ -707,6 +707,10 @@
         // 派生细节（诊断用；UI 不必读）
         detail: { arch: p.arch || null, hostArch: ha || null,
                   content: content, form: p.form || null,
+                  // ★ consumer 透传（2026-10-25，MSL 并入需要）：UI 要判"这条服务哪个
+                  //   引擎车道"（omc 车道栈 vs octave 车道栈）；缺省 = ["octave"]。
+                  consumer: (p.consumer && p.consumer.length) ? p.consumer.slice() : ['octave'],
+                  kind: p.kind || null, role: p.role || null,
                   acceleration: fromSource ? 'not-built' : 'none-needed' }
       };
     }

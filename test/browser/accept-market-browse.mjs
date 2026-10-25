@@ -76,8 +76,16 @@ const b3 = await page.evaluate(async () => {
   //   第一版只写死 'pyodide' ⇒ llvm-wasm 进表后 B3c 假红（这条实测抓到）。
   //   ⚠️ 第二版先用 e.form 也错了：Entry 的 form 在 **detail.form** 里（顶层没有）
   //   ⇒ 过滤恒真。判据：读 detail.form。
+  // 排除口径（2026-10-25 再扩）：能力层（form:'tree'）+ **非 octave 消费面**的外部
+  // 生产者条目（consumer 不含 octave，如 MSL 的 consumer:["omc"]）—— 它们不是本市场
+  // 的货架包，没有包级 description 是合理形态（内容仓 mail/048 C-2 的同一裁定）。
   const noDesc = list
-    .filter(e => (!e.detail || e.detail.form !== 'tree') && !(e.description || '').length)
+    .filter(e => {
+      const d = e.detail || {};
+      const consumer = d.consumer || e.consumer || null;
+      const external = Array.isArray(consumer) && consumer.indexOf('octave') < 0;
+      return d.form !== 'tree' && !external && !(e.description || '').length;
+    })
     .map(e => e.name);
   return {
     syDesc: sy ? sy.description : null,

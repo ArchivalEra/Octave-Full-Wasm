@@ -469,7 +469,11 @@ def capability_entries(site):
             "role": "toolchain",
             "arch": "omc",              # lane 值（内容仓 mail/056：部署事实 = 单档）
             "content": [],
-            "consumer": ["octave"],
+            # ★ consumer = 条目服务的**引擎车道**（内容仓 mail/088 §2 裁定，2026-10-25）：
+            #   omc 引擎是 omc 车道的运行时（与 MSL 同栈）⇒ ["omc"]；llvm-wasm/pyodide
+            #   服务 octave 车道栈 ⇒ ["octave"]（不变）。效果：缺省 octave 市场面不被
+            #   第二引擎条目污染 —— 正是 consumer 轴立轴的目的（宿主 008 裁决②）。
+            "consumer": ["omc"],
             "sha256": _file_sha_or_empty(omc_main),
             "url": "omc/OpenModelicaCompiler_bg.wasm",
             "size": total,
@@ -712,7 +716,18 @@ def stage_upstream_bytes(site, entries, bytes_dir, check_only=False):
         if not _name:
             problems.append("stage %s：从 url 推不出落点文件名（url=%s）" % (e.get("name"), u[:60]))
             continue
-        dst = os.path.join(site, "assets", "forge", _name)
+        # ★ 落点口径（2026-10-25 修，内容仓 mail/088 的 MSL 并入实测翻出）：
+        #   **站内相对 url = 生产者的交付路径**（端口纪律：它给什么就是什么）⇒ 落点
+        #   就按 url 铺（`assets/msl/x.zip` ⇒ `<site>/assets/msl/x.zip`）。
+        #   只有 url **不是**站内相对（绝对 URL / 带 query 的重取入口）时才回退
+        #   `assets/forge/<末段名>`（那是"表里给的是出处不是交付路径"的两段式情形）。
+        #   第一版一律铺 assets/forge/ ⇒ 与表里 url 两处口径分叉（MSL 的 url 是
+        #   assets/msl/…，铺到 forge/ 后站点闸门 R7b 会报 404 —— 与 llvm-wasm 那次
+        #   同族：声明与消费之间没有对账器）。
+        if u and not os.path.isabs(u) and "://" not in u and "?" not in u:
+            dst = os.path.join(site, u)
+        else:
+            dst = os.path.join(site, "assets", "forge", _name)
         if check_only:
             if not os.path.isfile(dst) or sha256_file(dst) != (want or got):
                 problems.append("stage %s：站点上没有 %s 或 sha 不符（未 stage）" % (e.get("name"), u))
@@ -1083,11 +1098,24 @@ def _selftest():
     def _stage_ok():
         bd, site, ent = _stage_fixture()
         probs = stage_upstream_bytes(site, ent, bd, check_only=False)
-        # ★ 翻面（2026-10-16）：落点恒 `assets/forge/<字节名>`（同源规范位），**不**再照 url 原路径
-        #   —— 实测抓到旧行为会给绝对 URL 造出 `site/https:/github.com/…` 假目录树。
-        dst = os.path.join(site, "assets", "forge", "clang.wasm")
+        # ★ 再翻面（2026-10-25，MSL 并入实测）：**站内相对 url = 生产者的交付路径**
+        #   ⇒ 落点照 url 铺（`assets/llvm-wasm/clang.wasm` ⇒ 同路径），不再一律
+        #   assets/forge/。理由：一律铺 forge/ 会与表里 url 两处口径分叉（MSL 的
+        #   url 是 assets/msl/…，铺错位后站点闸门 R7b 报 404）。
+        dst = os.path.join(site, "assets", "llvm-wasm", "clang.wasm")
         return probs == [] and os.path.isfile(dst) and _hl.sha256(open(dst, "rb").read()).hexdigest() == _bsha
-    cases.append(("stage：字节 stage 进站点 + sha 相符 ⇒ 无问题", _stage_ok))
+    cases.append(("stage：站内相对 url ⇒ 落点照 url 铺（交付路径口径）", _stage_ok))
+
+    def _stage_abs_url_no_fake_tree():
+        # ★ 反向（2026-10-16 的判例保留）：**绝对 URL 不许**造 `site/https:/…` 假目录树
+        #   ⇒ 回退 assets/forge/<末段名>。
+        bd, site, ent = _stage_fixture(url="https://github.com/x/clang.wasm")
+        probs = stage_upstream_bytes(site, ent, bd, check_only=False)
+        fake = os.path.join(site, "https:")
+        real = os.path.join(site, "assets", "forge", "clang.wasm")
+        return probs == [] and not os.path.exists(fake) and os.path.isfile(real)
+    cases.append(("★ stage 反向：绝对 URL ⇒ 落 assets/forge/，**不许**造 https:/ 假目录树",
+                  _stage_abs_url_no_fake_tree))
 
     def _stage_missing():
         bd, site, ent = _stage_fixture(with_bytes=False)
