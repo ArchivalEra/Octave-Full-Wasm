@@ -461,6 +461,20 @@ def measure():
                 "实测 >1 ⇒ 候选②否决——带宽绑定热点换语言无益",
                 replay=False)
 
+    # ★ **G5：Rust 工具链不变式**（工单 63 覆盖矩阵第 5 行，2026-10-28）：
+    #   grilling 会问"工具链钉住了吗" —— 事实化成四条可复跑不变式（钉版 channel /
+    #   staticlib / panic=abort / 两档 target）。**声明式一行**：值只有 ok。
+    #   replay=True：复跑输出就是 "ok"，闸门逐字对（契约见脚本 docstring）。
+    _g5 = subprocess.run([sys.executable, os.path.join(REPO, "build", "113",
+                                                       "check-rust-toolchain.py")],
+                         capture_output=True, text=True)
+    facts["rust_patch_toolchain_ok"] = fact(
+        "ok" if _g5.returncode == 0 else "red:%d" % _g5.returncode,
+        "python3 build/113/check-rust-toolchain.py",
+        "build/113/rust/{rust-toolchain.toml,Cargo.toml} + build/113/build-rustsort*.sh",
+        "G5（工单 63）：工具链输入钉住了没。ok = 四条全过；red = 逐条点名在 stderr",
+        replay=True)
+
     # ★ **sort spike**（工单 63 / 候选③，2026-10-04）：Rust stable sort vs 真
     #   octave_sort<double> 内核——语义差分 22 域逐位一致 + 内核 4× 加速 ⇒ ADOPT。
     _rs = os.path.join(os.path.dirname(SITE), "w64-logs", "rustsort-spike.log")

@@ -128,6 +128,8 @@ Werte wieder her und trennt die Audio-Stub-Aliase nach `m/audio-stub/`, das ans 
 Pfads angehängt wird — echte Implementierungen gewinnen, Stubs bleiben Rückfall. Beide Sites
 laufen jetzt die volle Suite mit **1253 PASS / 0 FAIL**.
 
+Auch G5 aus Ticket 63 (Rust-Toolchain-Invariante) ist umgesetzt: `build/113/check-rust-toolchain.py` prüft vier Invarianten (datumsgepinnter Channel — schwebende Namen pinnen nichts; `staticlib` in `crate-type`, weil ein cdylib E4s Schwachsymbol-Nullprüfung aushebeln würde; `panic = "abort"`, da wasm kein Unwind kennt; und je Lane das exakte Target, wasm64 zwingend über `build-std` + `wasm64-unknown-unknown`). Selbsttest 6/0, Ledger-Schlüssel `rust_patch_toolchain_ok` wörtlich nachgespielt; beim Einhängen ins Ledger fiel sofort ein echter Fehler auf — der Befehl trug eine Klammernotiz und lieferte rc=2, genau die Form, die der Bare-Value-Vertrag abfangen soll.
+
 ## Leistung (gemessen 2026-10-07, Median aus 5 nativen / 3 wasm-Läufen)
 
 ![Fünf-Wege-Leistungsvergleich](docs/charts/perf-5way.svg)

@@ -80,6 +80,7 @@
 !build/BASELINE-11.3.md
 !build/113/*
 !build/113/check-ci-bootstrap.sh
+!build/113/check-rust-toolchain.py
 !build/instruments.json
 !build/build-inputs.json
 !build/113/patch-openblas-relaxed-fma.py

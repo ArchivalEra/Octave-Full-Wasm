@@ -20,7 +20,7 @@ G6 延迟断言仍缺（候选④前置）。
 | G2b | **差分门自己能抓错吗？**（覆盖度的元事实） | **变异自证**：往 Rust 实现注入变异（>= 改 >）⇒ 差分门必须红 | 差分门的 --selftest | **新建**（F1"会红"延伸到语义等价） |
 | G3 | 真的更快吗？ | hotpath 同负载同窗交错 ≥3 轮 | `rust_patch_<n>_speedup`（replay=False） | 已有（hotpath 仪器 + §5.79 方法论） |
 | G4 | 补丁还在产品里吗？（发运后漂移） | 产物探针 `octave_rustpatch_<n>_version` + witness + plugin-check 登记 | `rust_patch_<n>_present` | 已有机制（工单 59 五件套同款） |
-| G5 | Rust 工具链钉住了吗？ | build-inputs.json 不变式（rustc 通道/目标/wasm32 vs wasm64） | `rust_patch_toolchain_ok` | **新建**（声明式一行） |
+| G5 | Rust 工具链钉住了吗？ | `build/113/check-rust-toolchain.py`（四条不变式：钉版 channel / staticlib / panic=abort / 两档 target） | `rust_patch_toolchain_ok` | **已落（2026-10-28）**：自证 6/0，台账键 replay=True（复跑逐字对） |
 | G6 | Ctrl-C 响应性还在吗？（quit 块级化的语义代价） | **延迟上界断言**：注入 quit 请求 → 测到响应的最大元素数 | `rust_patch_<n>_quit_latency` | **新建**（把"可接受吗"变成数字上界） |
 | G7 | 哪个热点值得做？ | hotpath 归因（fill 91% / sort 85-89% / …） | `hotpath_top` 等 | 已有 |
 | G8 | spike 门槛（≥2×） | 判据先行写进工单 + 结果键 | `rust_patch_<n>_spike_ratio` | 判据已声明（fill spike） |
@@ -129,3 +129,19 @@ G6 延迟断言仍缺（候选④前置）。
   天花板仅 ~2% ≪ 1.15× 门槛。**§5.91 的 39.5% 是 profiler 把内联 libm 记在 C++ 帧上的
   归因假象**，非可回收成本。
 - ⇒ **IllegalPerformance 无已知上升空间**（复跑件：`w64-logs/xpow-spike.log`）。
+
+## G5 落地（2026-10-28）
+
+- **仪器**：`build/113/check-rust-toolchain.py`（自证 **6/0**，三类齐备：正常不报 /
+  浮名 channel、cdylib、panic=unwind、w64 钉错 target 四条反向 / 空目录必报）。
+- **四条不变式**（判据原文见脚本 docstring，每条都带"为什么"）：
+  ① `rust-toolchain.toml` 的 channel 必须是**带日期的钉版**（`stable|beta|nightly-YYYY-MM-DD`）
+  —— 浮名每天变，等于没钉；② `crate-type` 含 `staticlib`（产品缝 = 静态库链进车道构建；
+  cdylib 会让 E4 的弱符号判空机制失效）；③ `panic = "abort"`（wasm 无 unwind）；
+  ④ 两档构建脚本各钉对 target：wasm32 → `wasm32-unknown-emscripten`（rustc 支持），
+  wasm64 → `build-std` + `wasm64-unknown-unknown`（rustc 无 wasm64-emscripten target，
+  评审 E0–E5 的硬事实）。
+- **事实键** `rust_patch_toolchain_ok`（`value: "ok"`，`replay=True`）。首次挂台账时
+  复跑闸门抓到一处**真错**：`cmd` 里带了括号说明 ⇒ 复跑 rc=2 —— 裸值契约要求 cmd 是
+  纯命令（"坏 cmd 印在活状态文档里，就是每行都绿着的假断言"）。已改。
+- **G5 结案**；矩阵里仍空的是 G6（候选④前置，候选④已被排除 ⇒ 该行的触发条件不复存在）。

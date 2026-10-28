@@ -188,6 +188,8 @@ requires. The fix moves `deps`/`addpath`/`alias_dir` provenance into `meta.json`
 `m/audio-stub/` appended to the *end* of the path so real implementations win while stubs still
 backstop. Both sites now run the full suite at **1253 PASS / 0 FAIL**.
 
+Issue 63's G5 (Rust toolchain invariant) also landed: `build/113/check-rust-toolchain.py` checks four invariants (a date-pinned channel — floating names pin nothing; `staticlib` in `crate-type`, since a cdylib would defeat E4's weak-symbol null check; `panic = "abort"`, as wasm has no unwind; and each lane's exact target, wasm64 necessarily via `build-std` + `wasm64-unknown-unknown`). Self-test 6/0, ledger key `rust_patch_toolchain_ok` replayed verbatim; hanging it on the ledger immediately caught a real defect — the command string carried a parenthetical note and returned rc=2, which is exactly the bare-value contract.
+
 **Pre-compaction snapshot (2026-10-25)**: the inbox is empty after an unattended sweep of nine letters (044–061), each with a landed artifact — the audio playback chain (three-layer fix, both sites 50/0), the `kind`/`role` schema extension (15/15 entries now self-describe), the llvm-wasm install-accident rejection split, the pyodide `language-bridge` label, the omc engine entry (second `kind:"engine"`), gate R14 enforcing the MSL sibling-directory invariant, MSL merged (17 packs), and the `consumer:["omc"]` ruling. The newest letter is a schema ticket now recorded as issue 69: an optional `files[]` key for `form:"tree"` entries carrying the download closure (`{bytes, sha256}` per file), because an engine's per-file shas are otherwise unreachable at runtime in the browser — the producer's ledger stays the single origin and assembly only projects it. Remaining work, in order of readiness: issue 69 (the bg.wasm projection can start now, the full shape waits on OM adding a JS ledger key), issue 67 (CI never tracked), issue 63 (rustpatch fact coverage), multi-TU compilation, plus three downstream items that belong to other repos.
 
 **MSL merged + omc consumer ruling (2026-10-25, mail/059)**: the catalog now carries 17 packs. MSL arrives from OM as `modelica-standard-library` (OM won the naming argument — a generic abbreviation is unsearchable; the precedent is that names carry upstream identity), `form:"file"` (one zip unpacked at runtime), `role:"package"`, `consumer:["omc"]`, and it lands in the **sibling** `assets/msl/` directory that gate R14 guards — HTTP 200 on all three sites, 19,482,938 bytes matching the declared size byte for byte. Two defects surfaced while merging. First, a real assembler bug: `stage_upstream_bytes` always placed bytes under `assets/forge/` while the producer's table points at `assets/msl/…` — two vocabularies for one delivery path, exactly the family that produced a 404 in the llvm-wasm merge. Fixed: a site-relative `url` **is** the delivery path, so bytes now land where the url says; only absolute or query-bearing re-fetch URLs fall back to `assets/forge/` (the fake-directory-tree precedent kept, plus a new reverse assertion). Second, `omc`'s `consumer` changed to `["omc"]` per the ruling that `consumer` names the **engine lane** a entry serves — the omc engine is that lane's runtime, same stack as MSL, while llvm-wasm and pyodide remain on the octave lane. Browse Entries now pass `consumer`/`kind`/`role` through (they previously dropped consumer, so neither the UI nor the B3c assertion could tell an external entry apart). Nine regression suites green, gates 49/49, parity consistent.
@@ -266,7 +268,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.github/workflows/gates.yml` (2886 bytes)
 - `.github/workflows/pages-deploy.yml` (911 bytes)
 - `.github/workflows/readme-sync.yml` (2173 bytes)
-- `.gitignore` (8254 bytes)
+- `.gitignore` (8289 bytes)
 - `.gitmodules` (2031 bytes)
 - `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
 - `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
@@ -329,7 +331,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `.scratch/open-questions/issues/60-libm-plugin-spike.md` (4583 bytes)
 - `.scratch/open-questions/issues/61-component-plugin-system.md` (4101 bytes)
 - `.scratch/open-questions/issues/62-full-rebuild-abi-divergence.md` (3963 bytes)
-- `.scratch/open-questions/issues/63-rustpatch-fact-coverage.md` (10360 bytes)
+- `.scratch/open-questions/issues/63-rustpatch-fact-coverage.md` (11782 bytes)
 - `.scratch/open-questions/issues/64-forge-ondemand.md` (5466 bytes)
 - `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md` (13852 bytes)
 - `.scratch/open-questions/issues/66-unimplemented-fn-shows-makeinfo-error.md` (5447 bytes)
@@ -352,9 +354,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (494490 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (73121 bytes)
-- `README.zh.md` (65593 bytes)
-- `STATE.md` (126084 bytes)
+- `README.de.md` (73802 bytes)
+- `README.zh.md` (66152 bytes)
+- `STATE.md` (126864 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (79991 bytes)
 - `bridge/compile-worker.mjs` (17088 bytes)
@@ -454,6 +456,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/113/check-oct-imports.py` (16007 bytes)
 - `build/113/check-oct-lane.py` (16171 bytes)
 - `build/113/check-pkg-module-table.py` (10100 bytes)
+- `build/113/check-rust-toolchain.py` (9466 bytes)
 - `build/113/configure-113-full.sh` (19902 bytes)
 - `build/113/configure-113.sh` (12415 bytes)
 - `build/113/dldprobe.cc` (1773 bytes)
@@ -557,7 +560,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/BASELINE-11.3.md` (17814 bytes)
 - `build/BENCH.md` (5886 bytes)
 - `build/CLIBS.md` (91292 bytes)
-- `build/FACTS.json` (58938 bytes)
+- `build/FACTS.json` (59331 bytes)
 - `build/GAPS-2.md` (28532 bytes)
 - `build/GAPS.md` (17674 bytes)
 - `build/GPT-REVIEW-2.md` (24185 bytes)
@@ -617,7 +620,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `build/forge-preload/ttest.m` (3147 bytes)
 - `build/forge/__forge_install__.m` (9246 bytes)
 - `build/forge/__forge_src_list__.m` (3442 bytes)
-- `build/gates-selftest.sh` (7253 bytes)
+- `build/gates-selftest.sh` (7298 bytes)
 - `build/gen-lanes.sh` (4177 bytes)
 - `build/gen-perf-charts.py` (5422 bytes)
 - `build/glue-selftest.m` (5046 bytes)
@@ -1358,7 +1361,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `zreflect/ledger.py` (11552 bytes)
 - `zreflect/living.py` (3688 bytes)
 - `zreflect/mail-read.py` (10523 bytes)
-- `zreflect/measure_octave.py` (98063 bytes)
+- `zreflect/measure_octave.py` (99064 bytes)
 - `zreflect/registry.py` (26659 bytes)
 - `zreflect/render.py` (7250 bytes)
 - `zreflect/runner.py` (5210 bytes)
