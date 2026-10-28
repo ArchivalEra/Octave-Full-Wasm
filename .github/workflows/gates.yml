@@ -1,0 +1,48 @@
+# 闸门的 CI 落点（Einfacht issue #4 ②；工单 67，2026-10-26 真正入库）：
+# pre-commit/pre-push 可被 --no-verify 跳过、也只装在跑过 install 的机器上 ——
+# 只在自己方便时生效的闸门 = "从未跑过的闸门"。CI 正面执行**不依赖部署树**的那批。
+#
+# ★ 判据集对账（工单 67 的结算条件，2026-10-26 实测对齐）：
+#   `python3 zreflect/registry.py --run commit`（带 reflect-hooks/Einfacht.env）在本机
+#   = ran 7 / off 6 / failed 0。**off 的 6 个**（check_ab/instruments/invariants/
+#   locks/pins/world）= 平台未启用档，CI 也不跑（同一条声明，不另抄清单）。
+#   **ran 7 里的 runner 可跑性逐个核过**：
+#     · check_questions / check_retractions —— 纯仓库输入 ⇒ CI 跑；
+#     · check_facts —— 块↔台账一致性（不测量）⇒ CI 跑；
+#     · check_facts_replay —— **重测**台账 cmd（要 /mnt/hdd 部署树与产物）⇒ CI 不跑；
+#     · check_stale —— 对 now() 判文档新鲜度（时间敏感，runner 上必假红）⇒ CI 不跑；
+#     · witness-upstream-pin（docker 容器树）/ build/113/plugin-check（产物 declared，
+#       也在部署树）⇒ CI 不跑。以上四个只在带部署树的机器上跑（pre-commit）。
+#   本仓专属 .githooks/* 与两份自证台全部 runner 可跑；`git add -A` 让 check-whitelist
+#   在 CI 上非空转（全跟踪集对白名单，与本地"只查暂存批"互补）。
+name: gates
+on: [push, pull_request]
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.x' }
+      - run: |
+          # 平台闸门的旋钮（REFLECT_FACTS 等）唯一可复现来源 —— 不 source 必红
+          # （实测：裸跑 check_facts 报"缺事实台账"，是输入没配，不是闸门坏了）。
+          . reflect-hooks/Einfacht.env
+          set -e
+          # 本仓专属闸门（不依赖部署树）；git add -A 让白名单闸门查全跟踪集
+          git add -A
+          python3 .githooks/check-wants.py
+          python3 .githooks/check-whitelist.py
+          python3 .githooks/check-consistency.py
+          python3 .githooks/check-readiness-pattern.py
+          python3 .githooks/check-mail-boundary.py
+          python3 .githooks/check-state.py
+          python3 .githooks/update-readme.py --check
+          python3 .githooks/update-state.py --check
+          # 平台闸门（runner 可跑的三件；跳过名单见文件头，不假装查过）
+          python3 zreflect/check_questions.py
+          python3 zreflect/check_retractions.py
+          python3 zreflect/check_facts.py
+          # 自证台：平台闸门 + 本仓专属闸门都必须能红（F1）
+          sh gates-selftest.sh
+          sh build/gates-selftest.sh

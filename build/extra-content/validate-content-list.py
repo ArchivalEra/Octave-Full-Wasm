@@ -246,6 +246,40 @@ def check_table(doc, producer=None, site=False, max_schema=None, schema=None):
             probs.append("%s kind=%r 不在词表 [src, pre, engine] 里" % (tag, e["kind"]))
         if "role" in e and e["role"] not in ("package", "toolchain", "language-bridge"):
             probs.append("%s role=%r 不在词表 [package, toolchain, language-bridge] 里" % (tag, e["role"]))
+        # ★ files（下载闭包清单，内容仓 mail/090，2026-10-26；工单 69）：tree 专属可选键。
+        #   绑定①：form:"file"（及其它非 tree 形态）带 files ⇒ **红**（file 形态没有闭包概念，
+        #   静默忽略 = 让错的键看起来合法）。绑定②/⑤：值 = map（文件名 → {bytes:int≥0, sha256:hex64}），
+        #   非下发件（.d.ts）不列 ⇒ files 和 ≠ size 是有意设计，**不查相等**。
+        if "files" in e:
+            fs = e["files"]
+            if e.get("form") != "tree":
+                probs.append("%s form=%r 带 files ⇒ 红（下载闭包清单是 tree 专属；file 等单件形态"
+                             "没有闭包概念，静默忽略会让错键显得合法 —— mail/090 绑定①）"
+                             % (tag, e.get("form")))
+            if not isinstance(fs, dict):
+                probs.append("%s files 必须是对象（map：文件名 → {bytes, sha256}）：得到 %s"
+                             % (tag, type(fs).__name__))
+            else:
+                if not fs:
+                    probs.append("%s files 是空对象（零值守卫：要表达'无下发件'就**别带本键**，"
+                                 "空 map 不是通过）" % tag)
+                for fn, fv in fs.items():
+                    if not isinstance(fn, str) or not fn:
+                        probs.append("%s files 的键 %r 不是非空文件名" % (tag, fn))
+                        break
+                    if (not isinstance(fv, dict) or set(fv.keys()) != {"bytes", "sha256"}):
+                        probs.append("%s files[%s] 必须恰为 {bytes, sha256}（多余键/缺键都不许"
+                                     "—— 闭包预算只认这两轴）：得到 %r" % (tag, fn, sorted(fv)))
+                        break
+                    b = fv.get("bytes")
+                    if isinstance(b, bool) or not isinstance(b, int) or b < 0:
+                        probs.append("%s files[%s].bytes 必须是 int≥0（bool 不算）：得到 %r"
+                                     % (tag, fn, b))
+                        break
+                    sh = fv.get("sha256")
+                    if not (isinstance(sh, str) and re.fullmatch(r"[0-9a-f]{64}", sh)):
+                        probs.append("%s files[%s].sha256 不是 64 位小写 hex" % (tag, fn))
+                        break
         # ★ kind:'engine'（mail/047，2026-10-20）：arch = lane 值（索引键不是版本轴，
         #   mail/031 裁决）——arch 的合法面按 kind 扩词表，且 engine 条目**必须带** arch。
         kind = e.get("kind")
@@ -361,6 +395,40 @@ def selftest():
         {"schema": 2, "octave": "11.3.0", "entries": [
             {"name": "x", "version": "1", "sha256": "c" * 64,
              "url": "assets/x.tar", "consumer": ["wat"]}]}, schema=schema), False)
+    # ★ files（下载闭包清单，mail/090；工单 69）：绑定① 正反 + 值形检查（2026-10-26）
+    _FILES_OK = {"OpenModelicaCompiler_bg.wasm": {"bytes": 74579404, "sha256": "a" * 64},
+                 "OpenModelicaCompiler.js": {"bytes": 56586, "sha256": "b" * 64}}
+    add("files：tree 条目带合法 map（.d.ts 不列，和≠size 是设计）⇒ 不报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "omc", "version": "unversioned", "sha256": "a" * 64,
+             "url": "omc/OpenModelicaCompiler_bg.wasm", "form": "tree", "content": [],
+             "files": _FILES_OK}]}, schema=schema), True)
+    add("★ files 绑定①反向：form:'file' 带 files ⇒ 必须报（形态错配）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "x", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "file", "content": [], "files": _FILES_OK}]}, schema=schema), False)
+    add("★ files 值形：bytes 是字符串 ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "omc", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "tree", "content": [],
+             "files": {"x.wasm": {"bytes": "74579404", "sha256": "a" * 64}}}]},
+        schema=schema), False)
+    add("★ files 值形：sha256 非 64 位 hex ⇒ 必须报", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "omc", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "tree", "content": [],
+             "files": {"x.wasm": {"bytes": 1, "sha256": "XYZ"}}}]},
+        schema=schema), False)
+    add("★ files 值形：值对象带多余键 ⇒ 必须报（闭包预算只认两轴）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "omc", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "tree", "content": [],
+             "files": {"x.wasm": {"bytes": 1, "sha256": "a" * 64, "mtime": 0}}}]},
+        schema=schema), False)
+    add("★ files 空对象 ⇒ 必须报（零值守卫：无下发件就别带本键）", lambda: check_table(
+        {"schema": 2, "octave": "11.3.0", "entries": [
+            {"name": "omc", "version": "1", "sha256": "a" * 64, "url": "u",
+             "form": "tree", "content": [], "files": {}}]}, schema=schema), False)
     # 裁决 2026-10-15（回应内容仓 mail/009 待确认②）：**「普通条目」不限制条数**
     add("★ 能力层可以有多条（LLVM 13 条形态）⇒ 不报", lambda: check_table(
         {"schema": 2, "octave": "11.3.0", "entries": [

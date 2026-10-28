@@ -314,13 +314,49 @@
                 // Octave 按**文件名**找 .oct 模块：一个模块导出的函数若与文件名不同名，
                 // 必须像桌面版那样给每个函数名建符号链接（例如 bzip2.oct -> gzip.oct）。
                 // 否则 exist()/which() 都找不到——这是 webio.oct 六个内建第一次全失联的原因。
+                //
+                // ★ alias_dir（2026-10-27，accept-requirements R8 实测逼出来的）：
+                //   别名可以建到**另一个目录**，且该目录**不进 path**（addpath:null）。
+                //   为什么必要：audiodevinfo.oct 的 38 个 __player_*/  __recorder_* 是
+                //   "无 webaudio 时响亮报错"的桩，而 webaudio 的 .m 是同名的真实现。
+                //   两者都建在 m/oct/ 且 m/oct 被每个 oct 条目反复 addpath（addpath 是
+                //   **前置**语义）⇒ 装了任何 oct 资产之后 m/oct 就顶到 m/webaudio 前面
+                //   ⇒ which 退回 .oct ⇒ audioplayer 抛 PortAudio disabled
+                //   （实测序列：装 webaudio 后 which=.m ✓，装 webnet(→webnet-oct) 后
+                //    which=.oct ✗）。⇒ 桩别名落 alias_dir + 不进 path：真实现永远赢，
+                //   只有真实现缺席时 Octave 才按 .oct 的默认查找找到桩（响亮报错）。
+                var aliasDirs = [];
                 (a.aliases || []).forEach(function (fn) {
-                  var link = dir + '/' + fn + '.oct';
+                  var ad = a.alias_dir || dir;
+                  if (ad !== dir) {
+                    if (aliasDirs.indexOf(ad) < 0) { aliasDirs.push(ad); mkdirp(ad); }
+                  }
+                  var link = ad + '/' + fn + '.oct';
                   try { fs().symlink(mount, link); } catch (e) { /* 已存在 */ }
                 });
-                var dirs = a.addpath ? [a.addpath] : [dir];
-                addPaths(dirs);
-                loaded[name] = { files: 1, addpath: dirs };
+                var dirs = [];
+                if (a.addpath === false) {
+                  dirs = [];                      // 显式"不进 path"（桩目录按 end 语义另加）
+                } else if (a.addpath) {
+                  dirs = [a.addpath];
+                } else {
+                  dirs = [dir];
+                }
+                if (dirs.length) addPaths(dirs);
+                // ★ 桩目录**追加到末尾**（addpath(d, '-end')）：语义 = "真实现优先，桩兜底"。
+                //   这是 accept-audio/t7 的"未加载 webaudio ⇒ 桩可见并响亮报错"与
+                //   accept-requirements R8 的"装了 webaudio ⇒ 真实现赢"两端同时成立的条件：
+                //   · 前置（默认 addpath）⇒ 桩永远压真实现（R8 那次 22 红）；
+                //   · 不进 path ⇒ 桩完全不可达（audio 48/2、t7 38/2 退化）；
+                //   · 末尾 ⇒ 真实现有就用真的，没有就落桩（两端都对）。
+                aliasDirs.forEach(function (ad) {
+                  var M = Msafe();
+                  if (M && M.eval_string) {
+                    try { M.eval_string('addpath("' + ad.replace(/"/g, '\\"') + '", "-end");'); }
+                    catch (e) { /* 失败不致命：桩不可达只影响"未装真实现时的报错质量" */ }
+                  }
+                });
+                loaded[name] = { files: 1, addpath: dirs, aliasDirs: aliasDirs };
                 log(name + ' 就绪（' + buf.byteLength + ' 字节 → ' + mount + '）');
                 return loaded[name];
               });
@@ -711,6 +747,10 @@
                   //   引擎车道"（omc 车道栈 vs octave 车道栈）；缺省 = ["octave"]。
                   consumer: (p.consumer && p.consumer.length) ? p.consumer.slice() : ['octave'],
                   kind: p.kind || null, role: p.role || null,
+                  // ★ files 透传（工单 69，mail/090，2026-10-26）：tree 条目的**下载闭包**
+                  //   （文件名 → {bytes,sha256}；无键 = 合法，UI 拿它自算闭包预算）。
+                  //   size 一并透传：闭包预算 ≠ 目录和是设计，UI 要能对出这个差。
+                  files: p.files || null, size: (typeof p.size === 'number') ? p.size : null,
                   acceleration: fromSource ? 'not-built' : 'none-needed' }
       };
     }

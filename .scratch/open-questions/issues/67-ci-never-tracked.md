@@ -1,6 +1,17 @@
 # 67 · CI 兜底从未入库：`.github/workflows/` 整体未被 git 跟踪（"注释承诺了不存在的闸门"）
 
-**Status:** ready-for-agent
+**Status:** resolved
+
+**结算（2026-10-26）**：`sh build/113/check-ci-bootstrap.sh` ⇒ **rc=0「已立」**（自证 4/0）。落地三件：
+① `.gitignore` 放行 `!.github/workflows/*.yml` + 三份 workflow 入库（gates.yml /
+readme-sync.yml / pages-deploy.yml）；② **gates.yml 判据集对账**（与
+`registry --run commit` 的 ran/off 逐个核：check_questions/retractions/facts 上 CI，
+check_facts_replay（要部署树）/check_stale（时间敏感）/witness-upstream-pin（docker）/
+plugin-check（产物 declared）明说不跑，6 个未启用档同一条声明）；平台闸门在 CI 必须
+`. reflect-hooks/Einfacht.env`（裸跑报"缺台账"= 输入没配，实测）；`git add -A` 让
+check-whitelist 在 CI 查全跟踪集（与本地"只查暂存批"互补）；③ **readme-sync.yml 新建**
+（pre-push §④ 同一条 --changed 判据 + 新分支/第一推同款口径），pre-push §④ 注释翻面
+（"只有本地一道" → "本地 + CI 两道"，空头历史保留作训）。
 **Settling:** `sh build/113/check-ci-bootstrap.sh` —— rc=0 ⇒ CI 兜底**已立**（`.github/` 已入库且白名单放行，且本地能复跑 CI 判据集）；rc=1 ⇒ **仍是空头**（`.github/` 未被跟踪 ⇒ CI 从未跑过；pre-push 注释必须保持"只有本地一道"的实话）；rc=2 ⇒ 半吊子（已入库但白名单/判据集有问题，逐条点名）；rc=3 ⇒ 环境问题（`git` 不在 / 读不到 `.gitignore`），不是结论。
 **结算件已存在**（2026-10-16 造）：`build/113/check-ci-bootstrap.sh`（自证 **4/0**；**对本仓实跑 = rc=1「仍是空头」**，与 §背景 的实测一致）。
 

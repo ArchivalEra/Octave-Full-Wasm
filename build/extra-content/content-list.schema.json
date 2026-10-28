@@ -229,6 +229,28 @@
       "language-bridge"
      ],
      "description": "消费角色（mail/049 Q1 提单，2026-10-20）：package=函数包（缺省，走 install）；toolchain=编译工具链（不走装载——DownloadStore + compile-worker 的执行域，消费端对 role:'toolchain' 必须拒绝 install 并指路下载界面）；language-bridge=语言桥（如 pyodide，走 installLayer）。缺省 = package。form 是形态不是角色（049 事故根因：llvm-wasm 与函数包同 form:'tree' 混列）。"
+    },
+    "files": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "properties": {
+       "bytes": {
+        "type": "integer",
+        "minimum": 0
+       },
+       "sha256": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+       }
+      },
+      "required": [
+       "bytes",
+       "sha256"
+      ],
+      "additionalProperties": false
+     },
+     "description": "★ **下载闭包清单**（内容仓 mail/090 提单，2026-10-26；工单 69）——**只对 `form:\"tree\"` 合法**，五条绑定：① **可选键、tree 专属**：`form:\"file\"`（及 pkg/oct/octdir/js）条目带 `files` ⇒ **红**（file 形态没有闭包概念，静默忽略 = 让错的键看起来合法，与 fail-closed 相反；file 条目要逐件 sha 用的是 artifact.files，那是另一条轴）；② **值 = 消费者会下载的文件 → `{bytes:int≥0, sha256:hex64}`**；非下发件（如 `.d.ts`）**不列** ⇒ **`files` 的字节数和 ≠ `size` 是有意设计**：`size` = url 所在目录字节和（R14 站点不变量，不变），files 和 = 下载闭包预算（消费端自算，**不存第二个总量**）；③ **产地纪律**：逐件 sha 唯一产地 = **生产者台账**，宿主装配时**投影**（omc 的 bg.wasm ← OM 台账 `omc_web_wasm_sha`，JS 件 ← `omc_web_js_sha`）；生产者不手写、宿主不另算 —— **不造第二产地**；宿主可拿站点字节**核对**投影值（核对 ≠ 另算：不一致是 red，不是重写）；④ **缺省兼容**：无 `files` 的 tree 条目合法（llvm-wasm / pyodide 现状不动）；⑤ **校验器配套**：类型检查（map：文件名 → `{bytes, sha256}`）+ 正反自证（合法 map 不报 / file 带 files 必报 / 值形错必报）。与 `$defs/artifact` 的 `files`（数组，.oct 逐件 sha）**不同对象不同轴**，同名非同义。"
     }
    },
    "additionalProperties": true

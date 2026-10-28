@@ -333,6 +333,40 @@ def check(site, shelf, repo=REPO, sha_of=sha256_file, has_oct=tarball_has_oct):
             if site_arch[ld] != want:
                 problems.append("R10 %s 的 arch=%s ≠ 站点 %s/ 里实际字节的架构 %s"
                                 % (p_.get("name"), want, ld, site_arch[ld]))
+    # R15（★ mail/090 绑定②③ + 工单 69，2026-10-26）：**files[]（下载闭包）与站点字节
+    #   逐件对账**。files 的语义 = 消费者会下载的闭包（size = 目录和是另一条轴，R14；
+    #   两者不等是设计，不比总量）—— 表里声明的每件 {bytes,sha256} 必须在 url 所在
+    #   目录里找得到且逐字节相符。列了不在的文件 / sha 不符 / bytes 不符 ⇒ 红
+    #   （fail-closed：闭包预算错一件，UI 的"还要拉多少"就骗人）。
+    #   反向可证伪：篡改 files 一件 sha / 删掉一件字节 ⇒ 必红（自证里有）。
+    for p in packs:
+        f15 = p.get("files")
+        if not f15:
+            continue
+        name15 = p.get("name", "?")
+        if not isinstance(f15, dict):
+            problems.append("R15 %s files 不是对象（map：文件名 → {bytes, sha256}）" % name15)
+            continue
+        u15 = p.get("url") or ""
+        d15 = os.path.join(site_dir, os.path.dirname(u15))
+        if not os.path.isdir(d15):
+            problems.append("R15 %s 的 url 目录不在站点（%s）⇒ files 对不了账" % (name15, u15))
+            continue
+        for fn in sorted(f15):
+            fv = f15[fn]
+            fpath = os.path.join(d15, fn)
+            if not isinstance(fv, dict) or not os.path.isfile(fpath):
+                problems.append("R15 %s files 列了 %s 但站点 %s/ 里没有（闭包预算错件）"
+                                % (name15, fn, os.path.dirname(u15)))
+                continue
+            got15 = sha_of(fpath)
+            if got15 != fv.get("sha256"):
+                problems.append("R15 %s files[%s] 声明 sha=%s… ≠ 站点字节 %s…"
+                                "（fail-closed：先对生产者台账，别静默改表）"
+                                % (name15, fn, str(fv.get("sha256"))[:8], got15[:8]))
+            elif fv.get("bytes") != os.path.getsize(fpath):
+                problems.append("R15 %s files[%s] 声明 bytes=%r ≠ 站点字节 %d"
+                                % (name15, fn, fv.get("bytes"), os.path.getsize(fpath)))
     # R12（2026-10-17，内容仓 mail/029/030 —— description/links 进规范键）：
     #   **货架条目的 description/links 必须与货架档案对账**（透传键 = 单一产地；
     #   "我这侧对" ≠ "装配器吃到" —— 第五、六例教训之后的第七例对账器）。
@@ -903,6 +937,49 @@ def _selftest():
         cases.append(("★ R14 反向：MSL 类资产混进 omc/ ⇒ size 与目录实测不符 ⇒ 必须报"
                       "（兄弟目录硬约束）",
                       lambda d=d14bad: any("R14" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+
+        # ★ R15（mail/090 + 工单 69，2026-10-26）：files[] 与站点字节逐件对账 ——
+        #   正常投影不报；篡改 sha / 列缺件 ⇒ 必红。
+        def _r15_fixture(tmp3, tamper=None, drop=None):
+            d3 = _mk_fixture(tmp3, [_pack(sha=good_sha)], blob_sha=data)
+            omcd = os.path.join(d3, "site", "omc")
+            os.makedirs(omcd)
+            open(os.path.join(omcd, "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
+            open(os.path.join(omcd, "OpenModelicaCompiler.js"), "wb").write(b"JS")
+            f15 = {"OpenModelicaCompiler_bg.wasm":
+                   {"bytes": 3, "sha256": hashlib.sha256(b"OMW").hexdigest()},
+                   "OpenModelicaCompiler.js":
+                   {"bytes": 2, "sha256": hashlib.sha256(b"JS").hexdigest()}}
+            if tamper:
+                f15[tamper]["sha256"] = "f" * 64
+            if drop:
+                f15[drop] = {"bytes": 9, "sha256": "a" * 64}   # 站点里没有的文件
+            catp = os.path.join(d3, "site", "assets", "forge-catalog.json")
+            cd = json.load(open(catp))
+            cd["packs"].append({
+                "name": "omc", "version": "unversioned", "form": "tree",
+                "kind": "engine", "role": "toolchain", "arch": "omc",
+                "content": [], "consumer": ["omc"],
+                "sha256": hashlib.sha256(b"OMW").hexdigest(),
+                "url": "omc/OpenModelicaCompiler_bg.wasm",
+                "size": 5, "deps": [], "files": f15})
+            json.dump(cd, open(catp, "w"))
+            return d3
+
+        d15ok = _r15_fixture(os.path.join(tmp, "r15_ok"))
+        cases.append(("R15：files[] 与站点字节逐件相符（.d.ts 不列，和≠size 是设计）⇒ 不报",
+                      lambda d=d15ok: not any("R15" in p for p in check(
+                          "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
+        d15sha = _r15_fixture(os.path.join(tmp, "r15_sha"), tamper="OpenModelicaCompiler.js")
+        cases.append(("★ R15 反向：files 一件 sha 与站点字节不符 ⇒ 必须报（fail-closed）",
+                      lambda d=d15sha: any("R15" in p and "OpenModelicaCompiler.js" in p
+                                           for p in check(
+                                               "site", "shelf", repo=d, sha_of=sha256_file,
+                                               has_oct=no_oct)[0])))
+        d15ghost = _r15_fixture(os.path.join(tmp, "r15_ghost"), drop="ghost.js")
+        cases.append(("★ R15 反向：files 列了站点没有的文件 ⇒ 必须报（闭包预算错件）",
+                      lambda d=d15ghost: any("R15" in p and "ghost.js" in p for p in check(
                           "site", "shelf", repo=d, sha_of=sha256_file, has_oct=no_oct)[0])))
 
         bad = 0

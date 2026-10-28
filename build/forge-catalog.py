@@ -329,13 +329,54 @@ def _host_lane_of_site(site):
         pass
     return None
 
-def capability_entries(site):
+# ★ OM 生产者台账（mail/090 绑定③ 的唯一产地，工单 69，2026-10-26）：
+#   omc 下载闭包逐件 {bytes,sha256} 的投影源。自证用 OM_FACTS 环境变量指夹具。
+OM_FACTS_PATH = os.environ.get("OM_FACTS",
+                               "/mnt/hdd/zcode-projects/OpenModelica-Full-Wasm/build/FACTS.json")
+_OM_AUTO = object()     # 哨兵：调用方未注入 ⇒ 站点有 omc/ 时自动读 OM_FACTS
+
+
+def _om_ledger():
+    """读 OM 生产者台账 ⇒ omc 下载闭包（文件名 → {bytes, sha256}）。
+
+    返回 (ledger|None, problems)：键缺失/值形错都进 problems（**[omc]** 前缀 = 装配路径
+    里按致命处理），键名齐全才返回 dict。**只投影不计算**——这里的值是 OM 量出来的
+    （其 cmd 字段 = 复跑方式），宿主另算就是造第二产地。"""
+    try:
+        with open(OM_FACTS_PATH) as fh:
+            facts = json.load(fh).get("facts", {})
+    except (OSError, ValueError) as e:
+        return None, ["[omc] OM 台账读不到（%s：%s）" % (OM_FACTS_PATH, e)]
+    want = {
+        "OpenModelicaCompiler_bg.wasm": ("omc_web_wasm_sha", "omc_web_wasm_bytes"),
+        "OpenModelicaCompiler.js": ("omc_web_js_sha", "omc_web_js_bytes"),
+    }
+    ledger, problems = {}, []
+    for fname, (sha_key, bytes_key) in want.items():
+        sha_v = (facts.get(sha_key) or {}).get("value")
+        bytes_v = (facts.get(bytes_key) or {}).get("value")
+        if not (isinstance(sha_v, str) and re.fullmatch(r"[0-9a-f]{64}", sha_v)) \
+                or isinstance(bytes_v, bool) or not isinstance(bytes_v, int) or bytes_v < 0:
+            problems.append("[omc] OM 台账键缺失/形错：%s / %s（%s）"
+                            % (sha_key, bytes_key, OM_FACTS_PATH))
+            continue
+        ledger[fname] = {"sha256": sha_v, "bytes": bytes_v}
+    if problems:
+        return None, problems
+    return ledger, []
+
+
+def capability_entries(site, om_ledger=_OM_AUTO):
     """**能力层条目**（接缝 §2/§5④）：`form:"tree"` 的普通条目，进同一张 `deps` 图。
 
     ⚠️ 为什么由**装配器**产出而不是内容仓：能力层 ≠ 某个包（它是多个包共用的运行时），
     所以它不出在货架档案里；而"站点上有没有这份字节"是**装配事实**（同源托管）⇒
     装配器按 `upstream-lock.json` + 站点实际存在性产出条目。
     ⚠️ **不加 `needs` 新字段**（§2 判决）：`symbolic` 靠 `deps` 边指向本条目。
+
+    om_ledger：omc 的下载闭包投影源（绑定③：生产者台账，宿主不另算）。缺省哨兵 =
+    站点有 omc/ 时自动读 OM 台账；自证**必须显式注入**（假字节配真台账必红——那正是
+    要的反向断言）。
 
     返回 (entries, problems)。**纯读**（不写盘）—— 字节由 `provision-pyodide.sh` 供。
     """
@@ -445,6 +486,12 @@ def capability_entries(site):
     #   字节产地 = OM 仓部署盘（provision-omc.sh 拷进站点 omc/，逐件 sha 与 OM 台账
     #   omc_web_wasm_sha 对账）；**MSL 等资产不许进 omc/**（mail/057 §2 兄弟目录硬约束：
     #   tree 的 size = url 所在目录字节和，MSL 进来会把预算从 74.7MB 虚胀到 94MB+）。
+    if om_ledger is _OM_AUTO:
+        # 自动读只发生在 omc/ 在场时（能力层缺席 = 合法形状，台账坏了不该连坐整个 bake）
+        om_ledger = None
+        if os.path.isdir(os.path.join(site, "omc")):
+            om_ledger, _auto_probs = _om_ledger()
+            problems.extend(_auto_probs)
     omc_root = os.path.join(site, "omc")
     omc_main = os.path.join(omc_root, "OpenModelicaCompiler_bg.wasm")
     if not os.path.isdir(omc_root):
@@ -459,6 +506,36 @@ def capability_entries(site):
                     total += os.path.getsize(os.path.join(base, f))
                 except OSError:
                     pass
+        # ★ files[]（下载闭包清单，内容仓 mail/090 绑定③，工单 69，2026-10-26）：
+        #   逐件 sha 唯一产地 = **OM 生产者台账**（build/FACTS.json 的 omc_web_*_sha/bytes），
+        #   装配只**投影**——宿主不另算（用本地 sha 当"权威"会造第二产地：字节渠道漂移时
+        #   本地 sha 会替错字节背书）。投影后拿站点字节**核对**（核对 ≠ 另算：不一致是
+        #   red，不是重写）。台账读不到 ⇒ red（fail-closed）——omc 的 UI 闭包预算全靠它，
+        #   静默缺键 = 预算悄悄消失，正是 mail/090 要堵的洞。
+        omc_files = None
+        if om_ledger is None:
+            problems.append("[omc] 台账读不到（注入 None 或 OM_FACTS=%s 读失败）⇒ 拒绝投影"
+                            " files[]（fail-closed：闭包预算不能静默缺）" % OM_FACTS_PATH)
+        else:
+            omc_files = {}
+            for fname, fv in om_ledger.items():
+                fpath = os.path.join(omc_root, fname)
+                if not os.path.isfile(fpath):
+                    problems.append("[omc] 台账列了 %s 但站点 omc/ 里没有（字节渠道变了？"
+                                    "先跑 provision-omc.sh verify）" % fname)
+                    omc_files = None
+                    break
+                got_sha = _file_sha_or_empty(fpath)
+                got_bytes = os.path.getsize(fpath)
+                if got_sha != fv.get("sha256") or got_bytes != fv.get("bytes"):
+                    problems.append(
+                        "[omc] 台账与站点字节不符：%s 台账 sha=%s…/%dB，站点实得 %s…/%dB"
+                        "（fail-closed：谁对谁错先对 OM 台账，别静默投影）"
+                        % (fname, str(fv.get("sha256"))[:8], fv.get("bytes"),
+                           got_sha[:8], got_bytes))
+                    omc_files = None
+                    break
+                omc_files[fname] = {"bytes": fv.get("bytes"), "sha256": fv.get("sha256")}
         entries.append({
             "name": "omc",
             # ⚠️ OM 侧未给版本串 —— 这里**如实占位**并在 note 说明，不编 semver
@@ -484,6 +561,10 @@ def capability_entries(site):
                     "size = omc/ 目录字节和（MSL 等资产必须落兄弟目录，不许进此目录）；"
                     "version 未由 OM 侧提供 ⇒ 标 unversioned（不编）",
         })
+        # files[] 只在**台账齐全且核对通过**时上表（omc_files 在任何一条红时归 None；
+        # 无键 = 合法形状 —— mail/090 绑定④，但 omc 缺台账本身已 red）
+        if omc_files:
+            entries[-1]["files"] = omc_files
     return entries, problems
 
 
@@ -1196,6 +1277,11 @@ def _selftest():
     cases.append(("★ stage 反向：带 query 且真名字节不在 ⇒ 仍必报（不静默）", _stage_query_missing))
     # ★ 能力层 llvm-wasm（内容仓 mail/040 §③ 的补全）：装配器从**站点实际存在的字节**
     #   产合成条目（pyodide 先例）。三条用例：正常产条目 / 字节缺 ⇒ 点名 / 版本按数字取。
+    def _ledger_of(files):
+        # 自证注入用：从夹具字节造"生产者台账"（投影源形状，值与字节天然一致）
+        return {n: {"bytes": len(b), "sha256": hashlib.sha256(b).hexdigest()}
+                for n, b in files}
+
     def _cap_llvm_ok(**kw):
         import tempfile as _tf
         with _tf.TemporaryDirectory() as d:
@@ -1209,7 +1295,8 @@ def _selftest():
             json.dump({"toolchain": {"emcc": "emcc (Emscripten gcc/clang-like replacement"
                                        " + linker emulating GNU ld) 6.0.12 (5488e0871d46)"}},
                       open(os.path.join(lw, "manifest.json"), "w"))
-            ents, probs = capability_entries(d)
+            ents, probs = capability_entries(
+                d, om_ledger=_ledger_of([("OpenModelicaCompiler_bg.wasm", b"OM")]))
             e = [x for x in ents if x["name"] == "llvm-wasm"]
             assert not probs, probs
             assert len(e) == 1 and e[0]["form"] == "tree" and e[0]["content"] == []
@@ -1225,13 +1312,14 @@ def _selftest():
             open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
             os.makedirs(os.path.join(d, "omc"))
             open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OM")
-            ents, probs = capability_entries(d)   # 没有 assets/llvm/
+            ents, probs = capability_entries(   # 没有 assets/llvm/
+                d, om_ledger=_ledger_of([("OpenModelicaCompiler_bg.wasm", b"OM")]))
             return (not [e for e in ents if e["name"] == "llvm-wasm"]
                     and any("assets/llvm/" in x for x in probs))
 
     cases.append(("★ 能力层 llvm-wasm：从站点字节产条目（版本取数字 6.0.12 不取 \"(Emscripten\"）",
                   _cap_llvm_ok))
-    # ★ omc 引擎条目（内容仓 mail/056/057，2026-10-25）
+    # ★ omc 引擎条目（内容仓 mail/056/057，2026-10-25；files[] 投影 = 工单 69，2026-10-26）
     def _cap_omc_ok():
         import tempfile as _tf
         with _tf.TemporaryDirectory() as d:
@@ -1243,7 +1331,9 @@ def _selftest():
                       open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
             open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
             open(os.path.join(d, "omc", "OpenModelicaCompiler.js"), "wb").write(b"JS")
-            ents, probs = capability_entries(d)
+            ents, probs = capability_entries(d, om_ledger=_ledger_of(
+                [("OpenModelicaCompiler_bg.wasm", b"OMW"),
+                 ("OpenModelicaCompiler.js", b"JS")]))   # 非下发件(.d.ts)不列
             assert not probs, probs
             e = [x for x in ents if x["name"] == "omc"]
             assert len(e) == 1
@@ -1251,7 +1341,95 @@ def _selftest():
             assert e[0]["arch"] == "omc", e[0]["arch"]     # lane 值，不是 wasm32/wasm64
             assert e[0]["url"] == "omc/OpenModelicaCompiler_bg.wasm"
             assert e[0]["size"] == 5, e[0]["size"]         # 整目录字节和（OMW+JS）
+            f = e[0]["files"]                              # ★ 投影：值来自台账不另算
+            assert f == {"OpenModelicaCompiler_bg.wasm": {"bytes": 3, "sha256": hashlib.sha256(b"OMW").hexdigest()},
+                         "OpenModelicaCompiler.js": {"bytes": 2, "sha256": hashlib.sha256(b"JS").hexdigest()}}, f
             return True
+
+    def _cap_omc_sha_drift():
+        # ★ 反向：台账 sha 与站点字节不符 ⇒ 必须报，且**不许**把错值投影上表
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            for sub in (("assets", "pyodide", "pyodide"), ("assets", "llvm"), ("omc",)):
+                os.makedirs(os.path.join(d, *sub))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            open(os.path.join(d, "assets", "llvm", "clang.wasm"), "wb").write(b"CW")
+            json.dump({"toolchain": {"emcc": "emcc 6.0.12 (x)"}},
+                      open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
+            open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
+            open(os.path.join(d, "omc", "OpenModelicaCompiler.js"), "wb").write(b"JS")
+            led = _ledger_of([("OpenModelicaCompiler_bg.wasm", b"OMW"),
+                              ("OpenModelicaCompiler.js", b"JS")])
+            led["OpenModelicaCompiler.js"]["sha256"] = "f" * 64   # 篡改台账
+            ents, probs = capability_entries(d, om_ledger=led)
+            e = [x for x in ents if x["name"] == "omc"]
+            return (any("[omc]" in x and "OpenModelicaCompiler.js" in x for x in probs)
+                    and (not e or "files" not in e[0]))
+
+    def _cap_omc_ghost():
+        # ★ 反向：台账列了站点 omc/ 里没有的文件 ⇒ 必须报（字节渠道变了别静默）
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            for sub in (("assets", "pyodide", "pyodide"), ("assets", "llvm"), ("omc",)):
+                os.makedirs(os.path.join(d, *sub))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            open(os.path.join(d, "assets", "llvm", "clang.wasm"), "wb").write(b"CW")
+            json.dump({"toolchain": {"emcc": "emcc 6.0.12 (x)"}},
+                      open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
+            open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
+            open(os.path.join(d, "omc", "OpenModelicaCompiler.js"), "wb").write(b"JS")
+            led = _ledger_of([("OpenModelicaCompiler_bg.wasm", b"OMW"),
+                              ("OpenModelicaCompiler.js", b"JS")])
+            led["ghost.js"] = {"bytes": 1, "sha256": "a" * 64}
+            ents, probs = capability_entries(d, om_ledger=led)
+            e = [x for x in ents if x["name"] == "omc"]
+            return (any("[omc]" in x and "ghost.js" in x for x in probs)
+                    and (not e or "files" not in e[0]))
+
+    def _cap_omc_ledger_missing():
+        # ★ 反向：omc/ 在场但注入 None（= 台账读不到的替身）⇒ 必须报且无 files
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            for sub in (("assets", "pyodide", "pyodide"), ("assets", "llvm"), ("omc",)):
+                os.makedirs(os.path.join(d, *sub))
+            open(os.path.join(d, "assets", "pyodide", "pyodide", "pyodide.asm.wasm"), "wb").write(b"x")
+            open(os.path.join(d, "assets", "llvm", "clang.wasm"), "wb").write(b"CW")
+            json.dump({"toolchain": {"emcc": "emcc 6.0.12 (x)"}},
+                      open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
+            open(os.path.join(d, "omc", "OpenModelicaCompiler_bg.wasm"), "wb").write(b"OMW")
+            open(os.path.join(d, "omc", "OpenModelicaCompiler.js"), "wb").write(b"JS")
+            ents, probs = capability_entries(d, om_ledger=None)
+            e = [x for x in ents if x["name"] == "omc"]
+            return (any("[omc]" in x for x in probs)
+                    and (not e or "files" not in e[0]))
+
+    def _om_ledger_reads_facts():
+        # ★ _om_ledger：FACTS 夹具 ⇒ 四键投影成闭包；缺键 ⇒ [omc] 问题（fail-closed）
+        import tempfile as _tf
+        global OM_FACTS_PATH
+        with _tf.TemporaryDirectory() as d:
+            fx = os.path.join(d, "FACTS.json")
+            json.dump({"facts": {
+                "omc_web_wasm_sha": {"value": "a" * 64},
+                "omc_web_wasm_bytes": {"value": 74579404},
+                "omc_web_js_sha": {"value": "b" * 64},
+                "omc_web_js_bytes": {"value": 56586}}},
+                open(fx, "w"))
+            old = OM_FACTS_PATH
+            try:
+                OM_FACTS_PATH = fx
+                led, probs = _om_ledger()
+                if probs or set(led) != {"OpenModelicaCompiler_bg.wasm",
+                                         "OpenModelicaCompiler.js"}:
+                    return False
+                if led["OpenModelicaCompiler.js"] != {"bytes": 56586, "sha256": "b" * 64}:
+                    return False
+                json.dump({"facts": {"omc_web_wasm_sha": {"value": "a" * 64}}},
+                          open(fx, "w"))                      # 只剩一键 ⇒ 必须红
+                led2, probs2 = _om_ledger()
+                return led2 is None and any("[omc]" in p for p in probs2)
+            finally:
+                OM_FACTS_PATH = old
 
     def _cap_omc_missing():
         import tempfile as _tf
@@ -1262,13 +1440,23 @@ def _selftest():
             open(os.path.join(d, "assets", "llvm", "clang.wasm"), "wb").write(b"CW")
             json.dump({"toolchain": {"emcc": "emcc 6.0.12 (x)"}},
                       open(os.path.join(d, "assets", "llvm", "manifest.json"), "w"))
-            ents, probs = capability_entries(d)   # 没有 omc/
+            ents, probs = capability_entries(d, om_ledger=None)   # 没有 omc/
             return (not [e for e in ents if e["name"] == "omc"]
-                    and any("omc/" in x for x in probs))
+                    and any("omc/" in x for x in probs)
+                    and not any("[omc]" in x for x in probs))   # 能力层缺席不连坐台账
 
-    cases.append(("★ 能力层 omc：kind:engine + role:toolchain + arch=lane 值 + size=整目录",
-                  _cap_omc_ok))
-    cases.append(("★ 能力层 omc 反向：omc/ 不在 ⇒ 点名", _cap_omc_missing))
+    cases.append(("★ 能力层 omc：kind:engine + role:toolchain + arch=lane 值 + size=整目录"
+                  " + files 投影自台账", _cap_omc_ok))
+    cases.append(("★ 能力层 omc 反向：台账 sha 与站点字节不符 ⇒ 报且不投影（不造第二产地）",
+                  _cap_omc_sha_drift))
+    cases.append(("★ 能力层 omc 反向：台账列了 omc/ 没有的文件 ⇒ 报且不投影（字节渠道变了）",
+                  _cap_omc_ghost))
+    cases.append(("★ 能力层 omc 反向：台账读不到（None）⇒ [omc] 致命且无 files（fail-closed）",
+                  _cap_omc_ledger_missing))
+    cases.append(("★ 能力层 omc 反向：omc/ 不在 ⇒ 点名且**不**报台账（缺席不连坐）",
+                  _cap_omc_missing))
+    cases.append(("★ _om_ledger：FACTS 四键投影成闭包；缺键 ⇒ [omc] 红（fail-closed）",
+                  _om_ledger_reads_facts))
     cases.append(("★ 能力层 llvm-wasm 反向：assets/llvm/ 不在 ⇒ 点名（不静默缺能力层）",
                   _cap_llvm_missing))
     cases.append(("★ stage：空条目 ⇒ 无问题（零值不报错，由调用方 guard）",
@@ -1321,6 +1509,10 @@ def main(argv):
     #   那只是"能力层缺席"，包本身仍可装）⇒ 报为 **note**，不进 `bad`（fail-closed 的边界：
     #   致命的只有"包字节与档案不符"）。
     cap, cap_problems = capability_entries(a.site)
+    # ★ [omc] 前缀 = omc 在场但台账读不到/字节核对不符 ⇒ **致命**（mail/090 绑定③：
+    #   闭包预算不能静默缺，也不能投影错字节）；其余能力层问题维持 note（能力层缺席
+    #   = 合法形状，接缝 §5④）。
+    bad += [p for p in cap_problems if p.startswith("[omc]")]
     # ★ 接缝 §5⑤：生产者出的表（如 LLVM-wasm 的工具链）—— 校验通过才并入（fail-closed）
     #   `--upstream-bytes <目录>`（可选，与 --upstream 配对应）：把表引用的字节 stage 进站点
     #   ⇒ 目录不指着 404（R7b）。缺字节目录 ⇒ 明说"未 stage"，不静默（站点闸门会拦）。
@@ -1346,7 +1538,8 @@ def main(argv):
     doc = catalog_doc(packs, octave, "build/forge-catalog.py", entries_extra=cap, site=a.site)
     bad += write_catalog(a.site, doc, a.check)
     for c in cap_problems:
-        print("  note: %s" % c, file=sys.stderr)
+        if not c.startswith("[omc]"):
+            print("  note: %s" % c, file=sys.stderr)
     if bad:
         print("FATAL: %d 个问题：" % len(bad), file=sys.stderr)
         for b in bad:

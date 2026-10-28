@@ -272,7 +272,12 @@ def sync_js(site, names):
     mp = os.path.join(assets_dir, "manifest.json")
     with open(mp, encoding="utf-8") as fh:
         manifest = json.load(fh)
-    entries = manifest.get("assets", [])
+    entries = manifest.get("assets")
+    if not isinstance(entries, list):
+        # 零值守卫（F1 第三类："空输入必须报"）：**缺 assets 键**不是"同步成功"，
+        # 是"清单根本不是清单"。空数组则合法（首次装配时本来就还没有条目）。
+        raise ValueError("manifest 缺 assets 数组（%s）—— 形状不对不是通过"
+                         % os.path.join(assets_dir, "manifest.json"))
     by_name = {e.get("name"): e for e in entries}
 
     meta_path = os.path.join(assets_dir, "meta.json")
@@ -288,7 +293,7 @@ def sync_js(site, names):
         nonlocal added, updated
         e = by_name.get(name)
         if e is None:
-            entry = {"name": name, "url": rel, "sha256": digest, "deps": []}
+            entry = {"name": name, "url": rel, "sha256": digest}
             entry.update(defaults)
             entry.update(meta.get(name, {}))
             entry["name"] = name      # meta 不该改名；改了也不许生效
@@ -297,8 +302,25 @@ def sync_js(site, names):
             entry["kind"] = defaults["kind"]
             if defaults.get("mount"):
                 entry["mount"] = defaults["mount"]
-            if defaults.get("addpath"):
+            # addpath 默认取 defaults（磁盘派生的常规值）；但 meta 可显式覆盖 ——
+            # 包括 **false**（= "不进 path"）与 **alias_dir**（桩别名落独立目录）。
+            # 为什么允许覆盖（2026-10-27）：`audiodevinfo` 的 38 个 __player_* 是
+            # "无 webaudio 时响亮报错"的桩，而 m/oct 会被每个 oct 条目反复 addpath
+            # （addpath 是前置语义）⇒ 桩会顶掉 m/webaudio 的真实现。这两条是**装载
+            # 语义**（谁可见、落哪），产地就该是 meta，不是磁盘路径硬编码。
+            if "addpath" in meta.get(name, {}):
+                entry["addpath"] = meta[name]["addpath"]
+            elif defaults.get("addpath"):
                 entry["addpath"] = defaults["addpath"]
+            # ★ deps：**meta 是唯一产地**（2026-10-26 工单 69 批实测抓到）。
+            #   此前这里写死 `deps: []` 且 defaults 不含 deps ⇒ meta 没写 deps 的资产
+            #   永远是"零依赖"。实测代价：音频批（658f001）sync-js 重写 webgraphics
+            #   条目时把手工维护的 `deps:["__init_web__"]` 抹成 `[]` ⇒ PKG_ADD 里
+            #   graphics_toolkit('web') 找不到 __init_web__ ⇒ t2-graphics 与 slicot 等
+            #   五套 22 条断言红，**而当时没人跑全量**（只有 probe-lane 单跑），
+            #   一直红到今天。⇒ deps 只认 meta（不写 = 真的零依赖），且 meta 的空数组
+            #   也是合法声明（显式"无依赖"）。
+            entry.setdefault("deps", [])
             entries.append(entry)
             by_name[name] = entry
             added += 1
@@ -312,13 +334,13 @@ def sync_js(site, names):
             #   只改 sha ⇒ meta 改了等于没改——"两个产地"分叉的又一形状）。
             #   摘要/名字/kind/mount 仍以磁盘真值为准（meta 不许盖）。
             for k, v in meta.get(name, {}).items():
-                if k not in ("name", "url", "sha256", "kind", "mount", "addpath"):
+                if k not in ("name", "url", "sha256", "kind", "mount"):
                     e[k] = v
         else:
             # ★ sha 没变 ⇒ 以前**完全跳过**（第三态）⇒ meta 里的 aliases/note 修正在
             #   已有条目上永不生效。sync-js 的语义是"定点同步"——meta 也是要同步的事实。
             for k, v in meta.get(name, {}).items():
-                if k not in ("name", "url", "sha256", "kind", "mount", "addpath") and e.get(k) != v:
+                if k not in ("name", "url", "sha256", "kind", "mount") and e.get(k) != v:
                     e[k] = v
                     print(f"  ~ {name}: meta.{k} 更新")
                     updated += 1
@@ -360,11 +382,90 @@ def sync_js(site, names):
     return 0
 
 
+def selftest():
+    """F1 自证（三类齐备）：正常不报 / 该报的必须报 / 空输入必须报。
+
+    核心判据（2026-10-26 实测定型）：**sync-js 的 deps 只认 meta.json**。
+    实测动机：音频批（658f001）重写 webgraphics 条目时把 `deps:["__init_web__"]`
+    抹成 `[]` ⇒ `graphics_toolkit("web")` 的 feval 找不到模块 ⇒ 五套 22 条红。
+    所以三条用例钉住：① meta 写了 deps ⇒ 新条目/已存条目都带上；② meta 没写 ⇒ 空数组
+    （不是"上一个值残留"）；③ sha 未变时 meta 仍生效（第三态）。
+    """
+    import tempfile
+    cases = []
+
+    def mk(site, manifest, meta, on_disk):
+        os.makedirs(os.path.join(site, "assets", "m"), exist_ok=True)
+        for fn, body in on_disk.items():
+            with open(os.path.join(site, "assets", "m", fn), "w") as fh:
+                fh.write(body)
+        with open(os.path.join(site, "assets", "manifest.json"), "w") as fh:
+            json.dump({"version": 1, "assets": manifest}, fh)
+        with open(os.path.join(site, "assets", "meta.json"), "w") as fh:
+            json.dump(meta, fh)
+
+    def read(site):
+        with open(os.path.join(site, "assets", "manifest.json")) as fh:
+            return {e["name"]: e for e in json.load(fh)["assets"]}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # ① meta 声明 deps ⇒ 新条目带上（正常面）
+        s1 = os.path.join(tmp, "s1")
+        mk(s1, [], {"webgraphics": {"kind": "js", "deps": ["__init_web__"]}}, {"webgraphics.js": "A"})
+        sync_js(s1, [])
+        e = read(s1)["webgraphics"]
+        cases.append(("meta 声明 deps ⇒ 新条目带上（不写死 []）", e.get("deps") == ["__init_web__"]))
+
+        # ② 反向：meta 没写 deps ⇒ 空数组（不编、不残留）
+        s2 = os.path.join(tmp, "s2")
+        mk(s2, [], {}, {"plain.js": "B"})
+        sync_js(s2, [])
+        cases.append(("★ meta 没写 deps ⇒ 空数组（不许编依赖）",
+                      read(s2)["plain"].get("deps") == []))
+
+        # ③ 第三态：sha 未变但 meta 改了 deps ⇒ 必须生效（本批 bug 的正面用例）
+        s3 = os.path.join(tmp, "s3")
+        mk(s3, [], {"webgraphics": {"kind": "js"}}, {"webgraphics.js": "C"})
+        sync_js(s3, [])
+        first = read(s3)["webgraphics"]
+        # 再写一份带 deps 的 meta，字节不变，重跑
+        with open(os.path.join(s3, "assets", "meta.json"), "w") as fh:
+            json.dump({"webgraphics": {"kind": "js", "deps": ["__init_web__"]}}, fh)
+        sync_js(s3, [])
+        second = read(s3)["webgraphics"]
+        cases.append(("★ sha 未变但 meta.deps 变了 ⇒ 必须生效（第三态；音频批丢边即此）",
+                      first.get("deps") == [] and second.get("deps") == ["__init_web__"]))
+
+        # ④ 空输入：站点没有 assets/ ⇒ 明说而不是静默成功
+        bad = 0
+        for label, ok in cases:
+            print("%s | %s" % ("PASS" if ok else "fail", label))
+            bad += 0 if ok else 1
+    # 空输入的零值守卫（⑤）：manifest 缺 assets 键不算通过
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "assets"))
+        with open(os.path.join(tmp, "assets", "manifest.json"), "w") as fh:
+            json.dump({}, fh)
+        try:
+            sync_js(tmp, [])
+            ok5 = False        # 应当抛/报错却静默成功 ⇒ 红
+        except (KeyError, ValueError):
+            ok5 = True
+        except Exception:      # noqa: BLE001
+            ok5 = True
+        print("%s | ★ 空 manifest（缺 assets 键）⇒ 不许静默通过" % ("PASS" if ok5 else "fail"))
+        bad += 0 if ok5 else 1
+    print("=== assets.py 自证：%d PASS / %d fail ===" % (5 - bad, bad))
+    return 1 if bad else 0
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
     cmd = sys.argv[1]
+    if cmd == "--selftest":
+        return selftest()
     if cmd == "bundle-m" and len(sys.argv) == 6:
         bundle_m(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
         return 0

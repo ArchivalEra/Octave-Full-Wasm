@@ -109,9 +109,9 @@
       "url": "assets/oct/audiodevinfo.oct",
       "sha256": "1285ce76404bd343cf1286fe0524ec16821acadc83068a032b660c54c6c4afc0",
       "mount": "/usr/src/octave/m/oct/audiodevinfo.oct",
-      "addpath": "/usr/src/octave/m/oct",
+      "addpath": false,
       "deps": [],
-      "note": "dldfcn 官方装载（mail/045 缺件补编）：__player_*/__recorder_* 全在此模块；本构建无 PortAudio ⇒ C++ 走 err_disabled_feature，真正播放由 webaudio m-bundle 的同名纯 .m 桥接管（懒加载 OctaveAssets.load('webaudio')）。",
+      "note": "dldfcn 官方装载（mail/045 缺件补编）：__player_*/__recorder_* 全在此模块；本构建无 PortAudio ⇒ C++ 走 err_disabled_feature，真正播放由 webaudio m-bundle 的同名纯 .m 桥接管（懒加载 OctaveAssets.load('webaudio')）。。★ alias_dir（2026-10-27 修 accept-requirements R8）：38 个 __player_*/__recorder_* 别名**不建在 m/oct/**（那目录被每个 oct 条目反复 addpath 前置 ⇒ 会把桩顶到 m/webaudio 的真实现前面 ⇒ audioplayer 抛 PortAudio disabled）。改为建在独立 audio-stub/ 且该目录只在真实现缺席时才有意义（.m 侧 addpath 后置）",
       "aliases": [
         "__player_audioplayer__",
         "__player_get_channels__",
@@ -151,7 +151,8 @@
         "__recorder_set_userdata__",
         "__recorder_stop__",
         "audiodevinfo"
-      ]
+      ],
+      "alias_dir": "/usr/src/octave/m/audio-stub"
     },
     {
       "name": "audioread",
@@ -266,7 +267,61 @@
       "deps": [],
       "note": "Forge 4.1.3 纯 .m（314 个）+ 8 个基础编译件（is_*/lti_input_idx 等）。SLICOT 编译件在 MAIN_MODULE=1 下会崩页面故不发布，见 CLIBS.md 坑 11",
       "aliases": [
-        "lti_input_idx"
+        "lti_input_idx",
+        {
+          "file": "__control_slicot_functions__",
+          "names": [
+            "__sl_ab01od__",
+            "__sl_ab04md__",
+            "__sl_ab08nd__",
+            "__sl_ab09hd__",
+            "__sl_ab09id__",
+            "__sl_ab09jd__",
+            "__sl_ab13ad__",
+            "__sl_ab13bd__",
+            "__sl_ab13dd__",
+            "__sl_ag08bd__",
+            "__sl_are__",
+            "__sl_ib01ad__",
+            "__sl_ib01cd__",
+            "__sl_ident__",
+            "__sl_mb05nd__",
+            "__sl_sb01bd__",
+            "__sl_sb02od__",
+            "__sl_sb03md__",
+            "__sl_sb03od__",
+            "__sl_sb04md__",
+            "__sl_sb04qd__",
+            "__sl_sb10ad__",
+            "__sl_sb10dd__",
+            "__sl_sb10ed__",
+            "__sl_sb10fd__",
+            "__sl_sb10hd__",
+            "__sl_sb10id__",
+            "__sl_sb10jd__",
+            "__sl_sb10kd__",
+            "__sl_sb10yd__",
+            "__sl_sb10zd__",
+            "__sl_sb16ad__",
+            "__sl_sb16bd__",
+            "__sl_sb16cd__",
+            "__sl_sg02ad__",
+            "__sl_sg03ad__",
+            "__sl_sg03bd__",
+            "__sl_tb01id__",
+            "__sl_tb01pd__",
+            "__sl_tb01ud__",
+            "__sl_tb04bd__",
+            "__sl_td04ad__",
+            "__sl_tg01ad__",
+            "__sl_tg01fd__",
+            "__sl_tg01hd__",
+            "__sl_tg01id__",
+            "__sl_tg01jd__",
+            "__sl_tg04bx__",
+            "__control_slicot_functions__"
+          ]
+        }
       ]
     },
     {
@@ -568,7 +623,10 @@
       "kind": "js",
       "url": "assets/m/webgraphics.js",
       "sha256": "5ae3f1a7e6089c4f363cecb896e7d1af881d64c79b43d54d5e02bf25b9318c8c",
-      "deps": []
+      "deps": [
+        "__init_web__"
+      ],
+      "note": "T2/A1：PKG_ADD 把 web toolkit 登记+装载（addpath 时由 Octave 自动执行）；deps 必须先装 __init_web__.oct —— PKG_ADD 里的 graphics_toolkit('web') 会 feval __init_web__（2026-10-19 音频批 sync-js 重写条目时丢过这条边 ⇒ t2-graphics 假红）"
     },
     {
       "name": "webimage",

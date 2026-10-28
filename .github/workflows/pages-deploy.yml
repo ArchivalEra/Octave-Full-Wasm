@@ -1,0 +1,32 @@
+# 手动触发的 Pages 部署（D6/批次收口的"直接部署"路径）。
+# ⚠️ 前置一次性步骤：仓库 Settings → Pages → Source 选 "GitHub Actions"。
+# ⚠️ 触发方式：Actions 页面选本工作流 → Run workflow（**不会**在 push 时自动运行）。
+# 部署内容 = 仓库根的 site/ 目录（8761 的逐字节镜像，见 DEPLOY.md）。
+name: pages-deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+      - id: deployment
+        uses: actions/deploy-pages@v4

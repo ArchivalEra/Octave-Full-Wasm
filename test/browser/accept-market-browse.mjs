@@ -246,6 +246,49 @@ check(net2.length === 0 && b10n > 0,
   'B10 browse() 期间零包字节请求（读面只读目录）',
   `entries=${b10n} bytes-requests=${net2.length} ${net2.slice(0, 2).join(' ')}`);
 
+// ── B11 ★ files[] 下载闭包（工单 69，内容仓 mail/090，2026-10-26）────────────────
+//   omc（tree）条目带 files = {文件名 → {bytes,sha256}}，值 = OM 生产者台账投影
+//   （omc_web_wasm_sha / omc_web_js_sha —— 两件 sha 的产地，UI 硬编码退役的前提）。
+//   非下发件（.d.ts）不列 ⇒ files 和 ≠ size 是**设计**（size = 目录和，R14 轴）。
+//   无 files 的 tree 条目（llvm-wasm/pyodide）detail.files === null（缺省兼容形状）。
+const b11 = await page.evaluate(async () => {
+  const list = await window.OctaveAssets.browse();
+  const omc = list.find(e => e.name === 'omc');
+  const lw = list.find(e => e.name === 'llvm-wasm');
+  const py = list.find(e => e.name === 'pyodide');
+  const f = omc && omc.detail && omc.detail.files;
+  const keys = f ? Object.keys(f).sort() : null;
+  const wasm = f && f['OpenModelicaCompiler_bg.wasm'];
+  const js = f && f['OpenModelicaCompiler.js'];
+  const closureBytes = f ? Object.values(f).reduce((s, v) => s + (v.bytes || 0), 0) : 0;
+  return {
+    hasOmc: !!omc,
+    keys,
+    wasm: wasm || null, js: js || null,
+    closureBytes,
+    size: omc ? omc.detail.size ?? null : null,
+    sizeNeqClosure: omc ? (omc.detail.size !== closureBytes) : null,
+    lwNull: !!(lw && lw.detail && lw.detail.files === null),
+    pyNull: !!(py && py.detail && py.detail.files === null)
+  };
+});
+check(b11.hasOmc && JSON.stringify(b11.keys) ===
+    JSON.stringify(['OpenModelicaCompiler.js', 'OpenModelicaCompiler_bg.wasm']),
+  'B11a omc Entry detail.files 恰为两件下发件（.d.ts 不列）',
+  JSON.stringify(b11.keys));
+check(!!b11.wasm && b11.wasm.bytes === 74579404
+  && b11.wasm.sha256 === '8287589ebdb53b4cc37c337c2ae88f798d8889f7ac3c29d693ca12e539b8d001'
+  && !!b11.js && b11.js.bytes === 56586
+  && b11.js.sha256 === '56c399bd455d57c8e21206287445643b81db6fd4e3ac183989616b903d165f17',
+  'B11b files 值 = OM 台账投影（bg.wasm 8287589e…/JS 56c399bd… —— 产地非宿主另算）',
+  JSON.stringify({ wasm: b11.wasm, js: b11.js }));
+check(b11.sizeNeqClosure === true && b11.closureBytes === 74635990,
+  'B11c 闭包预算 ≠ size（有意设计：size=目录和 R14 轴，files 和=下载预算）',
+  `closure=${b11.closureBytes} size=${b11.size}`);
+check(b11.lwNull && b11.pyNull,
+  'B11d ★ 无 files 的 tree 条目 detail.files === null（缺省兼容形状，不编空对象）',
+  `llvm-wasm=${b11.lwNull} pyodide=${b11.pyNull}`);
+
 console.log(`\n=== ${pass} PASS / ${fail} FAIL ===`);
 await browser.close();
 process.exit(fail ? 1 : 0);

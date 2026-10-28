@@ -165,6 +165,29 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **kind/role line closed (2026-10-20, mail/055)**: the content repo's acceptance letter confirms 15/15 entries self-describe — 13 packages, llvm-wasm (toolchain), pyodide (language-bridge, the Q1 vocabulary's third value in first use) — with kind semantics correct (engine carries it, bridges default). The line closed in three days from ticket to done (047 ticket → 050 schema → 052 engine entry → 053 missed label → 054 fix), the acceptance ledger reading: schema origin + semantic copy + table data + loader judge all aligned, zero hard-coded name checks. No outstanding items on either side; the UI reads the completed table whenever it wires up.
 
+**2026-10-27 — issue 69 landed, issue 67 resolved, and a 22-assertion regression root-caused.**
+`form:"tree"` entries now carry an optional `files[]` map (`filename → {bytes, sha256}`): the
+schema pins all five bindings (tree-only; `form:"file"` carrying `files` is an error; the shas'
+single origin is the producer ledger and assembly only *projects* them), the validator grew six
+positive/negative self-test cases (57→63), `forge-catalog.py` projects the omc closure from the
+OpenModelica ledger (`omc_web_wasm_sha` / `omc_web_js_sha`, so both download files rather than
+just bg.wasm) cross-checked against the site bytes, and gate **R15** reconciles every declared
+file against the site (43/0). `browse()` exposes it as `detail.files`; `accept-market-browse`
+went 17→21/0 including the deliberate point that the closure sum (74,635,990) differs from
+`size` (74,735,455), which is the directory total by design. Issue 67 is resolved: `.github/`
+is now tracked (three workflows), `gates.yml` was reconciled item-by-item against
+`registry --run commit`, and `readme-sync.yml` runs the same `--changed` criterion as pre-push.
+
+The 22 red assertions that appeared a week earlier came from one producer defect: the audio
+batch's `sync-js` fix rewrote entries and reset hand-maintained `deps`/`aliases` to defaults,
+dropping `webgraphics.deps = ["__init_web__"]` (so `graphics_toolkit("web")` could not find its
+module) and `control-oct`'s 49 `__sl_*__` aliases (so `c2d`/`step`/`norm` all failed). Nobody
+saw it because only a single-suite probe ran after that batch, not the full sweep the doctrine
+requires. The fix moves `deps`/`addpath`/`alias_dir` provenance into `meta.json` (with a new
+5/0 self-test), restores both lost values, and separates the audio stub aliases into
+`m/audio-stub/` appended to the *end* of the path so real implementations win while stubs still
+backstop. Both sites now run the full suite at **1253 PASS / 0 FAIL**.
+
 **Pre-compaction snapshot (2026-10-25)**: the inbox is empty after an unattended sweep of nine letters (044–061), each with a landed artifact — the audio playback chain (three-layer fix, both sites 50/0), the `kind`/`role` schema extension (15/15 entries now self-describe), the llvm-wasm install-accident rejection split, the pyodide `language-bridge` label, the omc engine entry (second `kind:"engine"`), gate R14 enforcing the MSL sibling-directory invariant, MSL merged (17 packs), and the `consumer:["omc"]` ruling. The newest letter is a schema ticket now recorded as issue 69: an optional `files[]` key for `form:"tree"` entries carrying the download closure (`{bytes, sha256}` per file), because an engine's per-file shas are otherwise unreachable at runtime in the browser — the producer's ledger stays the single origin and assembly only projects it. Remaining work, in order of readiness: issue 69 (the bg.wasm projection can start now, the full shape waits on OM adding a JS ledger key), issue 67 (CI never tracked), issue 63 (rustpatch fact coverage), multi-TU compilation, plus three downstream items that belong to other repos.
 
 **MSL merged + omc consumer ruling (2026-10-25, mail/059)**: the catalog now carries 17 packs. MSL arrives from OM as `modelica-standard-library` (OM won the naming argument — a generic abbreviation is unsearchable; the precedent is that names carry upstream identity), `form:"file"` (one zip unpacked at runtime), `role:"package"`, `consumer:["omc"]`, and it lands in the **sibling** `assets/msl/` directory that gate R14 guards — HTTP 200 on all three sites, 19,482,938 bytes matching the declared size byte for byte. Two defects surfaced while merging. First, a real assembler bug: `stage_upstream_bytes` always placed bytes under `assets/forge/` while the producer's table points at `assets/msl/…` — two vocabularies for one delivery path, exactly the family that produced a 404 in the llvm-wasm merge. Fixed: a site-relative `url` **is** the delivery path, so bytes now land where the url says; only absolute or query-bearing re-fetch URLs fall back to `assets/forge/` (the fake-directory-tree precedent kept, plus a new reverse assertion). Second, `omc`'s `consumer` changed to `["omc"]` per the ruling that `consumer` names the **engine lane** a entry serves — the omc engine is that lane's runtime, same stack as MSL, while llvm-wasm and pyodide remain on the octave lane. Browse Entries now pass `consumer`/`kind`/`role` through (they previously dropped consumer, so neither the UI nor the B3c assertion could tell an external entry apart). Nine regression suites green, gates 49/49, parity consistent.

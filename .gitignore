@@ -5,6 +5,11 @@
 !*/
 !.gitignore
 !README.md
+# ★ .github/workflows（工单 67，2026-10-26）：CI 兜底入库 —— pre-push/pre-commit 可被
+#   --no-verify 跳过，CI 正面跑同一条判据（gates.yml / readme-sync.yml）。
+#   此前整个 .github/ 从未进库（白名单无放行规则）而注释按"它存在"写了三年 ——
+#   "注释承诺的不存在物"是工单 67 的根因，勿再犯。
+!.github/workflows/*.yml
 !LICENSE
 !THIRD-PARTY-NOTICES.md
 !maintaince.md

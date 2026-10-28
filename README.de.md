@@ -103,6 +103,31 @@ und im Browser verifiziert — einschließlich der eingefrorenen `wasm32-final`-
 
 ---
 
+**2026-10-27 — Ticket 69 umgesetzt, Ticket 67 geschlossen, Ursache für 22 rote Assertions gefunden.**
+`form:"tree"`-Einträge tragen jetzt eine optionale `files[]`-Map (`Dateiname → {bytes, sha256}`):
+das Schema fixiert alle fünf Bindungen (nur für tree; `form:"file"` mit `files` ist ein Fehler;
+einzige Herkunft der Shas ist das Ledger des Produzenten, die Montage *projiziert* sie nur), der
+Validator bekam sechs positive/negative Selbsttestfälle (57→63), `forge-catalog.py` projiziert
+den omc-Closure aus dem OpenModelica-Ledger (`omc_web_wasm_sha` / `omc_web_js_sha`, also beide
+Downloaddateien statt nur bg.wasm) und gleicht ihn gegen die Site-Bytes ab, und Gate **R15**
+prüft jede deklarierte Datei gegen die Site (43/0). `browse()` reicht das als `detail.files`
+durch; `accept-market-browse` ging von 17 auf 21/0 — inklusive des bewussten Punktes, dass die
+Closure-Summe (74,635,990) von `size` (74,735,455) abweicht, denn `size` ist die Verzeichnissumme
+per Design. Ticket 67 ist geschlossen: `.github/` ist jetzt versioniert (drei Workflows),
+`gates.yml` wurde Punkt für Punkt gegen `registry --run commit` abgeglichen, und
+`readme-sync.yml` fährt dasselbe `--changed`-Kriterium wie pre-push.
+
+Die 22 roten Assertions eine Woche zuvor stammten aus einem Produzentenfehler: der `sync-js`-Fix
+des Audio-Batches schrieb Einträge neu und setzte handgepflegte `deps`/`aliases` auf Defaults
+zurück — `webgraphics.deps = ["__init_web__"]` (dadurch fand `graphics_toolkit("web")` sein
+Modul nicht) und die 49 `__sl_*__`-Aliase von `control-oct` (dadurch scheiterten
+`c2d`/`step`/`norm`). Unbemerkt blieb es, weil nach jenem Batch nur eine einzelne Suite lief,
+nicht der volle Sweep, den die Doktrin verlangt. Der Fix verlagert die Herkunft von
+`deps`/`addpath`/`alias_dir` in `meta.json` (neuer Selbsttest 5/0), stellt beide verlorenen
+Werte wieder her und trennt die Audio-Stub-Aliase nach `m/audio-stub/`, das ans *Ende* des
+Pfads angehängt wird — echte Implementierungen gewinnen, Stubs bleiben Rückfall. Beide Sites
+laufen jetzt die volle Suite mit **1253 PASS / 0 FAIL**.
+
 ## Leistung (gemessen 2026-10-07, Median aus 5 nativen / 3 wasm-Läufen)
 
 ![Fünf-Wege-Leistungsvergleich](docs/charts/perf-5way.svg)
