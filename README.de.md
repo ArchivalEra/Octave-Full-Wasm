@@ -103,6 +103,8 @@ und im Browser verifiziert — einschließlich der eingefrorenen `wasm32-final`-
 
 ---
 
+**2026-10-28 — Umgebung wiederhergestellt, zwei Tickets geschlossen, ein Instrument repariert.** Nach dem Neustart des Build-Containers (ein Shutdown zwei Tage zuvor hatte ihn beendet) meldet `doctor` alles gruen, und zwei zuvor uebersprungene Gates laufen nun wirklich: der Upstream-Pin-Witness (2 Pins identisch) und die Plugin-Registry-Pruefung (deklarierte Artefakte stimmen je Lane). Ticket 69 ist geschlossen — beide Abnahmekriterien greifen, und der erwartete OpenModelica-JS-Ledger-Schluessel war tatsaechlich laengst veroeffentlicht, sodass die Projektion beide Downloaddateien traegt statt nur bg.wasm. Ticket 63 ist geschlossen: jedes Instrument seiner Abdeckungsmatrix wurde heute erneut gefahren und tabelliert, wobei eine echte Faeulnis auffiel — `rustsort-spike` linkte nicht mehr (`operator new[]` undefiniert, weil `emcc` C++ ohne C++-Runtime uebersetzte); `-sDEFAULT_TO_CXX` in beiden Linkzeilen stellte G2 (22 Domaenen, null Fehler), G2b (4/4 Mutationen gefangen) und G3 (Verhaeltnis 0.241) wieder her. Dieses Rig ist der einzige Beleg fuer die Abschaffung des Grillings — braeche es still, waere der Beleg hohl.
+
 **2026-10-27 — Ticket 69 umgesetzt, Ticket 67 geschlossen, Ursache für 22 rote Assertions gefunden.**
 `form:"tree"`-Einträge tragen jetzt eine optionale `files[]`-Map (`Dateiname → {bytes, sha256}`):
 das Schema fixiert alle fünf Bindungen (nur für tree; `form:"file"` mit `files` ist ein Fehler;

@@ -1,6 +1,25 @@
 # 69 · `form:"tree"` 条目的可选键 `files[]`（UI 下载闭包缺口 / 内容仓 mail/090 裁定）
 
-**Status:** ready-for-agent
+**Status:** resolved
+
+**结算（2026-10-28）**：两条结算判据都 rc=0 ——
+`python3 build/extra-content/validate-content-list.py --selftest` ⇒ **63 PASS / 0 fail**
+（含 files 的六条正反：tree 合法 map 不报 / `form:"file"` 带 files 必报 /
+bytes 非整数 / sha 非 hex64 / 值对象带多余键 / 空 map 零值守卫）；
+`python3 build/113/check-forge-catalog.py --site <站点>` ⇒ **ok ×3**（8761 / 8768 / 仓库镜像）。
+★ **依赖已解**：OM 侧 JS 台账键其实早已上账（OM 仓 `b217f1a`，`omc_web_js_sha` +
+`omc_web_js_bytes`，注记原文写明"files[] 投影的产地"）⇒ 投影的是**完整两件**
+（bg.wasm 74,579,404 + JS 56,586），不是原先预计的"只 bg.wasm"。
+四步落地记录：
+① schema `$defs/entry` 加 `files`（map，值恰为 `{bytes:int≥0, sha256:hex64}`），描述写死
+   五条绑定 + "与 `$defs/artifact.files`（数组）同名非同义"；
+② `validate-content-list.py` 类型检查 + 六条自证（57→63/0）；
+③ `forge-catalog.py` 的 omc 条目投影 `files`（读 OM FACTS 的 `omc_web_*`，**不手写、不另算**；
+   拿站点字节**核对**，不一致是红不是重写；台账读不到 ⇒ `[omc]` 致命，自证 40→44/0）；
+④ 站点闸门 **R15** 逐件对账 + 三用例（正常 / 篡改 sha 必红 / 列缺件必红），40→43/0；
+   浏览器侧 `browse()` 以 `detail.files` 带出，`accept-market-browse` 17→21/0
+   （B11a 恰为两件下发件 / B11b 值 = OM 台账投影 / B11c **闭包和 ≠ size 是有意设计** /
+   B11d 无 files 的 tree ⇒ `detail.files === null`）。
 **Settling:** `python3 build/extra-content/validate-content-list.py --selftest` —— 自证里必须含
 `files[]` 的**正反各一条**（合法 map 不报 / 形态错配必报），且**真仓三站表**过校验器 `ok`；
 再跑 `python3 build/113/check-forge-catalog.py --site <站点>` 验 `files[]` 与站点字节逐件 sha 一致。

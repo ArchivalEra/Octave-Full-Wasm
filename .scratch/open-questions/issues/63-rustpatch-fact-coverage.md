@@ -5,7 +5,7 @@ grill 从"覆盖矩阵"开始。本单 = 把"人会怎么 grill"逐条事实化�
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Settling:** `sh test/fixtures/rustfill-spike/run-spike.sh`（G2 差分门 + G2b 变异自证）—— rc=0 ⇒ 仪器合格且当轮候选判决成立；rc≠0 ⇒ 门没红，先修门。
 已建成：32 输入域逐位一致 + 31/31 变异被抓）——rc=0 ⇒ 仪器合格且当轮候选判决成立；
@@ -15,13 +15,13 @@ G6 延迟断言仍缺（候选④前置）。
 
 | # | grill 的问题（人本来要问的） | 仪器（Einfacht 档位） | 事实键 | 状态 |
 |---|---|---|---|---|
-| G1 | 这个符号真的可覆盖吗？（模板内联会吃掉它） | nm T 级导出核验（fail-closed：非 T ⇒ 拒绝）| `rust_patch_<n>_symbol` | **新建**（工单 59 mi_version 同款机制） |
-| G2 | Rust 版数值等价吗？（NaN/稳定性/复杂分支） | **数值差分门**：同输入新旧逐位对比；输入域 = 网格+边界+随机+NaN/Inf | `rust_patch_<n>_numerics`（witness 每提交真跑） | **新建** |
-| G2b | **差分门自己能抓错吗？**（覆盖度的元事实） | **变异自证**：往 Rust 实现注入变异（>= 改 >）⇒ 差分门必须红 | 差分门的 --selftest | **新建**（F1"会红"延伸到语义等价） |
+| G1 | 这个符号真的可覆盖吗？（模板内联会吃掉它） | nm T 级导出核验（fail-closed：非 T ⇒ 拒绝）| `rust_patch_<n>_symbol` | **仪器在**（`build/113/wasm_symbols.py`，自证 5/0）；候选③ 实测"模板内联吃符号"⇒ 树补丁改调用点是唯一路径（本单 §候选③） |
+| G2 | Rust 版数值等价吗？（NaN/稳定性/复杂分支） | **数值差分门**：同输入新旧逐位对比 | `rust_patch_<n>_numerics`（witness 每提交真跑） | **已落并复跑（2026-10-28）**：`test/fixtures/rustsort-spike/run-spike.sh` ⇒ 22 域 failures=0；`rustfill-spike` ⇒ 32 域逐位一致 |
+| G2b | **差分门自己能抓错吗？**（覆盖度的元事实） | **变异自证**：注入变异 ⇒ 差分门必须红 | 差分门的 --selftest | **已落并复跑（2026-10-28）**：sort 恒等排序变异 **4/4 被抓**；fill 边界变异 **31/31 被抓**（n=0 不可观测，如实不计） |
 | G3 | 真的更快吗？ | hotpath 同负载同窗交错 ≥3 轮 | `rust_patch_<n>_speedup`（replay=False） | 已有（hotpath 仪器 + §5.79 方法论） |
 | G4 | 补丁还在产品里吗？（发运后漂移） | 产物探针 `octave_rustpatch_<n>_version` + witness + plugin-check 登记 | `rust_patch_<n>_present` | 已有机制（工单 59 五件套同款） |
 | G5 | Rust 工具链钉住了吗？ | `build/113/check-rust-toolchain.py`（四条不变式：钉版 channel / staticlib / panic=abort / 两档 target） | `rust_patch_toolchain_ok` | **已落（2026-10-28）**：自证 6/0，台账键 replay=True（复跑逐字对） |
-| G6 | Ctrl-C 响应性还在吗？（quit 块级化的语义代价） | **延迟上界断言**：注入 quit 请求 → 测到响应的最大元素数 | `rust_patch_<n>_quit_latency` | **新建**（把"可接受吗"变成数字上界） |
+| G6 | Ctrl-C 响应性还在吗？（quit 块级化的语义代价） | **延迟上界断言**：注入 quit 请求 → 测到响应的最大元素数 | `rust_patch_<n>_quit_latency` | **已落并复跑（2026-10-28）**：`test/fixtures/xpow-spike/run-spike.sh` ⇒ every∈{1,64,256,1024,4096} 全部返回 E-1（契约成立） |
 | G7 | 哪个热点值得做？ | hotpath 归因（fill 91% / sort 85-89% / …） | `hotpath_top` 等 | 已有 |
 | G8 | spike 门槛（≥2×） | 判据先行写进工单 + 结果键 | `rust_patch_<n>_spike_ratio` | 判据已声明（fill spike） |
 | G9 | 发运与否 | 产品决定（用户保留） | — | 本来就在人手里 |
@@ -145,3 +145,25 @@ G6 延迟断言仍缺（候选④前置）。
   复跑闸门抓到一处**真错**：`cmd` 里带了括号说明 ⇒ 复跑 rc=2 —— 裸值契约要求 cmd 是
   纯命令（"坏 cmd 印在活状态文档里，就是每行都绿着的假断言"）。已改。
 - **G5 结案**；矩阵里仍空的是 G6（候选④前置，候选④已被排除 ⇒ 该行的触发条件不复存在）。
+
+## G1/G2/G2b/G3/G5/G6 全表收口（2026-10-28 实测复跑）
+
+本单的**全部仪器**今日复跑一遍，逐个记录判据与输出（"仪器先于补丁"那条判据的兑现）：
+
+| 档 | 复跑命令 | 今日实测输出 |
+|---|---|---|
+| G2 + G2b（sort） | `bash test/fixtures/rustsort-spike/run-spike.sh` | `diff: 22 个域 failures=0 ✓` / `mutation: 4/4 被抓 ✓` |
+| G2 + G2b（fill） | `bash test/fixtures/rustfill-spike/run-spike.sh` | `diff: 32 个输入域 failures=0 ✓` / `mutation: 31/31 被抓 ✓` |
+| G3（sort 内核） | 同上（末行） | `base=371ms cand=89ms 比值=0.241 ⇒ ADOPT` |
+| G6（延迟上界） | `bash test/fixtures/xpow-spike/run-spike.sh` | every∈{1,64,256,1024,4096} ⇒ first_seen_index 依次 {0,63,255,1023,4095} = **E-1**（契约成立） |
+| G5（工具链） | `python3 build/113/check-rust-toolchain.py` | `ok`（四条不变式；自证 6/0） |
+| G1（符号） | `python3 build/113/wasm_symbols.py --selftest` | 自证 5/0；候选③ 的"模板内联吃符号"实测结论在案 |
+
+**★ 修了一处仪器腐烂**（AGENTS「probe 会腐烂」的又一实例）：`rustsort-spike/run-spike.sh`
+今日复跑时链接失败 `undefined symbol: operator new[]` —— `emcc` 编 `.cpp` 缺 C++ 标准库。
+修法 = 两条链接行加 `-sDEFAULT_TO_CXX`（emcc 自己的建议）。修完 G2/G2b/G3 立刻全绿。
+**为什么必须记**：这套仪器是"grilling 取消"的**唯一凭据** —— 它悄悄坏掉等于凭据变成空头。
+
+**结论**：矩阵里 G1–G8 全部有可跑仪器，G9（发运与否）本来就在用户手里。
+本单的判据成立。**Status: resolved**（2026-10-28）。仍未落的是"第一个真补丁的落地"
+—— 那是工单 59/候选③ 的产品决定，不是本单范围（本单只负责"仪器能红"）。
