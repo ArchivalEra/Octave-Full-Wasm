@@ -51,7 +51,7 @@
     桩别名落独立 `m/audio-stub/` 且该目录**追加到 path 末尾**（`addpath(d,"-end")`）
     ⇒ **真实现优先、桩兜底**（accept-audio 50/0 与 requirements 14/0 两端同时成立）。
 
-- **验收**：8768 全量 **55 套 1253 PASS / 0 FAIL**；8761 全量同样 **1253/0**；
+- **验收**：8768 与 8761 全量**都零红**（55 套，PASS 数见 [[accept_pass]]）；
   三处 parity 完全一致；8761 `BOOT OK`、部署件 SHA 三层（磁盘/HTTP/页面自证）全过；
   闸门 `ran 7 / off 6 / failed 0`；本仓自证台 49 个全绿。
 
@@ -1237,7 +1237,7 @@
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 52 | |
-| 最近一次**全绿**回归 | `20261019-182943` · **0 套 / 0 PASS / 0 FAIL**（同日 PROBES=1 另跑：探针 1 套 / 33 PASS） |  |
+| 最近一次**全绿**回归 | `20261028-123954` · **55 套 / 1,253 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20261019` · tar.zst 65,944,760 B · `abd8622a709425e7…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->
