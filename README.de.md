@@ -2,6 +2,17 @@
 
 [English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
 
+
+> ⚠️ **Einzige Quelle der README-Trilogie = Branch `master`** (Anweisung vom 2026-10-29:
+> „IP-Linie und wasm32-Linie zeigen beide auf die README-Trilogie der Master-Linie; die
+> IP-Linie wird nach Master migriert"). Die `README*.md` dieses Branches sind
+> **historische Momentaufnahmen** und werden nicht mehr pro Charge aktualisiert — massgeblich ist
+> [die README des `master`-Branches](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.md)
+> (dreisprachig: [中文](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.zh.md) /
+> [Deutsch](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.de.md)).
+> Grund: die drei Dokumente wurden zuvor auf drei Linien getrennt gepflegt, wodurch die Fassung
+> im GitHub-Standardbranch (`master`) am aeltesten war — Besucher sahen den Stand vom 10.12.
+> Eine einzige Quelle ist der einzige Schutz gegen erneutes Auseinanderdriften.
 GNU Octave 11.3.0 nach WebAssembly kompiliert — eine vollständige
 Numerik-Umgebung (Interpreter, BLAS/LAPACK, Plotten, ~500 Pakete), die
 **komplett im Browser läuft**: rein clientseitige Berechnung, **keine

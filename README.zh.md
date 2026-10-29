@@ -2,6 +2,14 @@
 
 [English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
 
+
+> ⚠️ **README 三件套的唯一产地 = `master` 分支**（2026-10-29 用户点令：「IP 线和 32 线都指向
+> Master 线的 readme 三件套，IP 线的迁徙到 Master」）。本分支的 `README*.md` 是**历史快照**，
+> 不再逐批更新 —— 以 [`master` 分支的 README](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.md)
+> 为准（三语：[中文](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.zh.md) /
+> [Deutsch](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.de.md)）。
+> 为什么这样定：三份文档曾分散在三条线上各自维护，结果 GitHub 默认分支（`master`）那一份最旧
+> ⇒ 访客看到的是 10-12 的状态。收拢到一个产地是唯一能防止再漂的做法。
 GNU Octave 11.3.0 编译为 WebAssembly —— 一个完整的数值计算环境（解释器、BLAS/LAPACK、
 绘图、约 500 个包）**完全跑在你的浏览器里**：纯客户端计算，**没有任何服务端执行**。
 

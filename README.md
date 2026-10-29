@@ -6,6 +6,15 @@ GNU Octave 11.3.0 compiled to WebAssembly — a full numerical computing environ
 (interpreter, BLAS/LAPACK, plotting, ~500 packages) running **entirely in your browser**:
 pure client-side compute, **no server-side execution**.
 
+> ⚠️ **README 三件套的唯一产地 = `master` 分支**（2026-10-29 用户点令：「IP 线和 32 线都
+> 指向 Master 线的 readme 三件套，IP 线的迁徙到 Master」）。本分支的 `README*.md` 是
+> **历史快照**，不再逐批更新 —— 以
+> [`master` 分支的 README](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.md)
+> 为准（三语：[中文](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.zh.md) /
+> [Deutsch](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.de.md)）。
+> 为什么这样定：三份文档曾分散在三条线上各自维护，结果 GitHub 默认分支（`master`）那一份
+> 最旧 ⇒ 访客看到的是 10-12 的状态。收拢到一个产地是唯一能防止再漂的做法。
+
 **Current production lane: `w64` (WebAssembly memory64 + threads + relaxed-FMA OpenBLAS
 + mimalloc + a Rust `sort` kernel)**, shipped behind the same web UI as every other lane.
 All numerical results are IEEE 754 binary64 — audited explicitly (below).
