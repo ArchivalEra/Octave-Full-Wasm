@@ -6017,3 +6017,155 @@ check-site-parity / promote-pages / hotpath 的档清单更新。
 **验收**：probe-lane 33/0（两格站）；单源对账 OK（2 站内档 / 2 死档 / 4 消费方）；
 promote-w64-lane --verify 两站 ✅ 两格齐备（base/w64）且无双死档痕迹；
 三处 parity 完全一致。
+
+## §5.110 额外内容市场收口：kind/role schema + 音频全链 + MSL/OMC 条目（2026-10-20 → 10-25）
+
+**区间说明**：本批次的详细记录原先堆在三份 README 的头部（21–67 KB 各一份），
+2026-10-29 用户点令「基线三我觉得就归进history」⇒ 收进本节，README 只留当前状态。
+
+**① kind / role 两轴进 schema（内容仓 mail/047、mail/049、mail/055）**
+- `kind`（src/pre/engine）= 条目性质；`role`（package/toolchain/language-bridge）= 消费角色。
+  两者**不同轴**：`form` 是形态不是角色 —— mail/049 的装载事故（llvm-wasm 与函数包同
+  `form:"tree"` 混列，装载器把它当函数包 install）就是这条没分开的代价。
+- `kind:"engine"` 的 `arch` 是 **lane 值**（wasm32/wasm64/base/w64/omc…，索引键），
+  不是架构字面量 ⇒ 校验器按 kind 扩词表（自证 52→57/0）。
+- pyodide 补 `role:"language-bridge"`；llvm-wasm 升 `kind:"engine"` + `role:"toolchain"`。
+  15/15 条目自描述齐。
+
+**② 音频播放链三层修复（内容仓 mail/045 钓鱼实测）**
+- 症状：`sound([0.1 0.2],8000)` 报 `'__player_audioplayer__' undefined`。`.m` 面在场让
+  `which` 类断言假绿，第一层真调用就穿帮。
+- 三层：缺件补编（`audiodevinfo.oct` 进 TREE_MODS，38 个 `__player_*/__recorder_*` 别名）/
+  开机装载（CORE_DLDFCN 加 audiodevinfo）/ sync-js 第三态修（见下）。
+- 验收：双站 accept-audio 50/0；`SOUND_OK=1`/`PLAY_OK=1`（真阻塞、真 AudioContext）。
+
+**③ ★ sync-js 第三态** —— sha 未变时条目被**完全跳过** ⇒ meta 修正（aliases/note）在既有
+条目上永不生效。加第三分支：sha 相同也合 meta（真值字段仍以磁盘为准）。
+
+**④ MSL 并入 + omc consumer 裁定（内容仓 mail/059）**
+- MSL 名字定案 `modelica-standard-library`（携带上游身份）；`form:"file"`（单 zip，
+  运行期 `omc_vfs_load_zip` 解压）；`size` 19,482,938 B；落 `assets/msl/` **兄弟目录**。
+- 顺带修装配器落点缺陷：`stage_upstream_bytes` 原先一律铺 `assets/forge/`，而生产者表 url
+  是 `assets/msl/…` ⇒ 两处口径分叉（R7b 报 404）。修法：**站内相对 url = 交付路径**。
+- omc consumer 改 `["omc"]`：`consumer` = 条目服务的**引擎车道**。
+
+**⑤ 闸门**：R14（tree 条目的 `size` == url 所在目录实测字节和 —— 兄弟目录硬约束）；
+`check-lanes-single-source.py`（`build/lanes.json` 单一产地对四消费方，自证 15/0）。
+
+## §5.111 工单 69（files[] 下载闭包）+ 工单 67（CI 入库）+ 22 红根因（2026-10-28）
+
+**① 工单 69：`form:"tree"` 条目补 `files[]`**（内容仓 mail/090 的五条绑定）
+- 缺口：omc 的 JS 胶水件在表里无 sha，`size`=目录和 ≠ **下载闭包** ⇒ 宿主「逐件权威走
+  产物自证」在运行期（浏览器）够不着，只有表能带过去。
+- 落地四步：schema（map：文件名 → `{bytes:int≥0, sha256:hex64}`，描述写死五条绑定）/
+  校验器（`form≠tree` 带 files ⇒ 红 + 类型 + 零值守卫，自证 57→63/0）/ 装配器（omc 条目
+  **投影** OM 台账 `omc_web_wasm_sha`+`omc_web_js_sha`，拿站点字节**核对**，不一致是红不是
+  重写，自证 40→44/0）/ 站点闸门 **R15**（逐件对账，自证 40→43/0）。
+- ★ **依赖早解**：OM 侧 JS 台账键其实已上账（OM 仓 `b217f1a`）⇒ 投影完整两件而非只 bg.wasm。
+- 浏览器：`accept-market-browse` 17→21/0（B11a–d，含"闭包和 74,635,990 ≠ size
+  74,735,455 是有意设计"）。
+
+**② 工单 67：CI 从未入库 → resolved**
+- `.github/` 整体未被跟踪（白名单 `*` 拒绝，无放行规则），而 `reflect-hooks/pre-push` 的注释
+  按"CI 跑同一条判据"写了三年 ⇒ **注释承诺了不存在的闸门**。
+- 修：`.gitignore` 放行 `!.github/workflows/*.yml` + 三份 workflow 入库；`gates.yml` 判据集
+  与 `registry --run commit` 的 ran/off 逐条对账（4 个依赖部署树的明说不跑）；新建
+  `readme-sync.yml`（pre-push §④ 同一条 `--changed` 判据）；pre-push 注释翻面。
+- 结算件 `check-ci-bootstrap.sh` rc=1 → **rc=0**。
+
+**③ ★★ 22 红根因（音频批 658f001 埋下）＝ sync-js 重置 meta**
+- 那次为补 `audiodevinfo` 的 38 aliases 改了 sync-js，**重写条目时把手工维护的
+  `deps`/`aliases` 抹成默认值**：
+  · `webgraphics.deps` 丢 `["__init_web__"]` ⇒ `PKG_ADD` 里 `graphics_toolkit("web")` 找不到
+    模块 ⇒ t2-graphics / p5-graphics 假红；
+  · `control-oct.aliases` 丢 `{file:"__control_slicot_functions__", names:[49 个 __sl_*__]}`
+    ⇒ `c2d`/`step`/`norm` 全报 `'__sl_xxx__' undefined` ⇒ slicot 11/14、forge2 3 红。
+- **为何一周没发现**：那批之后只跑过 `probe-lane` 单套，**没跑全量** —— AGENTS 那条
+  「改资源必须 PROBES=1 全量」被绕过。
+- 修：`deps`/`addpath`/`alias_dir` 的产地移进 `meta.json`（新增 `assets.py --selftest` 5/0，
+  含"sha 未变时 meta 仍生效"第三态）；恢复两处丢失值；音频桩别名分到独立
+  `m/audio-stub/` 并**追加到 path 末尾**（真实现优先、桩兜底）。
+- 验收：两站全量 **1253 PASS / 0 FAIL**（55 套）。
+
+## §5.112 工单 63 G5（Rust 工具链不变式）（2026-10-28）
+
+- 新闸门 `build/113/check-rust-toolchain.py`（自证 6/0，三类齐备），四条不变式：
+  ① channel 必须是**带日期钉版**（浮名 = 没钉）② `crate-type` 含 `staticlib`
+  （cdylib 会让 E4 弱符号判空失效）③ `panic="abort"`（wasm 无 unwind）④ 两档脚本各钉对
+  target（wasm64 必须 `build-std`+`wasm64-unknown-unknown`，rustc 无 emscripten target）。
+- 台账键 `rust_patch_toolchain_ok`（replay=True）。
+- ★ 挂台账时**复跑闸门当场抓到真错**：cmd 里带了括号说明 ⇒ rc=2 —— 裸值契约要求 cmd 是
+  纯命令（"坏 cmd 印在活状态文档里，就是每行都绿着的假断言"）。
+- 顺带修了一处**仪器腐烂**：`rustsort-spike/run-spike.sh` 链接失败
+  `undefined symbol: operator new[]`（emcc 编 .cpp 缺 C++ 标准库）⇒ 两条链接行加
+  `-sDEFAULT_TO_CXX`。这套仪器是"grilling 取消"的唯一凭据，悄悄坏掉等于凭据变空头。
+
+## §5.113 E 线 MATLAB 语义桥交付（2026-10-29，内容仓 108 / OM 025）
+
+**归属**（内容仓 108-host 裁定，我方接受）：产权/接口语义 = OM；装配 = 本仓；消费 = UI；
+**不是内容契约**（这批 `.m` 不进 `forge-catalog.json`）。
+
+**① 我方查到的两条新事实**（内容仓不知道，比它的描述深一层）：
+- `omc_bridge.js` **零调用方** —— 全 OM 仓 + 其产品站点都查过（排除定义文件本身后 0 处）；
+  它的验收套件里 `serveOnce()` 是**套件内自己实现的宿主**。缺口不是"没铺到宿主站点"，
+  而是**这个桥从未被接线**。
+- 三条承重语义只活在测试文件里：`cd`（omc 输出目录跟 cwd 走，否则 `resultFile` 空）/
+  `loadFile` 必须**跨 VFS 搬字节**（omc 是另一个 wasm，实测 `wasi_path_open → -1`）/
+  `simulate` 结果 `.mat` 要**回搬**进 Octave MEMFS 并以 `MAT <path>` 告知。
+
+**② OM 回信 025 三问 + 纠正我一条形态建议**
+- 我原以为"站点落 `omc/bridge/` + addpath"就够 —— **错**。`addpath` 走 **MEMFS**，站点
+  HTTP 路径不在其中（独立验证：MEMFS 根只有 tmp/home/dev/proc/fonts/src/usr；站点路径
+  `exist=0`；MEMFS 写文件后 addpath ⇒ `exist=2`）。
+- ⇒ 两段形态：站点目录 = 字节来源；运行期必须写 MEMFS 再 addpath。
+
+**③ 落地物**
+- `build/113/provision-omc-bridge.sh`：12 件供给（投影 OM 的 `bridge/manifest.json`，逐件核
+  sha&bytes，反证清单外文件）；自证 4/0。两站各 13 件（12 交付 + 清单本身）。
+- `bridge/octave-omc-bridge.js`：四步装配 + 三档失败态 + 两段式句柄（`.memfs` / `.ready`）。
+  **引擎真实形态 = ESM（wasm-bindgen）**：`export { initSync, __wbg_init as default }` ——
+  我第一版猜的三个 Emscripten 全局工厂名**全部不存在**（产物自证纠正）；动态 import 的
+  说明符必须是**绝对 URL**（相对串报 `Failed to resolve module specifier`）。
+- `bridge/octave-core.js`：`.memfs` 那一段**串进 boot 链**（`st.ready = true` 之前，实测 39 ms）；
+  omc 引擎 boot 仍在后台（74 MB 级，不进开机路径 ⇒ 开机仍 1.3 s）。
+- `test/browser/accept-omc-e2e.mjs`：结算件，6 条含两条反向（E5 摘掉 `/bridge` ⇒ 三项必须
+  MISSING）。两站 6/0。
+
+**④ ★ 查出 OM 产品态套件的判据缺陷（它 3 条假红的真因）**
+- 它的就绪门 `M.eval_string('x=1+1;') === 0` **实测 877 ms 就通过**，而本站 boot 链到
+  **1354 ms** 才装完（`__octaveReady`）⇒ 它在 **477 ms 空窗**里探 `exist('omc_*')` ⇒ 必然
+  MISSING。换成本站统一的 `__octaveReady` 门重探同一页面 ⇒ **8/8 全绿**。
+- 这不是装配缺陷，是判据的时序缺陷。已投 `027-host` 请它改门或说明其定义。
+
+## §5.114 README 三件套产地收拢 + 结构重写（2026-10-29，用户点令）
+
+**用户原话**（两次）：
+1. 「IP 线和 32 线都指向 Master 线的 readme 三件套，IP 线的迁徙到 Master」
+2. 「重写这三份README吧，不仅内容完全不一样，还各自掺了互相的语言，还又臭又长，
+   还加载不出图片」；随后定基线：「README还是给所有人看的，但是那些浅显的东西就省去
+   大多，就是说，主要服务开发者。性能表要，维护成本人家可以通过卸钩子解决，
+   基线三我觉得就归进history」
+
+**实测的四个病**（本批要治的）：
+| 病 | 实测 |
+|---|---|
+| 加载不出图片 | **master 分支没有 `docs/charts/`**（三张图全断链），且 master 的 `.gitignore` 无 `!docs/charts/*` 白名单。而 master 是 GitHub 默认分支 ⇒ 访客看到的就是坏图 |
+| 又臭又长 | 英文 1419 行 / 119 KB；头部 21–67 KB 全是逐批记录；另有 **87 KB 的 AUTO:FILES 逐文件清单**（1124 个文件逐条写进 README） |
+| 掺互相的语言 | 英文 README 里 132 个汉字（我上一批加的声明是中文；AUTO 块生成器里也写了中文） |
+| 内容完全不一样 | 英文 10 节 / 中文 9 节 / 德文 9 节，且**各写各的批次史** —— 三份不是同一份的三个译本 |
+
+**修法**：
+1. **批次史归 HISTORY**（本节 §5.110–§5.114 就是这次归档）；
+2. **AUTO:FILES 从逐文件清单改成分类摘要**（`update-readme.py`：1124 行 → ~20 行，
+   自证新增 4/0，含"改回逐条清单即红"的反向断言）；
+3. **三语统一骨架、同事实、各用纯语言**（生成块内容也必须是英文）；
+4. **`docs/charts/` 补到 master** + 白名单放行；
+5. README 定位改为**主要服务开发者**（砍浅显内容），性能表保留。
+
+**★ 本批的自我审计**（`adversarial-essay-sparring`）：第一版英文 README 是我凭手感写的，
+审计抓到三处**编造**：
+- 把性能表的复跑产地写成台账键 `w64_rustsort_ab_*` —— **焊错了**，真产地是
+  `docs/charts/perf-data.json` + `HISTORY §5.96` + `w64-logs/bigcompare-final.log`；
+- 写「libm spike geomean 0.991」—— 台账真值是 **0.964**（`libm_spike_geomean`）；
+- 把原文的「~500 packages」含糊改成「the core `.m` library」—— 没查就改写口径。
+教训与前几例同族：**凭印象写数字 = 造第二产地**。

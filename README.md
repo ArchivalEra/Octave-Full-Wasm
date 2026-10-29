@@ -2,1418 +2,225 @@
 
 [English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
 
-GNU Octave 11.3.0 compiled to WebAssembly — a full numerical computing environment
-(interpreter, BLAS/LAPACK, plotting, ~500 packages) running **entirely in your browser**:
-pure client-side compute, **no server-side execution**.
+GNU Octave 11.3.0 compiled to WebAssembly, running entirely in the browser. Pure
+client-side compute: no server ever executes your code.
 
-> ⚠️ **README 三件套的唯一产地 = `master` 分支**（2026-10-29 用户点令：「IP 线和 32 线都
-> 指向 Master 线的 readme 三件套，IP 线的迁徙到 Master」）。本分支的 `README*.md` 是
-> **历史快照**，不再逐批更新 —— 以
-> [`master` 分支的 README](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.md)
-> 为准（三语：[中文](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.zh.md) /
-> [Deutsch](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.de.md)）。
-> 为什么这样定：三份文档曾分散在三条线上各自维护，结果 GitHub 默认分支（`master`）那一份
-> 最旧 ⇒ 访客看到的是 10-12 的状态。收拢到一个产地是唯一能防止再漂的做法。
+This README is written for people who will **build, extend or debug** this repository.
+It states what the thing is, which line to pick, how fast each line is, and where the
+authoritative facts live. Per-batch history is in [`HISTORY.md`](HISTORY.md); live status
+is [`STATE.md`](STATE.md).
 
-**Current production lane: `w64` (WebAssembly memory64 + threads + relaxed-FMA OpenBLAS
-+ mimalloc + a Rust `sort` kernel)**, shipped behind the same web UI as every other lane.
-All numerical results are IEEE 754 binary64 — audited explicitly (below).
-
-Toolchain: Emscripten **6.0.12** (all three lines rebuilt and shipped; the
-The three-line 6.0.12 rollout is written up in `build/113/NOTES-emsdk-upgrade.md` §8.8.
-See `build/113/NOTES-emsdk-upgrade.md` §8.9 for the per-line acceptance triage.
-
-All three lines are **pushed and in sync** (local = origin = mirror), each rebuilt and verified under Emscripten 6.0.12.
-
-Downstream integration with the browser clang+lld toolchain ([LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)) is audited in `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md`.
-
-Site asset bundles are audited per batch: regenerate `site/assets/m/*.js` from their `build/` sources and compare hashes (mount points come from `build/assets-meta.json`, *not* guessed).
-
-`pkg load <name>` now resolves **where a package comes from** before firing: site-shipped assets go through `OctaveAssets.load`, shelf (Forge catalog) packages through `OctaveAssets.install` (same-origin tarball + sha256 + in-engine gunzip/untar). **Shipped to 8761 and verified in-browser** (real tarball download + `csaps` bit-identical to host Octave). See `build/113/NOTES-forge-ondemand.md` §10 (T4) and the acceptance suite `test/browser/accept-catalog-load.mjs` (27/0, incl. 4 reverse assertions).
-
-Installing the Forge `datatypes` package from the shelf makes the **modern MATLAB types** work: `table([1;2;3],{'a';'b';'c'})` returns `class=table` (height 3, width 2), `string(42)` gives `"42"`. Unimplemented MATLAB names now report Octave's real message ("belongs to the 'datatypes' package … not installed") instead of a `makeinfo` subprocess error. See `build/113/REQUIREMENTS-store-and-matlab.md`. (`help sin`/`help ode45`/`lookfor` are unaffected; the three help suites now assert `__makeinfo__` resolves to the sanctioned webshims downgrade.)
-
-This engine already has everything a Simulink-style **block-diagram** backend needs — state-space/transfer-function blocks, `ode45`, **stiff `ode15s`**, LQR, `zpkdata` (probe `test/browser/probe-blockdiag-backend.mjs`, 6/0). So a block-diagram frontend can be built **on this engine** (a separate JS repo) rather than pulling in a second runtime like Pyodide. See `build/113/NOTES-plugin-survey.md`.
-
-That survey also covers what this engine **cannot** reach: MATLAB has three axes (language / Simulink / Simscape), and we cover the first two — **non-causal physical modelling (Simscape) is zero-covered here**, and **OpenModelica** is the realistic answer for it (its wasm path lives in the official repo, has a Rust rewrite, and ships a browser FMI simulator; AGPLv3/OSMC-PL). See the survey's §8.
-
-A follow-up **experiment confirmed Modelica runs in the browser**: a third-party OpenModelica→wasm port runs a full `parse → C → in-browser emcc+wasm-ld → simulate → plot` cycle on `BouncingBall.mo` (evidence: `build/113/evidence-omc-web-demo.png`; record: `build/113/NOTES-experiment-omc-wasm.md`). So "Modelica on the web" is proven, not speculative — though that third-party route's solver coverage is narrow (Euler/RK/dassl).
-
-The **official** route is a first-class CMake target in OpenModelica's own tree (`rust_omc.cmake`: `RUST_OMC_WASM_RUNTIME`, `wasm32-wasip1` cross-compile, `omc.wasm`, prebuilt-artifact hand-off) — i.e. the same shape as this repo's own pipeline (upstream submodule + pin + cross-compile + same-origin hosting). So it is built the way we build Octave, not by copying a third-party recipe (see §11).
-
-And it can share the **same page** — measured, not assumed: this engine solves **index-1 DAE** (`ode15i`, `Mass` matrix; an RC circuit gives V(5)=0.9931 vs theory 0.9933) but **not index-3** (a constrained pendulum fails), and index reduction is exactly what the OpenModelica compiler does. Both engines read/write `.mat`, which is what omc-web already dumps. So the pairing is the same split as Simscape↔MATLAB: OM models, Octave analyses, `.mat` in between (see §8 of the experiment record).
-
-That also settles the repo plan: a separate "block-diagram repo" is **not** needed — MSL `Blocks` already provides the causal block library and OMEdit already ships a Qt-for-WebAssembly graphical editor, so OpenModelica is a **peer upstream** (its AGPLv3/OSMC-PL licence matches), i.e. a 20th submodule alongside Octave, feeding a second engine lane on the same page. See §9.
-
-The MATLAB-semantics bridge also already exists at the interface level: OM's script API (`sendExpression`, used by its official `OMMatlab` MATLAB client over ZeroMQ) is exposed in the browser as **`omc_eval`** — same command protocol, different transport. So an Octave-side `omc_*` function family (build a script, call `omc_eval`, read back `.mat`) is all that is missing; OMMatlab itself cannot run in a browser (it needs a local process socket). See §10.
-
-**Symbolic computation — the route's premise is now measured, not assumed**: `sym` is 0 in this build, and Forge's `symbolic` package is pure `.m` (zero `.cc`) yet drives everything through Python/SymPy — while this build's wasm has **zero** `pyexec`/`pyeval`/`pycall` bytes and no shell. So the package cannot run as-is; the only route is a real Python runtime in the browser. Measured: **Pyodide + SymPy works** — `diff(sin(x),x)` returns exactly `cos(x)`, in a COI worker **and** without COOP/COEP (so the base lane has it too), plus a loud-failure reverse test (`test/browser/probe-pyodide-sympy.mjs`, 5/0). On the "precompile Python" question: static compilation to JS (Transcrypt-style) is **infeasible**, not merely slower (Transcrypt's own README: "No eval and exec of Python code"; SymPy, measured, has 340 `eval(` / 61 `exec(` call sites). Precompiled **bytecode** (`.pyc`) is feasible and currently not done at all; the measured A/B is **7.26×** on `import sympy` (2757 → 380 ms, compile calls 472 → 0), at 3.28× the wheel bytes. See `build/113/PLAN-matlab-gaps.md`.
-
-**Verdict on "is Pyodide a performance burden"** (three-way measurement, same bench, same SymPy 1.14.0, same ground types): native CPython (uv 3.14) = 1.00×; **browser Pyodide = 2.04×** (geometric mean over 15 CAS ops, per-op range 1.6–3.2×); native Octave + `symbolic` with a persistent IPC = 7.54× (the browser lane is actually **3.69× faster** than that, because `symbolic` marshals variables across a pipe on every op). Cold start = Pyodide load + sympy package ≈ 2.3 s (lazy-loadable, never on the boot path). So: yes it costs something, but **≈2× is not a magnitude change** — it does not alter the architecture choice. Rerun: `sh test/fixtures/sympy-perf/run-perf.sh`.
-
-**Follow-up: how much does precompiled `.pyc` actually buy?** (four-way breakdown — measuring only `import` would mislead): `import sympy` **2.71 s → 0.37 s (7.40×)**; per-op **first call** geometric mean **1.29×** (SymPy lazily imports submodules on first use); **steady state 0.99× — unchanged, as it must be** (the control showing precompilation is no panacea). The key finding is in the fourth number: a second `import sympy` in the same session still costs 2.73 s on source wheels — i.e. **the browser has no implicit bytecode cache** (native CPython writes `__pycache__`; site-packages is read-only here), so every cold start recompiles those 472 modules. `.pyc` wheels therefore buy one thing: **the per-session startup constant drops ~85%**, for 3.28× the bytes. `test/fixtures/sympy-perf/compare-pyc.py`.
-
-**Where symbolic computation lives in "extra content"**: the `symbolic` package is an ordinary shelf entry, but the Pyodide runtime (~27 MB) is **infrastructure, not a shelf entry** — same class as the clang toolchain: same-origin hosting, pinned by URL+sha256 in `upstream-lock.json`, a rebuildable provision artifact shared by several packages. And the shelf's current `kinds` field **lies about it**: measured, `detect_kinds('symbolic-3.2.2.tar.gz')` returns `['m']` — identical to the truly out-of-the-box `cgi` — while its `DESCRIPTION` says `SystemRequirements: python, sympy, mpmath`, so it installs and then cannot run. Hence a new shelf axis (`needs: ["pyodide"]`); scale measured: only **2 of 144** upstream packages need it (`symbolic`, `pythonic`). For the store-style UI that means this row must say "pulls ~27 MB runtime on demand". See `REQUIREMENTS-store-and-matlab.md` §A4b.
-
-**Framing (user directive 2026-10-14): "plugin market / store" is only one UI form of **extra content**, not the concept itself.** Whatever these things are called, they are ultimately just capability extensions of this web version of Octave — the concept-level term is **extra content** (authoritative definition in `CONTEXT.md`): site-shipped assets / shelf packages / **shared capability layers** (the clang toolchain, the Pyodide runtime) / build-time component plugins. The "shelf" is its metadata carrier and "on-demand pull" is its acquisition mechanism. => Use "extra content" when writing about capability; use "store" only when writing about the interface.
-
-**Unified "extra content" interface across the three repos (decided 2026-10-14)**: a seam between Octave-Full-Wasm, LLVM-wasm and the shelf repo — **the seam is on the record, not on the method**: one record kind (`form` = delivery form, `content` = what's inside — two axes named separately, ending today's `kind`/`kinds` overload) + capability layers (Pyodide/clang) as ordinary `form:"tree"` entries in the SAME dependency graph + a host return of **four-state values** (ok/failed/not-found/cannot-know, which cannot collapse into a boolean — the T4 lesson "unread is not absent" made a type-level invariant) + the port living in `build/extra-content/` (schema + pure-stdlib validator + golden/bad fixtures; producers self-certify without the host present). See `build/113/NOTES-extra-content-seam.md`.
-
-**Organisational decision (2026-10-14, user: you choose)**: backend integration of extra content **stays with this repo**; non-core content (package/runtime/toolchain metadata + provisioning recipes) belongs to the **extra-content repo's agent**; the **UI repo holds two contracts** — one with this repo (engine / `docs/embed-api.md` / the four-state `install` return) and one with the extra-content repo (content governance / the port). **Rejected: an integrator repo in the middle** (the integration knowledge lives here — lane/COI/promote/gates/the Qt-derived embed API; an integrator would either re-learn it or become a facade); **rejected: pure promote-the-standard** (a standard is an activity, not a structure — no owner means it drifts). Note **there is still exactly one same-origin runtime endpoint**: the two contracts are two conversation partners, not two origins (COEP blocks cross-origin fetch, measured; the content tables are assembled into this site). See `build/113/NOTES-extra-content-seam.md` §8.
-
-**Migration: shelf repo → extra-content repo (private, 2026-10-14)**: the former `Octave-Forge-Shelf` (public) is now **`Octave-Extra-Content` (private)** — this repo's `shelf/` submodule points at it. Beyond the original package archives it adds `recipes/` (provisioning recipes for the LLVM-wasm toolchain and the Pyodide/SymPy runtime: URL + sha256 + budgets) and `port/` (a copy of the content-list port spec). **This lands org decision ③ (no middleman)**: this repo is the core host / consuming adapter, the extra-content repo is the producing adapter, and the UI holds one contract with each. **Honest consequence of private**: this repo is public, so **outside clones cannot init `shelf/`** — a capability minus, not a build failure (gates tolerate a missing shelf with SKIP). The old public repo `Octave-Forge-Shelf` is now **archived** (read-only; deleting it needs a `delete_repo` scope the token lacks, so it awaits one interactive `gh auth refresh`), and the local clone was removed. See `build/113/NOTES-extra-content-seam.md` §8. (Pin log: the extra-content repo went 980e093 -> upgrade 7eee94d -> whitelist .gitignore af7508c; both later commits touch only docs/gitignore, so `packages/`+`tools/` stay byte-identical to 980e093 — zero functional difference, no site rebuild needed.) (Knowledge transfer 2026-10-14: sent three experience docs to the extra-content repo — `docs/{FORK-PIPELINE,FACT-SYSTEM,LANES-AND-MEMORY-MODEL}.md`, each trimmed to its producing-adapter role with replayable commands and real error strings — and the memory-model/lane doc to the OM repo, incl. how three lines still stand when the upstream has zero wasm64 support.) (Handover 2026-10-14: the extra-content repo is cloned to /mnt/hdd/zcode-projects/Octave-Extra-Content via `gh repo clone` (remote authoritative state), verified on the spot: tool selftest 14/0, 12 packages, all three docs present; README now lists a four-step "read first" order.) (Cross-agent mail channel + one drift fix, 2026-10-14: the extra-content repo got a `mail/` channel and a first letter asking about the role boundary — seam §8.1 says "content contract = extra-content repo ↔ UI" while its manager said he does not handle UI, so the two conflict and need a decision; also fixed a drift of our own, where PLAN/REQUIREMENTS said "add a `needs` axis" but seam §2 rules that capability layers are ordinary `form:"tree"` entries plus a dependency edge, with no new field — flipped and logged as retraction `R-015`.) (Cross-agent exchange closed 2026-10-14: the extra-content repo accepted "the repo is authoritative" and takes the content contract; its raised conflict over port origin was ruled **host-owned** (seam §4 and §8.1 had contradicted each other; §8.1 narrowed and logged as retraction R-016); also added a distinction of **ownership vs delivery** — the content repo is private while the UI repo is public, so UI cannot read it directly: content semantics belong to the content repo, delivery goes through the host site.) (Port landed 2026-10-14: seam §5 step 1 — `build/extra-content/` now holds the schema, validator, 3 golden + 5 bad fixtures and the `check-content-port` gate (41 gates green); end-to-end testing found the content repo's `--emit` omits `producer` and emits upstream absolute URLs (`--site` correctly red — that is the two-stage design), reported by letter.) (Seam §5 steps 2 and 3 done, 2026-10-14: (2) the catalog goes to schema 2 with `form`/`content` axes, `kinds` kept as a compat view, gate gains R5; (3) `install()` returns a **four-state Verdict** (ok/failed/not-found/cannot-know, not collapsible) plus `planOnly` with zero download. Acceptance: new suite `accept-install-verdict` **12/0** (four states + two key reverse assertions + zero-download audit); regression `accept-forge-ondemand` 15/0 and `accept-catalog-load` 27/0 unchanged, proving backward compatibility. Also fixed two latent real bugs: a **double-base** in `catalog()` (only visible with a non-empty base) and an undeclared variable in the planOnly branch.) (Three port rulings + collection-point definition confirmed, 2026-10-14: the content repo escalated three port gaps and the host (port origin) ruled — (1) capability layers keep `content: []` (no enum expansion, plus a reverse assertion); (2) a new optional `consumer` axis (`octave`/`omc`, defaulting to octave); (3) `pin` should use a type prefix (`release:`/`commit:`/`submodule:`). Also confirmed the "collection point" is the producing-side aggregation of records, **not** a runtime endpoint. Validator selftest 22/0.) (Cleanup 2026-10-14: removed the stale `.opencode/goal-state.md` (a 2026-09-20 harness leftover whose four checklist items are all done and which STATE/FACTS have superseded); `PLAN-*.md` and `.scratch/perf-max/` were checked and are **load-bearing** (the former referenced by CONTEXT/AGENTS/README, the latter completed and cited by live-code comments as provenance) and are kept. The rule: not "looks old, delete" but "does what it points at still exist".) (Seam §5 progress: steps 1-3 landed and recorded in STATE; **remaining: (4) capability layers into the graph (Pyodide provisioning + a `form:"tree"` entry so `install('symbolic')` works) and (5) toolchain convergence — not done**.) (**★★ Symbolic computation now really works, 2026-10-15**: the `symbolic` package is wired to browser Pyodide with **zero patches** — its `python_ipc_system` backend calls the global name `system` (there is no `private/system.m` in the package), so the call lands on this repo's webshim, which routes it to a page-side bridge that calls Pyodide synchronously. `diff(sin(x),x)` returns **`cos(x)`** and `double(sym(3)/2)` returns `1.5`; acceptance `accept-symbolic-seam` **9/0** (incl. two reverse assertions). Decisive probe `probe-pyodide-sync` **4/0**: wasm C calling the runtime synchronously, **no JSPI/Asyncify/Atomics needed**. Four host-side changes, **zero relink/recompile**.) (**Shipped to 8761, 2026-10-15**: `accept-symbolic-seam` is 9/0 on the **production site**; concurrent sweep re-verified 51 suites / 1195 PASS / 0 FAIL. ⇒ the browser Octave can now really do symbolic computation.) (Ledger updated 2026-10-15: 168 facts; this batch adds 4 keys (symbolic seam 9/0, sync probe 4/0, cold start 2177 ms); the全量 accept_pass/accept_suites moved with the new sweep (1195 / 51).) (Seam §5 steps 4-5 done, 2026-10-15: (4) **capability layers into the graph** — `provision-pyodide.sh` provisions three assets (PyPI official bytes + rewriting the hosted lock's shas), the assembler emits a `form:"tree"` entry merged into the **same packs table**, and `symbolic` points at it via a `deps` edge (per §2: **no `needs` field**); new suite `accept-capability-layer` **12/0** (incl. the load-order topology [pyodide, symbolic] and two reverse assertions). (5) **toolchain table convergence** — the assembler's `--upstream` reads a producer table and **reuses the origin's validator**: compliant tables merge (13 entries measured), non-compliant ones are **refused and named** (LLVM's real table has 19 problems ⇒ the site stays uncontaminated). Remaining: LLVM fixes its own table, which is the content repo's promotion job.) (Port rulings round 2, 2026-10-15: the extra-content repo's `mail/009` raised three confirmations and one independent discovery; the host (port origin) ruled them — (1) `license` stays a **free string/object**, not an SPDX enum (real artifacts are per-file mixed: Apache-2.0 WITH LLVM-exception / MIT OR NCSA / AGPL; an enum would force producers to lie or split entries) — the validator checks **type only** and says plainly there is **no machine check for "is it written correctly"**; (2) "ordinary entry" for capability layers does **not** cap the count — LLVM's clang toolchain ships **13** entries (per-file licences + per-file sha make two sysroot variants' reuse visible); "ordinary" means *not special*, not *physically one entry*; (3) `--upstream` was re-run against LLVM's **fixed** table (sha `8bbafa5f…`, `release/content-list.json` ≡ `release/out/` byte-identical, both producer and `--site` modes `ok`, 13 entries; `v0.1.2` is now confirmed published via `gh release list`) and merged cleanly. Attachment ruling: `size` semantics are decided **by `form`** — single-file = the file's bytes; `form:"tree"` = whole-tree byte budget (present pyodide: 22,013,349 = the directory, while `url` anchors the 9,598,218 main wasm — **not the same object, both intentional**); `size` is not part of fail-closed. Merging LLVM exposed **two debts in the host's own gate** (fixed): the site gate ran shelf rules (R2/R4) against non-shelf entries ⇒ 26 false positives ⇒ now **split by `url` prefix** (shelf packages → R2–R5; capability layers / producer tables → **R7**); and old R6 required a `consumer` on capability layers, contradicting ruling (2)'s "optional, defaults octave" ⇒ **flipped**. New `--upstream-bytes` stages a producer table's bytes into the site with per-file sha256 (merge-only would leave the catalog pointing at 404s, caught by R7b); end-to-end proof on an isolated temp site: merge LLVM's real table + stage ⇒ site gate **`ok`** (catalog 26 entries). Validator selftest 26/0, port gate 6/0, site gate 20/0, assembler 19/0.)
-
-frozen `wasm32-final` archive line rebuilt but not promoted).
-
-All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
-verified in-browser: the frozen `wasm32-final` archive line included.
+All three language versions are kept in sync; a pre-push gate rejects a push that updates
+only one of them.
 
 ---
 
-## Performance (measured 2026-10-07, medians of 5 native / 3 wasm interleaved runs)
+## The three lines
 
-![five-way performance comparison](docs/charts/perf-5way.svg)
+One interpreter, three independently maintained product lines. The split is decided by
+**user reachability and licensing — never by performance**.
 
-| workload (s) | native ref-BLAS | native OpenBLAS ×24 | wasm32-final | wasm64-NEXT | **IllegalPerformance** |
+| Branch | Target | Requirement | Free |
+|---|---|---|---|
+| **`wasm32-final`** | wasm32, single-threaded | none — **the only line that runs without COI** | yes |
+| **`master`** | wasm64 + threads | COI headers + multithreading | yes |
+| **`IllegalPerformance`** | wasm64 + threads + Rust kernels | COI headers | no — patches the toolchain away from upstream support |
+
+Serving `master` without `crossOriginIsolated` silently drops the page to the wasm32 lane.
+There is no error, just a different lane. A site displays exactly two cells: `base`
+(wasm32) and `w64` (wasm64). Any other cell name is a dead lane and a gate rejects it.
+
+## Performance
+
+Wall time in seconds, lower is better. Native reference is `octave-cli` 11.3.0 on this
+machine (median of 5 warm runs); wasm figures are medians of 3 interleaved runs.
+Measured 2026-10-07.
+
+Raw data: [`docs/charts/perf-data.json`](docs/charts/perf-data.json).
+Narrative and log: `HISTORY.md` §5.96, `w64-logs/bigcompare-final.log`.
+
+![Five-way performance comparison](docs/charts/perf-5way.svg)
+
+| workload | native ref-BLAS | native OpenBLAS ×24 | wasm32-final | wasm64 | IllegalPerformance |
 |---|---|---|---|---|---|
-| dot 1e7 | 0.0082 | **0.0048** | 0.0080 | 0.0100 | 0.0110 |
-| matmul 500 | 0.0257 | **0.0029** | 0.0220 | 0.0040 | 0.0050 |
-| matmul 1000 | 0.1971 | **0.0089** | 0.1600 | 0.0230 | 0.0240 |
-| lu 800 | 0.0415 | **0.0147** | 0.0340 | 0.0140 | 0.0150 |
-| lu 1500 | 0.2598 | **0.0636** | 0.2180 | 0.0620 | 0.0720 |
-| svd 400 | 0.1650 | 0.2243 | 0.1740 | **0.1550** | 0.1870 |
-| sum 1e7 | 0.0086 | **0.0076** | 0.0080 | 0.0080 | 0.0090 |
-| **sort 2e6** | 0.2111 | 0.2020 | 0.2280 | 0.2400 | **0.1110** |
-| loop 1e6 | **0.4934** | 0.5226 | 0.6220 | 0.5780 | 0.5890 |
+| dot 1e7 | 0.0082 | 0.0048 | 0.0080 | 0.0100 | 0.0110 |
+| matmul 500 | 0.0257 | 0.0029 | 0.0220 | 0.0040 | 0.0050 |
+| matmul 1000 | 0.1971 | 0.0089 | 0.1600 | 0.0230 | 0.0240 |
+| lu 800 | 0.0415 | 0.0147 | 0.0340 | 0.0140 | 0.0150 |
+| lu 1500 | 0.2598 | 0.0636 | 0.2180 | 0.0620 | 0.0720 |
+| svd 400 | 0.1650 | 0.2243 | 0.1740 | 0.1550 | 0.1870 |
+| sum 1e7 | 0.0086 | 0.0076 | 0.0080 | 0.0080 | 0.0090 |
+| sort 2e6 | 0.2111 | 0.2020 | 0.2280 | 0.2400 | 0.1110 |
+| loop 1e6 | 0.4934 | 0.5226 | 0.6220 | 0.5780 | 0.5890 |
 
-![IllegalPerformance speedup vs each baseline](docs/charts/perf-speedup-IP.svg)
+Geometric mean against the native reference: wasm32-final 1.05×, wasm64 1.99×,
+IllegalPerformance 1.96×.
 
-**IllegalPerformance in ratios** (baseline time ÷ IP time; geometric mean over all 9):
+![IllegalPerformance speedup versus each baseline](docs/charts/perf-speedup-IP.svg)
 
-- **1.96× vs native Octave** (default reference BLAS; BLAS-only axes **3.16×**)
-- **1.86× vs wasm32-final** (the frozen wasm32 line; matmul 1000 alone **6.7×**)
-- **0.99× vs wasm64-NEXT** — parity everywhere except its defining win, **sort 2.16×**
-- **0.80× vs native OpenBLAS ×24** — the native multithreaded ceiling is still 1.25×
-  ahead on pure BLAS, but IllegalPerformance **wins sort (1.82×) and svd (1.20×)**
+The wasm lines beat single-threaded native Octave on BLAS-heavy work because they ship an
+OpenBLAS built with relaxed-SIMD FMA and run it multi-threaded. They do not beat a
+hand-tuned 24-thread native OpenBLAS on `matmul` (0.0230 s against 0.0089 s).
+Memory-bandwidth-bound workloads (`dot`, `sum`) land on the same figure on every line.
 
-## IEEE 754 production evaluation
+End-to-end Rust sort A/B (a different measurement, on the product artifact rather than the
+kernel): `w64_rustsort_ab_asc_ms` 165 ms, `w64_rustsort_ab_asc_ratio` 0.506 ⇒ 2.0×.
+Re-run: `bash build/113/sort-ab.sh`.
 
-A 24-field battery (`test/fixtures/ieee754/battery.m`) was run on **6 configurations**
-(4 wasm lanes + native ref-BLAS + native OpenBLAS ×24):
+## Correctness
 
-- **23/24 fields bit-identical everywhere**: round-half-to-even, ±0 bit patterns,
-  canonical NaN, Inf/division, subnormals, eps boundaries, seeded `rand` (MT19937
-  identical native↔wasm), `sin`/`pow`/division (musl vs glibc sampled bit-identical).
-- The only difference = **dgemm summation order vs a step-by-step unfused reference**
-  (max 6.6 ulp) — present in **native OpenBLAS too** (3522 of 10000 elements, 4.99e-16).
-  Every add/multiply is correctly rounded; only the order differs → IEEE-conformant.
-- `relaxed_madd` (81 sites, OpenBLAS rsimd kernels): WebAssembly permits fused *or*
-  unfused evaluation — **both are IEEE 754-conformant results**. Disclosure: w64 BLAS
-  results may vary in the last ulp **across browser engines** (same class as native
-  OpenBLAS across CPU microarchitectures). Element-wise math is unaffected (0 divergence).
+Results are compared against native Octave on identical inputs, bit for bit rather than
+approximately.
 
-**Verdict: wasm32-final and the IllegalPerformance line are cleared for production.**
-Repro: `test/fixtures/ieee754/battery.m`, logs in `w64-logs/ieee-*.log`.
+| Area | Verdict |
+|---|---|
+| Elementary math (`libm`) | bit-identical to musl for `sin`, `exp`, `log`, `pow` |
+| Sort (Rust kernel) | bit-identical over 22 domains including NaN and duplicate-heavy inputs |
+| Arithmetic, `sum`, `lu`, `svd`, … | bit-identical |
+| BLAS/LAPACK | same sources and flags; relaxed-SIMD FMA changes summation order, so this axis is compared against a documented tolerance envelope |
 
-## What shipped on the IllegalPerformance line
+A `libm` replacement spike was rejected on measurement: geomean 0.964 per call
+(`libm_spike_geomean`), against a 1.5× adoption threshold. Re-run:
+`sh build/113/bench-libm-spike.sh 8`.
 
-- **rust-sort** — a Rust (driftsort) kernel for `sort`, wired as a *source seam* with a
-  weak symbol + link-time knob (`RUST_SORT`); removal = relink without the library,
-  zero tree-object change. Differential gate: 22 domains bit-identical + 4/4 mutants
-  caught; **sort 2e6 = 2.16× vs wasm64-NEXT, 1.82× vs native OpenBLAS**.
-- **G6 latency instrument** — batched quit-check latency bound for any block-level
-  kernel (candidate ④ xpow-driver measured ≤2.1% and **rejected** by it).
-- Closure audit: libm (IEEE-locked), fill/fft (bandwidth-bound), xpow driver (≤2.1%) —
-  **no known headroom left** (reproducers in `w64-logs/`).
+The Rust sort kernel sits behind two gates. A differential gate compares 22 input domains
+bit for bit, and a mutation self-test injects deliberate errors into the kernel and
+requires the differential gate to catch them (4/4 caught). A kernel is not adopted unless
+both pass. Re-run: `bash test/fixtures/rustsort-spike/run-spike.sh`.
 
 ## Architecture
 
-Four deployment **lanes** of the same interpreter, auto-picked per browser capability
-(`lanes.js`): `base` (wasm32 single-thread — the whole wasm32 line is single-threaded) →
-`w64` (memory64 + threads + FMA + mimalloc + rust-sort) / `w64-base` (memory64 fallback cell).
-★ Three-line ruling 2026-10-17: the `threads` lane (wasm32+atomics) was a malformed lane and has been deleted — experiment slots are bound to the three branches (wasm32-final / master / IllegalPerformance); sites are display-only. Serving without
-COI headers silently drops you to `base` — see the [deployment ticket](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
+1. **The interpreter.** Upstream Octave forked at `upstream/octave` (branch `wasm/11.3.0`),
+   compiled with Emscripten 6.0.12. Upstream releases land through merge → rebuild →
+   lane SOP; `witness-upstream-pin.py` asserts the container tree matches the fork pin on
+   every commit.
 
-Swappable components (BLAS, allocator, Rust kernels) are **plugins with a contract**:
-mode-table knob → declared label → artifact probe → two-way gate (`plugin-check.py`) →
-fact-ledger entry. Octave updates land via the **fork/submodule pipeline**:
-`upstream/octave` (branch `wasm/11.3.0`) is our fork — merge upstream, rebuild, run the
-lane SOP (`build/113/NOTES-upstream.md`); the pin/witness gates (`witness-upstream-pin.py`)
-assert the container tree == fork pin on every commit.
+2. **The lanes.** The same wasm built per target (wasm32, wasm64+threads) and per component
+   set (BLAS flavour, allocator, Rust kernels). Lane knowledge is data:
+   [`build/lanes.json`](build/lanes.json) is the single source, and
+   `check-lanes-single-source.py` reconciles it against four consumers — the page selector,
+   the site generator, the purity gate and the plugin table.
 
-## Run it
+3. **The asset layer.** `.oct` modules, `.m` bundles and data files are fetched on demand
+   and mounted into Octave's in-memory filesystem with per-file sha256 verification.
+   Packages come from the shelf (prebuilt tarballs) or are compiled in-browser by a bundled
+   clang/lld toolchain. Note that `addpath` reads MEMFS, not the site's HTTP tree — anything
+   that must be visible to Octave has to be written into MEMFS first.
+
+4. **The fact system.** Every claim about the build is a ledger entry carrying its re-run
+   command. [`build/FACTS.json`](build/FACTS.json) holds the numbers, `STATE.md` the live
+   status, `HISTORY.md` the append-only record, and 64 gates (14 platform, 50
+   repository-specific) check that documents, artifacts and ledger agree.
+
+Swappable components are plugins with a contract rather than build flags: mode-table knob →
+declared label in the artifact → artifact probe → two-way gate → ledger entry.
+
+## Build and run
 
 ```sh
+# serve a built site (COI headers are mandatory for the w64 lane)
 python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
-# open http://127.0.0.1:8761/   (COI headers are mandatory — see issue #2)
 ```
 
-This repository ships **no CI auto-deploy** — deployment is manual, per [DEPLOY.md](DEPLOY.md).
-Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
-[issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2). UI integration:
-[Embed API](docs/embed-api.md) + [issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1).
+A plain `python3 -m http.server` cannot send COI headers, and the page then silently serves
+the wasm32 lane instead.
+
+Building from scratch needs the `o113` container (Emscripten 6.0.12 plus the Octave fork)
+and the recipes in [`build/CLIBS.md`](build/CLIBS.md). Relinking an existing tree goes
+through one entry point — `bash build/113/relink.sh link product` — which owns every
+environment variable for a mode; do not set them by hand. `bash build/113/relink.sh explain
+product` prints the recipe.
+
+Deployment is manual; there is no CI auto-deploy. See [`DEPLOY.md`](DEPLOY.md). Embedding
+the interpreter in your own page: [`docs/embed-api.md`](docs/embed-api.md).
 
 ## Repository map
 
-- `STATE.md` — live status; `build/FACTS.json` — measured-numbers ledger (each key carries a re-run command)
-- `zreflect/` — the fact system (**Einfacht refactor adopted 2026-10-09**: gate platform / discovered gate registry / knob registry / world gate); `zreflect/measure_octave.py` is this repo's data layer, `reflect-hooks/Einfacht.env` the knob carrier
-- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.107)
-- `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
-- **Octave-Forge on-demand pull** (v1 working 2026-10-09, **shipped 2026-10-10** to 8761/8768/repo `site/`): `OctaveAssets.catalog()` reads a site shelf and `OctaveAssets.install(name)` fetches+verifies+installs a package (with its dependency closure) only when asked — **zero bytes for packages you never use**. Shelf = the `shelf/` submodule (metadata only, one file per package); site catalogue = `build/forge-catalog.py` (gate: `build/113/check-forge-catalog.py`); design = `build/113/NOTES-forge-ondemand.md`; acceptance = `test/browser/accept-forge-ondemand.mjs` (v1 = pure `.m` packages; `.oct` accelerators = v2)
-
-**`OctaveAssets.browse()` — the market read-side front door (shipped 2026-10-17)**: one async call returns the full `Entry[]` — three attributes (`fromSource`/`compatible`/`installed`), per-candidate `versions[]` (staged carry derived axes; withheld carry only a cause — nothing invented), package-level `description`/`links` (passed through verbatim from the content repo's archives), plus a `state`/`why` aggregation. `statusOf()` shares the same single origin, so the two never disagree. Acceptance: `test/browser/accept-market-browse.mjs` (17/0, incl. three reverse assertions). Errors: all 14 codes classify in `install()`'s verdict (`_byCode` full table).
-- `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel; latest all-green sweep = `accept_suites` / `accept_pass` in the ledger)
-- graphics (engine-authoritative since 2026-10-09): `bridge/octave-core.js` protects the core `m/plot` tree from host shadow stubs (snapshot + restore + delete-created), `p5canvas.js`/`queue.js` resolve the module via `window.__octaveHosts` so figures reach the DOM in embed mode; acceptance = `accept-gfx-isolation` + `accept-gfx-render`
-- worker mode (`?worker=1`, fixed 2026-10-10): each eval never returned (the worker branch still called `octaveUiAppend` after the page adapter was extracted) — now the output flush can't wedge the pending queue; acceptance = `accept-worker`
-- `.scratch/open-questions/issues/` — local ticket tracker
-- `docs/agents/upstream-issues.md` — issues filed back upstream to [Einfacht](https://github.com/ArchivalEra/Einfacht) (archived copies); `docs/agents/ui-issue-interface-change.md` — the interface/behaviour notice filed to the UI repo
-
-**Package precompilation batch (2026-10-18)**: all 28 Forge `.oct` side modules that were still compiled with Octave 7.2 headers are rebuilt against 11.3.0 — **two flavors only**, per the three-line model: `wasm32` (no `-pthread`, serves the `base` cell) and `wasm64` (`-pthread -sMEMORY64=1`, serves `w64`). The tuning knobs were measured, not guessed: `-O3` costs **+11% bytes** for noise-level speed, **LTO breaks dlopen outright** (it strips symbols only dlopen needs — the §5.78 precedent reproduced on both flavors), and `wasm-opt -O3` post-processing yields -0.6% with no speed gain ⇒ **the shipped recipe is `-O2`**, because on the side-module layer there is no knob headroom left (the real levers are main-module/BLAS, already done). Verified in-browser: `accept-113-pkgoct` **27/0 on both flavors**; full `PROBES=1` sweep green. See `build/113/NOTES-pkg-precompile.md`.
-
-**Release model defined (2026-10-18)**: a package is released as an **artifact** = `(name, version, arch)` — not as a pile of files, and **not as a second version number**: the version is the upstream fact (`optim 1.6.3`) while the architecture is a build-matrix index key, so there is no `optim-1.6.3-wasm32` pseudo-version. The shipped catalog now carries `artifacts[]` (per-architecture, per-file sha256, derived `arch`, plus `octave`/`toolchain`/`recipe` provenance) — currently **5 packages × 2 architectures = 10 release units**. Gate R13 reconciles every artifact file against the site bytes (missing, extra, or sha drift ⇒ red). See `build/113/NOTES-release-model.md`.
-
-**kind/role line closed (2026-10-20, mail/055)**: the content repo's acceptance letter confirms 15/15 entries self-describe — 13 packages, llvm-wasm (toolchain), pyodide (language-bridge, the Q1 vocabulary's third value in first use) — with kind semantics correct (engine carries it, bridges default). The line closed in three days from ticket to done (047 ticket → 050 schema → 052 engine entry → 053 missed label → 054 fix), the acceptance ledger reading: schema origin + semantic copy + table data + loader judge all aligned, zero hard-coded name checks. No outstanding items on either side; the UI reads the completed table whenever it wires up.
-
-**2026-10-29 (later) — the E-line bridge is delivered.** OpenModelica answered with the delivery shape and corrected one of my assumptions: copying the eleven `.m` files into a site directory changes nothing, because `addpath` reads **MEMFS** and the site's HTTP path is not in it (I verified independently: after writing into MEMFS, `exist` flips from 0 to 2). So the shape is two-part — site directory is the byte source, and the page must write those bytes into MEMFS before `addpath`. That is now implemented: `provision-omc-bridge.sh` projects the OpenModelica manifest (self-test 4/0), `octave-omc-bridge.js` runs the four steps in order with three honest failure states, and the MEMFS stage is spliced into the boot chain *before* `st.ready` because it costs 39 ms while the 74 MB engine boot stays in the background (page boot remains 1.3 s). The engine turned out to be an ESM wasm-bindgen module, not an Emscripten global factory — my first guess at three global names matched none of them. **I also found a defect in OpenModelica's own product suite**: its readiness gate (`eval_string('x=1+1')`) passes at 877 ms while this site's boot chain finishes at 1354 ms, so it probes `exist()` inside a 477 ms window when MEMFS is still empty and reports three false failures. Re-probing the same page with `__octaveReady` yields 8/8 green. Issue 70 is closed: zero-injection assembly now makes all three `omc_*` functions visible, with a reverse assertion (removing `/bridge` turns them MISSING) proving the green comes from assembly. Both sites: 6/0 and 1253 PASS / 0 FAIL overall.
-
-**2026-10-29 — E-line MATLAB bridge handed back to its owner.** The content repo ruled that the `omc_*` MATLAB-semantics bridge belongs to OpenModelica (interface and semantics), to us (site assembly), and to the UI (consumption) — explicitly *not* a content contract, so those eleven `.m` files stay out of the forge catalog. We re-ran its four claims (all true) and found two things it did not know: `omc_bridge.js` has **zero callers** anywhere in the OM repo or its product site — its acceptance suite implements the host inline instead — and the three load-bearing semantics (`cd` before simulating, cross-VFS byte transport for `loadFile`, and moving the result `.mat` back into the Octave MEMFS) live only in that test file. So the gap is deeper than "files not copied": the bridge was never wired anywhere. We sent letter 024 to the OM inbox with the re-run evidence and three delivery-shape questions, and opened issue 70 as `needs-info`: we deliberately do not pick a shape and start copying, because that would set an interface contract on the owner's behalf. The first deliverable once OM answers is an end-to-end suite with **zero injection** — proving `omc_simulate('BouncingBall')` works from site assembly alone.
-
-**2026-10-28 — environment restored, two tickets closed, one instrument repaired.** With the build container restarted (it had been killed by a shutdown two days earlier), `doctor` reports fully green and two gates that previously skipped now actually run: the upstream-pin witness (2 pins identical) and the plugin registry check (declared artifacts match per lane). Issue 69 is closed — both settlement criteria pass, and the OpenModelica JS ledger key it was waiting on had in fact already been published, so the projection carries both download files rather than just bg.wasm. Issue 63 is closed with every instrument in its coverage matrix re-run today and tabulated, and it turned up a real rot: `rustsort-spike` no longer linked (`operator new[]` undefined, because `emcc` was compiling C++ without the C++ runtime) — adding `-sDEFAULT_TO_CXX` to both link lines restored G2 (22 domains, zero failures), G2b (4/4 mutations caught) and G3 (ratio 0.241). That rig is the sole evidence behind cancelling the grilling process, so it silently breaking would have made the evidence hollow.
-
-**2026-10-27 — issue 69 landed, issue 67 resolved, and a 22-assertion regression root-caused.**
-`form:"tree"` entries now carry an optional `files[]` map (`filename → {bytes, sha256}`): the
-schema pins all five bindings (tree-only; `form:"file"` carrying `files` is an error; the shas'
-single origin is the producer ledger and assembly only *projects* them), the validator grew six
-positive/negative self-test cases (57→63), `forge-catalog.py` projects the omc closure from the
-OpenModelica ledger (`omc_web_wasm_sha` / `omc_web_js_sha`, so both download files rather than
-just bg.wasm) cross-checked against the site bytes, and gate **R15** reconciles every declared
-file against the site (43/0). `browse()` exposes it as `detail.files`; `accept-market-browse`
-went 17→21/0 including the deliberate point that the closure sum (74,635,990) differs from
-`size` (74,735,455), which is the directory total by design. Issue 67 is resolved: `.github/`
-is now tracked (three workflows), `gates.yml` was reconciled item-by-item against
-`registry --run commit`, and `readme-sync.yml` runs the same `--changed` criterion as pre-push.
-
-The 22 red assertions that appeared a week earlier came from one producer defect: the audio
-batch's `sync-js` fix rewrote entries and reset hand-maintained `deps`/`aliases` to defaults,
-dropping `webgraphics.deps = ["__init_web__"]` (so `graphics_toolkit("web")` could not find its
-module) and `control-oct`'s 49 `__sl_*__` aliases (so `c2d`/`step`/`norm` all failed). Nobody
-saw it because only a single-suite probe ran after that batch, not the full sweep the doctrine
-requires. The fix moves `deps`/`addpath`/`alias_dir` provenance into `meta.json` (with a new
-5/0 self-test), restores both lost values, and separates the audio stub aliases into
-`m/audio-stub/` appended to the *end* of the path so real implementations win while stubs still
-backstop. Both sites now run the full suite at **1253 PASS / 0 FAIL**.
-
-Issue 63's G5 (Rust toolchain invariant) also landed: `build/113/check-rust-toolchain.py` checks four invariants (a date-pinned channel — floating names pin nothing; `staticlib` in `crate-type`, since a cdylib would defeat E4's weak-symbol null check; `panic = "abort"`, as wasm has no unwind; and each lane's exact target, wasm64 necessarily via `build-std` + `wasm64-unknown-unknown`). Self-test 6/0, ledger key `rust_patch_toolchain_ok` replayed verbatim; hanging it on the ledger immediately caught a real defect — the command string carried a parenthetical note and returned rc=2, which is exactly the bare-value contract.
-
-**Pre-compaction snapshot (2026-10-25)**: the inbox is empty after an unattended sweep of nine letters (044–061), each with a landed artifact — the audio playback chain (three-layer fix, both sites 50/0), the `kind`/`role` schema extension (15/15 entries now self-describe), the llvm-wasm install-accident rejection split, the pyodide `language-bridge` label, the omc engine entry (second `kind:"engine"`), gate R14 enforcing the MSL sibling-directory invariant, MSL merged (17 packs), and the `consumer:["omc"]` ruling. The newest letter is a schema ticket now recorded as issue 69: an optional `files[]` key for `form:"tree"` entries carrying the download closure (`{bytes, sha256}` per file), because an engine's per-file shas are otherwise unreachable at runtime in the browser — the producer's ledger stays the single origin and assembly only projects it. Remaining work, in order of readiness: issue 69 (the bg.wasm projection can start now, the full shape waits on OM adding a JS ledger key), issue 67 (CI never tracked), issue 63 (rustpatch fact coverage), multi-TU compilation, plus three downstream items that belong to other repos.
-
-**MSL merged + omc consumer ruling (2026-10-25, mail/059)**: the catalog now carries 17 packs. MSL arrives from OM as `modelica-standard-library` (OM won the naming argument — a generic abbreviation is unsearchable; the precedent is that names carry upstream identity), `form:"file"` (one zip unpacked at runtime), `role:"package"`, `consumer:["omc"]`, and it lands in the **sibling** `assets/msl/` directory that gate R14 guards — HTTP 200 on all three sites, 19,482,938 bytes matching the declared size byte for byte. Two defects surfaced while merging. First, a real assembler bug: `stage_upstream_bytes` always placed bytes under `assets/forge/` while the producer's table points at `assets/msl/…` — two vocabularies for one delivery path, exactly the family that produced a 404 in the llvm-wasm merge. Fixed: a site-relative `url` **is** the delivery path, so bytes now land where the url says; only absolute or query-bearing re-fetch URLs fall back to `assets/forge/` (the fake-directory-tree precedent kept, plus a new reverse assertion). Second, `omc`'s `consumer` changed to `["omc"]` per the ruling that `consumer` names the **engine lane** a entry serves — the omc engine is that lane's runtime, same stack as MSL, while llvm-wasm and pyodide remain on the octave lane. Browse Entries now pass `consumer`/`kind`/`role` through (they previously dropped consumer, so neither the UI nor the B3c assertion could tell an external entry apart). Nine regression suites green, gates 49/49, parity consistent.
-
-**OMC engine entry + MSL sibling-directory invariant (2026-10-25, mail/056/057)**: the second `kind:"engine"` entry landed. Byte channel verified independently: the OM deployment disk's four files, main artifact sha matching OM's ledger `omc_web_wasm_sha` byte-for-byte (the new `provision-omc.sh` re-checks the bytes rather than trusting the ledger, self-test 4/0). Entry: `kind:"engine"` + `role:"toolchain"` + `arch:"omc"` (lane value) + `size` = whole directory (74,735,455 B); `version:"unversioned"` because OM has not supplied a version string and we do not invent one. The toolchain rejection wording became role-generic — the old text hard-coded "clang/lld/sysroot" and would have lied for omc. For MSL: the content repo's ruling is `form:"file"` (a single zip unpacked at runtime) and a **sibling-directory** hard constraint — MSL must never land inside `omc/`, or the engine's size budget inflates from 74.7 MB to 94 MB+ (dishonest budget = same family as dishonest `content`). That constraint is now machine-enforced as gate **R14**: a tree entry's `size` must equal the measured byte sum of its url's directory; reverse-tested by dropping an MSL zip into `omc/`, which goes red immediately and names the constraint. Self-test 38→40/0, gates 48→49, seven regression suites zero-red, three sites rebaked.
-
-**pyodide role:'language-bridge' (2026-10-20, mail/053 catch)**: the content repo's acceptance letter caught the one mislabeled entry — pyodide carried neither role nor kind while every other entry self-describes. It now carries `role:"language-bridge"` (the Q1 vocabulary's third value in first use; kind stays absent — it's not an engine and compiles nothing). The "zero hard-coded name checks" discipline is now complete across all 15 entries: 13 shelf packages say `package`, llvm-wasm says `toolchain`, pyodide says `language-bridge`. Verified: three sites rebaked with the gate green ×3, five pyodide-path suites zero-red (symbolic-seam 9/0 through content-attributes 14/0 — the install('symbolic') → pyodide-then-symbolic closure untouched), gates 48/48, parity consistent.
-
-**Engine entry in the catalog (2026-10-20, mail/051 fulfillment)**: the content repo finished its side (role-emitting commit `7dfe77e`), so the shelf pin bumped and the assembler now emits `role` on every pack entry (13/13 `role:"package"`, explicit self-description matching the producer's emit). The llvm-wasm entry itself is upgraded to **`kind:"engine"` + `role:"toolchain"`** with `arch` = the **lane value** (`w64` — an index key, not a version axis; read from the site's deployed lanes.js, never hand-copied). Three judge-sites adjusted in lockstep: the port validator's engine lane-vocabulary gained the site-lane names (base/w64), the R10 byte-reconciliation gate exempts engine entries (clang.wasm living outside assets/oct*/ is design, not drift), and the loader's hard arch gate exempts `kind:'engine'` — measured catch: `w64` vs `wasm64` are different vocabularies, so a literal compare false-positives; the "one-line-one-arch" ruling governs `.oct`s that dlopen into the host, while the engine is the compile-worker's input, outside that semantics. `install('llvm-wasm')` now rejects via `NOT_INSTALLABLE` straight off the `role` field (the name-based fallback retired). Nine regression suites green (arch-boundary A2 flipped: an engine's lane-valued arch is legal luggage), gates 48/48, three sites rebaked, parity consistent.
-
-**kind/role schema + llvm-wasm install accident fixed (2026-10-20, mail/047/048/049)**: three letters, three closures. (1) The contract accident where clicking install on llvm-wasm in the package manager said "unknown capability layer" — misleading, it's not unknown, it's *not install's job*: `installLayer` rejection split into `NOT_INSTALLABLE` (toolchain → "由下载管理（DownloadStore）+ 编译 Worker 使用——不走装载") reading the new `role` field with a name-based fallback until tables upgrade, and `LAYER_NOT_IMPLEMENTED` for genuinely future language bridges — per ruling B (execution-domain mismatch). (2) The mail/047 + 049-Q1 schema tickets: entry gains `kind` (src/pre/engine; engine entries carry `arch` = lane value — arch is an index key, not a version axis) and `role` (package default / toolchain / language-bridge — form is shape, not role, the accident's root cause); per-file shas stay product-self-attested, validator self-test 52→57/0; `consumer` annotated as array + containment semantics. (3) The mail/048 erratum: mail/030's claim "keys always present so UI never checks" didn't match the live table (tree entries omit description/links entirely) — per ruling C-2 the *claim* changed, not the assembler: capability layers aren't packages, "key absent ⇒ no description" ≡ "key empty". Six install-related suites green, gates 48/48.
-
-**Audio playback chain fixed (2026-10-19, from content-repo mail/045 fishing expedition)**: `sound([0.1 0.2], 8000)` used to fail with `'__player_audioplayer__' undefined` — the whole playback chain was dead while `.m` faces kept `which`-style assertions falsely green. Three-layer fix: (1) the missing `audiodevinfo.oct` (all `__player_*`/`__recorder_*` live in that one module) was never in the lane build's `TREE_MODS` — added and rebuilt for both arches; without PortAudio the C++ layer now fails loud (`err_disabled_feature`) while the real playback is served by the lazy-loaded webaudio m-bundle. (2) Boot list gains `audiodevinfo` with **38 aliases** (Octave resolves `.oct` by filename — sibling functions need symlinks, the webio precedent); `__web_pause_ms__`'s five aliases fixed the same-module-name gap that broke `sound → pause → __web_suspend_ok__`. (3) `sync-js` third-state fix: entries whose sha didn't change were skipped entirely, so meta corrections (aliases/notes) never took effect on existing entries — a two-producers fork. Assertions flipped where behavior changed (accept-audio 46→50/0 with mail/045 regression pins; t6 33/0; t7 40/0). Verified on both sites: `SOUND_OK=1` (sound truly blocks ~0.2s, AudioContext really created), zero regressions, parity consistent. Also from mail/044: the mail/read/ gitignore hole (6 archived letters now tracked) and two letters to UI re-delivered to the antigravity worktree with `host-` prefix.
-
-**w64-base dead-laned (2026-10-19, second three-line ruling)**: the user's ruling — *the master line must never run on non-COI browsers; wasm32 is the only line without COI; master must be multithreaded; IP is the master line extended off the official tree* — killed the `w64-base` "fallback cell" outright, same treatment as `threads`. The site is now **two cells** (base / w64): no COI (even with memory64 available) ⇒ **base**, always. Purged across all seven producers (lanes.json single source → DEAD_LANES, lane.js FILES/order/override-regex, gen-lanes, check-lane-purity, relink mode list with named dead-mode FATAL, promote-w64-lane which now rejects any w64-base remnant), plus the ledger's five `w64_base_*` keys dropped, probe-lane's matrix flipped to two cells (new dead-URL assertion for `?lane=w64-base`), and six test suites' dead branches removed. Verified: probe-lane 33/0 on the two-cell site, single-source reconciler OK (2 live cells / 2 dead lanes / 4 consumers), promote --verify green on both sites, gates 48/48, full sweeps on both sites green (bench/probe stragglers were network flake, pass singly).
-
-**Ticket 65 ruling-A relink landed (2026-10-19)**: the w64 / w64-base artifacts are rebuilt on the full `-6012` lane (w64 `c994bdad…`, w64-base `35ef50dc…`, verdict=ok), and the settling probe flipped **rc=2 → rc=0** — a `throw 42` side module now dlopens and truly calls. Two real root causes were fixed along the way. First, keeping the 7 basic-type typeinfo symbols alive required **strong refs** (`-Wl,-u,_ZTIi` + `--export-if-defined` in pairs, the rust_sort precedent): the keep-list's `--export-if-defined` alone cannot stop MAIN_MODULE=2 DCE from dropping archive members nothing references. Second — a **reversal of an earlier inference** — the C2c "Invalid resizing" boundary was *not* typeinfo-related: the true cause is that the wasm32 and wasm64 header trees fork in `octave/mxtypes.h` (`mwSize/mwIndex` are `int32_t` vs `int64_t`), and octinc had only ever packaged the wasm32 tree, so browser-compiled `.oct`s had mis-sized indices. octinc now ships **per-arch headers** (with an assertion that the two really do fork), and C2c/C8e flipped from "recorded boundary" to **hard green** (`cell2cell({1,2},1)=1x1`, `partint(4)` invariant holds). Full `PROBES=1` sweeps green on both sites (96 suites / 1576 PASS / 0 FAIL), promote verify green, SHA three-layer 4/0, dist rebuilt.
-
-**LLVM-wasm pin v0.1.3 (2026-10-19)**: the toolchain pin moved from `v0.1.1` to `v0.1.3`, which ships `driver/compile-core.mjs` in its manifest (14 assets) plus `release/check-published.mjs` — a four-way reconciler whose `--freshness` layer compares the bundle's driver set byte-for-byte against the repo HEAD (the layer that catches a bundle that is *consistently* stale; the producer confirmed v0.1.2 was internally self-consistent at 13/13/13, which is why internal-consistency checks missed it). Our side re-verified independently: bundle sha256 matches the declared value, and the fallback copy that pulled `compile-core.mjs` from the producer's working tree is **retired** per the exit condition we wrote into `mail/013` — the provisioner now asserts positively that the bundle's manifest lists it (reverse test done: removing the entry makes it fail loud). `accept-compile-extension` re-ran at 16/0 on the new pin.
-
-**llvm-wasm capability layer in the catalog (2026-10-19)**: the clang toolchain was already on the site (`assets/llvm/`) but absent from `forge-catalog.json` — so ruling ⑤ ("loading a source package requires the LLVM toolchain to be downloaded") had no data source. The assembler now emits it as a **capability layer** shaped like the pyodide precedent (one synthesized entry built from bytes actually present on the site: `form:"tree"`, `content:[]`, `url` at the tree's main artifact, `size` = whole-tree budget, version read from the toolchain manifest), rather than merging the producer's 14-row file list verbatim — measured reasons: 14 rows would scatter into 14 packs (not one capability layer), and their `assets/llvm-wasm/` prefix diverges from the site's real `assets/llvm/`, which makes byte-staging and the catalog URL disagree (observed live: "staged 14 files" and "14× R7b missing" were simultaneously true). Catalog now carries 15 entries = 13 shelf packages + 2 capability layers. `accept-market-browse`'s B3c was corrected to exclude capability layers by `detail.form` instead of a hardcoded name (first fix still failed — `form` lives under `detail`, not on the Entry). Sabotage checks added both ways (37/0 assembler selftest).
-
-**Multi-TU compile + interaction upgrade (2026-10-18)**: v1 compiled only the main translation unit, so `miscellaneous`'s `partint` module never existed. v2 builds the container's full module table: the hand-written table in `build-pkg-oct.sh` is now **data** (`build/pkg-module-table.json`, reconciled by `check-pkg-module-table.py`, 12/0; live repo 6 packages / 27 modules) and the client reads the site copy, with DEFUN scanning only as a fallback — because "every source with a DEFUN should be built" is false (measured: `sample.cc` does not compile against 11.3.0 headers, and the container table deliberately omits it). Artifact names come from the **source basename**, not the first DEFUN (proof: the deployed `partint.oct` exports both `Gpartcnt` and `Gpartint`). The orchestration was extracted into a **deep module** `bridge/multi-tu.mjs` with two adapters: the browser worker and a **local bench** `test/local/compile-local.mjs` — the latter cut a verify cycle from **~8 minutes to 8–14 seconds** and returns full stderr instead of one `Aborted()`. `accept-compile-extension` is **16/0** (was 11/0). Two more Einfacht #20③ commitments landed: a `critical` suite list whose skipped-in-scope entries now force `sweep.sh` to exit non-zero, and `build/lanes.json` as the single declaration of lane knowledge (reconciler 15/0, which caught a real gap: `LANE_EXPECT` was missing `IllegalPerformance`).
-
-**Mail workflow (2026-10-18)**: the inbox now has an unread area (`mail/`) and a read archive (`mail/read/`), with `zreflect/mail-read.py` as the read entry point (read = print + auto `git mv` into the archive). The tool is explicitly **not a gate** — mail content is never trusted machine input. The boundary gate tolerates an empty unread area by falling back to the archive, while still failing when both are empty.
-
-**Upstream report (2026-10-18)**: the three-line purge surfaced three "two homes for one fact" gaps, filed as [Einfacht #20](https://github.com/ArchivalEra/Einfacht/issues/20): (1) two `gates-selftest.sh` benches coexist (declarative upstream + a hand-written 46-entry list) and pre-commit runs both; (2) the `REFLECT_*` code default writes the ledger to a gitignored path, so a bare re-measure reports success while the hook reads a different file; (3) lane knowledge lives in three registries, and forgetting one made the core `probe-lane` gate get silently skipped while the sweep still reported zero failures.
-
-**Inbox (2026-10-18)**: content-repo `033` acknowledged both the release model (`artifacts[]` belongs to the host; architecture is not a version axis) and the `read/` adoption, and accepted that the zero-value-guard conflict was a gap in its own proposal. Replied with the upstream issue number ([#20](https://github.com/ArchivalEra/Einfacht/issues/20)) — its input-vanished root cause and this repo's silently-skipped core gate are the same family.
-
-**Upstream follow-up (2026-10-18)**: issue #20 got a comment upgrading gap (2) from "writes to the wrong place" to "the write path is entirely unguarded" — the ledger write neither checks whether its target is gitignored nor warns that it is using the default path, and the `_load_or_die` hint ("run a measurement in the repo root first") actively points people at the action that creates the stray file. A peer repo's "it didn't write" self-check was correct but only by execution order, not by any guard.
-
-**Architecture change: download/load separation (2026-10-18)**: per the user directive ("the market offers source and precompiled options; loading happens in a separate view; installed becomes downloaded"), the content repo specified a `DownloadStore` that cuts `install()`'s chain between sha verification and untar, persisting verified bytes plus a manifest into OPFS. The seam still lives on the **record** (not on a method) — it simply gains a second kind of record: the user-local one. Host rulings: (1) the engine's per-file sha comes from `<site>/<lane>/octave.build.json`'s `measured.files`, **not** `upstream-lock.json` (which is a third-party source lock); (2) `ARCH_MISMATCH` stays a load-time hard gate, decoupled from the download layer; (3) `install()` is **not** converged onto `DownloadStore` — the two chains coexist (atomic no-gap load vs across-time-gap download).
-
-**Upstream ruling on #20 (2026-10-18)**: gap (2) is **fixed upstream** (`c29a33b`, blind-write guard: a ledger target covered by `.gitignore` is refused with rc=2 and zero bytes written) and has been ported into the vendored copy here — reverse-verified, with the guard's own selftest growing 16→20. For gap (1) the upstream suggestion (retire the hand-written bench, declare every gate) was measured and rejected for this repo: 45 of the 46 entries live outside `zreflect/` and 12 are shell scripts that cannot carry a Python `GATE` declaration. The ruling taken is therefore B — keep both benches but lock the division: a new assertion requires their **intersection to be empty** (verified green, and verified to go red when an overlap is injected).
-
-**Einfacht layer upgrade (2026-10-18)**: the vendored platform is now byte-identical to upstream `45ca586` — seven mechanism files were replaced wholesale (facts/guard/knobs/render/check_locks/check_questions/check_facts_replay) instead of cherry-picking, retiring the local patches (the hand-rolled measure dispatch is now the upstream `REFLECT_MEASURE_MODULE` knob with a loud fallback warning). Kept: the data layer (`measure_octave.py`), the mail-read tool, and the `build/facts.py` shell (which now also sets the measure knob — complementary to the blind-write guard). Acceptance: six checks green, including a reverse test of the guard (bare run ⇒ rc=2, zero bytes) and a data-layer non-interference proof (re-measure: zero value changes).
-
-**In-browser compilation landed (2026-10-18)**: `OctaveAssets.compileExtension(name)` now compiles a package's `src/*.cc` into a real `.oct` inside the browser, returning a verdict plus a **live `diagnostics` log stream**. Per the user directive the toolchain is **pulled in stages**: sysroot (19.7 MB) and clang (45.8 MB) at init, while **lld (31.8 MB) is deferred until the first link** — so the first compile peaks at 66 MB raw instead of 81 MB. A purpose-built `compile-worker.mjs` does the staging while still importing the producer's `driver/compile-core.mjs` orchestration. Acceptance `accept-compile-extension` is **11/0** on both sites. **Known boundary, recorded honestly**: the product is recognized (`exist=3`, `which` correct) but a cross-boundary call still fails, while the site's prebuilt 7.2 artifact works — the same typeinfo-export gap as ticket 65's ruling A, which is why the fix belongs to that relink batch.
-
-**Fact refresh (2026-10-18, pre-compaction)**: ledger re-measured — zero value changes, only measurement timestamps; replay gate 34/34 verbatim; STATE assertions consistent.
-
-## Branches (three independently maintainable lines)
-
-| branch | fork pin (`upstream/octave`) | role |
-|---|---|---|
-| `wasm32-final` | — (frozen) | wasm32 archive line |
-| ~~`wasm64-NEXT`~~ | ~~`a5a7208`~~ | **deleted 2026-10-17** (user order — merged into master long ago; measured 0 unique commits vs master; branch ref removed on local/origin/mirror, history preserved via master). Its role (moderate wasm64) is carried by **master** per the three-line model |
-| `IllegalPerformance` | `f4bf15b` (+ rust-sort seam) | aggressive wasm64 line — **shipped 2026-10-07** (8761 w64 = `f6fec91f`, IEEE-evaluated, sort 2.16× vs this line's base) |
-
-All three eat upstream Octave updates through the same fork pipeline
-(`upstream/octave` branch `wasm/11.3.0`); each line pins its own fork commit.
-Switching lines in the shared build container = submodule update + re-provision +
-deploy that line's `relink.sh`/`link-web.sh` + point `OCTAVE_WASM_BASE` at that line's
-site + set `core.hooksPath` to that line's hooks (the fact system lives in `reflect-hooks/`
-on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintaince.md`.
+| Path | What |
+|---|---|
+| [`STATE.md`](STATE.md) | Live status — what is true right now |
+| [`maintaince.md`](maintaince.md) | Direction and map |
+| [`HISTORY.md`](HISTORY.md) | Append-only per-batch record |
+| [`CONTEXT.md`](CONTEXT.md) | Glossary — one authoritative definition per term |
+| [`AGENTS.md`](AGENTS.md) | Operating rules for agents working here |
+| [`build/FACTS.json`](build/FACTS.json) | Measured-numbers ledger; each key carries its re-run command |
+| [`build/lanes.json`](build/lanes.json) | Single source of lane knowledge |
+| [`build/CLIBS.md`](build/CLIBS.md) | C library build recipes |
+| `build/113/` | Build recipes, gates, lane scripts, engineering notes |
+| `bridge/` | Browser-side glue: asset loader, lane selector, worker, page host |
+| `test/browser/` | Browser acceptance suites |
+| `zreflect/` | Fact system: gate registry, knob registry, ledger |
+| `upstream/` | Octave fork (submodule) |
+| `shelf/` | Package shelf (separate repo, submodule) |
+| `mail/` | Cross-repo correspondence — this repository's inbox |
 
 ## Repository contents
 
 <!-- AUTO:FILES -->
-- `.githooks/check-consistency.py` (17258 bytes)
-- `.githooks/check-mail-boundary.py` (8662 bytes)
-- `.githooks/check-readiness-pattern.py` (5523 bytes)
-- `.githooks/check-state.py` (13270 bytes)
-- `.githooks/check-wants.py` (10926 bytes)
-- `.githooks/check-whitelist.py` (3216 bytes)
-- `.githooks/gate.py` (3446 bytes)
-- `.githooks/handoff-context.py` (3072 bytes)
-- `.githooks/install.sh` (388 bytes)
-- `.githooks/pre-commit` (2556 bytes)
-- `.githooks/pre-push` (1289 bytes)
-- `.githooks/state_facts.py` (11010 bytes)
-- `.githooks/update-readme.py` (2270 bytes)
-- `.githooks/update-state.py` (5884 bytes)
-- `.githooks/witness-upstream-pin.py` (11252 bytes)
-- `.github/workflows/gates.yml` (2886 bytes)
-- `.github/workflows/pages-deploy.yml` (911 bytes)
-- `.github/workflows/readme-sync.yml` (2173 bytes)
-- `.gitignore` (8353 bytes)
-- `.gitmodules` (2031 bytes)
-- `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
-- `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
-- `.scratch/open-questions/issues/03-lsode-unreachable.md` (1961 bytes)
-- `.scratch/open-questions/issues/04-umfpack-sparse-lu.md` (2418 bytes)
-- `.scratch/open-questions/issues/05-jspi-g1-dlopen.md` (2598 bytes)
-- `.scratch/open-questions/issues/06-jspi-p3-p4.md` (2509 bytes)
-- `.scratch/open-questions/issues/07-browser-floor-matrix.md` (3047 bytes)
-- `.scratch/open-questions/issues/08-external-review-assertions.md` (2335 bytes)
-- `.scratch/open-questions/issues/09-relink-rebuild-path.md` (2997 bytes)
-- `.scratch/open-questions/issues/10-firefox-coi-contradiction.md` (2015 bytes)
-- `.scratch/open-questions/issues/11-b5-worker-render-backend.md` (2006 bytes)
-- `.scratch/open-questions/issues/12-real-device-manual-pass.md` (1595 bytes)
-- `.scratch/open-questions/issues/13-osmesa-phone-cost.md` (1634 bytes)
-- `.scratch/open-questions/issues/14-wasm64-migration.md` (3991 bytes)
-- `.scratch/open-questions/issues/15-verify-outdir-flag.md` (2995 bytes)
-- `.scratch/open-questions/issues/16-e2-threaded-path-cause.md` (3259 bytes)
-- `.scratch/open-questions/issues/17-wasm64-rebuild.md` (4761 bytes)
-- `.scratch/open-questions/issues/18-wasm64-final-integration.md` (6081 bytes)
-- `.scratch/open-questions/issues/19-openblas-internal-threads.md` (16594 bytes)
-- `.scratch/open-questions/issues/20-page-asset-promote-entry.md` (3512 bytes)
-- `.scratch/open-questions/issues/21-need-arch-call-sites.md` (5033 bytes)
-- `.scratch/open-questions/issues/22-relink-stale-var-count.md` (2449 bytes)
-- `.scratch/open-questions/issues/23-lane-drift-and-existence.md` (5671 bytes)
-- `.scratch/open-questions/issues/24-floor-matrix-old-engine.md` (4105 bytes)
-- `.scratch/open-questions/issues/25-sitewebgl-leftovers.md` (4356 bytes)
-- `.scratch/open-questions/issues/26-rebuild-lacks-lane-shim.md` (2851 bytes)
-- `.scratch/open-questions/issues/27-ship-threaded-openblas.md` (8843 bytes)
-- `.scratch/open-questions/issues/28-rebuild-wrong-install-prefix.md` (3988 bytes)
-- `.scratch/open-questions/issues/29-link-does-not-check-tree-prefix.md` (2684 bytes)
-- `.scratch/open-questions/issues/30-w64-fourcell-ship.md` (6184 bytes)
-- `.scratch/open-questions/issues/31-w64-heap-cap-and-speed.md` (5281 bytes)
-- `.scratch/open-questions/issues/32-rebuild-lacks-lane-deps.md` (3321 bytes)
-- `.scratch/open-questions/issues/33-w64-threaded-openblas.md` (5805 bytes)
-- `.scratch/open-questions/issues/34-rebuild-w64-tree-invalid-module.md` (4612 bytes)
-- `.scratch/open-questions/issues/35-e2-lane-silent-defects.md` (2909 bytes)
-- `.scratch/open-questions/issues/36-e2-wrapper-harvest-recipe.md` (4359 bytes)
-- `.scratch/open-questions/issues/37-port-facts-replay-gate.md` (3901 bytes)
-- `.scratch/open-questions/issues/38-ui-embed-api.md` (5004 bytes)
-- `.scratch/open-questions/issues/40-nt8-feval-deadlock.md` (4463 bytes)
-- `.scratch/open-questions/issues/41-nt8-dlopen-regression.md` (7472 bytes)
-- `.scratch/open-questions/issues/42-fact-witness-tier.md` (3372 bytes)
-- `.scratch/open-questions/issues/43-readiness-antipattern-gate.md` (2764 bytes)
-- `.scratch/open-questions/issues/44-nt-curve-completion.md` (3939 bytes)
-- `.scratch/open-questions/issues/45-final-settlement-vs-native.md` (3868 bytes)
-- `.scratch/open-questions/issues/46-preready-eval-guard.md` (3229 bytes)
-- `.scratch/open-questions/issues/47-embed-inventory-and-handoff-issues.md` (2682 bytes)
-- `.scratch/open-questions/issues/48-page-adapter-ts-rewrite.md` (3717 bytes)
-- `.scratch/open-questions/issues/49-rust-lane-ceiling.md` (3950 bytes)
-- `.scratch/open-questions/issues/50-geometry-plot-channel.md` (4041 bytes)
-- `.scratch/open-questions/issues/51-pgo-infeasible-startup-closure.md` (3550 bytes)
-- `.scratch/open-questions/issues/52-relaxed-simd-fma.md` (3386 bytes)
-- `.scratch/open-questions/issues/53-build-input-invariants.md` (3727 bytes)
-- `.scratch/open-questions/issues/54-hotpath-instrument.md` (4092 bytes)
-- `.scratch/open-questions/issues/55-hotpath-scan.md` (2613 bytes)
-- `.scratch/open-questions/issues/56-dlsync-patch-rc3-false-fatal.md` (4369 bytes)
-- `.scratch/open-questions/issues/57-allocator-lever.md` (2786 bytes)
-- `.scratch/open-questions/issues/58-swappable-component-inventory.md` (3488 bytes)
-- `.scratch/open-questions/issues/59-mimalloc-graduation.md` (5311 bytes)
-- `.scratch/open-questions/issues/60-libm-plugin-spike.md` (4583 bytes)
-- `.scratch/open-questions/issues/61-component-plugin-system.md` (4101 bytes)
-- `.scratch/open-questions/issues/62-full-rebuild-abi-divergence.md` (3963 bytes)
-- `.scratch/open-questions/issues/63-rustpatch-fact-coverage.md` (13983 bytes)
-- `.scratch/open-questions/issues/64-forge-ondemand.md` (5466 bytes)
-- `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md` (13852 bytes)
-- `.scratch/open-questions/issues/66-unimplemented-fn-shows-makeinfo-error.md` (5447 bytes)
-- `.scratch/open-questions/issues/67-ci-never-tracked.md` (5793 bytes)
-- `.scratch/open-questions/issues/68-market-arch-defects.md` (6795 bytes)
-- `.scratch/open-questions/issues/69-tree-entry-files-key.md` (5057 bytes)
-- `.scratch/open-questions/issues/70-omc-e2e-bridge-never-assembled.md` (6575 bytes)
-- `.scratch/perf-max/issues/01-openblas-levers.md` (4724 bytes)
-- `.scratch/perf-max/issues/02-native-baseline.md` (2545 bytes)
-- `.scratch/perf-max/issues/03-w64-big-heap.md` (2680 bytes)
-- `.scratch/perf-max/issues/04-openblas-simd-kernels.md` (4250 bytes)
-- `.scratch/perf-max/issues/05-thread-tuning.md` (4050 bytes)
-- `.scratch/perf-max/issues/06-link-flags.md` (4023 bytes)
-- `.scratch/perf-max/issues/07-carrier-and-ship-decision.md` (1449 bytes)
-- `.scratch/perf-max/issues/08-final-ship.md` (2435 bytes)
-- `.scratch/perf-max/issues/39-openblas-simd-kernel-dev.md` (12415 bytes)
-- `.scratch/perf-max/map.md` (7894 bytes)
-- `.zcode/config.json` (1597 bytes)
-- `AGENTS.md` (25857 bytes)
-- `CONTEXT.md` (20011 bytes)
-- `DEPLOY.md` (9405 bytes)
-- `HISTORY.md` (494490 bytes)
-- `LICENSE` (34523 bytes)
-- `README.de.md` (78896 bytes)
-- `README.zh.md` (70309 bytes)
-- `STATE.md` (133449 bytes)
-- `THIRD-PARTY-NOTICES.md` (4285 bytes)
-- `bridge/assets-loader.js` (79991 bytes)
-- `bridge/compile-worker.mjs` (17088 bytes)
-- `bridge/embed-demo.html` (6565 bytes)
-- `bridge/embed-wgsl.html` (6290 bytes)
-- `bridge/index.html` (18537 bytes)
-- `bridge/lane.js` (9762 bytes)
-- `bridge/lanes.js` (1151 bytes)
-- `bridge/multi-tu.mjs` (15512 bytes)
-- `bridge/octave-core.js` (43756 bytes)
-- `bridge/octave-embed.js` (15776 bytes)
-- `bridge/octave-omc-bridge.js` (14006 bytes)
-- `bridge/octave-page.js` (11870 bytes)
-- `bridge/octave-page.ts` (12860 bytes)
-- `bridge/octave-worker.js` (14324 bytes)
-- `bridge/p5canvas.js` (9656 bytes)
-- `bridge/queue.js` (3892 bytes)
-- `bridge/webaudio.js` (7303 bytes)
-- `bridge/webaudiorec.js` (11861 bytes)
-- `bridge/webfilepick.js` (6151 bytes)
-- `bridge/webnet.js` (4146 bytes)
-- `build/113/GATE3-QUESTION.md` (8148 bytes)
-- `build/113/GEMINI-ASK-1-worker-webgl.md` (9883 bytes)
-- `build/113/GPT-REVIEW-3-bridge-reply.md` (18378 bytes)
-- `build/113/GPT-REVIEW-3-bridge.md` (8131 bytes)
-- `build/113/GRAPHICS-BRANCH.md` (7731 bytes)
-- `build/113/ISSUE-1-verify-comment.md` (1734 bytes)
-- `build/113/ISSUE-for-LLVM-wasm.md` (7964 bytes)
-- `build/113/NOTES-archive.md` (4688 bytes)
-- `build/113/NOTES-asyncify.md` (4664 bytes)
-- `build/113/NOTES-client-compile-design.md` (24303 bytes)
-- `build/113/NOTES-client-compile.md` (4243 bytes)
-- `build/113/NOTES-coverage-100.md` (8206 bytes)
-- `build/113/NOTES-emsdk-upgrade.md` (43913 bytes)
-- `build/113/NOTES-experiment-omc-wasm.md` (26756 bytes)
-- `build/113/NOTES-extra-content-seam.md` (19798 bytes)
-- `build/113/NOTES-forge-ondemand.md` (25608 bytes)
-- `build/113/NOTES-hotpath.md` (8092 bytes)
-- `build/113/NOTES-jspi.md` (28469 bytes)
-- `build/113/NOTES-libm.md` (2974 bytes)
-- `build/113/NOTES-lsode.md` (12160 bytes)
-- `build/113/NOTES-main-module-2.md` (6400 bytes)
-- `build/113/NOTES-market-design.md` (15638 bytes)
-- `build/113/NOTES-octc-spike.md` (12302 bytes)
-- `build/113/NOTES-p5-osmesa.md` (33080 bytes)
-- `build/113/NOTES-pkg-precompile.md` (5577 bytes)
-- `build/113/NOTES-plugin-survey.md` (18550 bytes)
-- `build/113/NOTES-plugins.md` (4279 bytes)
-- `build/113/NOTES-release-model.md` (13071 bytes)
-- `build/113/NOTES-slicot.md` (19273 bytes)
-- `build/113/NOTES-t2-graphics.md` (7241 bytes)
-- `build/113/NOTES-t6-t7-hostlayer.md` (9825 bytes)
-- `build/113/NOTES-threads.md` (88608 bytes)
-- `build/113/NOTES-umfpack.md` (8116 bytes)
-- `build/113/NOTES-upstream.md` (14302 bytes)
-- `build/113/NOTES-wasm64.md` (15976 bytes)
-- `build/113/NOTES-webgl.md` (59320 bytes)
-- `build/113/PLAN-arch.md` (58795 bytes)
-- `build/113/PLAN-jspi.md` (21638 bytes)
-- `build/113/PLAN-matlab-gaps.md` (22338 bytes)
-- `build/113/PLAN-next.md` (16370 bytes)
-- `build/113/PLAN-threads.md` (32207 bytes)
-- `build/113/PLAN-wasm64.md` (14664 bytes)
-- `build/113/PROMOTION.md` (6444 bytes)
-- `build/113/REQUIREMENTS-store-and-matlab.md` (16594 bytes)
-- `build/113/REVIEW-QUESTIONS.md` (5820 bytes)
-- `build/113/SPEC-clang-wasm.md` (22779 bytes)
-- `build/113/STATUS.md` (8407 bytes)
-- `build/113/apply-platform-patches.sh` (9710 bytes)
-- `build/113/atomics_scan.py` (8649 bytes)
-- `build/113/bare-oct-w64.sh` (1320 bytes)
-- `build/113/bench-libm-spike.sh` (3714 bytes)
-- `build/113/bench-native.sh` (5483 bytes)
-- `build/113/build-blas-simd.sh` (4662 bytes)
-- `build/113/build-deps.sh` (10252 bytes)
-- `build/113/build-e2-lane.sh` (18330 bytes)
-- `build/113/build-fontconfig.sh` (12300 bytes)
-- `build/113/build-freetype.sh` (8169 bytes)
-- `build/113/build-gl-lane.sh` (3605 bytes)
-- `build/113/build-gl2ps.sh` (4092 bytes)
-- `build/113/build-glu-webgl.sh` (5242 bytes)
-- `build/113/build-libs.sh` (32311 bytes)
-- `build/113/build-oct-lane.sh` (13280 bytes)
-- `build/113/build-oct.sh` (5757 bytes)
-- `build/113/build-ode15.sh` (4909 bytes)
-- `build/113/build-pkg-oct.sh` (9351 bytes)
-- `build/113/build-rustsort-w64.sh` (2141 bytes)
-- `build/113/build-rustsort.sh` (1782 bytes)
-- `build/113/build-sundials.sh` (6682 bytes)
-- `build/113/build-w64-lane.sh` (10167 bytes)
-- `build/113/check-build-manifest.py` (28829 bytes)
-- `build/113/check-ci-bootstrap.sh` (6162 bytes)
-- `build/113/check-dylink-signatures.py` (9002 bytes)
-- `build/113/check-forge-catalog.py` (63538 bytes)
-- `build/113/check-lane-purity.py` (12886 bytes)
-- `build/113/check-lanes-single-source.py` (20411 bytes)
-- `build/113/check-oct-host-symbols.mjs` (953 bytes)
-- `build/113/check-oct-imports.py` (16007 bytes)
-- `build/113/check-oct-lane.py` (16171 bytes)
-- `build/113/check-pkg-module-table.py` (10100 bytes)
-- `build/113/check-rust-toolchain.py` (9466 bytes)
-- `build/113/configure-113-full.sh` (19902 bytes)
-- `build/113/configure-113.sh` (12415 bytes)
-- `build/113/dldprobe.cc` (1773 bytes)
-- `build/113/emf77` (4503 bytes)
-- `build/113/emscripten-cross.ini` (1190 bytes)
-- `build/113/evidence-omc-web-demo.png` (140328 bytes)
-- `build/113/f2c-io-shim.c` (2398 bytes)
-- `build/113/faer-bench/Cargo.toml` (367 bytes)
-- `build/113/faer-bench/src/lib.rs` (2301 bytes)
-- `build/113/fix-rapidjson.py` (1906 bytes)
-- `build/113/fix-slicot-abi.py` (13091 bytes)
-- `build/113/gemmkernel_wasm128_4x2.c` (16409 bytes)
-- `build/113/gen-f77-wrappers.py` (21724 bytes)
-- `build/113/gen-keep-list.sh` (6138 bytes)
-- `build/113/gen-matrix-android.py` (3526 bytes)
-- `build/113/gl-headers-webgl.sh` (5528 bytes)
-- `build/113/gl4es-smoke.c` (8634 bytes)
-- `build/113/gl4es-smoke.sh` (3808 bytes)
-- `build/113/gl4es-unmangled-shim.c` (3188 bytes)
-- `build/113/hotpath-scan-libs.py` (3666 bytes)
-- `build/113/hotpath-scan.py` (3824 bytes)
-- `build/113/hotpath.py` (17451 bytes)
-- `build/113/lane-pick-selftest.mjs` (3379 bytes)
-- `build/113/lane-shim.sh` (3910 bytes)
-- `build/113/link-web.sh` (53472 bytes)
-- `build/113/make-lane-manifest.py` (23485 bytes)
-- `build/113/minioct.cc` (2409 bytes)
-- `build/113/minithrow.cc` (897 bytes)
-- `build/113/needlib.cc` (631 bytes)
-- `build/113/oct-arch.py` (7624 bytes)
-- `build/113/oct_arch_probe.py` (525 bytes)
-- `build/113/openblas-emscripten.patch` (1948 bytes)
-- `build/113/patch-ax-pthread.sh` (8062 bytes)
-- `build/113/patch-gl4es.sh` (7469 bytes)
-- `build/113/patch-glue-proxy-dlsync-bigint.py` (7642 bytes)
-- `build/113/patch-odepack-callback-arity.sh` (5006 bytes)
-- `build/113/patch-openblas-emscripten.py` (9111 bytes)
-- `build/113/patch-openblas-f77-ret.py` (23443 bytes)
-- `build/113/patch-openblas-idle-exit.py` (7350 bytes)
-- `build/113/patch-openblas-relaxed-fma.py` (5159 bytes)
-- `build/113/patch-openblas-symbol-prefix.py` (10769 bytes)
-- `build/113/patch-openblas-threads.py` (3679 bytes)
-- `build/113/plugin-check.py` (10756 bytes)
-- `build/113/prep-catalog-accept-site.sh` (8069 bytes)
-- `build/113/prep-verdict-site.sh` (2709 bytes)
-- `build/113/probe-fontconfig.c` (4476 bytes)
-- `build/113/probe-fontconfig.sh` (2848 bytes)
-- `build/113/probe-jspi-b.sh` (2106 bytes)
-- `build/113/probe-jspi-g1.sh` (2528 bytes)
-- `build/113/probe-jspi-g1/main.cpp` (2168 bytes)
-- `build/113/probe-jspi-g1/page.html` (646 bytes)
-- `build/113/probe-jspi-g1/side.c` (464 bytes)
-- `build/113/probe-jspi-worker.sh` (2855 bytes)
-- `build/113/probe-jspi-worker/jslib.js` (687 bytes)
-- `build/113/probe-jspi-worker/main.c` (3343 bytes)
-- `build/113/probe-jspi-worker/run-page.html` (3077 bytes)
-- `build/113/probe-jspi-worker/run.html` (777 bytes)
-- `build/113/probe-jspi-worker/side.c` (719 bytes)
-- `build/113/probe-jspi-worker/worker.js` (5058 bytes)
-- `build/113/probe-jspi.sh` (5404 bytes)
-- `build/113/probe-jspi/jslib.js` (1069 bytes)
-- `build/113/probe-jspi/main.c` (7318 bytes)
-- `build/113/probe-jspi/run-b.html` (1354 bytes)
-- `build/113/probe-jspi/run.html` (497 bytes)
-- `build/113/probe-jspi/runner-a2.mjs` (7989 bytes)
-- `build/113/probe-jspi/side.c` (700 bytes)
-- `build/113/probe-jspi/side_ctor.c` (801 bytes)
-- `build/113/probe-side-atomic.sh` (4102 bytes)
-- `build/113/probe-side-module.sh` (3339 bytes)
-- `build/113/probe-threads.sh` (1861 bytes)
-- `build/113/probe-threads/main.c` (3735 bytes)
-- `build/113/probe-threads/run.html` (2314 bytes)
-- `build/113/probe-threads/side.c` (436 bytes)
-- `build/113/probe-wasm64-baseline.sh` (5114 bytes)
-- `build/113/probe-wasm64-link.sh` (4618 bytes)
-- `build/113/provision-emsdk.sh` (8412 bytes)
-- `build/113/provision-llvm-wasm.sh` (14924 bytes)
-- `build/113/provision-omc-bridge.sh` (9114 bytes)
-- `build/113/provision-omc.sh` (7454 bytes)
-- `build/113/provision-pyodide.sh` (7683 bytes)
-- `build/113/rebuild-pic-blas.sh` (6932 bytes)
-- `build/113/relink.sh` (58100 bytes)
-- `build/113/repro-umfpack-trap.sh` (8687 bytes)
-- `build/113/rust/.cargo/config.toml` (606 bytes)
-- `build/113/rust/Cargo.lock` (151 bytes)
-- `build/113/rust/Cargo.toml` (183 bytes)
-- `build/113/rust/rust-toolchain.toml` (238 bytes)
-- `build/113/rust/src/lib.rs` (3310 bytes)
-- `build/113/site-illegalperf.sh` (3913 bytes)
-- `build/113/sort-ab.sh` (1693 bytes)
-- `build/113/ss-long64.h` (1265 bytes)
-- `build/113/stage-oct-by-manifest.py` (7632 bytes)
-- `build/113/test-manifest-check.py` (4747 bytes)
-- `build/113/unpatch-ax-pthread.py` (6652 bytes)
-- `build/113/wasm_symbols.py` (7694 bytes)
-- `build/113/web_graphics_toolkit.cc` (8546 bytes)
-- `build/113/webgl_toolkit.cc` (23990 bytes)
-- `build/113/witness-build-inputs.py` (4815 bytes)
-- `build/113/witness-build-provenance.py` (5603 bytes)
-- `build/113/write-build-manifest.py` (19744 bytes)
-- `build/BASELINE-10.3.md` (8216 bytes)
-- `build/BASELINE-11.3.md` (17814 bytes)
-- `build/BENCH.md` (5886 bytes)
-- `build/CLIBS.md` (91292 bytes)
-- `build/FACTS.json` (59331 bytes)
-- `build/GAPS-2.md` (28532 bytes)
-- `build/GAPS.md` (17674 bytes)
-- `build/GPT-REVIEW-2.md` (24185 bytes)
-- `build/Makefile` (9811 bytes)
-- `build/NOTES.md` (1657 bytes)
-- `build/assets-meta.json` (13129 bytes)
-- `build/assets.py` (22985 bytes)
-- `build/build-embed-ts.sh` (1186 bytes)
-- `build/build-inputs.json` (4499 bytes)
-- `build/build_dldfcn.sh` (1448 bytes)
-- `build/build_oct.sh` (2441 bytes)
-- `build/build_pkg_oct.sh` (11790 bytes)
-- `build/check-boot.sh` (3736 bytes)
-- `build/check-deploy-sha.sh` (2141 bytes)
-- `build/check-site-parity.sh` (18117 bytes)
-- `build/check_m.py` (6710 bytes)
-- `build/embed/coi-serviceworker.js` (6028 bytes)
-- `build/embed/coi-serviceworker.min.js` (3009 bytes)
-- `build/extra-content/README.md` (8386 bytes)
-- `build/extra-content/bad/absolute-url-site.json` (4983 bytes)
-- `build/extra-content/bad/empty.json` (51 bytes)
-- `build/extra-content/bad/sha-missing.json` (4998 bytes)
-- `build/extra-content/bad/unknown-axis.json` (5102 bytes)
-- `build/extra-content/bad/unknown-form.json` (5079 bytes)
-- `build/extra-content/check-content-port.py` (8496 bytes)
-- `build/extra-content/content-list.schema.json` (22601 bytes)
-- `build/extra-content/golden/runtime.json` (826 bytes)
-- `build/extra-content/golden/shelf.json` (5080 bytes)
-- `build/extra-content/golden/toolchain-llvm.json` (6352 bytes)
-- `build/extra-content/golden/toolchain.json` (885 bytes)
-- `build/extra-content/golden/versions.json` (1452 bytes)
-- `build/extra-content/validate-content-list.py` (43586 bytes)
-- `build/facts.py` (1858 bytes)
-- `build/fftw_threads_stub.c` (553 bytes)
-- `build/forge-build.sh` (2117 bytes)
-- `build/forge-catalog.py` (89553 bytes)
-- `build/forge-fetch.py` (5109 bytes)
-- `build/forge-preload/asciiplot.m` (940 bytes)
-- `build/forge-preload/betacdf.m` (7159 bytes)
-- `build/forge-preload/betainv.m` (6572 bytes)
-- `build/forge-preload/betapdf.m` (6641 bytes)
-- `build/forge-preload/chi2cdf.m` (5463 bytes)
-- `build/forge-preload/fcdf.m` (7449 bytes)
-- `build/forge-preload/fft.m` (1736 bytes)
-- `build/forge-preload/fpdf.m` (7974 bytes)
-- `build/forge-preload/gamcdf.m` (13475 bytes)
-- `build/forge-preload/gaminv.m` (7365 bytes)
-- `build/forge-preload/gampdf.m` (6795 bytes)
-- `build/forge-preload/ifft.m` (881 bytes)
-- `build/forge-preload/normcdf.m` (10379 bytes)
-- `build/forge-preload/norminv.m` (6120 bytes)
-- `build/forge-preload/normpdf.m` (5930 bytes)
-- `build/forge-preload/regress.m` (7261 bytes)
-- `build/forge-preload/tcdf.m` (9315 bytes)
-- `build/forge-preload/tinv.m` (5467 bytes)
-- `build/forge-preload/tpdf.m` (4730 bytes)
-- `build/forge-preload/ttest.m` (3147 bytes)
-- `build/forge/__forge_install__.m` (9246 bytes)
-- `build/forge/__forge_src_list__.m` (3442 bytes)
-- `build/gates-selftest.sh` (7298 bytes)
-- `build/gen-lanes.sh` (4177 bytes)
-- `build/gen-perf-charts.py` (5422 bytes)
-- `build/glue-selftest.m` (5046 bytes)
-- `build/glue-selftest.sh` (2423 bytes)
-- `build/instruments.json` (1696 bytes)
-- `build/lanes.json` (5339 bytes)
-- `build/lib/doctor.py` (15989 bytes)
-- `build/lib/facts_block.py` (4696 bytes)
-- `build/lib/gate.py` (7246 bytes)
-- `build/lib/retractions.json` (12200 bytes)
-- `build/lib/sweep_select.py` (20075 bytes)
-- `build/main.cc` (26639 bytes)
-- `build/make-dist.sh` (9051 bytes)
-- `build/normalize_arpack.py` (1861 bytes)
-- `build/pins.json` (1701 bytes)
-- `build/pkgfix/__pkgfix_basename__.m` (1962 bytes)
-- `build/pkgfix/__pkgfix_forge_root__.m` (893 bytes)
-- `build/pkgfix/__pkgfix_local_list__.m` (1388 bytes)
-- `build/pkgfix/__pkgfix_make_packinfo__.m` (3272 bytes)
-- `build/pkgfix/__pkgfix_sync_db__.m` (4071 bytes)
-- `build/pkgfix/__webassets_available__.m` (1301 bytes)
-- `build/pkgfix/__webassets_info__.m` (7109 bytes)
-- `build/pkgfix/__webassets_pending__.m` (4892 bytes)
-- `build/pkgfix/__webpackage_source__.m` (13842 bytes)
-- `build/pkgfix/__webshelf_names__.m` (3833 bytes)
-- `build/pkgrestore/installed_packages.m` (5603 bytes)
-- `build/plotbridge/__pb_add__.m` (2733 bytes)
-- `build/plotbridge/__pb_apply_panel__.m` (549 bytes)
-- `build/plotbridge/__pb_axes_arg__.m` (3033 bytes)
-- `build/plotbridge/__pb_bar_args__.m` (2499 bytes)
-- `build/plotbridge/__pb_check_parent__.m` (2868 bytes)
-- `build/plotbridge/__pb_clear_series__.m` (853 bytes)
-- `build/plotbridge/__pb_core__.m` (7729 bytes)
-- `build/plotbridge/__pb_errbars__.m` (635 bytes)
-- `build/plotbridge/__pb_fields__.m` (5028 bytes)
-- `build/plotbridge/__pb_in_core__.m` (845 bytes)
-- `build/plotbridge/__pb_integerhandle_off__.m` (2724 bytes)
-- `build/plotbridge/__pb_is_linespec__.m` (2439 bytes)
-- `build/plotbridge/__pb_legend_args__.m` (3142 bytes)
-- `build/plotbridge/__pb_load_fig__.m` (749 bytes)
-- `build/plotbridge/__pb_mirror__.m` (4852 bytes)
-- `build/plotbridge/__pb_mirror_text__.m` (795 bytes)
-- `build/plotbridge/__pb_new_panel__.m` (508 bytes)
-- `build/plotbridge/__pb_palette__.m` (2700 bytes)
-- `build/plotbridge/__pb_panel_fields__.m` (718 bytes)
-- `build/plotbridge/__pb_parse_series__.m` (1554 bytes)
-- `build/plotbridge/__pb_project3__.m` (1298 bytes)
-- `build/plotbridge/__pb_publish__.m` (6445 bytes)
-- `build/plotbridge/__pb_real_renderer__.m` (3651 bytes)
-- `build/plotbridge/__pb_save_fig__.m` (1041 bytes)
-- `build/plotbridge/__pb_stash_panel__.m` (893 bytes)
-- `build/plotbridge/__pb_strip_axes__.m` (3095 bytes)
-- `build/plotbridge/__pb_strip_props__.m` (5528 bytes)
-- `build/plotbridge/__pb_surf_args__.m` (4766 bytes)
-- `build/plotbridge/__pb_surface__.m` (3504 bytes)
-- `build/plotbridge/__pstate__.m` (2132 bytes)
-- `build/plotbridge/__svg_panel_boxes__.m` (1569 bytes)
-- `build/plotbridge/__svg_render__.m` (24370 bytes)
-- `build/plotbridge/area.m` (2877 bytes)
-- `build/plotbridge/axis.m` (3720 bytes)
-- `build/plotbridge/bar.m` (2076 bytes)
-- `build/plotbridge/barh.m` (2615 bytes)
-- `build/plotbridge/clf.m` (1467 bytes)
-- `build/plotbridge/contour.m` (5409 bytes)
-- `build/plotbridge/errorbar.m` (3598 bytes)
-- `build/plotbridge/figure.m` (5663 bytes)
-- `build/plotbridge/grid.m` (1202 bytes)
-- `build/plotbridge/hold.m` (1291 bytes)
-- `build/plotbridge/insert-core-forward.py` (10940 bytes)
-- `build/plotbridge/legend.m` (1762 bytes)
-- `build/plotbridge/loglog.m` (2076 bytes)
-- `build/plotbridge/mesh.m` (1985 bytes)
-- `build/plotbridge/pie.m` (3464 bytes)
-- `build/plotbridge/plot.m` (2772 bytes)
-- `build/plotbridge/plot3.m` (4399 bytes)
-- `build/plotbridge/print.m` (7344 bytes)
-- `build/plotbridge/saveas.m` (1530 bytes)
-- `build/plotbridge/scatter.m` (2164 bytes)
-- `build/plotbridge/scatter3.m` (2738 bytes)
-- `build/plotbridge/semilogx.m` (2091 bytes)
-- `build/plotbridge/semilogy.m` (2091 bytes)
-- `build/plotbridge/stairs.m` (2707 bytes)
-- `build/plotbridge/stem.m` (2034 bytes)
-- `build/plotbridge/subplot.m` (3170 bytes)
-- `build/plotbridge/surf.m` (1968 bytes)
-- `build/plotbridge/title.m` (1703 bytes)
-- `build/plotbridge/xlabel.m` (1706 bytes)
-- `build/plotbridge/xlim.m` (2307 bytes)
-- `build/plotbridge/ylabel.m` (1489 bytes)
-- `build/plotbridge/ylim.m` (1976 bytes)
-- `build/plugins.json` (3853 bytes)
-- `build/post.js` (1885 bytes)
-- `build/prerender-m-docstrings.py` (16068 bytes)
-- `build/promote-pages.sh` (19117 bytes)
-- `build/promote-w64-lane.sh` (22693 bytes)
-- `build/promote-webgl.sh` (13570 bytes)
-- `build/provision-upstream.sh` (2435 bytes)
-- `build/rebuild-pic-libs.sh` (3672 bytes)
-- `build/reconf-batch1.sh` (2160 bytes)
-- `build/reconf-batch1b.sh` (2101 bytes)
-- `build/reconf-bench.sh` (3857 bytes)
-- `build/reconf-pic.sh` (2810 bytes)
-- `build/reconf.sh` (3004 bytes)
-- `build/recover-113.sh` (6297 bytes)
-- `build/recover.sh` (8004 bytes)
-- `build/render-docstrings.py` (8474 bytes)
-- `build/render_docstring_batch.m` (2443 bytes)
-- `build/second_stub.f` (358 bytes)
-- `build/serve-coi.py` (5412 bytes)
-- `build/sweep.sh` (10484 bytes)
-- `build/upstream-lock.json` (5448 bytes)
-- `build/upstream-pins.json` (1458 bytes)
-- `build/webaudio/__pba_enqueue__.m` (1289 bytes)
-- `build/webaudio/__pba_get__.m` (606 bytes)
-- `build/webaudio/__pba_id__.m` (1020 bytes)
-- `build/webaudio/__pba_init__.m` (1199 bytes)
-- `build/webaudio/__pba_new__.m` (398 bytes)
-- `build/webaudio/__pba_now__.m` (644 bytes)
-- `build/webaudio/__pba_put__.m` (390 bytes)
-- `build/webaudio/__pba_transition__.m` (10133 bytes)
-- `build/webaudio/__pba_write_samples__.m` (821 bytes)
-- `build/webaudio/__player_audioplayer__.m` (2551 bytes)
-- `build/webaudio/__player_get_channels__.m` (377 bytes)
-- `build/webaudio/__player_get_fs__.m` (359 bytes)
-- `build/webaudio/__player_get_id__.m` (357 bytes)
-- `build/webaudio/__player_get_nbits__.m` (368 bytes)
-- `build/webaudio/__player_get_sample_number__.m` (384 bytes)
-- `build/webaudio/__player_get_tag__.m` (354 bytes)
-- `build/webaudio/__player_get_total_samples__.m` (383 bytes)
-- `build/webaudio/__player_get_userdata__.m` (369 bytes)
-- `build/webaudio/__player_isplaying__.m` (965 bytes)
-- `build/webaudio/__player_pause__.m` (818 bytes)
-- `build/webaudio/__player_play__.m` (1859 bytes)
-- `build/webaudio/__player_playblocking__.m` (1359 bytes)
-- `build/webaudio/__player_resume__.m` (1456 bytes)
-- `build/webaudio/__player_set_fs__.m` (463 bytes)
-- `build/webaudio/__player_set_tag__.m` (458 bytes)
-- `build/webaudio/__player_set_userdata__.m` (473 bytes)
-- `build/webaudio/__player_stop__.m` (394 bytes)
-- `build/webaudio/audiodevinfo.m` (5793 bytes)
-- `build/webaudiorec/__pra_enqueue__.m` (840 bytes)
-- `build/webaudiorec/__pra_get__.m` (557 bytes)
-- `build/webaudiorec/__pra_id__.m` (987 bytes)
-- `build/webaudiorec/__pra_init__.m` (2771 bytes)
-- `build/webaudiorec/__pra_new__.m` (264 bytes)
-- `build/webaudiorec/__pra_progress__.m` (1740 bytes)
-- `build/webaudiorec/__pra_put__.m` (392 bytes)
-- `build/webaudiorec/__recorder_audiorecorder__.m` (1724 bytes)
-- `build/webaudiorec/__recorder_get_channels__.m` (184 bytes)
-- `build/webaudiorec/__recorder_get_fs__.m` (170 bytes)
-- `build/webaudiorec/__recorder_get_id__.m` (306 bytes)
-- `build/webaudiorec/__recorder_get_nbits__.m` (180 bytes)
-- `build/webaudiorec/__recorder_get_sample_number__.m` (430 bytes)
-- `build/webaudiorec/__recorder_get_tag__.m` (203 bytes)
-- `build/webaudiorec/__recorder_get_total_samples__.m` (200 bytes)
-- `build/webaudiorec/__recorder_get_userdata__.m` (189 bytes)
-- `build/webaudiorec/__recorder_getaudiodata__.m` (2982 bytes)
-- `build/webaudiorec/__recorder_isrecording__.m` (807 bytes)
-- `build/webaudiorec/__recorder_pause__.m` (344 bytes)
-- `build/webaudiorec/__recorder_record__.m` (913 bytes)
-- `build/webaudiorec/__recorder_recordblocking__.m` (1973 bytes)
-- `build/webaudiorec/__recorder_resume__.m` (259 bytes)
-- `build/webaudiorec/__recorder_set_fs__.m` (535 bytes)
-- `build/webaudiorec/__recorder_set_tag__.m` (175 bytes)
-- `build/webaudiorec/__recorder_set_userdata__.m` (185 bytes)
-- `build/webaudiorec/__recorder_stop__.m` (285 bytes)
-- `build/webdoc/doc.m` (2618 bytes)
-- `build/webfile/__wf_basename__.m` (2138 bytes)
-- `build/webfile/__wf_copy_dir__.m` (2672 bytes)
-- `build/webfile/__wf_copy_file__.m` (2282 bytes)
-- `build/webfile/__wf_fail__.m` (854 bytes)
-- `build/webfile/__wf_list_dir__.m` (1212 bytes)
-- `build/webfile/__wf_rmtree__.m` (2362 bytes)
-- `build/webfile/__wf_try_rename__.m` (1437 bytes)
-- `build/webfile/copyfile.m` (6270 bytes)
-- `build/webfile/ls.m` (5013 bytes)
-- `build/webfile/movefile.m` (5640 bytes)
-- `build/webfilepick.cc` (9043 bytes)
-- `build/webgraphics/PKG_ADD` (2022 bytes)
-- `build/webgraphics/__webgl_ginput__.m` (2736 bytes)
-- `build/webimage.cc` (7177 bytes)
-- `build/webio.cc` (18583 bytes)
-- `build/webjslib.js` (2307 bytes)
-- `build/webnet.cc` (7341 bytes)
-- `build/webnet/__web_decode__.m` (1208 bytes)
-- `build/webnet/__web_query__.m` (717 bytes)
-- `build/webnet/__web_read_last__.m` (784 bytes)
-- `build/webnet/__web_read_text__.m` (319 bytes)
-- `build/webnet/__web_urlenc__.m` (646 bytes)
-- `build/webnet/urlread.m` (2341 bytes)
-- `build/webnet/urlwrite.m` (2168 bytes)
-- `build/webnet/webread.m` (1573 bytes)
-- `build/webnet/websave.m` (1366 bytes)
-- `build/webshell/bunzip2.m` (363 bytes)
-- `build/webshell/gunzip.m` (359 bytes)
-- `build/webshell/tar.m` (314 bytes)
-- `build/webshell/untar.m` (256 bytes)
-- `build/webshell/unzip.m` (313 bytes)
-- `build/webshell/zip.m` (314 bytes)
-- `build/webshims/__makeinfo__.m` (4427 bytes)
-- `build/webshims/__webshim_python_cmd__.m` (3227 bytes)
-- `build/webshims/__webshim_strip_texinfo__.m` (5878 bytes)
-- `build/webshims/keyboard.m` (1055 bytes)
-- `build/webshims/pause.m` (1873 bytes)
-- `build/webshims/pkg.m` (11995 bytes)
-- `build/webshims/popen.m` (1608 bytes)
-- `build/webshims/system.m` (4539 bytes)
-- `build/webshims/uisetfont.m` (1039 bytes)
-- `build/webshims/uiwait.m` (907 bytes)
-- `build/webshims/waitfor.m` (1090 bytes)
-- `build/webshims/webpause.cc` (5202 bytes)
-- `dist/DEPLOY.md` (20510 bytes)
-- `dist/serve.py` (3871 bytes)
-- `docs/agents/domain.md` (3359 bytes)
-- `docs/agents/fact-system.md` (14148 bytes)
-- `docs/agents/issue-tracker.md` (3217 bytes)
-- `docs/agents/memory.md` (3919 bytes)
-- `docs/agents/triage-labels.md` (1606 bytes)
-- `docs/agents/ui-issue-graphics-crash.md` (4327 bytes)
-- `docs/agents/ui-issue-interface-change.md` (3810 bytes)
-- `docs/agents/upstream-issues.md` (12882 bytes)
-- `docs/charts/perf-5way.svg` (7540 bytes)
-- `docs/charts/perf-data.json` (1029 bytes)
-- `docs/charts/perf-speedup-IP.svg` (6490 bytes)
-- `docs/embed-api.md` (10564 bytes)
-- `docs/manual-test-checklist.md` (4489 bytes)
-- `doctor.json` (1587 bytes)
-- `gates-selftest.sh` (13572 bytes)
-- `mail/026-om-re-bridge-delivery-shape.md` (7008 bytes)
-- `mail/README.md` (6604 bytes)
-- `mail/read/003-re-role-boundary.md` (5959 bytes)
-- `mail/read/006-re-port-landed.md` (4107 bytes)
-- `mail/read/007-port-gaps-to-host.md` (7391 bytes)
-- `mail/read/009-re-rulings-synced.md` (5765 bytes)
-- `mail/read/011-re-rulings-2.md` (5490 bytes)
-- `mail/read/014-re-hardcode-and-hard-dep.md` (10794 bytes)
-- `mail/read/018-re-n5-and-versions.md` (7225 bytes)
-- `mail/read/020-re-versions-landed.md` (5316 bytes)
-- `mail/read/022-re-optim-query-gap.md` (5839 bytes)
-- `mail/read/024-re-ui-letter-and-a.md` (3988 bytes)
-- `mail/read/025-re-ui-adopted.md` (1966 bytes)
-- `mail/read/026-llvm-wasm-ticket65-gap2-ztii.md` (5014 bytes)
-- `mail/read/028-llvm-wasm-ruling-a-receipt.md` (3028 bytes)
-- `mail/read/028-re-rulings-and-ui-questions.md` (4994 bytes)
-- `mail/read/029-re-description-fields.md` (2210 bytes)
-- `mail/read/030-re-q2-ruling.md` (4743 bytes)
-- `mail/read/031-mail-read-proposal.md` (5616 bytes)
-- `mail/read/033-re-release-model-and-read-adopted.md` (3136 bytes)
-- `mail/read/034-re-upstream20-and-selfcheck.md` (3334 bytes)
-- `mail/read/036-re-035-and-shell.md` (3557 bytes)
-- `mail/read/037-download-module-spec.md` (7873 bytes)
-- `mail/read/039-todo-list-and-upgrade-reminder.md` (4845 bytes)
-- `mail/read/040-ruling5-llvm-prereq.md` (3576 bytes)
-- `mail/read/042-re-compile-landed.md` (3810 bytes)
-- `mail/read/043-re-039-all-done.md` (3128 bytes)
-- `mail/read/044-extra-content-re-compile-landed.md` (5022 bytes)
-- `mail/read/045-extra-content-fishing-audio-chain.md` (4158 bytes)
-- `mail/read/046-extra-content-re-audio-verified.md` (2815 bytes)
-- `mail/read/047-extra-content-engine-kind-schema.md` (1922 bytes)
-- `mail/read/048-extra-content-c2-erratum.md` (1866 bytes)
-- `mail/read/049-extra-content-llvm-installlayer-accident.md` (3130 bytes)
-- `mail/read/051-extra-content-re-050.md` (3181 bytes)
-- `mail/read/053-extra-content-re-052.md` (2768 bytes)
-- `mail/read/055-extra-content-re-054.md` (1117 bytes)
-- `mail/read/056-extra-content-omc-engine-entry.md` (1999 bytes)
-- `mail/read/057-extra-content-msl-addendum.md` (3876 bytes)
-- `mail/read/059-extra-content-consumer-ruling-and-merge.md` (4323 bytes)
-- `mail/read/061-extra-content-files-key-ruling.md` (4635 bytes)
-- `mail/read/062-extra-content-matlab-bridge-not-staged.md` (5099 bytes)
-- `maintaince.md` (13712 bytes)
-- `reflect-hooks/Einfacht.env` (3329 bytes)
-- `reflect-hooks/Einfacht.env.example` (1606 bytes)
-- `reflect-hooks/einfacht-env.sh` (4231 bytes)
-- `reflect-hooks/install.sh` (575 bytes)
-- `reflect-hooks/pre-commit` (5338 bytes)
-- `reflect-hooks/pre-push` (4659 bytes)
-- `shelf` (4096 bytes)
-- `site/VERSION` (14 bytes)
-- `site/assets-loader.js` (79991 bytes)
-- `site/assets/data/built-in-docstrings` (656052 bytes)
-- `site/assets/data/doc-cache` (2219997 bytes)
-- `site/assets/data/installed_packages.m` (5603 bytes)
-- `site/assets/data/macros.texi` (3369 bytes)
-- `site/assets/forge-catalog.json` (42501 bytes)
-- `site/assets/forge/cgi-0.1.2.tar.gz` (9960 bytes)
-- `site/assets/forge/datatypes-1.4.2.tar.gz` (2091502 bytes)
-- `site/assets/forge/geometry-4.1.0.tar.gz` (113949 bytes)
-- `site/assets/forge/matgeom-1.2.4.tar.gz` (572364 bytes)
-- `site/assets/forge/miscellaneous-1.3.3.tar.gz` (110600 bytes)
-- `site/assets/forge/nan-3.7.2.tar.gz` (257606 bytes)
-- `site/assets/forge/optim-1.6.3.tar.gz` (422679 bytes)
-- `site/assets/forge/quaternion-2.4.2.tar.gz` (47838 bytes)
-- `site/assets/forge/splines-1.3.5.tar.gz` (34053 bytes)
-- `site/assets/forge/statistics-1.7.7.tar.gz` (1437955 bytes)
-- `site/assets/forge/struct-1.0.18.tar.gz` (64113 bytes)
-- `site/assets/forge/symbolic-3.2.2.tar.gz` (276452 bytes)
-- `site/assets/forge/tsa-4.6.3.tar.gz` (85403 bytes)
-- `site/assets/llvm/LICENSE` (34523 bytes)
-- `site/assets/llvm/LICENSE-EMSCRIPTEN.txt` (5093 bytes)
-- `site/assets/llvm/LICENSE-LLVM.txt` (15141 bytes)
-- `site/assets/llvm/browser/worker.mjs` (7390 bytes)
-- `site/assets/llvm/clang.js` (76240 bytes)
-- `site/assets/llvm/clang.wasm` (48069274 bytes)
-- `site/assets/llvm/config.h.json` (892 bytes)
-- `site/assets/llvm/driver/abi.mjs` (7209 bytes)
-- `site/assets/llvm/driver/compile-core.mjs` (5798 bytes)
-- `site/assets/llvm/driver/sysroot-bundle.mjs` (2621 bytes)
-- `site/assets/llvm/driver/tar-reader.mjs` (1782 bytes)
-- `site/assets/llvm/driver/toolchain.mjs` (9501 bytes)
-- `site/assets/llvm/lld-wasm-only.js` (72686 bytes)
-- `site/assets/llvm/lld-wasm-only.wasm` (33358910 bytes)
-- `site/assets/llvm/manifest.json` (5559 bytes)
-- `site/assets/llvm/sysroot-headers.tar` (20654080 bytes)
-- `site/assets/llvm/sysroot-headers.wasm64.tar` (20654080 bytes)
-- `site/assets/m/forge.js` (13478 bytes)
-- `site/assets/m/lanetest.js` (380 bytes)
-- `site/assets/m/pkgfix.js` (45190 bytes)
-- `site/assets/m/plotbridge.js` (199280 bytes)
-- `site/assets/m/webaudio.js` (39138 bytes)
-- `site/assets/m/webaudiorec.js` (22119 bytes)
-- `site/assets/m/webdoc.js` (2935 bytes)
-- `site/assets/m/webfile.js` (31984 bytes)
-- `site/assets/m/webgraphics.js` (5220 bytes)
-- `site/assets/m/webimage.js` (2018 bytes)
-- `site/assets/m/webnet.js` (12305 bytes)
-- `site/assets/m/webshell.js` (2442 bytes)
-- `site/assets/m/webshims.js` (39468 bytes)
-- `site/assets/manifest.json` (24904 bytes)
-- `site/assets/manifest.w64.json` (23147 bytes)
-- `site/assets/meta.json` (13129 bytes)
-- `site/assets/msl/msl-4.1.0-maint.om.zip` (19482938 bytes)
-- `site/assets/oct-w64/__delaunayn__.oct` (14375 bytes)
-- `site/assets/oct-w64/__fltk_uigetfile__.oct` (18382 bytes)
-- `site/assets/oct-w64/__glpk__.oct` (28728 bytes)
-- `site/assets/oct-w64/__init_fltk__.oct` (2555 bytes)
-- `site/assets/oct-w64/__init_gnuplot__.oct` (33230 bytes)
-- `site/assets/oct-w64/__init_web__.oct` (19428 bytes)
-- `site/assets/oct-w64/__ode15__.oct` (184696 bytes)
-- `site/assets/oct-w64/__voronoi__.oct` (17731 bytes)
-- `site/assets/oct-w64/__web_pause_ms__.oct` (10998 bytes)
-- `site/assets/oct-w64/audiodevinfo.oct` (40719 bytes)
-- `site/assets/oct-w64/audioread.oct` (46730 bytes)
-- `site/assets/oct-w64/convhulln.oct` (12943 bytes)
-- `site/assets/oct-w64/fftw.oct` (10144 bytes)
-- `site/assets/oct-w64/gzip.oct` (46774 bytes)
-- `site/assets/oct-w64/webimage-oct.oct` (140185 bytes)
-- `site/assets/oct-w64/webio.oct` (48848 bytes)
-- `site/assets/oct-w64/webnet-oct.oct` (7666 bytes)
-- `site/assets/oct/__delaunayn__.oct` (14299 bytes)
-- `site/assets/oct/__fltk_uigetfile__.oct` (17567 bytes)
-- `site/assets/oct/__glpk__.oct` (28259 bytes)
-- `site/assets/oct/__init_fltk__.oct` (2545 bytes)
-- `site/assets/oct/__init_gnuplot__.oct` (33739 bytes)
-- `site/assets/oct/__init_web__.oct` (19262 bytes)
-- `site/assets/oct/__ode15__.oct` (250195 bytes)
-- `site/assets/oct/__voronoi__.oct` (17082 bytes)
-- `site/assets/oct/__web_pause_ms__.oct` (10834 bytes)
-- `site/assets/oct/audiodevinfo.oct` (41843 bytes)
-- `site/assets/oct/audioread.oct` (46953 bytes)
-- `site/assets/oct/convhulln.oct` (12900 bytes)
-- `site/assets/oct/fftw.oct` (9747 bytes)
-- `site/assets/oct/gzip.oct` (45429 bytes)
-- `site/assets/oct/webimage-oct.oct` (141398 bytes)
-- `site/assets/oct/webio.oct` (42199 bytes)
-- `site/assets/oct/webnet-oct.oct` (7430 bytes)
-- `site/assets/octdir-w64/control/__control_helper_functions__.oct` (17047 bytes)
-- `site/assets/octdir-w64/control/__control_slicot_functions__.oct` (1895499 bytes)
-- `site/assets/octdir-w64/control/is_matrix.oct` (3404 bytes)
-- `site/assets/octdir-w64/control/is_real_matrix.oct` (3396 bytes)
-- `site/assets/octdir-w64/control/is_real_scalar.oct` (3404 bytes)
-- `site/assets/octdir-w64/control/is_real_square_matrix.oct` (3561 bytes)
-- `site/assets/octdir-w64/control/is_real_vector.oct` (3509 bytes)
-- `site/assets/octdir-w64/control/is_zp_vector.oct` (3548 bytes)
-- `site/assets/octdir-w64/control/lti_input_idx.oct` (6242 bytes)
-- `site/assets/octdir-w64/geometry/polybool_mrf.oct` (56604 bytes)
-- `site/assets/octdir-w64/miscellaneous/cell2cell.oct` (8467 bytes)
-- `site/assets/octdir-w64/miscellaneous/partint.oct` (10994 bytes)
-- `site/assets/octdir-w64/optim/__bfgsmin.oct` (57500 bytes)
-- `site/assets/octdir-w64/optim/__disna_optim__.oct` (13411 bytes)
-- `site/assets/octdir-w64/optim/__max_nargin_optim__.oct` (8639 bytes)
-- `site/assets/octdir-w64/optim/numgradient.oct` (17519 bytes)
-- `site/assets/octdir-w64/optim/numhessian.oct` (18212 bytes)
-- `site/assets/octdir-w64/statistics/editDistance.oct` (35812 bytes)
-- `site/assets/octdir-w64/statistics/fcnnpredict.oct` (40164 bytes)
-- `site/assets/octdir-w64/statistics/fcnntrain.oct` (48945 bytes)
-- `site/assets/octdir-w64/statistics/libsvmread.oct` (13199 bytes)
-- `site/assets/octdir-w64/statistics/libsvmwrite.oct` (8902 bytes)
-- `site/assets/octdir-w64/statistics/svmpredict.oct` (90779 bytes)
-- `site/assets/octdir-w64/statistics/svmtrain.oct` (88762 bytes)
-- `site/assets/octdir-w64/struct/cell2fields.oct` (17082 bytes)
-- `site/assets/octdir-w64/struct/fieldempty.oct` (12324 bytes)
-- `site/assets/octdir-w64/struct/fields2cell.oct` (14024 bytes)
-- `site/assets/octdir-w64/struct/structcat.oct` (15821 bytes)
-- `site/assets/octdir/control/__control_helper_functions__.oct` (17009 bytes)
-- `site/assets/octdir/control/__control_slicot_functions__.oct` (1860182 bytes)
-- `site/assets/octdir/control/is_matrix.oct` (3144 bytes)
-- `site/assets/octdir/control/is_real_matrix.oct` (3206 bytes)
-- `site/assets/octdir/control/is_real_scalar.oct` (3214 bytes)
-- `site/assets/octdir/control/is_real_square_matrix.oct` (3368 bytes)
-- `site/assets/octdir/control/is_real_vector.oct` (3316 bytes)
-- `site/assets/octdir/control/is_zp_vector.oct` (3355 bytes)
-- `site/assets/octdir/control/lti_input_idx.oct` (6133 bytes)
-- `site/assets/octdir/geometry/polybool_mrf.oct` (54660 bytes)
-- `site/assets/octdir/miscellaneous/cell2cell.oct` (8138 bytes)
-- `site/assets/octdir/miscellaneous/partint.oct` (10538 bytes)
-- `site/assets/octdir/optim/__bfgsmin.oct` (57271 bytes)
-- `site/assets/octdir/optim/__disna_optim__.oct` (12837 bytes)
-- `site/assets/octdir/optim/__max_nargin_optim__.oct` (8311 bytes)
-- `site/assets/octdir/optim/numgradient.oct` (17025 bytes)
-- `site/assets/octdir/optim/numhessian.oct` (17515 bytes)
-- `site/assets/octdir/statistics/editDistance.oct` (35429 bytes)
-- `site/assets/octdir/statistics/fcnnpredict.oct` (39068 bytes)
-- `site/assets/octdir/statistics/fcnntrain.oct` (47303 bytes)
-- `site/assets/octdir/statistics/libsvmread.oct` (12678 bytes)
-- `site/assets/octdir/statistics/libsvmwrite.oct` (8506 bytes)
-- `site/assets/octdir/statistics/svmpredict.oct` (88179 bytes)
-- `site/assets/octdir/statistics/svmtrain.oct` (85962 bytes)
-- `site/assets/octdir/struct/cell2fields.oct` (16456 bytes)
-- `site/assets/octdir/struct/fieldempty.oct` (11661 bytes)
-- `site/assets/octdir/struct/fields2cell.oct` (13566 bytes)
-- `site/assets/octdir/struct/structcat.oct` (15074 bytes)
-- `site/assets/octinc/octave-headers.tar.gz` (541862 bytes)
-- `site/assets/octinc/octave-headers.wasm64.tar.gz` (565910 bytes)
-- `site/assets/pkg-module-table.json` (4393 bytes)
-- `site/assets/pkg/control.js` (1366564 bytes)
-- `site/assets/pkg/geometry.js` (236832 bytes)
-- `site/assets/pkg/matgeom.js` (2382316 bytes)
-- `site/assets/pkg/miscellaneous.js` (271364 bytes)
-- `site/assets/pkg/nan.js` (441285 bytes)
-- `site/assets/pkg/optim.js` (672909 bytes)
-- `site/assets/pkg/quaternion.js` (198789 bytes)
-- `site/assets/pkg/signal.js` (913704 bytes)
-- `site/assets/pkg/splines.js` (118077 bytes)
-- `site/assets/pkg/statistics.js` (5351017 bytes)
-- `site/assets/pkg/struct.js` (44263 bytes)
-- `site/assets/pkg/tsa.js` (254427 bytes)
-- `site/assets/pyodide/pyodide/ffi.d.ts` (45021 bytes)
-- `site/assets/pyodide/pyodide/mpmath-1.4.1-py3-none-any.whl` (567787 bytes)
-- `site/assets/pyodide/pyodide/package.json` (2999 bytes)
-- `site/assets/pyodide/pyodide/pyodide-lock.json` (137305 bytes)
-- `site/assets/pyodide/pyodide/pyodide.asm.mjs` (1250344 bytes)
-- `site/assets/pyodide/pyodide/pyodide.asm.wasm` (9598218 bytes)
-- `site/assets/pyodide/pyodide/pyodide.d.ts` (81966 bytes)
-- `site/assets/pyodide/pyodide/pyodide.js` (18912 bytes)
-- `site/assets/pyodide/pyodide/pyodide.mjs` (17931 bytes)
-- `site/assets/pyodide/pyodide/python` (1689 bytes)
-- `site/assets/pyodide/pyodide/python.bat` (3990 bytes)
-- `site/assets/pyodide/pyodide/python.exe` (1433600 bytes)
-- `site/assets/pyodide/pyodide/python_cli_entry.mjs` (8597 bytes)
-- `site/assets/pyodide/pyodide/python_stdlib.zip` (2545637 bytes)
-- `site/assets/pyodide/pyodide/sympy-1.14.0-py3-none-any.whl` (6299353 bytes)
-- `site/compile-worker.mjs` (17088 bytes)
-- `site/dldprobe.oct` (2764 bytes)
-- `site/embed-demo.html` (6565 bytes)
-- `site/index.html` (18537 bytes)
-- `site/lane.js` (9762 bytes)
-- `site/lanes.js` (328 bytes)
-- `site/matrix-android.html` (24853 bytes)
-- `site/minioct.oct` (5694 bytes)
-- `site/multi-tu.mjs` (15512 bytes)
-- `site/octave-core.js` (43756 bytes)
-- `site/octave-embed.js` (15776 bytes)
-- `site/octave-omc-bridge.js` (14006 bytes)
-- `site/octave-page.js` (11870 bytes)
-- `site/octave-worker.js` (14324 bytes)
-- `site/octave.build.json` (2695 bytes)
-- `site/octave.data` (9712174 bytes)
-- `site/octave.js` (462821 bytes)
-- `site/octave.wasm` (29632229 bytes)
-- `site/omc/OpenModelicaCompiler.d.ts` (55625 bytes)
-- `site/omc/OpenModelicaCompiler.js` (56586 bytes)
-- `site/omc/OpenModelicaCompiler_bg.wasm` (74579404 bytes)
-- `site/omc/OpenModelicaCompiler_bg.wasm.d.ts` (43840 bytes)
-- `site/p5canvas.js` (9656 bytes)
-- `site/queue.js` (3892 bytes)
-- `site/vendor/asciiplot.m` (940 bytes)
-- `site/vendor/betacdf.m` (7159 bytes)
-- `site/vendor/betainv.m` (6572 bytes)
-- `site/vendor/betapdf.m` (6641 bytes)
-- `site/vendor/chi2cdf.m` (5463 bytes)
-- `site/vendor/fcdf.m` (7449 bytes)
-- `site/vendor/fft.m` (1736 bytes)
-- `site/vendor/fpdf.m` (7974 bytes)
-- `site/vendor/gamcdf.m` (13475 bytes)
-- `site/vendor/gaminv.m` (7365 bytes)
-- `site/vendor/gampdf.m` (6795 bytes)
-- `site/vendor/ifft.m` (881 bytes)
-- `site/vendor/normcdf.m` (10379 bytes)
-- `site/vendor/norminv.m` (6120 bytes)
-- `site/vendor/normpdf.m` (5930 bytes)
-- `site/vendor/regress.m` (7261 bytes)
-- `site/vendor/tcdf.m` (9315 bytes)
-- `site/vendor/tinv.m` (5467 bytes)
-- `site/vendor/tpdf.m` (4730 bytes)
-- `site/vendor/ttest.m` (3147 bytes)
-- `site/w64/dldprobe.oct` (3033 bytes)
-- `site/w64/minioct.oct` (5887 bytes)
-- `site/w64/octave.build.json` (3193 bytes)
-- `site/w64/octave.data` (9712192 bytes)
-- `site/w64/octave.js` (517810 bytes)
-- `site/w64/octave.wasm` (31246819 bytes)
-- `site/webaudio.js` (7303 bytes)
-- `site/webaudiorec.js` (11861 bytes)
-- `site/webfilepick.js` (6151 bytes)
-- `site/webnet.js` (4146 bytes)
-- `test/browser/accept-113-assets.mjs` (8023 bytes)
-- `test/browser/accept-113-boot.mjs` (6814 bytes)
-- `test/browser/accept-113-libs.mjs` (7677 bytes)
-- `test/browser/accept-113-oct.mjs` (7684 bytes)
-- `test/browser/accept-113-ode15.mjs` (16795 bytes)
-- `test/browser/accept-113-pkgoct.mjs` (9923 bytes)
-- `test/browser/accept-arch-boundary.mjs` (10236 bytes)
-- `test/browser/accept-archive.mjs` (7447 bytes)
-- `test/browser/accept-audio.mjs` (16814 bytes)
-- `test/browser/accept-capability-layer.mjs` (6242 bytes)
-- `test/browser/accept-catalog-load.mjs` (16248 bytes)
-- `test/browser/accept-compile-extension.mjs` (18688 bytes)
-- `test/browser/accept-content-attributes.mjs` (11858 bytes)
-- `test/browser/accept-dldfcn.mjs` (13850 bytes)
-- `test/browser/accept-embed-api.mjs` (7149 bytes)
-- `test/browser/accept-embed-multi.mjs` (7994 bytes)
-- `test/browser/accept-fileops.mjs` (8223 bytes)
-- `test/browser/accept-forge-oct.mjs` (6255 bytes)
-- `test/browser/accept-forge-ondemand.mjs` (10829 bytes)
-- `test/browser/accept-forge.mjs` (7943 bytes)
-- `test/browser/accept-forge2.mjs` (10518 bytes)
-- `test/browser/accept-full.mjs` (8309 bytes)
-- `test/browser/accept-gfx-isolation.mjs` (9394 bytes)
-- `test/browser/accept-gfx-render.mjs` (11077 bytes)
-- `test/browser/accept-ginput.mjs` (12761 bytes)
-- `test/browser/accept-hdf5.mjs` (6979 bytes)
-- `test/browser/accept-help.mjs` (4289 bytes)
-- `test/browser/accept-idbfs.mjs` (6249 bytes)
-- `test/browser/accept-image.mjs` (5880 bytes)
-- `test/browser/accept-input.mjs` (6644 bytes)
-- `test/browser/accept-install-verdict.mjs` (9202 bytes)
-- `test/browser/accept-interactive.mjs` (10465 bytes)
-- `test/browser/accept-jspi-stress.mjs` (9384 bytes)
-- `test/browser/accept-market-browse.mjs` (17415 bytes)
-- `test/browser/accept-net.mjs` (11086 bytes)
-- `test/browser/accept-ode15.mjs` (7231 bytes)
-- `test/browser/accept-omc-e2e.mjs` (9136 bytes)
-- `test/browser/accept-p5-fallback.mjs` (9597 bytes)
-- `test/browser/accept-p5-graphics.mjs` (18194 bytes)
-- `test/browser/accept-pkg.mjs` (5619 bytes)
-- `test/browser/accept-pkgview.mjs` (6716 bytes)
-- `test/browser/accept-plot3d.mjs` (11570 bytes)
-- `test/browser/accept-plotv2.mjs` (20958 bytes)
-- `test/browser/accept-print.mjs` (14128 bytes)
-- `test/browser/accept-queue-drift.mjs` (9231 bytes)
-- `test/browser/accept-requirements.mjs` (6314 bytes)
-- `test/browser/accept-selftest.mjs` (6178 bytes)
-- `test/browser/accept-shellerr.mjs` (7001 bytes)
-- `test/browser/accept-slicot.mjs` (8857 bytes)
-- `test/browser/accept-symbolic-seam.mjs` (6519 bytes)
-- `test/browser/accept-t2-graphics.mjs` (10415 bytes)
-- `test/browser/accept-t6-audio-doc.mjs` (10119 bytes)
-- `test/browser/accept-t7-recorder.mjs` (14218 bytes)
-- `test/browser/accept-t8-uigetfile.mjs` (11441 bytes)
-- `test/browser/accept-t9-helpm.mjs` (9148 bytes)
-- `test/browser/accept-worker.mjs` (20785 bytes)
-- `test/browser/bench-core.mjs` (5946 bytes)
-- `test/browser/bench-dgemm.mjs` (3726 bytes)
-- `test/browser/bench-lanes.mjs` (5050 bytes)
-- `test/browser/fixtures/internal-props-probe.m` (3762 bytes)
-- `test/browser/fixtures/p5-graphics-probe.m` (3048 bytes)
-- `test/browser/fixtures/t2-graphics-probe.m` (2587 bytes)
-- `test/browser/manifest.json` (11887 bytes)
-- `test/browser/probe-artifact-sha.mjs` (4700 bytes)
-- `test/browser/probe-blockdiag-backend.mjs` (5685 bytes)
-- `test/browser/probe-bridge-cost.mjs` (2853 bytes)
-- `test/browser/probe-bridge-cost2.mjs` (1789 bytes)
-- `test/browser/probe-bridge-mirror-cost.mjs` (5323 bytes)
-- `test/browser/probe-bridge-svg-out.mjs` (2214 bytes)
-- `test/browser/probe-browser-floor.mjs` (11992 bytes)
-- `test/browser/probe-browser-matrix.mjs` (4425 bytes)
-- `test/browser/probe-caps.mjs` (6556 bytes)
-- `test/browser/probe-coep-engines.mjs` (5014 bytes)
-- `test/browser/probe-coi-sw.mjs` (9651 bytes)
-- `test/browser/probe-cold-start.mjs` (4572 bytes)
-- `test/browser/probe-core-names.mjs` (9505 bytes)
-- `test/browser/probe-e2-threads.mjs` (17361 bytes)
-- `test/browser/probe-embed-inventory.mjs` (8074 bytes)
-- `test/browser/probe-engine-parity.mjs` (10832 bytes)
-- `test/browser/probe-figures-geometry.mjs` (6845 bytes)
-- `test/browser/probe-fontname.mjs` (10774 bytes)
-- `test/browser/probe-gfx-bench.mjs` (4496 bytes)
-- `test/browser/probe-gfx-e2e-breakdown.mjs` (2714 bytes)
-- `test/browser/probe-gfx-isolation.mjs` (11524 bytes)
-- `test/browser/probe-gfx-resolution.mjs` (2443 bytes)
-- `test/browser/probe-gfx-surf-cost.mjs` (2358 bytes)
-- `test/browser/probe-gl4es-smoke.mjs` (4306 bytes)
-- `test/browser/probe-gpu-backend.mjs` (2037 bytes)
-- `test/browser/probe-heap-ceiling.mjs` (5848 bytes)
-- `test/browser/probe-hotpath.mjs` (6100 bytes)
-- `test/browser/probe-idbfs-bounds.mjs` (4741 bytes)
-- `test/browser/probe-iframe-coi.mjs` (11130 bytes)
-- `test/browser/probe-internal-props.mjs` (9154 bytes)
-- `test/browser/probe-jspi-b.mjs` (8858 bytes)
-- `test/browser/probe-jspi-eval.mjs` (5733 bytes)
-- `test/browser/probe-jspi-g1.mjs` (5137 bytes)
-- `test/browser/probe-jspi-gate.mjs` (7889 bytes)
-- `test/browser/probe-jspi-worker.mjs` (5633 bytes)
-- `test/browser/probe-jspi.mjs` (8348 bytes)
-- `test/browser/probe-lane.mjs` (20704 bytes)
-- `test/browser/probe-locale.mjs` (5178 bytes)
-- `test/browser/probe-m2-lazyload.mjs` (4379 bytes)
-- `test/browser/probe-matrix-android.mjs` (6924 bytes)
-- `test/browser/probe-nogl-flag.mjs` (2385 bytes)
-- `test/browser/probe-octc-spike.mjs` (6700 bytes)
-- `test/browser/probe-output-cost.mjs` (4524 bytes)
-- `test/browser/probe-p5-run.mjs` (2255 bytes)
-- `test/browser/probe-pkg-d6.mjs` (3390 bytes)
-- `test/browser/probe-preready-guard.mjs` (5717 bytes)
-- `test/browser/probe-pyodide-sympy.mjs` (16264 bytes)
-- `test/browser/probe-pyodide-sync.mjs` (4779 bytes)
-- `test/browser/probe-relaxed-simd.mjs` (3170 bytes)
-- `test/browser/probe-sort-bitexact.mjs` (2985 bytes)
-- `test/browser/probe-t2-graphics.mjs` (4979 bytes)
-- `test/browser/probe-t2-run.mjs` (2246 bytes)
-- `test/browser/probe-text-render.mjs` (5372 bytes)
-- `test/browser/probe-threads.mjs` (4584 bytes)
-- `test/browser/probe-toolchain-gap.mjs` (7581 bytes)
-- `test/browser/probe-toolkit-print.mjs` (2474 bytes)
-- `test/browser/probe-umfpack-trap.mjs` (3409 bytes)
-- `test/browser/probe-unimplemented-msg.mjs` (3947 bytes)
-- `test/browser/probe-want-matcher.mjs` (5236 bytes)
-- `test/browser/probe-wasm64-mem.mjs` (9087 bytes)
-- `test/browser/probe-webgpu-capability.mjs` (8461 bytes)
-- `test/browser/run.sh` (1836 bytes)
-- `test/fixtures/README.md` (1024 bytes)
-- `test/fixtures/emcc6-probe/driver.mjs` (1601 bytes)
-- `test/fixtures/emcc6-probe/probe.c` (2038 bytes)
-- `test/fixtures/emcc6-probe/run-probe.sh` (1779 bytes)
-- `test/fixtures/hotpath-known-hot-stripped.wasm` (825 bytes)
-- `test/fixtures/hotpath-known-hot.wasm` (1762 bytes)
-- `test/fixtures/ieee754/battery.m` (2261 bytes)
-- `test/fixtures/libm-spike/bench.c` (1961 bytes)
-- `test/fixtures/libm-spike/driver.mjs` (4411 bytes)
-- `test/fixtures/libm-spike/shim.c` (494 bytes)
-- `test/fixtures/pyodide-sync/build.sh` (1889 bytes)
-- `test/fixtures/pyodide-sync/probe.c` (1012 bytes)
-- `test/fixtures/relaxed_madd_min.wasm` (794 bytes)
-- `test/fixtures/sympy-perf/bench-sympy.py` (6796 bytes)
-- `test/fixtures/sympy-perf/compare-pyc.py` (4395 bytes)
-- `test/fixtures/sympy-perf/compare.py` (5617 bytes)
-- `test/fixtures/sympy-perf/probe-sympy-perf-pyodide.mjs` (6289 bytes)
-- `test/fixtures/sympy-perf/run-perf.sh` (4425 bytes)
-- `test/fixtures/sympy-pyc-ab/prepare-pyc-wheels.sh` (3833 bytes)
-- `test/fixtures/sympy-pyc-ab/probe-sympy-pyc-ab.mjs` (9197 bytes)
-- `test/fixtures/sympy-pyc-ab/repack-wheel.py` (2255 bytes)
-- `test/fixtures/sympy-pyc-ab/run-ab.sh` (1985 bytes)
-- `test/fixtures/xpow-spike/run-spike.sh` (1304 bytes)
-- `test/fixtures/xpow-spike/rust/.cargo/config.toml` (606 bytes)
-- `test/fixtures/xpow-spike/rust/Cargo.lock` (154 bytes)
-- `test/fixtures/xpow-spike/rust/Cargo.toml` (184 bytes)
-- `test/fixtures/xpow-spike/rust/rust-toolchain.toml` (238 bytes)
-- `test/fixtures/xpow-spike/rust/src/lib.rs` (1287 bytes)
-- `test/fixtures/xpow-spike/xpowmain.cpp` (2951 bytes)
-- `test/fixtures/xpow-spike/xpowspike.cpp` (2500 bytes)
-- `test/local/compile-local.mjs` (16984 bytes)
-- `upstream-patches/octave-wasm-quantstack/0001-Add-emscripten-platform-support.patch` (4480 bytes)
-- `upstream-patches/octave-wasm-quantstack/0002-Fix-weird-nesting.patch` (282286 bytes)
-- `upstream-patches/octave-wasm-quantstack/0003-Disable-threads.patch` (880 bytes)
-- `upstream-patches/octave-wasm-quantstack/0004-Custom-link-octave-cli.patch` (1660 bytes)
-- `upstream-patches/octave-wasm-quantstack/0005-Remove-rpath.patch` (17587 bytes)
-- `upstream-patches/octave-wasm-quantstack/0006-Assume-little-endian.patch` (2757 bytes)
-- `upstream-patches/octave-wasm-quantstack/0007-MAYBE-Set-SIDE_MODULE-to-1.patch` (4006 bytes)
-- `upstream-patches/octave-wasm-quantstack/0008-Set-octave-cli-flags.patch` (1149 bytes)
-- `upstream-patches/octave-wasm-quantstack/0009-Fix-Fortran-calling-convention.patch` (4730 bytes)
-- `upstream-patches/octave-wasm-quantstack/0010-Remove-redundant-headers.patch` (111089 bytes)
-- `upstream-patches/octave-wasm-quantstack/0011-Fix-duplicate-convert_enum-error.patch` (803 bytes)
-- `upstream-patches/octave-wasm-quantstack/0012-Return-void-from-xerbla.patch` (710 bytes)
-- `upstream-patches/octave-wasm-quantstack/0013-Add-emscripten-mutex.patch` (1328 bytes)
-- `upstream-patches/octave-wasm-quantstack/0014-Disable-path-modifications.patch` (2091 bytes)
-- `upstream-patches/octave-wasm-quantstack/0015-Disable-multithreading.patch` (781 bytes)
-- `upstream-patches/octave-wasm-quantstack/0016-Disable-gui-calls-and-threading.patch` (2654 bytes)
-- `upstream-patches/octave-wasm-quantstack/0017-Adapt-signal-wrappers.patch` (3125 bytes)
-- `upstream-patches/octave-wasm-quantstack/0018-FIXME-abort-calls-native-code-failure.patch` (1663 bytes)
-- `upstream-patches/octave-wasm-quantstack/0019-FIXME-memory-leaks.patch` (879 bytes)
-- `upstream-patches/octave-wasm-quantstack/README.md` (847 bytes)
-- `upstream/arpack-ng` (6 bytes)
-- `upstream/bzip2` (6 bytes)
-- `upstream/emsdk` (6 bytes)
-- `upstream/expat` (6 bytes)
-- `upstream/fftw` (6 bytes)
-- `upstream/fontconfig` (6 bytes)
-- `upstream/freetype` (6 bytes)
-- `upstream/gl4es` (6 bytes)
-- `upstream/hdf5` (6 bytes)
-- `upstream/octave` (4096 bytes)
-- `upstream/openblas` (6 bytes)
-- `upstream/pcre2` (6 bytes)
-- `upstream/qhull` (6 bytes)
-- `upstream/rapidjson` (6 bytes)
-- `upstream/sndfile` (6 bytes)
-- `upstream/suitesparse` (6 bytes)
-- `upstream/sundials` (6 bytes)
-- `upstream/zlib` (6 bytes)
-- `vendor/MANIFEST.md` (1676 bytes)
-- `vendor/extra/asciiplot.m` (940 bytes)
-- `vendor/extra/fft.m` (1736 bytes)
-- `vendor/extra/ifft.m` (881 bytes)
-- `vendor/extra/ttest.m` (3147 bytes)
-- `vendor/forge/betacdf.m` (7159 bytes)
-- `vendor/forge/betainv.m` (6572 bytes)
-- `vendor/forge/betapdf.m` (6641 bytes)
-- `vendor/forge/chi2cdf.m` (5463 bytes)
-- `vendor/forge/fcdf.m` (7449 bytes)
-- `vendor/forge/fpdf.m` (7974 bytes)
-- `vendor/forge/gamcdf.m` (13475 bytes)
-- `vendor/forge/gaminv.m` (7365 bytes)
-- `vendor/forge/gampdf.m` (6795 bytes)
-- `vendor/forge/normcdf.m` (10379 bytes)
-- `vendor/forge/norminv.m` (6120 bytes)
-- `vendor/forge/normpdf.m` (5930 bytes)
-- `vendor/forge/regress.m` (7261 bytes)
-- `vendor/forge/tcdf.m` (9315 bytes)
-- `vendor/forge/tinv.m` (5467 bytes)
-- `vendor/forge/tpdf.m` (4730 bytes)
-- `zreflect/__init__.py` (112 bytes)
-- `zreflect/check_ab.py` (8423 bytes)
-- `zreflect/check_envfile.py` (15627 bytes)
-- `zreflect/check_facts.py` (7705 bytes)
-- `zreflect/check_facts_replay.py` (17807 bytes)
-- `zreflect/check_instruments.py` (9383 bytes)
-- `zreflect/check_invariants.py` (9065 bytes)
-- `zreflect/check_locks.py` (8476 bytes)
-- `zreflect/check_pins.py` (10754 bytes)
-- `zreflect/check_questions.py` (9031 bytes)
-- `zreflect/check_readme_sync.py` (9862 bytes)
-- `zreflect/check_retractions.py` (6211 bytes)
-- `zreflect/check_stale.py` (12272 bytes)
-- `zreflect/check_world.py` (17168 bytes)
-- `zreflect/collect.py` (5329 bytes)
-- `zreflect/doctor.json.example` (1242 bytes)
-- `zreflect/doctor.py` (15657 bytes)
-- `zreflect/facts.py` (20200 bytes)
-- `zreflect/gate.py` (10914 bytes)
-- `zreflect/guard.py` (13118 bytes)
-- `zreflect/knobs.py` (13454 bytes)
-- `zreflect/ledger.py` (11552 bytes)
-- `zreflect/living.py` (3688 bytes)
-- `zreflect/mail-read.py` (10523 bytes)
-- `zreflect/measure_octave.py` (99064 bytes)
-- `zreflect/registry.py` (26659 bytes)
-- `zreflect/render.py` (7250 bytes)
-- `zreflect/runner.py` (5210 bytes)
-- `zreflect/world.json.example` (1299 bytes)
+```
+group                           files        bytes
+site/                             228     333.5 MB
+build/                            456       3.3 MB
+test/                             156       1.0 MB
+(root)                             13     758.9 KB
+upstream-patches/                  20     435.1 KB
+zreflect/                          29     378.0 KB
+.scratch/                          79     343.5 KB
+bridge/                            20     303.2 KB
+mail/                              41     178.0 KB
+vendor/                            21     123.5 KB
+.githooks/                         15     102.4 KB
+docs/                              13      75.6 KB
+dist/                               2      23.8 KB
+reflect-hooks/                      6      19.3 KB
+.github/                            3       5.8 KB
+upstream/                          18       4.1 KB
+.zcode/                             1       1.6 KB
+(total)                          1121     340.5 MB
+```
+
+Per-file listing: `git ls-files` — this block is a summary so the README stays readable.
+Re-run: `python3 .githooks/update-readme.py --check`
 <!-- /AUTO -->
-## Hooks
 
-This repo uses a whitelist `.gitignore` (deny by default, allow per path) + git hooks:
+## Hooks and gates
 
-- `pre-commit`: recalculates the README AUTO block, checks the whitelist, runs the fact/
-  consistency/plugin/instrument gates and the **trilingual README sync gate**
-  (`check_readme_sync.py`, vendored from [Einfacht](https://github.com/ArchivalEra/Einfacht)):
-  all three language READMEs must exist, be non-empty, and cross-link.
-- `pre-push`: README freshness + the **push-set mode** of the trilingual gate — any push
-  touching one language README must update all three in the same batch.
-- Install: `bash .githooks/install.sh` (sets `core.hooksPath`).
+Gates live in `reflect-hooks/` and are wired through `core.hooksPath`. `pre-commit`
+re-renders the machine blocks in this README and in `STATE.md`, then runs the fact-system
+gates, the repository-specific gates (whitelist, consistency, falsifiability, readiness
+anti-patterns, mail boundary) and both self-test benches. `pre-push` additionally requires
+all three READMEs to be updated in the same push.
+
+```sh
+. reflect-hooks/Einfacht.env
+python3 zreflect/registry.py --run commit              # gates declaring runs_at="commit"
+sh gates-selftest.sh && sh build/gates-selftest.sh     # prove each gate can fail
+```
+
+Every gate carries `--selftest`. A gate that cannot be shown to fail is not a gate.
+
+## Contributing
+
+Read [`AGENTS.md`](AGENTS.md) first — it is the operating contract, not a style guide.
+Three rules are absolute: no server-side execution, no force-push or history rewriting,
+and every new file must be added to the `.gitignore` whitelist or the pre-commit gate
+rejects it.
 
 ## License
 
-**AGPL-3.0-or-later** (full text: [`LICENSE`](LICENSE)). The distributed wasm binary
-statically links GPLv3 Octave, GPLv2+ FFTW, LGPL libsndfile and several BSD/permissive
-components — this mix has **no choice outside AGPL-3.0**.
+AGPL-3.0-or-later for the build glue, the browser host and the Octave fork's
+modifications. Octave itself is GPL-3.0-or-later; BLAS/LAPACK, SuiteSparse, FFTW and
+related libraries keep their own licenses. Some bundled components are GPL-2.0-only, which
+is incompatible with AGPL-3.0, so this combination can only be distributed under
+AGPL-3.0.
 
-This program is free software: you can redistribute it and/or modify it under the terms
-of the GNU Affero General Public License as published by the Free Software Foundation,
-either version 3 of the License, or (at your option) any later version. The program is
-distributed in the hope that it will be useful, but **without any warranty**; without
-even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU Affero General Public License as published by the Free Software Foundation, either
+version 3 of the License, or (at your option) any later version. It is distributed in the
+hope that it will be useful, but without any warranty; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 Per AGPL-3.0 §13, users interacting with it over a network are entitled to the
-corresponding source: **this repository is that source**; the build reproduces fully in
-the `o113` container (recipes in `build/CLIBS.md`). Per-component licenses and
-copyrights: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+corresponding source: this repository is that source, and the build reproduces in the
+`o113` container. Per-component licenses and copyrights:
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
