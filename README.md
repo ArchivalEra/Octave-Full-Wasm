@@ -1,222 +1,275 @@
 # Octave-Full-Wasm
 
-目标：**浏览器里跑满功能 Octave**（当前基线 **11.3.0**）——把官方发行版缺的宿主组件
-换成浏览器原生 API，并把 C 库长尾尽量补全：全量核心脚本、Forge 包、
-SuiteSparse / ARPACK / FFTW / QHull / GLPK / HDF5、图像与音频 I/O、同步网络、
-plot 桥 + `print -dsvg`。
+[English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
 
-起点是 `rwl/octave-wasm`（BSD）的 7.2 骨架；**第四轮已换基线到 vanilla
-Octave 11.3.0 + emsdk 5.0.7**（计划见 `HISTORY.md` §9，实况与坑见 §10）。
-**工具链现已升级到 emsdk 6.0.12**：wasm64-NEXT 线在该版本下全配方重编并跑通
-（boot + 数值六套 107/0 + IEEE 逐位一致，2026-10-11）。
-构建产物（wasm/data/js）体积大，走 Release 分发，不进 git。
+GNU Octave 11.3.0 compiled to WebAssembly — a full numerical computing environment
+(interpreter, BLAS/LAPACK, plotting, ~500 packages) running **entirely in your browser**:
+pure client-side compute, **no server-side execution**.
 
-## 为什么是网页版
+**Current production lane: `w64` (WebAssembly memory64 + threads + relaxed-FMA OpenBLAS
++ mimalloc + a Rust `sort` kernel)**, shipped behind the same web UI as every other lane.
+All numerical results are IEEE 754 binary64 — audited explicitly (below).
 
-省磁盘空间只是它最不重要的一个意义。真正区分度在于：
+> **README 三件套的唯一产地 = 本分支（`master`）**（2026-10-29 用户点令：「IP 线的迁徙到
+> Master」）。此前三份文档分散在三条线上各自维护，`master` 的英文 README 停在 10-12、
+> `IllegalPerformance` 那份逐批更新 ⇒ 访客（GitHub 默认分支正是 `master`）看到的是最旧的。
+> 现在：**`master` 的 `README.md` / `README.zh.md` / `README.de.md` 是权威版本**，
+> `IllegalPerformance` 与 `wasm32-final` 的对应文件顶部各有一条指向这里的声明。
+> 三条线的关系见下方「Branches」一节（三线模型：`wasm32-final` / `master` /
+> `IllegalPerformance`，分档依据是**用户可达性 + 许可线，与性能无关**）。
+>
+> ⚠️ **本文件描述的是三条线的共同事实 + 各自的差异**，因此文中提到的部分路径
+> **只存在于 `IllegalPerformance` 线**（那是 non-free 的实验线，含 Rust 补丁内核与
+> 内容契约工具链）：`build/113/rust/`、`build/113/check-rust-toolchain.py`、
+> `build/extra-content/validate-content-list.py`、`build/lanes.json`、
+> `bridge/multi-tu.mjs`、`build/113/provision-omc*.sh`。
+> 在 `master` 上读到这些路径时，它们指的是**另一条线上的对应物**，不在本线的工作树里
+> —— 这是刻意的三线划分，不是文档漂移。判断本线有什么，以 `git ls-files` 为准。
 
-1. **零安装零配置**——桌面 Octave 的使用链是：下载→安装→摸清路径→装包→配
-   gnuplot/图形，每一步劝退一批人；网页版是**一个链接**。对"考前冲刺"场景，
-   安装成本直接等于放弃率。
-2. **手机能用**——桌面版永远做不到。通勤/课间用手机跑一段矩阵、看一眼图。
-3. **可分享、可复现、版本钉死**——URL 即环境；Octave 11.3.0 + 具体 BLAS/包版本
-   全打包，所有人算出的数字一致。桌面版是"在我机器上能跑"。
-4. **示例可以内嵌成"活的"**——教材解析里的例子不再需要"自己复制到 Octave 试"，
-   点一下就跑，输出长在讲解旁边。文字/符号气泡/可执行代码是**同一个产物**。
-   plot 桥（Octave 算→SVG 上屏）正是靠这个接缝才成立。
-5. **沙箱与确定性**——用户代码跑在隔离 wasm 里：碰不到文件系统、发不了进程
-   （`system()` 清晰报错）。做自动评测/作业批改不必起 Octave 服务器。
-6. **分发边际成本为零**——纯静态资源上 CDN，算力在用户浏览器；用户数从 1 涨到
-   1 万，服务端成本不变。
-7. **教学上"受限"反而可能是优点**——能精确定义哪些可用、哪些明确报错；受控子集
-   比"什么都能装、装完就崩"更适合初学者。
+Toolchain: Emscripten **6.0.12** (all three lines rebuilt and shipped; the
+The three-line 6.0.12 rollout is written up in `build/113/NOTES-emsdk-upgrade.md` §8.8.
+See `build/113/NOTES-emsdk-upgrade.md` §8.9 for the per-line acceptance triage.
 
-一句话：桌面版是「**一台装着 Octave 的电脑**」，网页版是「**一个能算、能画、
-能被链接和嵌入的 Octave**」。前者拼功能完整性，后者拼**分发与集成**。
-代价也要认清：慢（wasm 单线程、无 JIT）、无工具箱生态、无 GUI 工具链、内存受限——
-它不是取代桌面版，是**另一个产品**。
+All three lines are **pushed and in sync** (local = origin = mirror), each rebuilt and verified under Emscripten 6.0.12.
 
-## 架构
+Downstream integration with the browser clang+lld toolchain ([LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)) is audited in `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md`.
 
-```text
-Octave 11.3.0 wasm（build/113/configure-113-full.sh + link-web.sh；-O2 编译）
-├── 全量核心 .m（plot/ode/signal/special-matrix/…，两段式 addpath）
-├── vendor/forge：forge statistics 纯 .m（normpdf/tcdf/ttest 依赖…）
-├── 真 .oct 动态装载：主模块 -s MAIN_MODULE=1，模块编成 wasm side module
-│   运行时 dlopen —— 与桌面版插件模型一致，加模块不必重链那 36MB 主 wasm。
-│   连 dldfcn（convhulln/gzip/glpk/fftw/audioread/…）也走这条路。
-├── 资产懒加载车道：站点 assets/ 下按需 fetch → 写 wasm FS → addpath
-│   （Forge 包、SUNDIALS、图像、音频、网络、plot 桥覆写全在这里）
-├── plot 桥 v2：Octave 算 → spec → SVG（2D + 3D，含 subplot/figure(n)/axis）
-└── print -dsvg：纯 .m SVG 生成器（不依赖 gnuplot，也不需 Asyncify）
+Site asset bundles are audited per batch: regenerate `site/assets/m/*.js` from their `build/` sources and compare hashes (mount points come from `build/assets-meta.json`, *not* guessed).
+
+`pkg load <name>` now resolves **where a package comes from** before firing: site-shipped assets go through `OctaveAssets.load`, shelf (Forge catalog) packages through `OctaveAssets.install` (same-origin tarball + sha256 + in-engine gunzip/untar). **Shipped to 8761 and verified in-browser** (real tarball download + `csaps` bit-identical to host Octave). See `build/113/NOTES-forge-ondemand.md` §10 (T4) and the acceptance suite `test/browser/accept-catalog-load.mjs` (27/0, incl. 4 reverse assertions).
+
+Installing the Forge `datatypes` package from the shelf makes the **modern MATLAB types** work: `table([1;2;3],{'a';'b';'c'})` returns `class=table` (height 3, width 2), `string(42)` gives `"42"`. Unimplemented MATLAB names now report Octave's real message ("belongs to the 'datatypes' package … not installed") instead of a `makeinfo` subprocess error. See `build/113/REQUIREMENTS-store-and-matlab.md`. (`help sin`/`help ode45`/`lookfor` are unaffected; the three help suites now assert `__makeinfo__` resolves to the sanctioned webshims downgrade.)
+
+This engine already has everything a Simulink-style **block-diagram** backend needs — state-space/transfer-function blocks, `ode45`, **stiff `ode15s`**, LQR, `zpkdata` (probe `test/browser/probe-blockdiag-backend.mjs`, 6/0). So a block-diagram frontend can be built **on this engine** (a separate JS repo) rather than pulling in a second runtime like Pyodide. See `build/113/NOTES-plugin-survey.md`.
+
+That survey also covers what this engine **cannot** reach: MATLAB has three axes (language / Simulink / Simscape), and we cover the first two — **non-causal physical modelling (Simscape) is zero-covered here**, and **OpenModelica** is the realistic answer for it (its wasm path lives in the official repo, has a Rust rewrite, and ships a browser FMI simulator; AGPLv3/OSMC-PL). See the survey's §8.
+
+A follow-up **experiment confirmed Modelica runs in the browser**: a third-party OpenModelica→wasm port runs a full `parse → C → in-browser emcc+wasm-ld → simulate → plot` cycle on `BouncingBall.mo` (evidence: `build/113/evidence-omc-web-demo.png`; record: `build/113/NOTES-experiment-omc-wasm.md`). So "Modelica on the web" is proven, not speculative — though that third-party route's solver coverage is narrow (Euler/RK/dassl).
+
+The **official** route is a first-class CMake target in OpenModelica's own tree (`rust_omc.cmake`: `RUST_OMC_WASM_RUNTIME`, `wasm32-wasip1` cross-compile, `omc.wasm`, prebuilt-artifact hand-off) — i.e. the same shape as this repo's own pipeline (upstream submodule + pin + cross-compile + same-origin hosting). So it is built the way we build Octave, not by copying a third-party recipe (see §11).
+
+And it can share the **same page** — measured, not assumed: this engine solves **index-1 DAE** (`ode15i`, `Mass` matrix; an RC circuit gives V(5)=0.9931 vs theory 0.9933) but **not index-3** (a constrained pendulum fails), and index reduction is exactly what the OpenModelica compiler does. Both engines read/write `.mat`, which is what omc-web already dumps. So the pairing is the same split as Simscape↔MATLAB: OM models, Octave analyses, `.mat` in between (see §8 of the experiment record).
+
+That also settles the repo plan: a separate "block-diagram repo" is **not** needed — MSL `Blocks` already provides the causal block library and OMEdit already ships a Qt-for-WebAssembly graphical editor, so OpenModelica is a **peer upstream** (its AGPLv3/OSMC-PL licence matches), i.e. a 20th submodule alongside Octave, feeding a second engine lane on the same page. See §9.
+
+The MATLAB-semantics bridge also already exists at the interface level: OM's script API (`sendExpression`, used by its official `OMMatlab` MATLAB client over ZeroMQ) is exposed in the browser as **`omc_eval`** — same command protocol, different transport. So an Octave-side `omc_*` function family (build a script, call `omc_eval`, read back `.mat`) is all that is missing; OMMatlab itself cannot run in a browser (it needs a local process socket). See §10.
+
+**Symbolic computation — the route's premise is now measured, not assumed**: `sym` is 0 in this build, and Forge's `symbolic` package is pure `.m` (zero `.cc`) yet drives everything through Python/SymPy — while this build's wasm has **zero** `pyexec`/`pyeval`/`pycall` bytes and no shell. So the package cannot run as-is; the only route is a real Python runtime in the browser. Measured: **Pyodide + SymPy works** — `diff(sin(x),x)` returns exactly `cos(x)`, in a COI worker **and** without COOP/COEP (so the base lane has it too), plus a loud-failure reverse test (`test/browser/probe-pyodide-sympy.mjs`, 5/0). On the "precompile Python" question: static compilation to JS (Transcrypt-style) is **infeasible**, not merely slower (Transcrypt's own README: "No eval and exec of Python code"; SymPy, measured, has 340 `eval(` / 61 `exec(` call sites). Precompiled **bytecode** (`.pyc`) is feasible and currently not done at all; the measured A/B is **7.26×** on `import sympy` (2757 → 380 ms, compile calls 472 → 0), at 3.28× the wheel bytes. See `build/113/PLAN-matlab-gaps.md`.
+
+**Verdict on "is Pyodide a performance burden"** (three-way measurement, same bench, same SymPy 1.14.0, same ground types): native CPython (uv 3.14) = 1.00×; **browser Pyodide = 2.04×** (geometric mean over 15 CAS ops, per-op range 1.6–3.2×); native Octave + `symbolic` with a persistent IPC = 7.54× (the browser lane is actually **3.69× faster** than that, because `symbolic` marshals variables across a pipe on every op). Cold start = Pyodide load + sympy package ≈ 2.3 s (lazy-loadable, never on the boot path). So: yes it costs something, but **≈2× is not a magnitude change** — it does not alter the architecture choice. Rerun: `sh test/fixtures/sympy-perf/run-perf.sh`.
+
+**Follow-up: how much does precompiled `.pyc` actually buy?** (four-way breakdown — measuring only `import` would mislead): `import sympy` **2.71 s → 0.37 s (7.40×)**; per-op **first call** geometric mean **1.29×** (SymPy lazily imports submodules on first use); **steady state 0.99× — unchanged, as it must be** (the control showing precompilation is no panacea). The key finding is in the fourth number: a second `import sympy` in the same session still costs 2.73 s on source wheels — i.e. **the browser has no implicit bytecode cache** (native CPython writes `__pycache__`; site-packages is read-only here), so every cold start recompiles those 472 modules. `.pyc` wheels therefore buy one thing: **the per-session startup constant drops ~85%**, for 3.28× the bytes. `test/fixtures/sympy-perf/compare-pyc.py`.
+
+**Where symbolic computation lives in "extra content"**: the `symbolic` package is an ordinary shelf entry, but the Pyodide runtime (~27 MB) is **infrastructure, not a shelf entry** — same class as the clang toolchain: same-origin hosting, pinned by URL+sha256 in `upstream-lock.json`, a rebuildable provision artifact shared by several packages. And the shelf's current `kinds` field **lies about it**: measured, `detect_kinds('symbolic-3.2.2.tar.gz')` returns `['m']` — identical to the truly out-of-the-box `cgi` — while its `DESCRIPTION` says `SystemRequirements: python, sympy, mpmath`, so it installs and then cannot run. Hence a new shelf axis (`needs: ["pyodide"]`); scale measured: only **2 of 144** upstream packages need it (`symbolic`, `pythonic`). For the store-style UI that means this row must say "pulls ~27 MB runtime on demand". See `REQUIREMENTS-store-and-matlab.md` §A4b.
+
+**Framing (user directive 2026-10-14): "plugin market / store" is only one UI form of **extra content**, not the concept itself.** Whatever these things are called, they are ultimately just capability extensions of this web version of Octave — the concept-level term is **extra content** (authoritative definition in `CONTEXT.md`): site-shipped assets / shelf packages / **shared capability layers** (the clang toolchain, the Pyodide runtime) / build-time component plugins. The "shelf" is its metadata carrier and "on-demand pull" is its acquisition mechanism. => Use "extra content" when writing about capability; use "store" only when writing about the interface.
+
+**Unified "extra content" interface across the three repos (decided 2026-10-14)**: a seam between Octave-Full-Wasm, LLVM-wasm and the shelf repo — **the seam is on the record, not on the method**: one record kind (`form` = delivery form, `content` = what's inside — two axes named separately, ending today's `kind`/`kinds` overload) + capability layers (Pyodide/clang) as ordinary `form:"tree"` entries in the SAME dependency graph + a host return of **four-state values** (ok/failed/not-found/cannot-know, which cannot collapse into a boolean — the T4 lesson "unread is not absent" made a type-level invariant) + the port living in `build/extra-content/` (schema + pure-stdlib validator + golden/bad fixtures; producers self-certify without the host present). See `build/113/NOTES-extra-content-seam.md`.
+
+**Organisational decision (2026-10-14, user: you choose)**: backend integration of extra content **stays with this repo**; non-core content (package/runtime/toolchain metadata + provisioning recipes) belongs to the **extra-content repo's agent**; the **UI repo holds two contracts** — one with this repo (engine / `docs/embed-api.md` / the four-state `install` return) and one with the extra-content repo (content governance / the port). **Rejected: an integrator repo in the middle** (the integration knowledge lives here — lane/COI/promote/gates/the Qt-derived embed API; an integrator would either re-learn it or become a facade); **rejected: pure promote-the-standard** (a standard is an activity, not a structure — no owner means it drifts). Note **there is still exactly one same-origin runtime endpoint**: the two contracts are two conversation partners, not two origins (COEP blocks cross-origin fetch, measured; the content tables are assembled into this site). See `build/113/NOTES-extra-content-seam.md` §8.
+
+**Migration: shelf repo → extra-content repo (private, 2026-10-14)**: the former `Octave-Forge-Shelf` (public) is now **`Octave-Extra-Content` (private)** — this repo's `shelf/` submodule points at it. Beyond the original package archives it adds `recipes/` (provisioning recipes for the LLVM-wasm toolchain and the Pyodide/SymPy runtime: URL + sha256 + budgets) and `port/` (a copy of the content-list port spec). **This lands org decision ③ (no middleman)**: this repo is the core host / consuming adapter, the extra-content repo is the producing adapter, and the UI holds one contract with each. **Honest consequence of private**: this repo is public, so **outside clones cannot init `shelf/`** — a capability minus, not a build failure (gates tolerate a missing shelf with SKIP). The old public repo `Octave-Forge-Shelf` is now **archived** (read-only; deleting it needs a `delete_repo` scope the token lacks, so it awaits one interactive `gh auth refresh`), and the local clone was removed. See `build/113/NOTES-extra-content-seam.md` §8. (Pin log: the extra-content repo went 980e093 -> upgrade 7eee94d -> whitelist .gitignore af7508c; both later commits touch only docs/gitignore, so `packages/`+`tools/` stay byte-identical to 980e093 — zero functional difference, no site rebuild needed.) (Knowledge transfer 2026-10-14: sent three experience docs to the extra-content repo — `docs/{FORK-PIPELINE,FACT-SYSTEM,LANES-AND-MEMORY-MODEL}.md`, each trimmed to its producing-adapter role with replayable commands and real error strings — and the memory-model/lane doc to the OM repo, incl. how three lines still stand when the upstream has zero wasm64 support.) (Handover 2026-10-14: the extra-content repo is cloned to /mnt/hdd/zcode-projects/Octave-Extra-Content via `gh repo clone` (remote authoritative state), verified on the spot: tool selftest 14/0, 12 packages, all three docs present; README now lists a four-step "read first" order.) (Cross-agent mail channel + one drift fix, 2026-10-14: the extra-content repo got a `mail/` channel and a first letter asking about the role boundary — seam §8.1 says "content contract = extra-content repo ↔ UI" while its manager said he does not handle UI, so the two conflict and need a decision; also fixed a drift of our own, where PLAN/REQUIREMENTS said "add a `needs` axis" but seam §2 rules that capability layers are ordinary `form:"tree"` entries plus a dependency edge, with no new field — flipped and logged as retraction `R-015`.) (Cross-agent exchange closed 2026-10-14: the extra-content repo accepted "the repo is authoritative" and takes the content contract; its raised conflict over port origin was ruled **host-owned** (seam §4 and §8.1 had contradicted each other; §8.1 narrowed and logged as retraction R-016); also added a distinction of **ownership vs delivery** — the content repo is private while the UI repo is public, so UI cannot read it directly: content semantics belong to the content repo, delivery goes through the host site.) (Port landed 2026-10-14: seam §5 step 1 — `build/extra-content/` now holds the schema, validator, 3 golden + 5 bad fixtures and the `check-content-port` gate (41 gates green); end-to-end testing found the content repo's `--emit` omits `producer` and emits upstream absolute URLs (`--site` correctly red — that is the two-stage design), reported by letter.) (Seam §5 steps 2 and 3 done, 2026-10-14: (2) the catalog goes to schema 2 with `form`/`content` axes, `kinds` kept as a compat view, gate gains R5; (3) `install()` returns a **four-state Verdict** (ok/failed/not-found/cannot-know, not collapsible) plus `planOnly` with zero download. Acceptance: new suite `accept-install-verdict` **12/0** (four states + two key reverse assertions + zero-download audit); regression `accept-forge-ondemand` 15/0 and `accept-catalog-load` 27/0 unchanged, proving backward compatibility. Also fixed two latent real bugs: a **double-base** in `catalog()` (only visible with a non-empty base) and an undeclared variable in the planOnly branch.) (Three port rulings + collection-point definition confirmed, 2026-10-14: the content repo escalated three port gaps and the host (port origin) ruled — (1) capability layers keep `content: []` (no enum expansion, plus a reverse assertion); (2) a new optional `consumer` axis (`octave`/`omc`, defaulting to octave); (3) `pin` should use a type prefix (`release:`/`commit:`/`submodule:`). Also confirmed the "collection point" is the producing-side aggregation of records, **not** a runtime endpoint. Validator selftest 22/0.) (Cleanup 2026-10-14: removed the stale `.opencode/goal-state.md` (a 2026-09-20 harness leftover whose four checklist items are all done and which STATE/FACTS have superseded); `PLAN-*.md` and `.scratch/perf-max/` were checked and are **load-bearing** (the former referenced by CONTEXT/AGENTS/README, the latter completed and cited by live-code comments as provenance) and are kept. The rule: not "looks old, delete" but "does what it points at still exist".) (Seam §5 progress: steps 1-3 landed and recorded in STATE; **remaining: (4) capability layers into the graph (Pyodide provisioning + a `form:"tree"` entry so `install('symbolic')` works) and (5) toolchain convergence — not done**.) (**★★ Symbolic computation now really works, 2026-10-15**: the `symbolic` package is wired to browser Pyodide with **zero patches** — its `python_ipc_system` backend calls the global name `system` (there is no `private/system.m` in the package), so the call lands on this repo's webshim, which routes it to a page-side bridge that calls Pyodide synchronously. `diff(sin(x),x)` returns **`cos(x)`** and `double(sym(3)/2)` returns `1.5`; acceptance `accept-symbolic-seam` **9/0** (incl. two reverse assertions). Decisive probe `probe-pyodide-sync` **4/0**: wasm C calling the runtime synchronously, **no JSPI/Asyncify/Atomics needed**. Four host-side changes, **zero relink/recompile**.) (**Shipped to 8761, 2026-10-15**: `accept-symbolic-seam` is 9/0 on the **production site**; concurrent sweep re-verified 51 suites / 1195 PASS / 0 FAIL. ⇒ the browser Octave can now really do symbolic computation.) (Ledger updated 2026-10-15: 168 facts; this batch adds 4 keys (symbolic seam 9/0, sync probe 4/0, cold start 2177 ms); the全量 accept_pass/accept_suites moved with the new sweep (1195 / 51).) (Seam §5 steps 4-5 done, 2026-10-15: (4) **capability layers into the graph** — `provision-pyodide.sh` provisions three assets (PyPI official bytes + rewriting the hosted lock's shas), the assembler emits a `form:"tree"` entry merged into the **same packs table**, and `symbolic` points at it via a `deps` edge (per §2: **no `needs` field**); new suite `accept-capability-layer` **12/0** (incl. the load-order topology [pyodide, symbolic] and two reverse assertions). (5) **toolchain table convergence** — the assembler's `--upstream` reads a producer table and **reuses the origin's validator**: compliant tables merge (13 entries measured), non-compliant ones are **refused and named** (LLVM's real table has 19 problems ⇒ the site stays uncontaminated). Remaining: LLVM fixes its own table, which is the content repo's promotion job.) (Port rulings round 2, 2026-10-15: the extra-content repo's `mail/009` raised three confirmations and one independent discovery; the host (port origin) ruled them — (1) `license` stays a **free string/object**, not an SPDX enum (real artifacts are per-file mixed: Apache-2.0 WITH LLVM-exception / MIT OR NCSA / AGPL; an enum would force producers to lie or split entries) — the validator checks **type only** and says plainly there is **no machine check for "is it written correctly"**; (2) "ordinary entry" for capability layers does **not** cap the count — LLVM's clang toolchain ships **13** entries (per-file licences + per-file sha make two sysroot variants' reuse visible); "ordinary" means *not special*, not *physically one entry*; (3) `--upstream` was re-run against LLVM's **fixed** table (sha `8bbafa5f…`, `release/content-list.json` ≡ `release/out/` byte-identical, both producer and `--site` modes `ok`, 13 entries; `v0.1.2` is now confirmed published via `gh release list`) and merged cleanly. Attachment ruling: `size` semantics are decided **by `form`** — single-file = the file's bytes; `form:"tree"` = whole-tree byte budget (present pyodide: 22,013,349 = the directory, while `url` anchors the 9,598,218 main wasm — **not the same object, both intentional**); `size` is not part of fail-closed. Merging LLVM exposed **two debts in the host's own gate** (fixed): the site gate ran shelf rules (R2/R4) against non-shelf entries ⇒ 26 false positives ⇒ now **split by `url` prefix** (shelf packages → R2–R5; capability layers / producer tables → **R7**); and old R6 required a `consumer` on capability layers, contradicting ruling (2)'s "optional, defaults octave" ⇒ **flipped**. New `--upstream-bytes` stages a producer table's bytes into the site with per-file sha256 (merge-only would leave the catalog pointing at 404s, caught by R7b); end-to-end proof on an isolated temp site: merge LLVM's real table + stage ⇒ site gate **`ok`** (catalog 26 entries). Validator selftest 26/0, port gate 6/0, site gate 20/0, assembler 19/0.)
+
+frozen `wasm32-final` archive line rebuilt but not promoted).
+
+All three lines are now rebuilt on the **same toolchain (Emscripten 6.0.12)** and
+verified in-browser: the frozen `wasm32-final` archive line included.
+
+---
+
+## Performance (measured 2026-10-07, medians of 5 native / 3 wasm interleaved runs)
+
+![five-way performance comparison](docs/charts/perf-5way.svg)
+
+| workload (s) | native ref-BLAS | native OpenBLAS ×24 | wasm32-final | wasm64-NEXT | **IllegalPerformance** |
+|---|---|---|---|---|---|
+| dot 1e7 | 0.0082 | **0.0048** | 0.0080 | 0.0100 | 0.0110 |
+| matmul 500 | 0.0257 | **0.0029** | 0.0220 | 0.0040 | 0.0050 |
+| matmul 1000 | 0.1971 | **0.0089** | 0.1600 | 0.0230 | 0.0240 |
+| lu 800 | 0.0415 | **0.0147** | 0.0340 | 0.0140 | 0.0150 |
+| lu 1500 | 0.2598 | **0.0636** | 0.2180 | 0.0620 | 0.0720 |
+| svd 400 | 0.1650 | 0.2243 | 0.1740 | **0.1550** | 0.1870 |
+| sum 1e7 | 0.0086 | **0.0076** | 0.0080 | 0.0080 | 0.0090 |
+| **sort 2e6** | 0.2111 | 0.2020 | 0.2280 | 0.2400 | **0.1110** |
+| loop 1e6 | **0.4934** | 0.5226 | 0.6220 | 0.5780 | 0.5890 |
+
+![IllegalPerformance speedup vs each baseline](docs/charts/perf-speedup-IP.svg)
+
+**IllegalPerformance in ratios** (baseline time ÷ IP time; geometric mean over all 9):
+
+- **1.96× vs native Octave** (default reference BLAS; BLAS-only axes **3.16×**)
+- **1.86× vs wasm32-final** (the frozen wasm32 line; matmul 1000 alone **6.7×**)
+- **0.99× vs wasm64-NEXT** — parity everywhere except its defining win, **sort 2.16×**
+- **0.80× vs native OpenBLAS ×24** — the native multithreaded ceiling is still 1.25×
+  ahead on pure BLAS, but IllegalPerformance **wins sort (1.82×) and svd (1.20×)**
+
+## IEEE 754 production evaluation
+
+A 24-field battery (`test/fixtures/ieee754/battery.m`) was run on **6 configurations**
+(4 wasm lanes + native ref-BLAS + native OpenBLAS ×24):
+
+- **23/24 fields bit-identical everywhere**: round-half-to-even, ±0 bit patterns,
+  canonical NaN, Inf/division, subnormals, eps boundaries, seeded `rand` (MT19937
+  identical native↔wasm), `sin`/`pow`/division (musl vs glibc sampled bit-identical).
+- The only difference = **dgemm summation order vs a step-by-step unfused reference**
+  (max 6.6 ulp) — present in **native OpenBLAS too** (3522 of 10000 elements, 4.99e-16).
+  Every add/multiply is correctly rounded; only the order differs → IEEE-conformant.
+- `relaxed_madd` (81 sites, OpenBLAS rsimd kernels): WebAssembly permits fused *or*
+  unfused evaluation — **both are IEEE 754-conformant results**. Disclosure: w64 BLAS
+  results may vary in the last ulp **across browser engines** (same class as native
+  OpenBLAS across CPU microarchitectures). Element-wise math is unaffected (0 divergence).
+
+**Verdict: wasm32-final and the IllegalPerformance line are cleared for production.**
+Repro: `test/fixtures/ieee754/battery.m`, logs in `w64-logs/ieee-*.log`.
+
+## What shipped on the IllegalPerformance line
+
+- **rust-sort** — a Rust (driftsort) kernel for `sort`, wired as a *source seam* with a
+  weak symbol + link-time knob (`RUST_SORT`); removal = relink without the library,
+  zero tree-object change. Differential gate: 22 domains bit-identical + 4/4 mutants
+  caught; **sort 2e6 = 2.16× vs wasm64-NEXT, 1.82× vs native OpenBLAS**.
+- **G6 latency instrument** — batched quit-check latency bound for any block-level
+  kernel (candidate ④ xpow-driver measured ≤2.1% and **rejected** by it).
+- Closure audit: libm (IEEE-locked), fill/fft (bandwidth-bound), xpow driver (≤2.1%) —
+  **no known headroom left** (reproducers in `w64-logs/`).
+
+## Architecture
+
+Four deployment **lanes** of the same interpreter, auto-picked per browser capability
+(`lanes.js`): `base` (wasm32 single-thread — the whole wasm32 line is single-threaded) →
+`w64` (memory64 + threads + FMA + mimalloc + rust-sort) / `w64-base` (memory64 fallback cell).
+★ Three-line ruling 2026-10-17: the `threads` lane (wasm32+atomics) was a malformed lane and has been deleted — experiment slots are bound to the three branches (wasm32-final / master / IllegalPerformance); sites are display-only. Serving without
+COI headers silently drops you to `base` — see the [deployment ticket](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
+
+Swappable components (BLAS, allocator, Rust kernels) are **plugins with a contract**:
+mode-table knob → declared label → artifact probe → two-way gate (`plugin-check.py`) →
+fact-ledger entry. Octave updates land via the **fork/submodule pipeline**:
+`upstream/octave` (branch `wasm/11.3.0`) is our fork — merge upstream, rebuild, run the
+lane SOP (`build/113/NOTES-upstream.md`); the pin/witness gates (`witness-upstream-pin.py`)
+assert the container tree == fork pin on every commit.
+
+## Run it
+
+```sh
+python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
+# open http://127.0.0.1:8761/   (COI headers are mandatory — see issue #2)
 ```
 
-构建命令里 `-s MAIN_MODULE=1` 与 `-fPIC` 是一对：主链带 MAIN_MODULE 时，
-Octave 本体与静态库必须全部 `-fPIC` 重编，否则 wasm-ld 报 `recompile with -fPIC`。
-**11.3.0 车道的重配/重链是 `build/113/configure-113-full.sh` + `build/113/link-web.sh`**
-（依赖写成一张表，`SKIP=<库名>` 可按库集合二分；7.2 时代的 `build/reconf-pic.sh`
-保留作历史记录）。配方与坑见 `build/CLIBS.md`。
+This repository ships **no CI auto-deploy** — deployment is manual, per [DEPLOY.md](DEPLOY.md).
+Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
+[issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2). UI integration:
+[Embed API](docs/embed-api.md) + [issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1).
 
-## 状态（2026-09-24 实测）
+## Repository map
 
-**基线 = Octave 11.3.0（带真渲染器 + FreeType 文字 + fontconfig 字体匹配 + `MAIN_MODULE=2`）**。`http://127.0.0.1:8761/`
-服务的就是**最近一次通过浏览器实测**的构建（**wasm sha256 见 `STATE.md` 文末 `AUTO:STATE`**，
-别在这里抄 —— 默认 toolkit = `webgl`）。
-**全量回归的套件数与项数以 `STATE.md` 文末的 `AUTO:STATE` 区块为准** —— 那几件数字由
-`.githooks/update-handoff.py` 从部署件与最近一次全绿回归重算，本文不再抄一份（抄一份必烂）。**R1–R10 需求全部落地**，第三轮 T1–T5 亦已完成
-（见 `build/GAPS.md` 的需求书与 `HISTORY.md` §5 / §10 的结论表）。
+- `STATE.md` — live status; `build/FACTS.json` — measured-numbers ledger (each key carries a re-run command)
+- `zreflect/` — the fact system (**Einfacht refactor adopted 2026-10-09**: gate platform / discovered gate registry / knob registry / world gate); `zreflect/measure_octave.py` is this repo's data layer, `reflect-hooks/Einfacht.env` the knob carrier
+- `HISTORY.md` — append-only per-batch record (the evidence above lives in §5.77–§5.107)
+- `maintaince.md` — direction map; `docs/embed-api.md` — embed contract; `DEPLOY.md` — deployment
+- **Octave-Forge on-demand pull** (v1 working 2026-10-09, **shipped 2026-10-10** to 8761/8768/repo `site/`): `OctaveAssets.catalog()` reads a site shelf and `OctaveAssets.install(name)` fetches+verifies+installs a package (with its dependency closure) only when asked — **zero bytes for packages you never use**. Shelf = the `shelf/` submodule (metadata only, one file per package); site catalogue = `build/forge-catalog.py` (gate: `build/113/check-forge-catalog.py`); design = `build/113/NOTES-forge-ondemand.md`; acceptance = `test/browser/accept-forge-ondemand.mjs` (v1 = pure `.m` packages; `.oct` accelerators = v2)
 
-| 项 | 结果 |
-|---|---|
-| 线代/微积分/优化/ODE45/多项式 | ✅ 全对（与本机同版 11.3.0 **逐位一致**） |
-| 统计分布 + ttest/regress + fft 后备 | ✅ 全对 |
-| R1 SUNDIALS → `ode15s`/`ode15i` | ✅ 真 `__ode15__.oct`（SUNDIALS 静态码全在模块内，主 wasm 零改动） |
-| R2 Forge 包（statistics/optim/signal/control/…） | ✅ 懒加载，真数值验证 |
-| R3 HDF5 → `save/load -hdf5` | ✅ 往返/压缩/`whos -file` 全通 |
-| R4 图像 → `imread`/`imwrite`/`imfinfo` | ✅ PNG/BMP/TGA 像素级无损 |
-| R5 网络 → `urlread`/`urlwrite`/`webread`/`websave` | ✅ **真同步**（同步 XHR，无需 Asyncify） |
-| R6 压缩归档（6 个函数无 shell 化） | ✅ 二进制字节级往返 |
-| R7 CXSparse | ✅ 已开（SPQR 不是缺口，`spqr` 3.6.0 就被 `qr` 取代） |
-| R8 WebAudio → `audioplayer` | ✅ 18 个符号纯 `.m` 实现，真实 AudioContext 调度 |
-| R9 图形导出 → `print -dsvg` | ✅ 2D + 3D 都能出，不依赖 gnuplot |
-| R10 编译级别 | ✅ 11.3.0 车道走 `-O2`；R10 计时护栏（1e6 循环 <1.5s）通过 |
-| plot 桥 | ✅ v2：2D（含 subplot/figure(n)/axis）+ 3D（plot3/mesh/surf/contour）+ 中文标签 |
-| **图形句柄（T2）** | ✅ `web` toolkit：`figure/gcf/gca/get/set/title/close` 全可用（资产车道） |
-| **真渲染（2026-09-23）** | ✅ **默认 toolkit = `webgl`**（gl4es → WebGL2/GPU）：开箱 `plot(...); drawnow` 出真图、`getframe` 真像素；`accept-p5-graphics` **65/65** |
-| 官方 `.oct` 装载 | ✅ dldfcn 也走 dlopen，`exist=3` / `which()` 返回 `.oct` 路径 |
-| 稀疏 `lu`（UMFPACK） | ✅ 可用（根因：建 SuiteSparse 时漏传 `-DNBLAS`/`-DNSUPERNODAL`） |
-| `lsode` | ✅ 可用（根因：f2c 回调实参个数 4 vs 5，wasm `call_indirect` 做精确类型检查） |
-| SLICOT（control 编译件） | ✅ 可用（根因：CHARACTER 隐藏长度 ABI + 主模块不导出 LAPACK/BLAS；`accept-slicot` 25/25） |
-| 交付包（可静态托管） | ✅ `dist/octave-full-wasm-site-20260924`（**含真渲染 + 持久化 + 两个字体家族**），首包 gzip ≈**10.26MB**（准确值见 `HANDOFF.md` 的 `AUTO:STATE`） |
-| 验收 | ✅ **全绿**（8761；**套件数与项数见 `HANDOFF.md` 的 `AUTO:STATE`**，含需求级 `accept-requirements`、图形线 `accept-p5-graphics` **65 项**、无 shell 报错 `accept-shellerr` 14 项） |
+**`OctaveAssets.browse()` — the market read-side front door (shipped 2026-10-17)**: one async call returns the full `Entry[]` — three attributes (`fromSource`/`compatible`/`installed`), per-candidate `versions[]` (staged carry derived axes; withheld carry only a cause — nothing invented), package-level `description`/`links` (passed through verbatim from the content repo's archives), plus a `state`/`why` aggregation. `statusOf()` shares the same single origin, so the two never disagree. Acceptance: `test/browser/accept-market-browse.mjs` (17/0, incl. three reverse assertions). Errors: all 14 codes classify in `install()`'s verdict (`_byCode` full table).
+- `build/113/` — lane build recipes + gates; `test/browser/` — acceptance harness (`SWEEP_JOBS=4` parallel; latest all-green sweep = `accept_suites` / `accept_pass` in the ledger)
+- graphics (engine-authoritative since 2026-10-09): `bridge/octave-core.js` protects the core `m/plot` tree from host shadow stubs (snapshot + restore + delete-created), `p5canvas.js`/`queue.js` resolve the module via `window.__octaveHosts` so figures reach the DOM in embed mode; acceptance = `accept-gfx-isolation` + `accept-gfx-render`
+- worker mode (`?worker=1`, fixed 2026-10-10): each eval never returned (the worker branch still called `octaveUiAppend` after the page adapter was extracted) — now the output flush can't wedge the pending queue; acceptance = `accept-worker`
+- `.scratch/open-questions/issues/` — local ticket tracker
+- `docs/agents/upstream-issues.md` — issues filed back upstream to [Einfacht](https://github.com/ArchivalEra/Einfacht) (archived copies); `docs/agents/ui-issue-interface-change.md` — the interface/behaviour notice filed to the UI repo
 
+**Package precompilation batch (2026-10-18)**: all 28 Forge `.oct` side modules that were still compiled with Octave 7.2 headers are rebuilt against 11.3.0 — **two flavors only**, per the three-line model: `wasm32` (no `-pthread`, serves the `base` cell) and `wasm64` (`-pthread -sMEMORY64=1`, serves `w64`). The tuning knobs were measured, not guessed: `-O3` costs **+11% bytes** for noise-level speed, **LTO breaks dlopen outright** (it strips symbols only dlopen needs — the §5.78 precedent reproduced on both flavors), and `wasm-opt -O3` post-processing yields -0.6% with no speed gain ⇒ **the shipped recipe is `-O2`**, because on the side-module layer there is no knob headroom left (the real levers are main-module/BLAS, already done). Verified in-browser: `accept-113-pkgoct` **27/0 on both flavors**; full `PROBES=1` sweep green. See `build/113/NOTES-pkg-precompile.md`.
 
-### 已知偏差（如实）
-- ~~**`help` 对非平凡输入报 `makeinfo` 子进程错误**（无 shell）~~ → **T1 已修（内建）**：
-  构建期用**真 makeinfo 预渲染** `built-in-docstrings`（与 Octave 自己的
-  `mk-doc-cache.pl` 同一技术），运行时零新代码。`help sin`/`help sqrt`/`help disp` 可用。
-  （**2026-09-23 更新**：`help ode45` 这类 `.m` 的 docstring 也修好了 —— 构建期预渲染 + 去标记，
-  见 HISTORY §5.13；`accept-t9-helpm` 18/18。**该缺口已彻底消除。**）
-- `fftw('threads',N)` 静默 no-op（`fftw_init_threads` 桩须返回成功，否则核心 `fft` 崩）。
-- **无 shell 的入口一律"清晰报错"**（2026-09-24 起，覆写层 `build/webshims/`）：
-  `[st,out]=system(...)`/`unix(...)` 一向如此；`st = system(...)`、`system(...)`（无输出参数）、
-  `popen(...)` 这三条**以前静默返回 -1 / 静默通过**，现在同样抛清晰错误（HISTORY §5.30，`accept-shellerr` 14 项）。
-  ⇒ 这不只是措辞：**任何调 `system()` 的 `.m` 现在会明确失败，而不是悄悄拿到 -1 继续跑**。
-- **"等用户动作"一族一律"清晰报错"**（2026-09-24 起，同一覆写层）：`ginput`/`keyboard`/
-  `uisetfont`/`uiwait`/`waitfor` **以前会挂死页面**（8 s 无响应，比报错更糟），现在报错并点明
-  替代办法（`input()` 走 `window.prompt` 可用；字体直接 `set(h,"fontname",…)`）。
-  连带 `waitforbuttonpress`/`gtext`（内部调 `ginput`）。钉子 `accept-interactive` 15 项。
-  ⇒ 真实现要等 JSPI 车道（`build/113/PLAN-jspi.md` 的 G3/G5），届时**删掉那几个覆写文件**。
-- **`waitbar` 可用**（2026-09-24 修）：以前整族坏在桥的 `figure` 上（`integerhandle=off` 形态），
-  现在建图/更新/取帧都正常（HISTORY §5.35）。
-- ~~**control 包的 SLICOT 编译件未发布**~~ → **2026-09-23 已修好并发布**（HISTORY §5.15）：
-  `ss`/`step`/`pole`/`zero`/`norm`/`lyap`/`dlyap`/`care`/`tf2ss`/`c2d` 全可用且数值正确
-  （`step` 与解析解 `1-e^-t` 误差 1.1e-16）。
-- ~~`voronoi` 单输出形式（要画图）不可用~~ → **2026-09-24 已修**（桥支持 `plot(hax,…)`，HISTORY §5.30）；两输出形式照旧。
-- **`print` 的矢量输出只有 plot 桥那一条路**（`-dsvg` 由桥自己的 `__svg_render__.m` 出）。
-  Octave **核心**的 `print` 管线（`__opengl_print__.m`）要 **gl2ps + shell 管道 + (gs|svgconvert)**：
-  gl2ps **2026-09-23 已补上**（`build/113/build-gl2ps.sh` + `configure-113-full.sh` 的
-  `WITH_GL2PS=1`），但**"没有 shell"是本构建的有意设计**（`system`/`unix`/`popen` 清晰报错）
-  ⇒ `print -dsvg` 仍报 `failed to open pipe "| cat > …"`，`-dpdf/-dps/-deps` 另需 gs。
-  **所以别把桥的数据管线当冗余砍掉**（详见 `HISTORY.md` §5.20、`build/113/NOTES-webgl.md` §4.5.9–4.5.11）。
+**Release model defined (2026-10-18)**: a package is released as an **artifact** = `(name, version, arch)` — not as a pile of files, and **not as a second version number**: the version is the upstream fact (`optim 1.6.3`) while the architecture is a build-matrix index key, so there is no `optim-1.6.3-wasm32` pseudo-version. The shipped catalog now carries `artifacts[]` (per-architecture, per-file sha256, derived `arch`, plus `octave`/`toolchain`/`recipe` provenance) — currently **5 packages × 2 architectures = 10 release units**. Gate R13 reconciles every artifact file against the site bytes (missing, extra, or sha drift ⇒ red). See `build/113/NOTES-release-model.md`.
 
-## 下一步（第三轮：浏览器环境语义）
+**kind/role line closed (2026-10-20, mail/055)**: the content repo's acceptance letter confirms 15/15 entries self-describe — 13 packages, llvm-wasm (toolchain), pyodide (language-bridge, the Q1 vocabulary's third value in first use) — with kind semantics correct (engine carries it, bridges default). The line closed in three days from ticket to done (047 ticket → 050 schema → 052 engine entry → 053 missed label → 054 fix), the acceptance ledger reading: schema origin + semantic copy + table data + loader judge all aligned, zero hard-coded name checks. No outstanding items on either side; the UI reads the completed table whenever it wires up.
 
-R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 API 怎么换成浏览器原生"**
-（完整计划见 `HISTORY.md` §5.5）：
+**2026-10-29 (later) — the E-line bridge is delivered.** OpenModelica answered with the delivery shape and corrected one of my assumptions: copying the eleven `.m` files into a site directory changes nothing, because `addpath` reads **MEMFS** and the site's HTTP path is not in it (I verified independently: after writing into MEMFS, `exist` flips from 0 to 2). So the shape is two-part — site directory is the byte source, and the page must write those bytes into MEMFS before `addpath`. That is now implemented: `provision-omc-bridge.sh` projects the OpenModelica manifest (self-test 4/0), `octave-omc-bridge.js` runs the four steps in order with three honest failure states, and the MEMFS stage is spliced into the boot chain *before* `st.ready` because it costs 39 ms while the 74 MB engine boot stays in the background (page boot remains 1.3 s). The engine turned out to be an ESM wasm-bindgen module, not an Emscripten global factory — my first guess at three global names matched none of them. **I also found a defect in OpenModelica's own product suite**: its readiness gate (`eval_string('x=1+1')`) passes at 877 ms while this site's boot chain finishes at 1354 ms, so it probes `exist()` inside a 477 ms window when MEMFS is still empty and reports three false failures. Re-probing the same page with `__octaveReady` yields 8/8 green. Issue 70 is closed: zero-injection assembly now makes all three `omc_*` functions visible, with a reverse assertion (removing `/bridge` turns them MISSING) proving the green comes from assembly. Both sites: 6/0 and 1253 PASS / 0 FAIL overall.
 
-**T1** `help`（构建期 makeinfo 预渲染）、**T2** graphics 句柄半真化（薄 `web` toolkit）、
-**T3** `copyfile`/`movefile`/`ls`、**T4** `pkg` 语义、**T5** `input()`、
-**T6** `audiodevinfo` + `doc`（+ 页面输出落点）、**T7** `audiorecorder`、
-**T8** `uigetfile`（浏览器文件选择器）、**T10** Asyncify 实验（结论：不可采用）
-—— ✅ **八项均已完成**，各自验收套件全绿（`accept-help` 12、`accept-t2-graphics` 26、
-`accept-fileops` 20、`accept-pkg` 16、`accept-input` 9、`accept-t6-audio-doc` 33、
-`accept-t7-recorder` 40、`accept-t8-uigetfile` 19）。
+**2026-10-29 — E-line MATLAB bridge handed back to its owner.** The content repo ruled that the `omc_*` MATLAB-semantics bridge belongs to OpenModelica (interface and semantics), to us (site assembly), and to the UI (consumption) — explicitly *not* a content contract, so those eleven `.m` files stay out of the forge catalog. We re-ran its four claims (all true) and found two things it did not know: `omc_bridge.js` has **zero callers** anywhere in the OM repo or its product site — its acceptance suite implements the host inline instead — and the three load-bearing semantics (`cd` before simulating, cross-VFS byte transport for `loadFile`, and moving the result `.mat` back into the Octave MEMFS) live only in that test file. So the gap is deeper than "files not copied": the bridge was never wired anywhere. We sent letter 024 to the OM inbox with the re-run evidence and three delivery-shape questions, and opened issue 70 as `needs-info`: we deliberately do not pick a shape and start copying, because that would set an interface contract on the owner's behalf. The first deliverable once OM answers is an end-to-end suite with **zero injection** — proving `omc_simulate('BouncingBall')` works from site assembly alone.
 
-**覆盖率已收口**：拿**同版桌面 Octave 11.3.0** 的 `__list_functions__`（927 个可调用名字）
-逐个在浏览器里 `exist()` 对照 → **926/926 可用**；唯一不在的是 Debian 打包产物
-`debian_missing_handler`（不属 Octave）。详见 `build/113/NOTES-coverage-100.md`。
+**2026-10-28 — environment restored, two tickets closed, one instrument repaired.** With the build container restarted (it had been killed by a shutdown two days earlier), `doctor` reports fully green and two gates that previously skipped now actually run: the upstream-pin witness (2 pins identical) and the plugin registry check (declared artifacts match per lane). Issue 69 is closed — both settlement criteria pass, and the OpenModelica JS ledger key it was waiting on had in fact already been published, so the projection carries both download files rather than just bg.wasm. Issue 63 is closed with every instrument in its coverage matrix re-run today and tabulated, and it turned up a real rot: `rustsort-spike` no longer linked (`operator new[]` undefined, because `emcc` was compiling C++ without the C++ runtime) — adding `-sDEFAULT_TO_CXX` to both link lines restored G2 (22 domains, zero failures), G2b (4/4 mutations caught) and G3 (ratio 0.241). That rig is the sole evidence behind cancelling the grilling process, so it silently breaking would have made the evidence hollow.
 
-**非图形待办已清零**（2026-09-23/24）：`help` 覆盖 `.m` docstring 已完成（构建期预渲染，见
-`HISTORY.md` §5.13）；**T9/G1 `MAIN_MODULE=2` + 保活清单也做成了** —— `octave.wasm` 从
-36.86MB 降到 **29.46MB**（含 FreeType + fontconfig），主模块导出名 44,987 → **703**，`.oct` 仍走资产车道懒加载。
-配方与 7 个坑见 `build/CLIBS.md`「批次 C · `MAIN_MODULE=2`」。
+**2026-10-27 — issue 69 landed, issue 67 resolved, and a 22-assertion regression root-caused.**
+`form:"tree"` entries now carry an optional `files[]` map (`filename → {bytes, sha256}`): the
+schema pins all five bindings (tree-only; `form:"file"` carrying `files` is an error; the shas'
+single origin is the producer ledger and assembly only *projects* them), the validator grew six
+positive/negative self-test cases (57→63), `forge-catalog.py` projects the omc closure from the
+OpenModelica ledger (`omc_web_wasm_sha` / `omc_web_js_sha`, so both download files rather than
+just bg.wasm) cross-checked against the site bytes, and gate **R15** reconciles every declared
+file against the site (43/0). `browse()` exposes it as `detail.files`; `accept-market-browse`
+went 17→21/0 including the deliberate point that the closure sum (74,635,990) differs from
+`size` (74,735,455), which is the directory total by design. Issue 67 is resolved: `.github/`
+is now tracked (three workflows), `gates.yml` was reconciled item-by-item against
+`registry --run commit`, and `readme-sync.yml` runs the same `--changed` criterion as pre-push.
 
-依据：`build/GAPS-2.md`（缺口清单，逐条实测证据）+ `build/GPT-REVIEW-2.md`
-（外部审核：两处纠错——`spqr` 早已被 `qr` 取代、`record()` 本就不阻塞；
-以及 A1 的核心建议——**不复活 gnuplot 后端，改写薄 toolkit 复用现有桥**）。
+The 22 red assertions that appeared a week earlier came from one producer defect: the audio
+batch's `sync-js` fix rewrote entries and reset hand-maintained `deps`/`aliases` to defaults,
+dropping `webgraphics.deps = ["__init_web__"]` (so `graphics_toolkit("web")` could not find its
+module) and `control-oct`'s 49 `__sl_*__` aliases (so `c2d`/`step`/`norm` all failed). Nobody
+saw it because only a single-suite probe ran after that batch, not the full sweep the doctrine
+requires. The fix moves `deps`/`addpath`/`alias_dir` provenance into `meta.json` (with a new
+5/0 self-test), restores both lost values, and separates the audio stub aliases into
+`m/audio-stub/` appended to the *end* of the path so real implementations win while stubs still
+backstop. Both sites now run the full suite at **1253 PASS / 0 FAIL**.
 
-> **图形线 —— 2026-09-23 收口：只剩 `webgl` 一条后端，且已是 8761 的默认**：
-> Octave **自己的 `opengl_renderer`**（一字不改）真渲出像素（`getframe` 真 cdata、
-> 页面 `<img>` 贴真 PNG、15 种图解码后全部非空白）。
->
-> | 后端 | 做法 | `octave.wasm` | 状态 |
-> |---|---|---|---|
-> | `webgl` | **gl4es** 把 GL 1.x 翻译到 GLES2 ⇒ **WebGL2（GPU）** | 36.86MB raw / 8.43MB gz | ✅ **默认**（`accept-p5-graphics` 64 PASS / 0 FAIL） |
-> | `osmesa` | Mesa **软件光栅化**（CPU，渲进内存） | 45,580,621（+11.3MB） | ⛔ **已退役**（脚本/配方在 git 历史的 `graphics-osmesa*` 分支） |
->
-> 卡了两轮的根因只有一行：toolkit 的编译单元**缺 `#include "config.h"`** ⇒
-> `octave::opengl_functions` 被编成空类（虚表 2 槽），而 `gl-render.o` 要取第 77 槽 ⇒ 越界 trap。
-> plot 桥的镜像层让桥**同时**建出真图形对象（默认 toolkit 是 `webgl` ⇒ 这条链默认就开着）。
->
-> **plot 桥两刀提速**：① `surf` 从"每单元格一条 series"改成"**每条行带一条**"
-> （`peaks(40)`：1521 → 39 条）⇒ 桥的 `surf(peaks(40))` **1686 → 480 ms**；
-> ② 镜像层从"每次摘 path"改成**一次性句柄缓存 + 深度转发** ⇒ 一次镜像
-> **146 → 1.5 ms（~97×）**、一张图的温开销 **395 → 94 ms（4.2×）**。
-> （顺带更正：之前把"端到端 2.1s"归因成 path 手术是**错的**，真凶是**首帧冷启动 ~0.6s**。）
->
-> **已上线 8761**（换装脚本 `build/promote-webgl.sh`）：首包 gzip 9.62MB → 9.91MB。
-> **没有 WebGL2 的设备也能看见图**（2026-09-23 起）：浏览器拿不到 GL 上下文时（旧设备、
-> GPU 被 blocklist、`--disable-webgl`）桥把自己渲的 **SVG** 交给页面显示
-> —— 此前是『命令成功、页面静默空白』。见 `HISTORY.md` §5.22 / `NOTES-webgl.md` §4.7。
-> **文字渲染 + 字体匹配都有**（2026-09-24）：构建开 FreeType（批次 D）+ **fontconfig（R3）**，
-> 预载 Octave **自带**的 4 个 FreeSans 面 ⇒ 刻度/标题/图例都出字，且
-> `fontname`/`fontweight`/`fontangle` **真的改像素**、`listfonts()` 返回 `FreeSans`。
-> **仍如实记**：只有这 4 个面，填别的家族名（如 `Courier`）会落回 FreeSans；
-> 证据 `test/browser/probe-fontname.mjs`（13 项，含像素级判别）。
-> 证据：`test/browser/probe-text-render.mjs`（加 `title/xlabel` 后 `getframe` 非白像素 +2130，
-> 无 FreeType 时是 +0）。一手记录：`build/CLIBS.md`「批次 D」、`NOTES-webgl.md` §4.8。
-> 一手记录：**`build/113/NOTES-webgl.md`**（§4.5.12 / §4.5.13 / §4.6）、
-> `build/113/GRAPHICS-BRANCH.md`、`HISTORY.md` §5.20 / §5.21。
+Issue 63's G5 (Rust toolchain invariant) also landed: `build/113/check-rust-toolchain.py` checks four invariants (a date-pinned channel — floating names pin nothing; `staticlib` in `crate-type`, since a cdylib would defeat E4's weak-symbol null check; `panic = "abort"`, as wasm has no unwind; and each lane's exact target, wasm64 necessarily via `build-std` + `wasm64-unknown-unknown`). Self-test 6/0, ledger key `rust_patch_toolchain_ok` replayed verbatim; hanging it on the ledger immediately caught a real defect — the command string carried a parenthetical note and returned rc=2, which is exactly the bare-value contract.
 
-## 第四轮：已换基线到 **Octave 11.3.0**（2026-09-22 落地）
+**Pre-compaction snapshot (2026-10-25)**: the inbox is empty after an unattended sweep of nine letters (044–061), each with a landed artifact — the audio playback chain (three-layer fix, both sites 50/0), the `kind`/`role` schema extension (15/15 entries now self-describe), the llvm-wasm install-accident rejection split, the pyodide `language-bridge` label, the omc engine entry (second `kind:"engine"`), gate R14 enforcing the MSL sibling-directory invariant, MSL merged (17 packs), and the `consumer:["omc"]` ruling. The newest letter is a schema ticket now recorded as issue 69: an optional `files[]` key for `form:"tree"` entries carrying the download closure (`{bytes, sha256}` per file), because an engine's per-file shas are otherwise unreachable at runtime in the browser — the producer's ledger stays the single origin and assembly only projects it. Remaining work, in order of readiness: issue 69 (the bg.wasm projection can start now, the full shape waits on OM adding a JS ledger key), issue 67 (CI never tracked), issue 63 (rustpatch fact coverage), multi-TU compilation, plus three downstream items that belong to other repos.
 
-计划见 `HISTORY.md` §9，**实况、坑与结论见 §10**，外部事实依据 `build/BASELINE-11.3.md`。
-要点：
+**MSL merged + omc consumer ruling (2026-10-25, mail/059)**: the catalog now carries 17 packs. MSL arrives from OM as `modelica-standard-library` (OM won the naming argument — a generic abbreviation is unsearchable; the precedent is that names carry upstream identity), `form:"file"` (one zip unpacked at runtime), `role:"package"`, `consumer:["omc"]`, and it lands in the **sibling** `assets/msl/` directory that gate R14 guards — HTTP 200 on all three sites, 19,482,938 bytes matching the declared size byte for byte. Two defects surfaced while merging. First, a real assembler bug: `stage_upstream_bytes` always placed bytes under `assets/forge/` while the producer's table points at `assets/msl/…` — two vocabularies for one delivery path, exactly the family that produced a 404 in the llvm-wasm merge. Fixed: a site-relative `url` **is** the delivery path, so bytes now land where the url says; only absolute or query-bearing re-fetch URLs fall back to `assets/forge/` (the fake-directory-tree precedent kept, plus a new reverse assertion). Second, `omc`'s `consumer` changed to `["omc"]` per the ruling that `consumer` names the **engine lane** a entry serves — the omc engine is that lane's runtime, same stack as MSL, while llvm-wasm and pyodide remain on the octave lane. Browse Entries now pass `consumer`/`kind`/`role` through (they previously dropped consumer, so neither the UI nor the B3c assertion could tell an external entry apart). Nine regression suites green, gates 49/49, parity consistent.
 
-- **收益**：11.x 的卷积快 10%–150×、`randi` 4.5×、logical 求和最高 6×；MATLAB 兼容
-  有一整节（稀疏/对角 broadcasting、一大批函数的 `"all"`/`vecdim`/`nanflag`、
-  `qr` 单输出只返回 R…）。且**与本机参照版 Octave 同版**，验收可逐位对照。
-- **代价比原估小得多**：原以为 19 个 patch 要全部重推，**实测 16/19 直接可用**
-  （1 个已进上游该删、2 个局部重做，共 4 个文件）。
-- **取法**：工具链 emsdk 5.0.7 + **f2c（`emf77` 那套，与我们现有路线同源）** +
-  Edge-Tools 的 5 处平台补丁（实测 5/5 命中 11.3.0）；**链接模型与 C 库长尾用我们自己的**。
-- **多线程 / 64 位（B6 + wasm64；2026-10-01 起站点是「四档」）**：站点里带**四份产物**
-  （根目录 = `base` 基础档，`threads/` = wasm32 线程档（单线程 OpenBLAS），`w64/` = memory64+线程+**线程版 OpenBLAS -O3**（四档里最快的交付形态 —— 台账 `w64_ob_matmul500_speedup`；**wasm 上限 8GB、实测存活 7.45 GiB**，perf-max 票 03；wasm32 线冻结于 `wasm32-final` 分支），
-  `w64-base/` = memory64 单线程回退），页面按**同步**判据自动选档：宿主发了
-  `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`
-  且引擎支持 memory64 ⇒ `w64`；没有 memory64 ⇒ `threads`；没有 COI ⇒ `w64-base` / `base`
-  （任何静态托管的底线，这条红线没动）。站点**真的**部署了哪几档由生成的 `lanes.js` 声明
-  （与能力判据取交集，防 404）。本地带头服务：`python3 build/serve-coi.py --dir <站点> --port 8761`。
-  现状边界：**数学还没并行化**（`threads/` 那份是 OpenBLAS 的 `USE_THREAD=0` 单线程形态 ——
-  收益来自内核而非线程；`USE_THREAD=1` 的 6.7× 技术判据已过、发运决定待定）、
-  **worker 宿主自动落基础档**；详见 `DEPLOY.md` 的「四档」一节、
-  `build/113/NOTES-threads.md` 与 `build/113/NOTES-wasm64.md`。
-- **结果**：三道闸门（能编能跑数值对 / `.oct` side module 可用 / **免 COI**）**全部通过**；
-  8761 已切到 11.3.0，7.2 快照留在 `/mnt/hdd/octave-wasm-build/site-72bak/`。
-  9 个长尾库（glpk/qhull/fftw3+3f/sndfile/qrupdate/hdf5/arpack/SuiteSparse）全部重开。
-- **换基线时补的三处内容缺口**：`dldprobe.oct` 的源码入仓、`lanetest` 资产、
-  `m/forge` 的 20 个预装 `.m`（否则 `normpdf` 从"开箱即有"退化成"要先加载包"）。
-- **图形**（2026-09-23 已更新，见上一条引用框）：**默认 toolkit = `webgl`**（gl4es → WebGL2/GPU），
-  开箱 `plot(...); drawnow` 就出真图、`getframe` 真像素；plot 桥 + `print -dsvg` 仍是
-  **唯一的矢量输出**路径（核心那条要 shell 管道 + gs，本构建没有 shell 是有意的）。
-  （历史：OSMesa 软件光栅化线曾在 8763 上打通步骤①②③，后被 gl4es 取代并**退役**。）
-  见 `build/113/GRAPHICS-BRANCH.md`、`build/113/NOTES-webgl.md`。
+**OMC engine entry + MSL sibling-directory invariant (2026-10-25, mail/056/057)**: the second `kind:"engine"` entry landed. Byte channel verified independently: the OM deployment disk's four files, main artifact sha matching OM's ledger `omc_web_wasm_sha` byte-for-byte (the new `provision-omc.sh` re-checks the bytes rather than trusting the ledger, self-test 4/0). Entry: `kind:"engine"` + `role:"toolchain"` + `arch:"omc"` (lane value) + `size` = whole directory (74,735,455 B); `version:"unversioned"` because OM has not supplied a version string and we do not invent one. The toolchain rejection wording became role-generic — the old text hard-coded "clang/lld/sysroot" and would have lied for omc. For MSL: the content repo's ruling is `form:"file"` (a single zip unpacked at runtime) and a **sibling-directory** hard constraint — MSL must never land inside `omc/`, or the engine's size budget inflates from 74.7 MB to 94 MB+ (dishonest budget = same family as dishonest `content`). That constraint is now machine-enforced as gate **R14**: a tree entry's `size` must equal the measured byte sum of its url's directory; reverse-tested by dropping an MSL zip into `omc/`, which goes red immediately and names the constraint. Self-test 38→40/0, gates 48→49, seven regression suites zero-red, three sites rebaked.
 
-> **一手记录**：`build/CLIBS.md`（每批配方与坑）、`build/BENCH.md`（O 级矩阵）、
-> `HANDOFF.md`（接续说明与架构要点）、`build/GAPS.md` + `GAPS-2.md`（两轮缺口审计）。
+**pyodide role:'language-bridge' (2026-10-20, mail/053 catch)**: the content repo's acceptance letter caught the one mislabeled entry — pyodide carried neither role nor kind while every other entry self-describes. It now carries `role:"language-bridge"` (the Q1 vocabulary's third value in first use; kind stays absent — it's not an engine and compiles nothing). The "zero hard-coded name checks" discipline is now complete across all 15 entries: 13 shelf packages say `package`, llvm-wasm says `toolchain`, pyodide says `language-bridge`. Verified: three sites rebaked with the gate green ×3, five pyodide-path suites zero-red (symbolic-seam 9/0 through content-attributes 14/0 — the install('symbolic') → pyodide-then-symbolic closure untouched), gates 48/48, parity consistent.
 
-## 目录
+**Engine entry in the catalog (2026-10-20, mail/051 fulfillment)**: the content repo finished its side (role-emitting commit `7dfe77e`), so the shelf pin bumped and the assembler now emits `role` on every pack entry (13/13 `role:"package"`, explicit self-description matching the producer's emit). The llvm-wasm entry itself is upgraded to **`kind:"engine"` + `role:"toolchain"`** with `arch` = the **lane value** (`w64` — an index key, not a version axis; read from the site's deployed lanes.js, never hand-copied). Three judge-sites adjusted in lockstep: the port validator's engine lane-vocabulary gained the site-lane names (base/w64), the R10 byte-reconciliation gate exempts engine entries (clang.wasm living outside assets/oct*/ is design, not drift), and the loader's hard arch gate exempts `kind:'engine'` — measured catch: `w64` vs `wasm64` are different vocabularies, so a literal compare false-positives; the "one-line-one-arch" ruling governs `.oct`s that dlopen into the host, while the engine is the compile-worker's input, outside that semantics. `install('llvm-wasm')` now rejects via `NOT_INSTALLABLE` straight off the `role` field (the name-based fallback retired). Nine regression suites green (arch-boundary A2 flipped: an engine's lane-valued arch is legal luggage), gates 48/48, three sites rebaked, parity consistent.
+
+**kind/role schema + llvm-wasm install accident fixed (2026-10-20, mail/047/048/049)**: three letters, three closures. (1) The contract accident where clicking install on llvm-wasm in the package manager said "unknown capability layer" — misleading, it's not unknown, it's *not install's job*: `installLayer` rejection split into `NOT_INSTALLABLE` (toolchain → "由下载管理（DownloadStore）+ 编译 Worker 使用——不走装载") reading the new `role` field with a name-based fallback until tables upgrade, and `LAYER_NOT_IMPLEMENTED` for genuinely future language bridges — per ruling B (execution-domain mismatch). (2) The mail/047 + 049-Q1 schema tickets: entry gains `kind` (src/pre/engine; engine entries carry `arch` = lane value — arch is an index key, not a version axis) and `role` (package default / toolchain / language-bridge — form is shape, not role, the accident's root cause); per-file shas stay product-self-attested, validator self-test 52→57/0; `consumer` annotated as array + containment semantics. (3) The mail/048 erratum: mail/030's claim "keys always present so UI never checks" didn't match the live table (tree entries omit description/links entirely) — per ruling C-2 the *claim* changed, not the assembler: capability layers aren't packages, "key absent ⇒ no description" ≡ "key empty". Six install-related suites green, gates 48/48.
+
+**Audio playback chain fixed (2026-10-19, from content-repo mail/045 fishing expedition)**: `sound([0.1 0.2], 8000)` used to fail with `'__player_audioplayer__' undefined` — the whole playback chain was dead while `.m` faces kept `which`-style assertions falsely green. Three-layer fix: (1) the missing `audiodevinfo.oct` (all `__player_*`/`__recorder_*` live in that one module) was never in the lane build's `TREE_MODS` — added and rebuilt for both arches; without PortAudio the C++ layer now fails loud (`err_disabled_feature`) while the real playback is served by the lazy-loaded webaudio m-bundle. (2) Boot list gains `audiodevinfo` with **38 aliases** (Octave resolves `.oct` by filename — sibling functions need symlinks, the webio precedent); `__web_pause_ms__`'s five aliases fixed the same-module-name gap that broke `sound → pause → __web_suspend_ok__`. (3) `sync-js` third-state fix: entries whose sha didn't change were skipped entirely, so meta corrections (aliases/notes) never took effect on existing entries — a two-producers fork. Assertions flipped where behavior changed (accept-audio 46→50/0 with mail/045 regression pins; t6 33/0; t7 40/0). Verified on both sites: `SOUND_OK=1` (sound truly blocks ~0.2s, AudioContext really created), zero regressions, parity consistent. Also from mail/044: the mail/read/ gitignore hole (6 archived letters now tracked) and two letters to UI re-delivered to the antigravity worktree with `host-` prefix.
+
+**w64-base dead-laned (2026-10-19, second three-line ruling)**: the user's ruling — *the master line must never run on non-COI browsers; wasm32 is the only line without COI; master must be multithreaded; IP is the master line extended off the official tree* — killed the `w64-base` "fallback cell" outright, same treatment as `threads`. The site is now **two cells** (base / w64): no COI (even with memory64 available) ⇒ **base**, always. Purged across all seven producers (lanes.json single source → DEAD_LANES, lane.js FILES/order/override-regex, gen-lanes, check-lane-purity, relink mode list with named dead-mode FATAL, promote-w64-lane which now rejects any w64-base remnant), plus the ledger's five `w64_base_*` keys dropped, probe-lane's matrix flipped to two cells (new dead-URL assertion for `?lane=w64-base`), and six test suites' dead branches removed. Verified: probe-lane 33/0 on the two-cell site, single-source reconciler OK (2 live cells / 2 dead lanes / 4 consumers), promote --verify green on both sites, gates 48/48, full sweeps on both sites green (bench/probe stragglers were network flake, pass singly).
+
+**Ticket 65 ruling-A relink landed (2026-10-19)**: the w64 / w64-base artifacts are rebuilt on the full `-6012` lane (w64 `c994bdad…`, w64-base `35ef50dc…`, verdict=ok), and the settling probe flipped **rc=2 → rc=0** — a `throw 42` side module now dlopens and truly calls. Two real root causes were fixed along the way. First, keeping the 7 basic-type typeinfo symbols alive required **strong refs** (`-Wl,-u,_ZTIi` + `--export-if-defined` in pairs, the rust_sort precedent): the keep-list's `--export-if-defined` alone cannot stop MAIN_MODULE=2 DCE from dropping archive members nothing references. Second — a **reversal of an earlier inference** — the C2c "Invalid resizing" boundary was *not* typeinfo-related: the true cause is that the wasm32 and wasm64 header trees fork in `octave/mxtypes.h` (`mwSize/mwIndex` are `int32_t` vs `int64_t`), and octinc had only ever packaged the wasm32 tree, so browser-compiled `.oct`s had mis-sized indices. octinc now ships **per-arch headers** (with an assertion that the two really do fork), and C2c/C8e flipped from "recorded boundary" to **hard green** (`cell2cell({1,2},1)=1x1`, `partint(4)` invariant holds). Full `PROBES=1` sweeps green on both sites (96 suites / 1576 PASS / 0 FAIL), promote verify green, SHA three-layer 4/0, dist rebuilt.
+
+**LLVM-wasm pin v0.1.3 (2026-10-19)**: the toolchain pin moved from `v0.1.1` to `v0.1.3`, which ships `driver/compile-core.mjs` in its manifest (14 assets) plus `release/check-published.mjs` — a four-way reconciler whose `--freshness` layer compares the bundle's driver set byte-for-byte against the repo HEAD (the layer that catches a bundle that is *consistently* stale; the producer confirmed v0.1.2 was internally self-consistent at 13/13/13, which is why internal-consistency checks missed it). Our side re-verified independently: bundle sha256 matches the declared value, and the fallback copy that pulled `compile-core.mjs` from the producer's working tree is **retired** per the exit condition we wrote into `mail/013` — the provisioner now asserts positively that the bundle's manifest lists it (reverse test done: removing the entry makes it fail loud). `accept-compile-extension` re-ran at 16/0 on the new pin.
+
+**llvm-wasm capability layer in the catalog (2026-10-19)**: the clang toolchain was already on the site (`assets/llvm/`) but absent from `forge-catalog.json` — so ruling ⑤ ("loading a source package requires the LLVM toolchain to be downloaded") had no data source. The assembler now emits it as a **capability layer** shaped like the pyodide precedent (one synthesized entry built from bytes actually present on the site: `form:"tree"`, `content:[]`, `url` at the tree's main artifact, `size` = whole-tree budget, version read from the toolchain manifest), rather than merging the producer's 14-row file list verbatim — measured reasons: 14 rows would scatter into 14 packs (not one capability layer), and their `assets/llvm-wasm/` prefix diverges from the site's real `assets/llvm/`, which makes byte-staging and the catalog URL disagree (observed live: "staged 14 files" and "14× R7b missing" were simultaneously true). Catalog now carries 15 entries = 13 shelf packages + 2 capability layers. `accept-market-browse`'s B3c was corrected to exclude capability layers by `detail.form` instead of a hardcoded name (first fix still failed — `form` lives under `detail`, not on the Entry). Sabotage checks added both ways (37/0 assembler selftest).
+
+**Multi-TU compile + interaction upgrade (2026-10-18)**: v1 compiled only the main translation unit, so `miscellaneous`'s `partint` module never existed. v2 builds the container's full module table: the hand-written table in `build-pkg-oct.sh` is now **data** (`build/pkg-module-table.json`, reconciled by `check-pkg-module-table.py`, 12/0; live repo 6 packages / 27 modules) and the client reads the site copy, with DEFUN scanning only as a fallback — because "every source with a DEFUN should be built" is false (measured: `sample.cc` does not compile against 11.3.0 headers, and the container table deliberately omits it). Artifact names come from the **source basename**, not the first DEFUN (proof: the deployed `partint.oct` exports both `Gpartcnt` and `Gpartint`). The orchestration was extracted into a **deep module** `bridge/multi-tu.mjs` with two adapters: the browser worker and a **local bench** `test/local/compile-local.mjs` — the latter cut a verify cycle from **~8 minutes to 8–14 seconds** and returns full stderr instead of one `Aborted()`. `accept-compile-extension` is **16/0** (was 11/0). Two more Einfacht #20③ commitments landed: a `critical` suite list whose skipped-in-scope entries now force `sweep.sh` to exit non-zero, and `build/lanes.json` as the single declaration of lane knowledge (reconciler 15/0, which caught a real gap: `LANE_EXPECT` was missing `IllegalPerformance`).
+
+**Mail workflow (2026-10-18)**: the inbox now has an unread area (`mail/`) and a read archive (`mail/read/`), with `zreflect/mail-read.py` as the read entry point (read = print + auto `git mv` into the archive). The tool is explicitly **not a gate** — mail content is never trusted machine input. The boundary gate tolerates an empty unread area by falling back to the archive, while still failing when both are empty.
+
+**Upstream report (2026-10-18)**: the three-line purge surfaced three "two homes for one fact" gaps, filed as [Einfacht #20](https://github.com/ArchivalEra/Einfacht/issues/20): (1) two `gates-selftest.sh` benches coexist (declarative upstream + a hand-written 46-entry list) and pre-commit runs both; (2) the `REFLECT_*` code default writes the ledger to a gitignored path, so a bare re-measure reports success while the hook reads a different file; (3) lane knowledge lives in three registries, and forgetting one made the core `probe-lane` gate get silently skipped while the sweep still reported zero failures.
+
+**Inbox (2026-10-18)**: content-repo `033` acknowledged both the release model (`artifacts[]` belongs to the host; architecture is not a version axis) and the `read/` adoption, and accepted that the zero-value-guard conflict was a gap in its own proposal. Replied with the upstream issue number ([#20](https://github.com/ArchivalEra/Einfacht/issues/20)) — its input-vanished root cause and this repo's silently-skipped core gate are the same family.
+
+**Upstream follow-up (2026-10-18)**: issue #20 got a comment upgrading gap (2) from "writes to the wrong place" to "the write path is entirely unguarded" — the ledger write neither checks whether its target is gitignored nor warns that it is using the default path, and the `_load_or_die` hint ("run a measurement in the repo root first") actively points people at the action that creates the stray file. A peer repo's "it didn't write" self-check was correct but only by execution order, not by any guard.
+
+**Architecture change: download/load separation (2026-10-18)**: per the user directive ("the market offers source and precompiled options; loading happens in a separate view; installed becomes downloaded"), the content repo specified a `DownloadStore` that cuts `install()`'s chain between sha verification and untar, persisting verified bytes plus a manifest into OPFS. The seam still lives on the **record** (not on a method) — it simply gains a second kind of record: the user-local one. Host rulings: (1) the engine's per-file sha comes from `<site>/<lane>/octave.build.json`'s `measured.files`, **not** `upstream-lock.json` (which is a third-party source lock); (2) `ARCH_MISMATCH` stays a load-time hard gate, decoupled from the download layer; (3) `install()` is **not** converged onto `DownloadStore` — the two chains coexist (atomic no-gap load vs across-time-gap download).
+
+**Upstream ruling on #20 (2026-10-18)**: gap (2) is **fixed upstream** (`c29a33b`, blind-write guard: a ledger target covered by `.gitignore` is refused with rc=2 and zero bytes written) and has been ported into the vendored copy here — reverse-verified, with the guard's own selftest growing 16→20. For gap (1) the upstream suggestion (retire the hand-written bench, declare every gate) was measured and rejected for this repo: 45 of the 46 entries live outside `zreflect/` and 12 are shell scripts that cannot carry a Python `GATE` declaration. The ruling taken is therefore B — keep both benches but lock the division: a new assertion requires their **intersection to be empty** (verified green, and verified to go red when an overlap is injected).
+
+**Einfacht layer upgrade (2026-10-18)**: the vendored platform is now byte-identical to upstream `45ca586` — seven mechanism files were replaced wholesale (facts/guard/knobs/render/check_locks/check_questions/check_facts_replay) instead of cherry-picking, retiring the local patches (the hand-rolled measure dispatch is now the upstream `REFLECT_MEASURE_MODULE` knob with a loud fallback warning). Kept: the data layer (`measure_octave.py`), the mail-read tool, and the `build/facts.py` shell (which now also sets the measure knob — complementary to the blind-write guard). Acceptance: six checks green, including a reverse test of the guard (bare run ⇒ rc=2, zero bytes) and a data-layer non-interference proof (re-measure: zero value changes).
+
+**In-browser compilation landed (2026-10-18)**: `OctaveAssets.compileExtension(name)` now compiles a package's `src/*.cc` into a real `.oct` inside the browser, returning a verdict plus a **live `diagnostics` log stream**. Per the user directive the toolchain is **pulled in stages**: sysroot (19.7 MB) and clang (45.8 MB) at init, while **lld (31.8 MB) is deferred until the first link** — so the first compile peaks at 66 MB raw instead of 81 MB. A purpose-built `compile-worker.mjs` does the staging while still importing the producer's `driver/compile-core.mjs` orchestration. Acceptance `accept-compile-extension` is **11/0** on both sites. **Known boundary, recorded honestly**: the product is recognized (`exist=3`, `which` correct) but a cross-boundary call still fails, while the site's prebuilt 7.2 artifact works — the same typeinfo-export gap as ticket 65's ruling A, which is why the fix belongs to that relink batch.
+
+**Fact refresh (2026-10-18, pre-compaction)**: ledger re-measured — zero value changes, only measurement timestamps; replay gate 34/34 verbatim; STATE assertions consistent.
+
+## Branches (three independently maintainable lines)
+
+| branch | fork pin (`upstream/octave`) | role |
+|---|---|---|
+| `wasm32-final` | — (frozen) | wasm32 archive line |
+| ~~`wasm64-NEXT`~~ | ~~`a5a7208`~~ | **deleted 2026-10-17** (user order — merged into master long ago; measured 0 unique commits vs master; branch ref removed on local/origin/mirror, history preserved via master). Its role (moderate wasm64) is carried by **master** per the three-line model |
+| `IllegalPerformance` | `f4bf15b` (+ rust-sort seam) | aggressive wasm64 line — **shipped 2026-10-07** (8761 w64 = `f6fec91f`, IEEE-evaluated, sort 2.16× vs this line's base) |
+
+All three eat upstream Octave updates through the same fork pipeline
+(`upstream/octave` branch `wasm/11.3.0`); each line pins its own fork commit.
+Switching lines in the shared build container = submodule update + re-provision +
+deploy that line's `relink.sh`/`link-web.sh` + point `OCTAVE_WASM_BASE` at that line's
+site + set `core.hooksPath` to that line's hooks (the fact system lives in `reflect-hooks/`
+on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintaince.md`.
+
+## Repository contents
 
 <!-- AUTO:FILES -->
 - `.githooks/check-consistency.py` (17258 bytes)
@@ -236,7 +289,7 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `.githooks/update-readme.py` (2270 bytes)
 - `.githooks/update-state.py` (5884 bytes)
 - `.githooks/witness-upstream-pin.py` (6939 bytes)
-- `.gitignore` (5168 bytes)
+- `.gitignore` (5389 bytes)
 - `.gitmodules` (1934 bytes)
 - `.scratch/open-questions/issues/01-diag-instrument.md` (1906 bytes)
 - `.scratch/open-questions/issues/02-e2-threaded-hang.md` (3277 bytes)
@@ -1100,24 +1153,24 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `upstream-patches/octave-wasm-quantstack/0018-FIXME-abort-calls-native-code-failure.patch` (1663 bytes)
 - `upstream-patches/octave-wasm-quantstack/0019-FIXME-memory-leaks.patch` (879 bytes)
 - `upstream-patches/octave-wasm-quantstack/README.md` (847 bytes)
-- `upstream/arpack-ng` (6 bytes)
-- `upstream/bzip2` (6 bytes)
-- `upstream/emsdk` (6 bytes)
-- `upstream/expat` (6 bytes)
-- `upstream/fftw` (6 bytes)
-- `upstream/fontconfig` (6 bytes)
-- `upstream/freetype` (6 bytes)
-- `upstream/gl4es` (6 bytes)
-- `upstream/hdf5` (6 bytes)
-- `upstream/octave` (4096 bytes)
-- `upstream/openblas` (6 bytes)
-- `upstream/pcre2` (6 bytes)
-- `upstream/qhull` (6 bytes)
-- `upstream/rapidjson` (6 bytes)
-- `upstream/sndfile` (6 bytes)
-- `upstream/suitesparse` (6 bytes)
-- `upstream/sundials` (6 bytes)
-- `upstream/zlib` (6 bytes)
+- `upstream/arpack-ng` (40 bytes)
+- `upstream/bzip2` (40 bytes)
+- `upstream/emsdk` (40 bytes)
+- `upstream/expat` (40 bytes)
+- `upstream/fftw` (40 bytes)
+- `upstream/fontconfig` (40 bytes)
+- `upstream/freetype` (40 bytes)
+- `upstream/gl4es` (40 bytes)
+- `upstream/hdf5` (40 bytes)
+- `upstream/octave` (40 bytes)
+- `upstream/openblas` (40 bytes)
+- `upstream/pcre2` (40 bytes)
+- `upstream/qhull` (40 bytes)
+- `upstream/rapidjson` (40 bytes)
+- `upstream/sndfile` (40 bytes)
+- `upstream/suitesparse` (40 bytes)
+- `upstream/sundials` (40 bytes)
+- `upstream/zlib` (40 bytes)
 - `vendor/MANIFEST.md` (1676 bytes)
 - `vendor/extra/asciiplot.m` (940 bytes)
 - `vendor/extra/fft.m` (1736 bytes)
@@ -1140,33 +1193,31 @@ R1–R10 已全部落地。第三轮做的不是数学能力，而是**"宿主 A
 - `vendor/forge/tinv.m` (5467 bytes)
 - `vendor/forge/tpdf.m` (4730 bytes)
 <!-- /AUTO -->
+## Hooks
 
+This repo uses a whitelist `.gitignore` (deny by default, allow per path) + git hooks:
 
+- `pre-commit`: recalculates the README AUTO block, checks the whitelist, runs the fact/
+  consistency/plugin/instrument gates and the **trilingual README sync gate**
+  (`check_readme_sync.py`, vendored from [Einfacht](https://github.com/ArchivalEra/Einfacht)):
+  all three language READMEs must exist, be non-empty, and cross-link.
+- `pre-push`: README freshness + the **push-set mode** of the trilingual gate — any push
+  touching one language README must update all three in the same batch.
+- Install: `bash .githooks/install.sh` (sets `core.hooksPath`).
 
-## 钩子
+## License
 
-本仓用白名单 `.gitignore`（默认拒绝，逐项放行）+ git hooks：
+**AGPL-3.0-or-later** (full text: [`LICENSE`](LICENSE)). The distributed wasm binary
+statically links GPLv3 Octave, GPLv2+ FFTW, LGPL libsndfile and several BSD/permissive
+components — this mix has **no choice outside AGPL-3.0**.
 
-- `pre-commit`：重算 README 的 AUTO 区块并 `git add`，再校验白名单覆盖。
-- `pre-push`：校验 README 是新鲜的，不新鲜直接拒推（先提交再推）。
-- 安装：`bash .githooks/install.sh`（设 `core.hooksPath`）。
+This program is free software: you can redistribute it and/or modify it under the terms
+of the GNU Affero General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version. The program is
+distributed in the hope that it will be useful, but **without any warranty**; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-## 许可
-
-**AGPL-3.0-or-later**（全文见 [`LICENSE`](LICENSE)）。本仓对外分发的是一个 wasm
-二进制，它静态链接了 GPLv3 的 Octave、GPLv2+ 的 FFTW、LGPL 的 libsndfile，
-以及 BSD/permissive 的若干件——这种混合**没有 AGPL-3.0 以外的选择**。
-
-本程序是自由软件：你可以按自由软件基金会发布的 GNU Affero 通用公共许可证
-（第 3 版，或你选择的任何更新版本）的条款再分发和/或修改它。本程序分发时
-希望它有用，但**不提供任何担保**，也不提供适销性或特定用途适用性的默示担保。
-
-按 AGPL-3.0 第 13 条（网络交互条款），通过计算机网络使用本程序的用户有权
-获得对应源码：**本仓即该源码**，构建可在 `obuild` 容器内完整复现
-（配方见 `build/CLIBS.md` 与 `HANDOFF.md`）。
-
-逐组件的许可与版权声明见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)：
-Octave 与 C 库长尾的版本/许可逐条列在那边，`build/` 的构建骨架源自
-rwl/octave-wasm（BSD-3-Clause，见 build/NOTES.md）；vendored `.m` 的来源见
-`vendor/MANIFEST.md`，其文件头均保留原许可声明；本仓自研文件带
-`SPDX-License-Identifier: AGPL-3.0-or-later` 头。
+Per AGPL-3.0 §13, users interacting with it over a network are entitled to the
+corresponding source: **this repository is that source**; the build reproduces fully in
+the `o113` container (recipes in `build/CLIBS.md`). Per-component licenses and
+copyrights: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

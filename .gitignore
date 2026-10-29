@@ -5,6 +5,10 @@
 !*/
 !.gitignore
 !README.md
+# 三语 README（2026-10-29，用户点令「IP 线的迁徙到 Master」）：master 现在是
+# **README 三件套的唯一产地**，IllegalPerformance / wasm32-final 两份指向这里。
+!README.zh.md
+!README.de.md
 !LICENSE
 !THIRD-PARTY-NOTICES.md
 !maintaince.md
