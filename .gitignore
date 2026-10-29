@@ -5,6 +5,10 @@
 !*/
 !.gitignore
 !README.md
+# 三语 README 白名单（2026-10-29）：本线当前只有英文一份；
+# 三件套的唯一产地在 master 分支（用户点令），本线留白名单以便随时补译。
+!README.zh.md
+!README.de.md
 !LICENSE
 !THIRD-PARTY-NOTICES.md
 !HANDOFF.md

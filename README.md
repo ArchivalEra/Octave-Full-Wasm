@@ -5,6 +5,18 @@
 SuiteSparse / ARPACK / FFTW / QHull / GLPK / HDF5、图像与音频 I/O、同步网络、
 plot 桥 + `print -dsvg`。
 
+
+> ⚠️ **README 三件套的唯一产地 = `master` 分支**（2026-10-29 用户点令：「IP 线和 32 线都
+> 指向 Master 线的 readme 三件套，IP 线的迁徙到 Master」）。本分支的 `README.md` 是
+> **本线（`wasm32-final`）的历史快照**，不再逐批更新 —— 通用事实与最新状态以
+> [`master` 分支的 README](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.md)
+> 为准（三语：[中文](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.zh.md) /
+> [Deutsch](https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/README.de.md)）。
+> **本线是什么**：`wasm32-final` = wasm32 单线程产品线 —— **无 COI 环境下的唯一线**
+> （不需要 `SharedArrayBuffer`，任何浏览器、任何静态托管都能跑）。它是三线模型里
+> 唯一的非 COI 档，分档依据是用户可达性而非性能（`master` = wasm64 多线程必须 COI；
+> `IllegalPerformance` = 加 Rust 补丁的 non-free 线）。
+> 本线自 2026-10-12 起未再提交（产物冻结在该次）；是否重启由产品决定，不由文档决定。
 起点是 `rwl/octave-wasm`（BSD）的 7.2 骨架；**第四轮已换基线到 vanilla
 Octave 11.3.0 + emsdk 5.0.7**（计划见 `HISTORY.md` §9，实况与坑见 §10）。
 构建产物（wasm/data/js）体积大，走 Release 分发，不进 git。
