@@ -2,325 +2,208 @@
 
 [English](README.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
 
-GNU Octave 11.3.0 nach WebAssembly kompiliert — eine vollständige
-Numerik-Umgebung (Interpreter, BLAS/LAPACK, Plotten, ~500 Pakete), die
-**komplett im Browser läuft**: rein clientseitige Berechnung, **keine
-serverseitige Ausführung**.
+GNU Octave 11.3.0 nach WebAssembly kompiliert, der gesamte Interpreter laeuft im Browser.
+Reine Client-Berechnung: Ihr Code wird nie auf einem Server ausgefuehrt.
 
-**Aktuelle Produktionslinie: `w64` (WebAssembly memory64 + Threads +
-relaxed-FMA OpenBLAS + mimalloc + Rust-`sort`-Kernel)**, hinter derselben
-Web-Oberfläche wie jede andere Spur betrieben. Alle numerischen Ergebnisse
-sind IEEE 754 binary64 — nachfolgend explizit auditiert.
+Diese README richtet sich an Menschen, die dieses Repository **bauen, erweitern oder
+debuggen**. Sie nennt vier Dinge: was das ist, welche Linie zu waehlen ist, wie schnell
+jede Linie ist und wo die massgeblichen Fakten liegen. Die Historie pro Charge steht in
+[`HISTORY.md`](HISTORY.md), der Live-Status in [`STATE.md`](STATE.md).
 
-Toolchain: Emscripten **6.0.12** (alle drei Linien neu gebaut und ausgeliefert;
-Die 6.0.12-Ausrollung der drei Linien ist in `build/113/NOTES-emsdk-upgrade.md` §8.8 dokumentiert.
-Die Annahme-Triage je Linie steht in `build/113/NOTES-emsdk-upgrade.md` §8.9.
-
-Alle drei Linien sind **gepusht und synchron** (local = origin = mirror), jede unter Emscripten 6.0.12 neu gebaut und im Browser verifiziert.
-
-Die Downstream-Integration mit der Browser-clang+lld-Toolchain ([LLVM-wasm](https://github.com/ArchivalEra/LLVM-wasm)) ist in `.scratch/open-questions/issues/65-clang-wasm-toolchain-host-integration.md` dokumentiert.
-
-Ein host-seitiger Integrationsbericht für die Browser-clang+lld-Toolchain liegt in `build/113/ISSUE-for-LLVM-wasm.md` (gegen das Issue-Gate jenes Repos validiert).
-
-Ausgehender Issue upstream: [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wasm/issues/1) (wasm64-Sysroot fehlt im Release-Bundle).
-
-Die **unabhängige Downstream-Re-Verifikation** des Fixes zu [LLVM-wasm#1](https://github.com/ArchivalEra/LLVM-wasm/issues/1) ist an echten Artefakten durchgelaufen (v0.1.1).
-
-**Browser-seitige `.oct`-Kompilierung ist end-to-end belegt**: die clang+lld-Toolchain im Browser baut ein echtes Octave-`.oct` (788 echte Header); nach `addpath` meldet der Live-Host `exist=3` und führt es aus. Siehe `build/113/NOTES-client-compile.md`.
-
-A+B-Design für client-seitige `.oct`-Kompilierung: `build/113/NOTES-client-compile-design.md` — gepinnt über die bestehende Fork-Pipeline (keine Plugin-Bibliothek zu pflegen), validiert durch echte Paketquelle im Browser.
-
-Das Fakten-Ledger erfasst jetzt den 6.0.12-Stand der drei Linien (`lane6012_*`) sowie die Client-Compile-/Upstream-Arbeit dieser Sitzung.
-
-`pkg load <Name>` klärt jetzt zuerst die **Herkunft** eines Pakets: mitgelieferte Assets über `OctaveAssets.load`, Regal-Pakete (Forge-Katalog) über `OctaveAssets.install` (same-origin Tarball + sha256 + Gunzip/Untar in der Engine). **Auf 8761 ausgeliefert und im Browser verifiziert** (echter Tarball-Download + `csaps` bitgenau wie der Host-Octave). Siehe `build/113/NOTES-forge-ondemand.md` §10 (T4) und die Abnahmesuite `test/browser/accept-catalog-load.mjs` (27/0, inkl. 4 Gegenproben).
-
-Die Installation des Forge-Pakets `datatypes` vom Regal macht die **modernen MATLAB-Typen** nutzbar: `table([1;2;3],{'a';'b';'c'})` liefert `class=table` (height 3, width 2), `string(42)` ergibt `"42"`. Nicht implementierte MATLAB-Namen melden jetzt den echten Octave-Text ("belongs to the 'datatypes' package … not installed") statt eines `makeinfo`-Subprozessfehlers. Siehe `build/113/REQUIREMENTS-store-and-matlab.md`. (`help sin`/`help ode45`/`lookfor` bleiben unberührt; die drei Help-Suiten prüfen jetzt, dass `__makeinfo__` auf den sanktionierten webshims-Downgrade zeigt.)
-
-Diese Engine hat bereits alles, was ein Simulink-artiges **Blockdiagramm**-Backend braucht — State-Space-/Übertragungsfunktions-Blöcke, `ode45`, **steifes `ode15s`**, LQR, `zpkdata` (Probe `test/browser/probe-blockdiag-backend.mjs`, 6/0). Ein Blockdiagramm-Frontend kann also **auf dieser Engine** gebaut werden (eigenes JS-Repo), statt eine zweite Laufzeit wie Pyodide einzuführen. Siehe `build/113/NOTES-plugin-survey.md`.
-
-Diese Untersuchung behandelt auch das, was diese Engine **nicht** erreicht: MATLAB hat drei Achsen (Sprache / Simulink / Simscape), wir decken die ersten beiden ab — **nicht-kausale physikalische Modellierung (Simscape) ist hier nicht abgedeckt**, und **OpenModelica** ist dafür die realistische Antwort (wasm-Pfad im offiziellen Repo, Rust-Neuschreibung, ausgelieferter Browser-FMI-Simulator; AGPLv3/OSMC-PL). Siehe §8 dort.
-
-**WebGPU funktioniert hier, im Worker gemessen**: `navigator.gpu` liefert sowohl im Hauptthread als auch in einem DOM-freien Worker einen echten Adapter/Device (vendor=nvidia), und ein dort ausgeführter Compute-Shader ergibt für `[1,1,1,1]×2` das Ergebnis `[2,2,2,2]`. GPU-Compute ist also **keine** strukturelle Lücke — und anders als CUDA (herstellerprivater Stack, auf Telefonen abwesend) ist WebGPU eine einzige API für NVIDIA/AMD/Intel/Apple. WebSerial/USB/HID sind ebenfalls nativ verfügbar. Siehe `test/browser/probe-webgpu-capability.mjs`.
-
-Ein Folge**experiment bestätigte, dass Modelica im Browser läuft**: ein Drittanbieter-Port OpenModelica→wasm führt `BouncingBall.mo` durch den vollen Zyklus `parse → C → emcc+wasm-ld im Browser → Simulation → Plot` (Beleg: `build/113/evidence-omc-web-demo.png`; Protokoll: `build/113/NOTES-experiment-omc-wasm.md`). „Modelica im Web" ist also bewiesen, nicht spekulativ — die Solver-Abdeckung jenes **Drittanbieter**-Wegs ist allerdings schmal (Euler/RK/dassl).
-
-Der **offizielle** Weg ist ein erstklassiges CMake-Ziel in OpenModelicas eigenem Baum (`rust_omc.cmake`: `RUST_OMC_WASM_RUNTIME`, `wasm32-wasip1`-Cross-Compile, `omc.wasm`, Artefakt-Übergabe) — also dieselbe Form wie die eigene Pipeline dieses Repos (Upstream-Submodul + Pin + Cross-Compile + Same-Origin-Hosting). Er wird also so gebaut, wie wir Octave bauen, nicht durch Kopieren eines Drittanbieter-Rezepts (siehe §11).
-
-Und es kann sich **dieselbe Seite** teilen — gemessen, nicht angenommen: diese Engine löst **index-1 DAE** (`ode15i`, `Mass`-Matrix; eine RC-Schaltung ergibt V(5)=0.9931 gegen Theorie 0.9933), aber **nicht index-3** (ein Zwangspendel schlägt fehl) — und Indexreduktion ist genau das, was der OpenModelica-Compiler tut. Beide Engines lesen/schreiben `.mat`, was omc-web ohnehin ausgibt. Die Paarung entspricht also der Simscape↔MATLAB-Aufteilung: OM modelliert, Octave analysiert, `.mat` dazwischen (siehe §8 des Protokolls).
-
-Das klärt auch den Repo-Plan: ein separates „Blockdiagramm-Repo" ist **nicht** nötig — MSL `Blocks` liefert bereits die kausale Blockbibliothek, und OMEdit bringt bereits einen Qt-for-WebAssembly-Grafikeditor mit; OpenModelica ist also ein **gleichrangiger Upstream** (Lizenz AGPLv3/OSMC-PL passt), d. h. ein 20. Submodul neben Octave, das eine zweite Engine-Lane auf derselben Seite versorgt. Siehe §9.
-
-Die Brücke zur MATLAB-Semantik existiert auf der Schnittstellenebene ebenfalls bereits: OMs Skript-API (`sendExpression`, genutzt vom offiziellen `OMMatlab`-MATLAB-Client über ZeroMQ) wird im Browser als **`omc_eval`** exponiert — dasselbe Kommandoprotokoll, anderer Transport. Fehlt also nur eine Octave-seitige `omc_*`-Funktionsfamilie (Skript bauen → `omc_eval` aufrufen → `.mat` zurücklesen); OMMatlab selbst läuft nicht im Browser (es braucht einen lokalen Prozess-Socket). Siehe §10.
-
-**Symbolisches Rechnen — die Routenvoraussetzung ist jetzt gemessen, nicht angenommen**: In diesem Build ist `sym` = 0, und Forge's `symbolic`-Paket ist reines `.m` (null `.cc`), treibt aber alles über Python/SymPy — während das wasm dieses Builds **null** Bytes für `pyexec`/`pyeval`/`pycall` enthält und keine Shell hat. Das Paket läuft also nicht unverändert; der einzige Weg ist eine echte Python-Laufzeit im Browser. Gemessen: **Pyodide + SymPy funktioniert** — `diff(sin(x),x)` ergibt exakt `cos(x)`, sowohl im COI-Worker als auch **ohne** COOP/COEP (die Basis-Linie hat es also auch), samt lautem Fehlschlag als Gegenprobe (`test/browser/probe-pyodide-sympy.mjs`, 5/0). Zur Frage „Python vorkompilieren": Statische Kompilierung nach JS (Transcrypt-Art) ist **nicht machbar**, nicht bloß langsamer (Transcrypts eigenes README: „No eval and exec of Python code"; SymPy, gemessen: 340 `eval(` / 61 `exec(` Aufrufstellen). Vorkompilierter **Bytecode** (`.pyc`) ist machbar und derzeit gar nicht umgesetzt; die gemessene A/B ergibt **7.26×** bei `import sympy` (2757 → 380 ms, Kompilieraufrufe 472 → 0), bei 3.28× der Wheel-Bytes. Siehe `build/113/PLAN-matlab-gaps.md`.
-
-**Urteil zur Frage „ist Pyodide ein Performance-Ballast“** (Dreiweg-Messung, dieselbe Bench, dasselbe SymPy 1.14.0, dieselben Ground Types): natives CPython (uv 3.14) = 1,00×; **Browser-Pyodide = 2,04×** (geometrisches Mittel über 15 CAS-Ops, pro Op 1,6–3,2×); natives Octave + `symbolic` mit persistentem IPC = 7,54× (die Browser-Variante ist sogar **3,69× schneller**, weil `symbolic` bei jedem Op Variablen über eine Pipe marshallt). Kaltstart = Pyodide-Laden + sympy-Paket ≈ 2,3 s (lazy ladbar, nie im Boot-Pfad). Also: ≈2× ist keine Größenordnungsänderung und ändert die Architekturwahl nicht. Re-Run: `sh test/fixtures/sympy-perf/run-perf.sh`.
-
-**Nachfrage: wie viel bringt vorkompiliertes `.pyc` wirklich?** (viergeteilte Messung — nur `import` zu messen, wäre irreführend): `import sympy` **2,71 s → 0,37 s (7,40×)**; geometrisches Mittel der **Erstaufrufe** pro Op **1,29×** (SymPy importiert Submodule lazy); **Steady State 0,99× — unverändert, wie es sein muss** (die Kontrolle dafür, dass Vorkompilierung kein Allheilmittel ist). Entscheidend ist die vierte Zahl: ein zweiter `import sympy` in derselben Sitzung kostet mit Quell-Wheels weiterhin 2,73 s — d. h. **der Browser hat keinen impliziten Bytecode-Cache** (natives CPython schreibt `__pycache__`; site-packages ist hier nur lesbar); jeder Kaltstart kompiliert die 472 Module neu. `.pyc`-Wheels kaufen also genau eines: **die Startkonstante pro Sitzung sinkt um ~85%**, zum Preis von 3,28× Bytes. `test/fixtures/sympy-perf/compare-pyc.py`.
-
-**Wo das symbolische Rechnen in den "Zusatzinhalten" beheimatet ist**: das Paket `symbolic` ist ein gewöhnlicher Shelf-Eintrag, die Pyodide-Laufzeit (~27 MB) aber ist **Infrastruktur, kein Shelf-Eintrag** — dieselbe Klasse wie die clang-Toolchain: Same-Origin-Hosting, per URL+sha256 in `upstream-lock.json` gepinnt, ein wiederherstellbares Bereitstellungsartefakt, das mehrere Pakete teilen. Und das aktuelle `kinds`-Feld **belügt sich hier selbst**: gemessen liefert `detect_kinds('symbolic-3.2.2.tar.gz')` den Wert `['m']` — identisch mit dem wirklich sofort nutzbaren `cgi` —, während die `DESCRIPTION` `SystemRequirements: python, sympy, mpmath` nennt: Es lässt sich installieren und danach nicht ausführen. Daher eine neue Shelf-Achse (`needs: ["pyodide"]`); die Größenordnung ist gemessen: Nur **2 von 144** Upstream-Paketen brauchen sie (`symbolic`, `pythonic`). Im Store-artigen UI muss diese Zeile "lädt bei Bedarf ~27 MB Laufzeit" anzeigen. Siehe `REQUIREMENTS-store-and-matlab.md` §A4b.
-
-**Rahmung (Nutzervorgabe 2026-10-14): "Plugin-Markt / Store" ist nur eine UI-Form von **Zusatzinhalten** (extra content), nicht das Konzept selbst.** Wie diese Dinge auch heißen mögen — sie sind letztlich nur Fähigkeitserweiterungen dieser Web-Version von Octave; der Begriff auf Konzeptebene ist **Zusatzinhalte** (maßgebliche Definition in `CONTEXT.md`): mitgelieferte Assets / Shelf-Pakete / **gemeinsame Fähigkeitsschichten** (clang-Toolchain, Pyodide-Laufzeit) / Build-Zeit-Komponenten-Plugins. Das "Shelf" ist ihr Metadatenträger, "On-Demand-Pull" ihr Beschaffungsmechanismus. => Bei Fähigkeiten "Zusatzinhalte" schreiben; "Store" nur für die Oberfläche.
-
-**Vereinheitlichte "Zusatzinhalte"-Schnittstelle über die drei Repos (entschieden 2026-10-14)**: eine Naht zwischen Octave-Full-Wasm, LLVM-wasm und dem Shelf-Repo — **die Naht liegt am Datensatz, nicht an der Methode**: ein Satztyp (`form` = Auslieferungsform, `content` = Inhalt — zwei getrennt benannte Achsen, Schluss mit der `kind`/`kinds`-Überladung) + Fähigkeitsschichten (Pyodide/clang) als gewöhnliche `form:"tree"`-Einträge im SELBEN Abhängigkeitsgraphen + ein Host-Rückgabewert mit **vier Zuständen** (ok/failed/not-found/cannot-know, nicht zu einem Boolean kollabierbar — die T4-Lehre "nicht gelesen ist nicht abwesend" als typisierte Invariante) + der Port in `build/extra-content/`. Siehe `build/113/NOTES-extra-content-seam.md`.
-
-**Organisatorische Entscheidung (2026-10-14, Nutzer: du waehlst)**: Die Backend-Integration der Zusatzinhalte **bleibt bei diesem Repo**; nicht-Kern-Inhalte (Metadaten + Bereitstellungsrezepte fuer Pakete/Laufzeiten/Toolchain) gehoeren dem **Agenten des Zusatzinhalte-Repos**; das **UI-Repo haelt zwei Vertraege** — einen mit diesem Repo (Engine / `docs/embed-api.md` / vier-Zustaende-Rueckgabe von `install`) und einen mit dem Zusatzinhalte-Repo (Inhalts-Governance / der Port). **Verworfen: ein Integrator-Repo dazwischen** (das Integrationswissen liegt hier — Lane/COI/Promote/Gates/die Qt-abgeleitete Embed-API; ein Integrator muesste es neu lernen oder wuerde zur Fassade); **verworfen: reines Standard-propagieren** (ein Standard ist eine Taetigkeit, keine Struktur — ohne Eigentuemer driftet er). Es gibt weiterhin **genau einen Same-Origin-Endpunkt zur Laufzeit**; die zwei Vertraege sind zwei Gespraechspartner, keine zwei Origins (COEP blockiert Cross-Origin-Fetch, gemessen). Siehe `build/113/NOTES-extra-content-seam.md` §8.
-
-**Migration: Shelf-Repo -> Zusatzinhalte-Repo (privat, 2026-10-14)**: Das frühere `Octave-Forge-Shelf` (public) ist jetzt **`Octave-Extra-Content` (privat)** — das `shelf/`-Submodul dieses Repos zeigt darauf. Neben den ursprünglichen Paketarchiven kommen `recipes/` (Bereitstellungsrezepte für die LLVM-wasm-Toolchain und die Pyodide/SymPy-Laufzeit: URL + sha256 + Budgets) und `port/` (eine Kopie der content-list-Portspezifikation) hinzu. **Damit ist Organisations-Entscheidung ③ (kein Zwischenhändler) umgesetzt**: dieses Repo ist der Kern-Host / konsumierende Adapter, das Zusatzinhalte-Repo der produzierende Adapter, und die UI hat je einen Vertrag. **Ehrliche Folge von privat**: Dieses Repo ist public, daher können **externe Clones `shelf/` nicht initialisieren** — eine Fähigkeits-Einbuße, kein Build-Fehler (Gates tolerieren das per SKIP). Das alte public-Repo `Octave-Forge-Shelf` ist jetzt **archiviert** (schreibgeschuetzt; Loeschen braucht einen `delete_repo`-Scope, den der Token nicht hat, also wartet es auf ein interaktives `gh auth refresh`); der lokale Klon wurde entfernt. Siehe `build/113/NOTES-extra-content-seam.md` §8. (Pin-Verlauf: das Zusatzinhalte-Repo ging 980e093 -> Upgrade 7eee94d -> Whitelist-.gitignore af7508c; die beiden spaeteren Commits betreffen nur Doku/.gitignore, `packages/`+`tools/` bleiben byte-identisch zu 980e093 — keine funktionale Aenderung, kein Site-Rebuild noetig.) (Wissenstransfer 2026-10-14: drei Erfahrungsdokumente an das Zusatzinhalte-Repo gesendet — `docs/{FORK-PIPELINE,FACT-SYSTEM,LANES-AND-MEMORY-MODEL}.md`, je auf seine Rolle als produzierender Adapter zugeschnitten, mit reproduzierbaren Befehlen und echten Fehlertexten — und das Speichermodell-/Linien-Dokument an das OM-Repo.) (Uebergabe 2026-10-14: Das Zusatzinhalte-Repo ist nach /mnt/hdd/zcode-projects/Octave-Extra-Content geklont (via `gh repo clone`, autoritativer Remote-Stand), vor Ort verifiziert: Tool-Selbsttest 14/0, 12 Pakete, alle drei Docs vorhanden; README nennt nun eine vierschrittige Zuerst-lesen-Reihenfolge.) (Cross-Agent-Mailkanal + eine Drift-Korrektur, 2026-10-14: das Zusatzinhalte-Repo bekam einen `mail/`-Kanal und einen ersten Brief zur Rollengrenze — Naht §8.1 sagt "Inhaltsvertrag = Zusatzinhalte-Repo ↔ UI", waehrend der Manager sagte, er kuemmere sich nicht um UI, was sich widerspricht; ausserdem eine eigene Drift behoben: PLAN/REQUIREMENTS sagten "eine `needs`-Achse hinzufuegen", aber Naht §2 entscheidet, dass Faehigkeitsschichten gewoehnliche `form:"tree"`-Eintraege plus eine Abhaengigkeitskante sind, ohne neues Feld — umgedreht und als Widerruf `R-015` protokolliert.) (Cross-Agent-Austausch abgeschlossen 2026-10-14: das Zusatzinhalte-Repo akzeptierte "das Repo ist massgeblich" und uebernimmt den Inhaltsvertrag; sein aufgeworfener Konflikt zum Port-Ursprung wurde als **host-eigen** entschieden (Naht §4 und §8.1 widersprachen sich; §8.1 verengt und als Widerruf R-016 protokolliert); ausserdem die Unterscheidung **Eigentum vs Auslieferung** — Inhalts-Repo privat, UI-Repo public, daher kann UI es nicht direkt lesen: Inhalts-Semantik beim Inhalts-Repo, Auslieferung ueber die Host-Site.) (Port gelandet 2026-10-14: Naht §5 Schritt 1 — `build/extra-content/` enthaelt nun Schema, Validator, 3 golden + 5 bad Fixtures und das Gate `check-content-port` (41 Gates gruen); End-to-End-Tests zeigten, dass `--emit` des Inhalts-Repos `producer` auslaesst und absolute Upstream-URLs liefert (`--site` meldet korrekt rot — das ist das Zwei-Stufen-Design), per Brief gemeldet.) (Naht §5 Schritte 2 und 3 erledigt, 2026-10-14: (2) Katalog auf schema 2 mit `form`/`content`-Achsen, `kinds` bleibt als Kompatibilitaetsansicht, Gate bekommt R5; (3) `install()` liefert ein **Vier-Zustands-Verdict** (ok/failed/not-found/cannot-know, nicht kollabierbar) plus `planOnly` ohne Download. Abnahme: neue Suite `accept-install-verdict` **12/0**; Regression `accept-forge-ondemand` 15/0 und `accept-catalog-load` 27/0 unveraendert. Zwei latente echte Bugs behoben: doppelte base in `catalog()` und eine nicht deklarierte Variable im planOnly-Zweig.) (Drei Port-Entscheidungen + Sammelpunkt-Definition bestaetigt, 2026-10-14: das Inhalts-Repo eskalierte drei Port-Luecken, der Host (Port-Ursprung) entschied — (1) Faehigkeitsschichten behalten `content: []` (keine Enum-Erweiterung, plus Gegenassertion); (2) neue optionale `consumer`-Achse (`octave`/`omc`, Standard octave); (3) `pin` mit Typ-Praefix (`release:`/`commit:`/`submodule:`). Ausserdem bestaetigt: der "Sammelpunkt" ist die produktionsseitige Aggregation der Datensaetze, **kein** Laufzeit-Endpunkt. Validator-Selbsttest 22/0.) (Aufraeumen 2026-10-14: die veraltete `.opencode/goal-state.md` entfernt (ein Harness-Ueberrest vom 2026-09-20, dessen vier Checklistenpunkte alle erledigt sind und die STATE/FACTS ersetzt haben); `PLAN-*.md` und `.scratch/perf-max/` wurden geprueft und sind **tragend** (erstere von CONTEXT/AGENTS/README referenziert, letztere abgeschlossen und von Live-Code-Kommentaren als Herkunft zitiert) und bleiben. Regel: nicht "sieht alt aus, loeschen", sondern "existiert noch, worauf es zeigt".) (Naht §5 Fortschritt: Schritte 1-3 gelandet und in STATE erfasst; **offen: (4) Faehigkeitsschichten in den Graphen (Pyodide + `form:"tree"`-Eintrag) und (5) Toolchain-Zusammenfuehrung**.) (**★★ Symbolisches Rechnen funktioniert jetzt wirklich, 2026-10-15**: Das Paket `symbolic` ist mit **null Patches** an Browser-Pyodide angebunden — sein `python_ipc_system`-Backend ruft den globalen Namen `system` (kein `private/system.m` im Paket), der Aufruf landet also im Webshim dieses Repos, der ihn an eine seitenseitige Bruecke weiterleitet, die Pyodide synchron aufruft. `diff(sin(x),x)` ergibt **`cos(x)`**, `double(sym(3)/2)` ergibt `1.5`; Abnahme `accept-symbolic-seam` **9/0**. Entscheidender Probe `probe-pyodide-sync` **4/0**: wasm-C ruft die Laufzeit synchron — **kein JSPI/Asyncify/Atomics noetig**. Vier Host-Aenderungen, **kein Relink/Recompile**.) (**Auf 8761 ausgeliefert, 2026-10-15**: `accept-symbolic-seam` ist 9/0 auf der **Produktionsseite**; paralleler Sweep bestaetigt 51 Suites / 1195 PASS / 0 FAIL. ⇒ Das Browser-Octave kann jetzt wirklich symbolisch rechnen.) (Ledger aktualisiert 2026-10-15: 168 Fakten; dieser Batch fuegt 4 Schluessel hinzu (Symbolik-Naht 9/0, Sync-Probe 4/0, Kaltstart 2177 ms); die Gesamtwerte accept_pass/accept_suites folgen dem neuen Sweep (1195 / 51).) (Naht §5 Schritte 4-5 erledigt, 2026-10-15: (4) **Faehigkeitsschichten in den Graphen** — `provision-pyodide.sh` beschafft drei Assets (offizielle PyPI-Bytes + Umschreiben der sha im gehosteten lock), der Assembler erzeugt einen `form:"tree"`-Eintrag in **derselben packs-Tabelle**, und `symbolic` zeigt per `deps`-Kante darauf (gemaess §2: **kein `needs`-Feld**); neue Suite `accept-capability-layer` **12/0**. (5) **Toolchain-Tabelle** — `--upstream` liest eine Produzententabelle und **nutzt den Validator des Ursprungs**: konforme werden uebernommen, nicht-konforme **abgelehnt und benannt**. Offen: LLVM korrigiert seine eigene Tabelle.) (Port-Entscheidungen Runde 2, 2026-10-15: `mail/009` des Inhalts-Repos brachte drei Bestaetigungen und eine unabhaengige Entdeckung; der Host (Port-Ursprung) entschied — (1) `license` bleibt **freier String/Objekt**, kein SPDX-Enum (echte Artefakte sind pro Datei gemischt: Apache-2.0 WITH LLVM-exception / MIT OR NCSA / AGPL; ein Enum wuerde Produzenten zum Luegen oder Aufteilen zwingen) — der Validator prueft **nur den Typ** und sagt klar, dass es **keine Maschinenpruefung fuer "korrekt geschrieben"** gibt; (2) "gewoehnlicher Eintrag" bei Faehigkeitsschichten begrenzt die **Anzahl nicht** — LLVMs clang-Toolchain liefert **13** Eintraege (Lizenzen + sha pro Datei machen die Wiederverwendung zweier sysroot-Varianten sichtbar); (3) `--upstream` wurde gegen LLVMs **korrigierte** Tabelle neu gelaufen (sha `8bbafa5f…`, `release/content-list.json` ≡ `release/out/` byte-identisch, beide Modi `ok`, 13 Eintraege; `v0.1.2` per `gh release list` als veroeffentlicht bestaetigt) und sauber uebernommen. Zusatz-Entscheidung: `size` richtet sich **nach `form`** — Einzeldatei = Bytes der Datei; `form:"tree"` = Byte-Budget des ganzen Baums (aktuell pyodide: 22.013.349 = das Verzeichnis, waehrend `url` auf das 9.598.218 grosse Haupt-wasm zeigt — **nicht dasselbe Objekt, beides Absicht**); `size` ist nicht Teil von fail-closed. Das Uebernehmen von LLVM legte **zwei Schulden im eigenen Gate des Hosts** offen (behoben): das Site-Gate wandte Shelf-Regeln (R2/R4) auf Nicht-Shelf-Eintraege an ⇒ 26 Fehlalarme ⇒ jetzt **nach `url`-Praefix getrennt** (Shelf-Pakete → R2–R5; Faehigkeitsschichten/Produzententabellen → **R7**); und altes R6 verlangte `consumer` bei Faehigkeitsschichten, im Widerspruch zur Entscheidung "optional, Standard octave" ⇒ **umgedreht**. Neues `--upstream-bytes` legt die Bytes einer Produzententabelle mit sha256 pro Datei in die Site (nur Uebernahme liesse den Katalog auf 404 zeigen, gefangen von R7b); End-to-End auf einer isolierten Temp-Site: LLVMs echte Tabelle + Stage ⇒ Site-Gate **`ok`** (Katalog 26 Eintraege). Validator-Selbsttest 26/0, Port-Gate 6/0, Site-Gate 20/0, Assembler 19/0.) (Mail-Grenze, 2026-10-15, Nutzeranweisung "jeder liest nur den eigenen mail-Ordner": Anlass war eine **Grenzueberschreitung** — dieses Repo suchte in `LLVM-wasm/mail/` und `OpenModelica-Full-Wasm/mail/` nach "Briefen an mich", doch diese waren **vom Inhalts-Repo an LLVM und OM** gerichtete Privatpost. **Wurzel: dieses Repo war das einzige der vier ohne `mail/`** ⇒ Briefe an mich hatten kein Ziel und blieben im Absender-Repo ⇒ der Empfaenger musste den Absenderordner durchsuchen. **Behebung**: (1) eigenes `Octave-Full-Wasm/mail/` (Posteingang) + 5 tatsaechlich an uns adressierte historische Briefe uebernommen (Originalnummern erhalten); (2) **drei Grenzregeln** (Zustellung in den `mail/` des Empfaengers / **nur den eigenen `mail/` lesen** / `**To:**` im eigenen Posteingang muss host nennen); (3) neues Gate `.githooks/check-mail-boundary.py` (Empfaengerseite-Invariante, Selbsttest **5/0**; Gegenprobe: ein `To:` eines anderen Repos ⇒ rot). Registriert im Gate-Selbstteststand (**43 Gates**) + pre-commit + Whitelist. Das Gate fing **sofort meinen eigenen falsch zugestellten `013`** (`To: extra-content` im eigenen Kasten) ⇒ verschoben ins Inhalts-Repo. Regeln: `mail/README.md`, `AGENTS.md`, `CONTEXT.md`.) (Abhaengigkeitskanten ohne Hardcoding, 2026-10-15, Antwort auf `mail/011`/`014`: das Inhalts-Repo hat die Faehigkeitsschicht-Kante **in den Daten** (`shelf/packages/symbolic.json` `depends:["pyodide"]`), daher **entfernt dieses Repo das namensbasierte Hardcoding** im Assembler ("Inhalt hinzufuegen = eine Datenzeile, kein Code"). **Vorbedingung**: die Kante liegt nur im neuen Pin ⇒ **Hardcoding-Entfernung + Pin-Bump `f6d38c9`→`922736a` in derselben Charge** (sonst liest `resolve()` leeres `depends` ⇒ `install('symbolic')` bricht still). **Zwei Selbsttests umgedreht** (Assertion aendern, nicht den Pruefer) ⇒ `forge-catalog.py --selftest` 19→20/0. **R9 vollstaendige Schliessung ergaenzt** (`check-forge-catalog.py` Selbsttest 20→24/0; drei Stufen: tabellenintern / legitime Abwesenheit (bekannter Faehigkeitsschicht-Name) / Tippfehler ⇒ rot); **Entscheidung des Inhalts-Repos uebernommen**: `symbolic→pyodide` = **harte Abhaengigkeit** (Site ohne Schicht ⇒ install scheitert laut). **Drei Kataloge neu gebacken** (8761/8768/Mirror; datei-genaue sha-Snapshots beweisen: einzige Aenderung = `forge-catalog.json`); Ende-zu-Ende `accept-symbolic-seam` **9/0**. **Ausserdem eine Falschaussage korrigiert**: der `pre-push`-Kommentar behauptete eine CI-Absicherung (`.github/workflows/readme-sync.yml`) — **existiert nie, und `.github/` ist gar nicht git-verfolgt** ⇒ durch die Wahrheit ersetzt (nur eine lokale Instanz).) (Architektur-Grenze "Chu-He-Han-Jie", 2026-10-16, Nutzeranweisung: **wasm32-Engine nimmt nur 32er-Zusatzinhalte, IP- und 64er-Linie muessen 64er-Zusatzinhalte aufnehmen**. **Messkorrektur**: die Grenze ist **nicht** "w64 nimmt nur wasm64" — Gegenbeispiel: **Pyodide ist wasm32 und laeuft trotzdem auf der w64-Seite** (`accept-symbolic-seam` 9/0) ⇒ drei Klassen: reine `.m` ohne Architekturbegriff / `.oct`-haltig muss zur Host-Lane passen / Faehigkeitsschichten (bringen ihre eigene Laufzeit mit) ohne `arch`. **Abgeleitet, nicht handgeschrieben** (`build/113/oct-arch.py` liest den TARGET_FEATURES-Unterabschnitt von `dylink.0`; **nicht aus Verzeichnisnamen raten**). Vier Stellen: Port-Schema `arch` + Validator mit drei Klassen und Gegenproben (Selbsttest 26→**33/0**), Assembler leitet aus den Bytes ab, Site-Gate **R10** (Selbsttest 20→**27/0**, zwei Gegenproben), Client-`install()` verweigert laut mit `cause='arch-mismatch'`. Abnahme `accept-arch-boundary` **5/0** auf einer **isolierten Site-Kopie** (8761 unberuehrt); Gate-Selbstteststand 44→**45**.) (Drei Inhaltsattribute, 2026-10-16, Nutzeranweisung "ein Inhalt sollte drei Attribute haben": `OctaveAssets.statusOf(name)` liefert **`fromSource` (aus Quellen gebaut?) / `compatible` (host-kompatibel?) / `installed` (installiert?)** — drei **unabhaengige, rein abgeleitete** Achsen (keine handgeschriebenen Felder): `fromSource` = `content` enthaelt `src` (derzeit 8 Pakete), `compatible` = Architekturgrenze `arch` vs Host-Lane, `installed` = Sitzungszustand; unbekannter Inhalt ⇒ **`null`** (kein erfundener Zustand). Abnahme `accept-content-attributes` **11/0** (u.a. ★ S4: dieselbe arch-Unstimmigkeit ⇒ `compatible=false` und `install` verweigert; ★ S5 in beiden Richtungen). **Zwei echte Bugs mitgefixt**: `kind` (Auslieferungsform) wurde als `content` (Inhaltszusammensetzung) missdeutet, und `installed` pruefte nur zwei Schluessel ⇒ mitgelieferte Pakete zeigten immer "nicht installiert". (Marktarchitektur-Entscheid, 2026-10-16, design-it-twice: vier Subagenten entwarfen unabhaengig; Konsens: (1) **kein Versionsattribut** — die Formulierung wird zu "die drei Attribute **pro Version** auswerten"; (2) die Bezugsart (clang-Vorkompilierung vs. fertiger Download) ist **kein Teil des Records**; (3) die Naht bleibt am Record; (4) **kein gespeichertes compatible-Bool pro Version** (es driftet). Urteil: `versions[]` im Eintrag (nicht gestaged ⇒ `compatible: null`, nicht erfunden) + `ways` + `statusOf` wandert in ein async `browse`. ★ Die vier Subagenten **widerlegten meinen eigenen Belegfall**: `statistics 1.7.3` deklariert `kinds:['m','oct']`, hat aber **0 `.oct`** (13 src); `verified.tarball_sha` gehoert zu 1.7.7 ⇒ nie geprueft (38 von 52 Versionsdatensaetzen haben leeres `kinds`) ⇒ Defekt haerter als gedacht: **Versionsdeklarationen sind bereits gedriftet**. Vier gemessene Defekte (Ticket 68); dieser Batch: Schritte 0/1 (null Client-Aenderungen): R11 + bidirektionales R4 + `derive_arch`-Wache; Selbsttest 27→**30/0**; drei Sites weiterhin `ok`.) (Rollenkonsens erneut bestaetigt, 2026-10-16, Nutzerwortlaut: "das Inhalts-Repo empfiehlt den Standard, wir als OCTAVE-Kern machen die Anpassung" — keine neue Entscheidung, sondern Bestaetigung der bestehenden Teilung; in beiden STATEs dokumentiert.)(018-Erledigung, 2026-10-16: alle sieben Punkte des Inhalts-Repos unabhaengig verifiziert — N5 dort behoben (52/52 Versionen neu sondiert, leere kinds 38→0, --emit durchlaeuft unseren Validator, arch-Kopie synchronisiert, Stichprobe 4/4); es entschied die versions-Achse (ausgeben, nur gestagte Versionen) und bestaetigte die drei Attributnamen. Wir loesten ein: versions[]-Achse ins Port-Schema (drei Invarianten; Validator-Selbsttest 33→**41/0**; Golden-Beispiel; drei Sites weiter ok) plus N6 behoben und ausgeliefert (install() berechnet drei Felder echt; accept-content-attributes **11→14/0**; auf 8761: install(symbolic) ⇒ layers=[pyodide 22 MB], bytes=22289801). Ticket 68 geschlossen — alle vier Defekte behoben.) (versions-Kette geschlossen, 2026-10-16: das Inhalts-Repo lieferte `--probe` pro Version + `--emit` mit `versions[]` (Beispiel sha `b55a73db…`). **Drei-Schichten-Abgleich bestanden**: Validator (Produzentenmodus ok), Assembler+Site-Gate (Katalog mit 52 echten Kandidaten), Browser (8761 `catalog()` liefert Kandidaten; Invariante ② wahr). ★ Der Abgleich fand eine **Host-Luecke**: der Shelf-Pfad `resolve()` konsumierte das `versions`-Feld nie ⇒ Kandidaten erreichten den Katalog nicht; behoben (staged = Bytes liegen wirklich im Cache/auf der Site, sonst withheld). staged-Semantik entschieden: Assembler-Seite beim Host, Produzenten-Seite beim Inhalts-Repo. Drei Sites neu gebacken (reine Zusatzschluessel; accept-symbolic-seam 9/0 unveraendert); Voll-Sweep **96 Suites / 1552 PASS / 1 FAIL** (der eine = Ticket 65 Luecke 2, ein ehrliches Rot).) (022-Erledigung, 2026-10-16: das Inhalts-Repo korrigierte meine Fehleinschaetzung, dass die query-URL nur theoretisch sei — optim steht so in seiner Tabelle. Entscheidung (a): `url` bleibt Abrufeingang (emit dort unveraendert), Host bekommt eine Kandidatenliste fuer den Dateinamen (byte_name_candidates; Reihenfolge danach, ob der letzte Pfadteil wie ein Archiv aussieht), withheld-Kandidaten tragen upstream_url. ★ Der End-zu-Ende-Stage-Test fand zwei weitere echte Host-Defekte: (1) `join(site, absolute URL)` baute einen falschen Verzeichnisbaum `site/https:/github.com/...` (die Pruefung fragte dieselbe Join-Formel, also sah es erfolgreich aus); (2) die Same-Origin-Umschreibung auf Eintragsebene fehlte im --upstream-Pfad. Beides behoben, plus size aus den Site-Bytes aufgefuellt. Selbsttest 20→28/0; echter Tabellenpfad: Validator ok + Site-Gate ok; die drei Sites weiterhin ok.) (Ticket-65-Entscheid, 2026-10-17, LLVM mail/026: der **dritte Fall** trift zu — `_ZTIi` existiert auf keiner Seite (Host-_ZTI_* sind alles Octave-Klassen; 11.663 .oct null Treffer; der offizielle emcc-Pfad importiert es ebenso) ⇒ die Entscheidung liegt beim ABI-Eigentuemer (diesem Repo). **Entscheidung A**: `_ZTIv/b/c/i/f/l/d` liegen in libc++abi-mt-legacyexcept.a (D-Sektion, gemessen); die keep-Liste exportiert bereits die gleiche Familie (__cxa_*). Dieser Batch: gen-keep-list haengt 7 Eintraege explizit an (der Generator findet sie nie von selbst) + Behaelter-keep aktualisiert + --selftest ⇒ Gate-Stand 45→**46**; der Relink bleibt ein eigener Batch (kein echter Anwendungsfall ⇒ ready-for-human). 024/025: UI-Vertrag geschlossen (UI liest die von diesem Repo assemblyerte forge-catalog.json).) (Drei-Linien-Modell final, 2026-10-17, Nutzerkorrektur: nur **drei Linien** ueber alle angeschlossenen Repos — wasm32 (32 Single-Thread ohne COI, zweifach nuetzlich), master (64 Multi-Thread; es gibt keine Single-Thread-wasm64-Produktlinie, w64-base ist nur ein Rueckfallfeld), IllegalPerformance (non-free: Rust-Patches = Abkehr von der Open-Source-Gemeinschaft). Die einzigen beiden Kriterien fuer die Aufteilung: Nutzer-Erreichbarkeit + non-free-Status — nicht Performance. In AGENTS.md/maintaince.md dokumentiert.) (UI-vier-Fragen-Umsetzung, 2026-10-17: der von UI gemeldete Bug „chinesische Fehlermeldung in englischer UI“ stammt aus unserem assets-loader — behoben: **alle 15 throws tragen err.code** (geschlossenes Vokabular) + die Vier-Zustands-Klassifikation von install() liest jetzt e.code statt Regex (Kompatibilitaets-Regex bleibt; .m-Seite unberuehrt) + message bleibt Chinesisch. Ausgeliefert: 8761 err.code=NOT_IN_ANY_LIST PASS; Regression 10/0. Q2 (Versionsbeschreibung) ans Inhalts-Repo; Q3/Q4 Host-Position gegeben (LLVM-Voraussetzung = planOnly-Planungsabfang, nicht Sofortfehler). LLVM-028-Einlangung verifiziert (4 PASS) + die handkopierten-Zahlen-Lektion traf auch uns einmal — behoben.) (STATE-Maschinenblock mit dem Batch aufgefrischt.) (Merge-Konvergenz der amend-Gabelung auf der Mirror-Seite; README-Konflikt nach HEAD-Seite geloest.) (Voll-Sweep PROBES=1: 96 Suites / 1551 PASS / 0 FAIL; probe-toolchain-gap-Fixtures waren durch den Reboot in /tmp verloren — neu gebaut, danach 1 PASS / 1 FAIL (Luecke 2, ein ehrliches Rot vor dem Relink). Ledger mit 172 Eintraegen neu gemessen.) (Passthrough-Batch 2026-10-17, Umsetzung von mail/029/030 des Inhalts-Repos: `description`/`links` werden formale Schluessel im Port-Schema (`$defs/link`, Slimming-Kriterium {label,url}); Validator-Selbsttest 41→**46/0**; der Assembler flacht `upstream.*` ins Site-Katalog (Leerwerte bleiben als Schluessel erhalten) plus `_site_fixups`-Strukturreparatur ⇒ Selbsttest 28→**32/0**; neues Site-Gate **R12** (Passthrough-Schluessel muessen byte-genau zum Shelf-Archiv passen, fehlende Schluesser rot) ⇒ Selbsttest 30→**34/0**; drei Sites neu gebacken (Pin 922736a→285af2f), alle drei Schichten gruen. **Client `browse()` gelandet** (Markt-Urteil §5 Schritt 5): async Fronttuer liefert Entry[] (drei Attribute + versions[] je Kandidat + description/links + state/why), statusOf teilt dieselbe Herkunft `_browseEntry`; `_byCode` vervollstaendigt auf **14 Codes** (die in mail/030 genannte 7-Code-Luecke). Abnahme: neue Suite `accept-market-browse` **17/0** (drei Gegenproben + Null-Byte-Anforderung); fuenf bestehende Suiten ohne Regression (zwei Sites); ausgeliefert per promote-pages, 8761 BOOT OK; Voll-Sweep 54 Suites / 1231 PASS / 0 FAIL.) (kind/role-Linie abgeschlossen, 2026-10-20, mail/055: Das Abnahmeschreiben des Inhalt-Repos bestaetigt 15/15 selbstbeschreibende Eintraege — 13 Pakete, llvm-wasm (toolchain), pyodide (language-bridge, der dritte Wert der Q1-Vokabulars im Ersteinsatz) — mit korrekter kind-Semantik (Engine traegt es, Bruecken defaulten). Die Linie schloss in drei Tagen vom Ticket zum Fertigen (047 Ticket → 050 Schema → 052 Engine-Eintrag → 053 fehlende Markierung → 054 Fix), das Abnahmebuch liest: Schema-Ursprung + semantische Kopie + Tabellendaten + Loader-Urteil alle ausgerichtet, null hartkodierte Namenspruefungen. Keine offenen Punkte auf beiden Seiten; das UI liest die vollstaendige Tabelle, wann immer es sich anschliesst.)
-
-(Verdichtungs-Schnappschuss, 2026-10-25: Der Posteingang ist leer nach einem unbeaufsichtigten Durchlauf von neun Briefen (044–061), jeder mit einem gelandeten Artefakt — die Audio-Wiedergabekette (Drei-Schichten-Fix, beide Sites 50/0), die kind/role-Schema-Erweiterung (15/15 Eintraege selbstbeschreiben jetzt), die Aufteilung der llvm-wasm-Installationsablehnung, das pyodide-Label language-bridge, der omc-Engine-Eintrag (zweite kind:"engine"), Gate R14, das die MSL-Geschwisterverzeichnis-Invariante erzwingt, MSL eingegliedert (17 Pakete) und der consumer:["omc"]-Spruch. Der neueste Brief ist ein Schema-Ticket, jetzt als Issue 69 erfasst: ein optionaler files[]-Schluessel fuer form:"tree"-Eintraege, der den Download-Verschluss traegt ({bytes, sha256} pro Datei), weil die Datei-shas einer Engine zur Laufzeit im Browser sonst unerreichbar sind — das Faktenbuch des Produzenten bleibt die einzige Herkunft, die Montage projiziert nur. Verbleibende Arbeit nach Bereitschaft: Issue 69 (die bg.wasm-Projektion kann jetzt beginnen, die vollstaendige Form wartet auf einen JS-Faktenbuchschluessel von OM), Issue 67 (CI nie verfolgt), Issue 63 (rustpatch-Faktenabdeckung), Multi-TU-Kompilierung, plus drei nachgelagerte Punkte, die anderen Repos gehoeren.)
-
-(MSL eingegliedert + omc-consumer-Spruch, 2026-10-25, mail/059: Der Katalog traegt jetzt 17 Pakete. MSL kommt von OM als modelica-standard-library (OM gewann die Namensdebatte — eine generische Abkuerzung ist nicht durchsuchbar; der Praezedenzfall ist, dass Namen die Upstream-Identitaet tragen), form:"file" (ein Zip, zur Laufzeit entpackt), role:"package", consumer:["omc"], und landet im **Geschwister**verzeichnis assets/msl/, das Gate R14 bewacht — HTTP 200 auf allen drei Sites, 19.482.938 Bytes byte-genau gleich der erklaerten Groesse. Beim Zusammenfuehren traten zwei Defekte auf. Erstens ein echter Assembler-Bug: stage_upstream_bytes legte Bytes immer unter assets/forge/ ab, waehrend die Produzententabelle auf assets/msl/… zeigt — zwei Vokabulare fuer einen Lieferpfad, genau die Familie, die beim llvm-wasm-Merge einen 404 erzeugte. Behoben: Eine site-relative url **ist** der Lieferpfad, also landen Bytes dort, wo die url sagt; nur absolute oder query-tragende Wiederabruf-URLs fallen auf assets/forge/ zurueck (der Praezedenzfall des falschen Verzeichnisbaums bleibt, plus eine neue Umkehr-Assertion). Zweitens wurde der consumer von omc auf ["omc"] geaendert, nach dem Spruch, dass consumer die **Engine-Lane** benennt, die ein Eintrag bedient — die omc-Engine ist die Laufzeit dieser Lane, derselbe Stack wie MSL, waehrend llvm-wasm und pyodide auf der Octave-Lane bleiben. Browse-Eintraege reichen jetzt consumer/kind/role durch (frueher fiel consumer weg, sodass weder die UI noch die B3c-Assertion einen externen Eintrag unterscheiden konnten). Neun Regressions-Suiten gruen, Gates 49/49, Paritaet konsistent.)
-
-(OMC-Engine-Eintrag + MSL-Geschwisterverzeichnis-Invariante, 2026-10-25, mail/056/057: Der zweite kind:"engine"-Eintrag ist gelandet. Der Byte-Kanal wurde unabhaengig geprueft: die vier Dateien der OM-Deployment-Platte, Hauptartefakt-sha byte-genau gleich dem OM-Faktenbuch omc_web_wasm_sha (das neue provision-omc.sh prueft die Bytes erneut, statt dem Faktenbuch zu vertrauen, Selbsttest 4/0). Eintrag: kind:"engine" + role:"toolchain" + arch:"omc" (Lane-Wert) + size = Ganzverzeichnis (74.735.455 B); version:"unversioned", weil OM keine Versionszeichenkette geliefert hat und wir keine erfinden. Der Ablehnungstext fuer Toolchains wurde rollengenerisch — der alte Text kodierte "clang/lld/sysroot" hart und haette fuer omc gelogen. Fuer MSL: Der Spruch des Inhalt-Repos lautet form:"file" (ein einzelnes Zip, zur Laufzeit entpackt) und eine **Geschwisterverzeichnis**-Hartsbedingung — MSL darf niemals in omc/ landen, sonst schwillt das Groessenbudget der Engine von 74,7 MB auf 94 MB+ an (unehrliches Budget = dieselbe Familie wie unehrlicher content). Diese Bedingung wird jetzt maschinell als Gate R14 erzwungen: die size eines tree-Eintrags muss der gemessenen Bytesumme seines url-Verzeichnisses entsprechen; umgekehrt getestet, indem ein MSL-Zip in omc/ fallen gelassen wird — sofort rot und die Bedingung wird benannt. Selbsttest 38→40/0, Gates 48→49, sieben Regressions-Suiten ohne Rot, drei Sites neu gebacken.)
-
-(pyodide role:'language-bridge', 2026-10-20, Fund aus mail/053: Das Abnahmenschreiben des Inhalt-Repos fing den einen falsch markierten Eintrag — pyodide trug weder role noch kind, waehrend sich alle anderen Eintraege selbst beschreiben. Jetzt traegt es role:"language-bridge" (der dritte Wert der Q1-Vokabulars im Ersteinsatz; kind bleibt abwesend — es ist keine Engine und kompiliert nichts). Die Disziplin „null hartkodierte Namenspruefungen" ist damit ueber alle 15 Eintraege vollstaendig: 13 Shelf-Pakete sagen package, llvm-wasm sagt toolchain, pyodide sagt language-bridge. Verifiziert: drei Sites neu gebacken mit Gate gruen ×3, fuenf Pyodide-Pfad-Suiten ohne Rot (symbolic-seam 9/0 bis content-attributes 14/0 — der install('symbolic') → pyodide-dann-symbolic-Verschluss unberuehrt), Gates 48/48, Paritaet konsistent.)
-
-(Engine-Eintrag im Katalog, 2026-10-20, mail/051-Erfuellung: Das Inhalt-Repo hat seine Haelfte fertig (role-emittierender Commit 7dfe77e), daher wanderte der Shelf-Pin voran und der Assembler setzt jetzt role auf jeden Paketeintrag (13/13 role:"package" — explizite Selbstbeschreibung wie beim Emittenten). Der llvm-wasm-Eintrag selbst wurde auf kind:"engine" + role:"toolchain" angehoben, mit arch = Lane-Wert (w64 — ein Indexschluessel, keine Versionsachse; aus der eingesetzten lanes.js der Site gelesen, nie abgeschrieben). Drei Pruefstellen im Gleichschritt angepasst: Die Engine-Lane-Vokabular des Port-Validators erhielt die Site-Lane-Namen (base/w64), das R10-Byte-Abgleich-Gate befreit Engine-Eintraege (clang.wasm ausserhalb assets/oct*/ ist Gestaltung, kein Drift), und das harte Arch-Gate des Loaders befreit kind:'engine' — gemessener Fund: w64 vs. wasm64 sind verschiedene Vokabulare, ein literaler Vergleich schlaegt falsch; die Ein-Linie-Ein-Architektur-Regel regelt .oct-s, die in den Host dlopenen, waehrend die Engine die Eingabe des Kompilier-Workers ist, ausserhalb jener Semantik. install('llvm-wasm') lehnt jetzt direkt am role-Feld mit NOT_INSTALLABLE ab (der Namens-Fallback ist ausser Dienst). Neun Regressions-Suiten gruen (arch-boundary A2 gekippt: der Lane-wertige arch eines Engines ist legales Gepaeck), Gates 48/48, drei Sites neu gebacken, Paritaet konsistent.)
-
-(kind/role-Schema + llvm-wasm-Installationsunfall behoben, 2026-10-20, mail/047/048/049: drei Briefe, drei Abschluesse. (1) Der Vertragsumfall — Klick auf Installieren bei llvm-wasm im Paketmanager sagte „unbekannte Faehigkeitsschicht“, irrefuehrend, denn es ist nicht unbekannt, sondern nicht Aufgabe von install: Die installLayer-Ablehnung wurde aufgeteilt in NOT_INSTALLABLE (Toolchain → „von der Downloadverwaltung (DownloadStore) + Kompilier-Worker verwendet — nicht Ladung“, liest das neue role-Feld mit Namens-Fallback bis Tabellen upgraden) und LAYER_NOT_IMPLEMENTED (wirklich zukuenftige Sprachbruecken) — nach Spruch B (Ausfuehrungsdomaenen-Fehlpassung). (2) Die Schema-Tickets mail/047 + 049-Q1: entry erhaelt kind (src/pre/engine; Engine-Eintraege tragen arch = Lane-Wert — arch ist ein Indexschluessel, keine Versionsachse) und role (package Standard / toolchain / language-bridge — form ist Gestalt, nicht Rolle, die Wurzel des Unfalls); Datei-shas bleiben produktselbstbezeugt, Validator-Selbsttest 52→57/0; consumer als Array- plus Enthaltenseins-Semantik annotiert. (3) Das mail/048-Erratum: Die Behauptung von mail/030 („Schluessel immer vorhanden, UI prueft nie“) passte nicht zur Livetabelle (tree-Eintraege lassen description/links komplett weg) — nach Spruch C-2 wurde die Behauptung geaendert, nicht der Assembler: Faehigkeitsschichten sind keine Pakete, „Schluessel abwesend ⇒ keine Beschreibung“ ≡ „Schluessel leer“. Sechs Install-bezogene Suiten gruen, Gates 48/48.)
-
-(Audio-Wiedergabekette behoben, 2026-10-19 (aus der Fishing-Expedition des Inhalt-Repos, mail/045): `sound([0.1 0.2], 8000)` scheiterte ehemals mit `'__player_audioplayer__' undefined` — die gesamte Wiedergabekette war tot, waehrend vorhandene .m-Flaechen which-artige Assertionen falsch gruen hielten. Drei-Schichten-Fix: (1) Das fehlende `audiodevinfo.oct` (alle __player_*/__recorder_* leben in diesem einen Modul) stand nie in den TREE_MODS des Spur-Builds — ergaenzt und fuer beide Architekturen neu gebaut; ohne PortAudio scheitert die C++-Schicht jetzt laut (err_disabled_feature), wahrend die echte Wiedergabe vom lazy-geladenen webaudio-m-Bundle bedient wird. (2) Die Boot-Liste erhaelt audiodevinfo mit **38 Aliases** (Octave loest .oct nach Dateinamen auf — Geschwisterfunktionen brauchen Symlinks, das webio-Praezedenz); die fuenf Aliases von __web_pause_ms__ behoben die Luecke, die sound → pause → __web_suspend_ok__ brach. (3) sync-js-Drittzustands-Fix: Eintraege mit unveraenderter sha wurden komplett uebersprungen, sodass Meta-Korrekturen (aliases/notes) auf bestehenden Eintraegen nie wirksam wurden — eine Zwei-Produzenten-Gabelung. Assertionen gekippt, wo sich Verhalten aenderte (accept-audio 46→50/0 mit mail/045-Regressionspins; t6 33/0; t7 40/0). Auf beiden Sites verifiziert: SOUND_OK=1 (sound blockiert tatsaechlich ~0,2 s, AudioContext wirklich erzeugt), keine Regressionen, Paritaet konsistent. Ebenfalls aus mail/044: das mail/read/-Gitignore-Loch (6 archivierte Briefe jetzt getrackt) und zwei Briefe an das UI neu zugestellt in den Antigravity-Worktree mit host-Praefix.)
-
-(w64-base totgeschaltet, 2026-10-19, zweite Drei-Linien-Entscheidung: Die Anordnung des Nutzers — die Master-Linie darf niemals auf Nicht-COI-Browsern laufen; wasm32 ist die einzige Linie ohne COI; Master muss multithreaded sein; IP ist die von der offiziellen Linie abgezweigte Master-Erweiterung — beseitigte die w64-base-"Rueckfallzelle" vollstaendig, gleichbehandelt mit threads. Die Site hat nun **zwei Zellen** (base / w64): kein COI (selbst mit verfuegbarem memory64) ⇒ immer **base**. Beseitigt ueber alle sieben Produzenten (lanes.json-Einzelquelle in DEAD_LANES, lane.js FILES/order/Override-Regex, gen-lanes, check-lane-purity, relink-Modusliste mit namentlicher Totmodus-FATAL, promote-w64-lane weist jetzt jedes w64-base-Ueberbleibsel zurueck), dazu fielen die fuenf w64_base_*-Schluessel des Faktenbuchs, probe-lanes Matrix wurde zweizellig umgestellt (neue Tot-URL-Assertion fuer ?lane=w64-base) und sechs Testsuiten verloren ihre toten Zweige. Verifiziert: probe-lane 33/0 auf der zweizelligen Site, Einzelquellen-Abgleich OK (2 lebende Zellen / 2 tote Lanes / 4 Konsumenten), promote --verify auf beiden Sites gruen, Gates 48/48, volle Sweeps auf beiden Sites gruen (vereinzelte bench/probe-Rote waren Netzwerkflattern, einzeln gruen).)
-
-(Ticket-65-Ruling-A-Relink gelandet, 2026-10-19: Die w64-/w64-base-Artefakte sind auf der vollstaendigen -6012-Spur neu gebaut (w64 `c994bdad…`, w64-base `35ef50dc…`, verdict=ok), und der Abrechnungs-Sonde kippte von rc=2 auf rc=0 — ein Side-Modul mit `throw 42` dlopent nun und ruft wirklich auf. Unterwegs wurden zwei echte Wurzeln behoben. Erstens brauchte die Abhaltung der 7 Basis-Typeinfo-Symbole **starke Referenzen** (`-Wl,-u,_ZTIi` plus `--export-if-defined` paarweise, das rust_sort-Praezedenz): Das export-if-defined der Keep-Liste allein verhindert nicht, dass MAIN_MODULE=2-DCE Archivmitglieder entfernt, auf die nichts verweist. Zweitens — eine Umkehrung einer frueheren Folgerung — war die C2c-Grenze "Invalid resizing" *nicht* typeinfo-verwandt: Die echte Wurzel ist, dass sich die wasm32- und wasm64-Headerbaeume in `octave/mxtypes.h` gabeln (`mwSize/mwIndex` sind int32_t vs. int64_t), und octinc hatte je nur den wasm32-Baum gepackt, sodass im Browser kompilierte .oct fehlindizierte Groessen hatten. octinc liefert jetzt **architekturspezifische Header** (mit einer Assertion, dass die beiden sich wirklich gabeln), und C2c/C8e kippten von "verzeichneter Grenze" auf hart gruen (`cell2cell({1,2},1)=1x1`, die `partint(4)`-Invariante gilt). Volle PROBES=1-Sweeps auf beiden Sites gruen (96 Suiten / 1576 PASS / 0 FAIL), Promote-Verify gruen, SHA drei Schichten 4/0, Dist neu gebaut.)
-
-(LLVM-wasm-Pin v0.1.3, 2026-10-19: Der Toolchain-Pin wechselte von `v0.1.1` auf `v0.1.3`, das `driver/compile-core.mjs` im Manifest mitfuehrt (14 Assets) plus `release/check-published.mjs` — ein Vier-Wege-Abgleicher, dessen `--freshness`-Schicht das Driver-Set des Bundles byte-genau gegen den Repo-HEAD prueft (genau die Schicht, die ein *durchgaengig veraltetes* Bundle faengt; der Produzent bestaetigte, dass v0.1.2 intern mit 13/13/13 selbstkonsistent war, weshalb interne Konsistenzpruefungen es verpassten). Unsere Seite hat unabhaengig nachgeprueft: Bundle-Sha256 stimmt mit dem erklaerten Wert; die Ausfallkopie, die `compile-core.mjs` aus dem Arbeitsbaum des Produzenten holte, ist gemaess der in `mail/013` notierten Exit-Bedingung **ausser Dienst** — der Provisioner behauptet nun positiv, dass das Manifest des Bundles es auflistet (Umkehrtest gemacht: Entfernen des Eintrags laesst ihn laut scheitern). `accept-compile-extension` lief erneut mit 16/0 auf dem neuen Pin.)
-
-(llvm-wasm-Faehigkeitschicht im Katalog, 2026-10-19: Die clang-Toolchain lag bereits auf der Site (`assets/llvm/`), fehlte aber in `forge-catalog.json` — damit hatte Ruling ⑤ ("Laden eines Quellpakets erfordert das Herunterladen der LLVM-Toolchain") keine Datenquelle. Der Assembler erzeugt sie nun als **Faehigkeitschicht** nach dem pyodide-Praezedenzfall (ein synthetisierter Eintrag aus tatsaechlich vorhandenen Site-Bytes: `form:"tree"`, `content:[]`, `url` auf das Hauptartefakt des Baums, `size` = Ganzbaum-Budget, Version aus dem Toolchain-Manifest), statt die 14-zeilige Dateiliste des Produzenten woertlich zu uebernehmen — zwei gemessene Gruende: 14 Zeilen wuerden zu 14 Packs zerstreuen (nicht *eine* Faehigkeitschicht), und ihr Praefix `assets/llvm-wasm/` weicht vom realen Site-Pfad `assets/llvm/` ab, wodurch Byte-Staging und Katalog-URL auseinanderlaufen (live beobachtet: "14 Dateien gestaged" und "14× R7b fehlt" waren gleichzeitig wahr). Der Katalog traegt nun 15 Eintraege = 13 Shelf-Pakete + 2 Faehigkeitschichten. B3c in `accept-market-browse` wurde korrigiert, um Faehigkeitschichten ueber `detail.form` statt eines hartkodierten Namens auszuschliessen (der erste Fix schlug noch fehl — `form` liegt unter `detail`, nicht am Entry). Sabotage-Checks in beide Richtungen ergaenzt (Assembler-Selbsttest 37/0).
-
-(Multi-TU-Kompilierung + Interaktions-Upgrade 2026-10-18: v1 kompilierte nur die Haupt-Uebersetzungseinheit, daher existierte `miscellaneous`s `partint`-Modul nie. v2 baut die vollstaendige Modultabelle des Containers: die handgeschriebene Tabelle in `build-pkg-oct.sh` ist jetzt **Daten** (`build/pkg-module-table.json`, abgeglichen durch `check-pkg-module-table.py`, 12/0; Live-Repo 6 Pakete / 27 Module), und der Client liest die Site-Kopie; DEFUN-Scanning dient nur als Rueckfall — denn "jede Quelle mit DEFUN muss gebaut werden" ist falsch (gemessen: `sample.cc` kompiliert nicht gegen 11.3.0-Header, und die Container-Tabelle laesst es bewusst weg). Artefaktnamen kommen vom **Quell-Basename**, nicht vom ersten DEFUN (Beleg: das ausgelieferte `partint.oct` exportiert sowohl `Gpartcnt` als auch `Gpartint`). Die Orchestrierung wurde in ein **tiefes Modul** `bridge/multi-tu.mjs` extrahiert, mit zwei Adaptern: dem Browser-Worker und einer **lokalen Bank** `test/local/compile-local.mjs` — letztere senkte einen Verifikationszyklus von **~8 Minuten auf 8-14 Sekunden** und liefert volles stderr statt eines einzigen `Aborted()`. `accept-compile-extension` ist **16/0** (vorher 11/0). Zwei weitere Einfacht-#20③-Zusagen landeten: eine `critical`-Suitenliste, deren im Scope uebersprungene Eintraege `sweep.sh` nun zu einem Nicht-Null-Exit zwingen, und `build/lanes.json` als einzige Deklaration des Lane-Wissens (Abgleicher 15/0, der eine echte Luecke fand: `LANE_EXPECT` fehlte `IllegalPerformance`).)(Paket-Vorkompilierungs-Batch 2026-10-18: alle 28 Forge-`.oct`-Side-Module, die noch mit Octave-7.2-Headern gebaut waren, sind gegen 11.3.0 neu gebaut — **nur zwei Varianten** gemaess Drei-Linien-Modell: `wasm32` (ohne `-pthread`, fuer die `base`-Zelle) und `wasm64` (`-pthread -sMEMORY64=1`, fuer `w64`) (Release-Modell definiert 2026-10-18: ein Paket wird als **Artefakt = (name, version, arch)** veroeffentlicht — nicht als Dateihaufen und **nicht als zweite Versionsnummer**: die Version ist die Upstream-Tatsache (optim 1.6.3) (Mail-Workflow 2026-10-18: der Posteingang hat nun einen Ungelesen-Bereich (mail/) und ein Gelesen-Archiv (mail/read/) (Upstream-Rueckmeldung 2026-10-18: der Drei-Linien-Abbau legte drei Stellen offen, an denen dieselbe Tatsache zwei Heimatorte hat — als [Einfacht #20](https://github.com/ArchivalEra/Einfacht/issues/20) gemeldet: (1) (Posteingang 2026-10-18: Inhalts-Repo 033 bestaetigt sowohl das Release-Modell (artifacts[] gehoert zum Host, Architektur ist keine Versionsachse) als auch die read/-Uebernahme und erkennt den Zero-Value-Guard-Konflikt als Luecke des eigenen Vorschlags. Antwort mit der Upstream-Nummer [#20](https://github.com/ArchivalEra/Einfacht/issues/20) (Upstream-Nachtrag 2026-10-18: Issue #20 erhielt einen Kommentar, der Luecke (2) von "schreibt an die falsche Stelle" zu "der Schreibpfad ist voellig ungeschuetzt" hochstuft - das Ledger-Schreiben prueft weder, ob das Ziel gitignoriert ist, noch warnt es vor dem Standardpfad; und der _load_or_die-Hinweis ("zuerst im Repo-Root messen") (Architektur-Aenderung: Trennung von Download und Laden, 2026-10-18: laut Nutzeranweisung (Markt bietet Quell- und vorkompilierte Variante; Laden in einer separaten Ansicht; installiert wird zu heruntergeladen) spezifizierte das Inhalts-Repo einen DownloadStore, der die install() (Upstream-Entscheid zu #20, 2026-10-18: Luecke (2) ist upstream behoben (c29a33b: ein von .gitignore abgedecktes Ledger-Ziel wird mit rc=2 und null Bytes abgelehnt) (Einfacht-Schicht-Upgrade 2026-10-18: die vendored Mechanik ist jetzt byte-identisch mit Upstream 45ca586 - sieben Mechanikdateien wurden im Ganzen ersetzt statt einzeln gepflueckt; lokale Patches zurueckgezogen (der eigene measure-Dispatch ist jetzt der Upstream-REFLECT_MEASURE_MODULE-Knopf mit lautem Rueckfall-Warnhinweis). Behalten: Datenschicht, mail-read-Werkzeug und die build/facts.py-Shell (setzt jetzt zusaetzlich den Messknopf - komplementaer zur Blind-Schreib-Wache) (Browser-internes Kompilieren gelandet 2026-10-18: OctaveAssets.compileExtension(name) kompiliert src/*.cc im Browser zu einem echten .oct und liefert ein Verdict plus einen **live diagnostics**-Logstrom. Gemaess Nutzeranweisung wird die Toolchain **stufenweise** geladen: sysroot (19,7 MB) und clang (45,8 MB) beim Init, **lld (31,8 MB) erst beim ersten Link** - erster Kompilierlauf damit 66 MB roh statt 81 MB. Ein eigener compile-worker.mjs macht die Stufung, importiert aber weiterhin die Orchestrierung des Produzenten. Abnahme accept-compile-extension **11/0** auf beiden Sites. Bekannte Grenze ehrlich vermerkt: Produkt wird erkannt, aber der Aufruf ueber die Grenze schlaegt noch fehl - dieselbe typeinfo-Exportluecke wie Ticket 65.). Sechs Abnahmen gruen.) und hier in die vendored Kopie uebernommen - gegengetestet, Selbsttest des Guards 16->20. Fuer Luecke (1) wurde der Upstream-Vorschlag (handgeschriebene Bank stilllegen) fuer dieses Repo gemessen und verworfen: 45 von 46 Eintraegen liegen ausserhalb von zreflect/, 12 sind Shell-Skripte ohne moegliche GATE-Deklaration. Entscheidung ist daher B - beide Baenke bleiben, aber die Aufteilung wird gesperrt: eine neue Zusicherung verlangt eine leere Schnittmenge.)-Kette zwischen sha-Pruefung und Untar schneidet und gepruefte Bytes plus Manifest in OPFS ablegt. Die Naht liegt weiterhin am Record. Host-Entscheidungen: (1) die sha pro Engine-Datei stammt aus octave.build.json/measured.files, nicht aus upstream-lock.json; (2) ARCH_MISMATCH bleibt ein harter Gate zur Ladezeit; (3) install() wird nicht auf DownloadStore konvergiert - beide Ketten bestehen.) weist genau auf die Aktion hin, die die wilde Datei erzeugt.) - dieselbe Familie wie das still uebersprungene Kern-Gate dieses Repos.) zwei gates-selftest.sh-Baenke laufen parallel; (2) der REFLECT_*-Standardwert schreibt das Ledger an einen gitignorierten Pfad, sodass eine direkte Neumessung Erfolg meldet, waehrend der Hook eine andere Datei liest; (3) Spurwissen liegt in drei Registern, und eine vergessene Stelle laesst das Kern-Gate probe-lane still ueberspringen, waehrend der Sweep 0 FAIL meldet.); Lese-Einstieg ist zreflect/mail-read.py (Lesen = ausgeben + automatisches git mv ins Archiv). Das Werkzeug ist bewusst **kein Gate** — Mailinhalt ist nie vertrauenswuerdige Maschineneingabe. Das Grenz-Gate toleriert einen leeren Ungelesen-Bereich durch Rueckfall aufs Archiv, meldet aber weiterhin, wenn beide leer sind.), die Architektur ein Indexschluessel der Build-Matrix, daher gibt es keine Pseudo-Version optim-1.6.3-wasm32. Der Katalog traegt nun artifacts[] (pro Architektur, sha256 pro Datei, abgeleitete arch + octave/toolchain/recipe-Herkunft) — derzeit **5 Pakete x 2 Architekturen = 10 Release-Einheiten**. Gate R13 gleicht jede Artefaktdatei gegen die Site-Bytes ab.). Die Stellschrauben wurden gemessen: `-O3` kostet **+11% Bytes** bei Rausch-Geschwindigkeit, **LTO zerstoert dlopen** (es entfernt Symbole, die nur dlopen braucht — das §5.78-Praezedenz reproduzierte sich auf beiden Varianten), `wasm-opt -O3` bringt -0.6% ohne Geschwindigkeitsgewinn ⇒ **ausgeliefertes Rezept ist `-O2`**; auf der Side-Module-Ebene ist kein Regler-Spielraum mehr (die echten Hebel sind Hauptmodul/BLAS, laengst erledigt). Im Browser verifiziert: `accept-113-pkgoct` **27/0 auf beiden Varianten**; voller `PROBES=1`-Sweep gruen.) (Rollenkonsens bestaetigt, 2026-10-16, Nutzerwortlaut: "das Inhalts-Repo empfiehlt den ) (Auf 8761 ausgeliefert (`promote-pages.sh`, vierfach identisch, die drei Grossdateien unveraendert) + echte Site-Abnahme `accept-content-attributes` **11/0**. ★ Beim Ausliefern einen **seit Bestehen vorhandenen Defekt des geregelten Einstiegs selbst** gefunden: `--verify` prueft **vier** Stellen, der echte Sync schrieb aber nur **zwei** (8768 fehlte) ⇒ nach jedem echten Sync konnte `--verify` nie gruen werden (`git log -S`-Beleg: seit dem Entstehungs-Commit so); behoben plus neuer Selbsttest-Fall ①b (nach echtem Lauf wird **8768 mitgeschrieben**) ⇒ Selbsttest 4→**5/0**.) (Drei offene Faelle geschlossen, 2026-10-16: (1) **Ticket 65** (clang-wasm-Integration) — das **Schliessungsartefakt existiert jetzt** (`test/browser/probe-toolchain-gap.mjs`): **Luecke 1 (TLS-Einstieg) ist behoben und End-zu-Ende verifiziert** — der Treiber **verweigert** nun das Kompilieren von wasm64 mit einem einzelnen tar ("Refusing rather than linking a module without the TLS init entry"), und ein mit per-arch sysroot gebautes Modul liefert auf 8761 w64 **`dlopen=OK` und `probe_f(22)==22`**; **Luecke 2 (Basistyp-typeinfo `_ZTIi`) bleibt offen** ⇒ Ticket 65 = `needs-info`. (2) **Ticket 66 geschlossen**: nicht implementierte Funktionen melden keinen `makeinfo`-Subprozessfehler mehr; Artefakt 6/0. (3) **Neues Ticket 67**: das im `pre-push`-Kommentar genannte CI (`readme-sync.yml`) **existierte nie, und `.github/` ist gar nicht git-verfolgt** ⇒ Kommentar korrigiert; CI aufsetzen = Ticket 67. Nebenbei: `probe-octc-spike` (abgeschlossenes Experiment) ist im Manifest registriert ⇒ `PROBES=1` zaehlt keine 12 Fehlalarme mehr.) (Fakten-Auffrischung 2026-10-18: Ledger neu gemessen - keine Wertanderungen, nur Zeitstempel; Replay-Gate 34/34 woertlich.)
-
-
-**Eine Linie, eine Architektur** (Nutzervorgabe 2026-10-12): Die `master`-Linie zielt auf wasm64 und kompiliert nur wasm64; die wasm32-Linie entsprechend nur wasm32. Erzwungen durch `build/113/check-lane-purity.py`.
-
-Website-Asset-Bundles werden pro Charge geprüft: `site/assets/m/*.js` aus den `build/`-Quellen neu bauen und Hashes vergleichen (Mount-Punkte wörtlich aus `build/assets-meta.json`, nicht geraten).
-die eingefrorene `wasm32-final`-Archivlinie neu gebaut, aber nicht promoted).
-
-Alle drei Linien sind jetzt auf **derselben Toolchain (Emscripten 6.0.12)** neu gebaut
-und im Browser verifiziert — einschließlich der eingefrorenen `wasm32-final`-Linie.
+Alle drei Sprachfassungen werden gleichzeitig gepflegt; ein Push, der nur eine davon
+aktualisiert, wird vom pre-push-Gate abgelehnt.
 
 ---
 
-**2026-10-29 (spaeter) — Die E-Linien-Bruecke ist geliefert.** OpenModelica antwortete mit der Lieferform und korrigierte eine meiner Annahmen: die elf `.m`-Dateien in ein Site-Verzeichnis zu kopieren bewirkt nichts, weil `addpath` **MEMFS** liest und der HTTP-Pfad der Site dort nicht vorkommt (unabhaengig geprueft: nach dem Schreiben in MEMFS springt `exist` von 0 auf 2). Die Form ist also zweiteilig — das Site-Verzeichnis ist die Byte-Quelle, die Seite muss diese Bytes vor `addpath` in MEMFS schreiben. Das ist jetzt umgesetzt: `provision-omc-bridge.sh` projiziert das OpenModelica-Manifest (Selbsttest 4/0), `octave-omc-bridge.js` fuehrt die vier Schritte in Reihenfolge aus mit drei ehrlichen Fehlerzustaenden, und die MEMFS-Phase ist vor `st.ready` in die Boot-Kette eingefuegt, weil sie 39 ms kostet, waehrend der 74-MB-Engine-Boot im Hintergrund bleibt (Seitenstart weiter 1,3 s). Die Engine erwies sich als ESM-wasm-bindgen-Modul, nicht als Emscripten-Globalfabrik — meine erste Vermutung von drei globalen Namen traf keinen davon. **Ich fand ausserdem einen Defekt in OpenModelicas eigener Produkt-Suite**: ihr Bereitschaftsgatter (`eval_string('x=1+1')`) greift bei 877 ms, waehrend die Boot-Kette dieser Site erst bei 1354 ms fertig ist, sodass sie in einem 477-ms-Fenster `exist()` prueft, wenn MEMFS noch leer ist, und drei falsche Fehlschlaege meldet. Erneutes Pruefen derselben Seite mit `__octaveReady` ergibt 8/8 gruen. Ticket 70 ist geschlossen: Injektionsfreie Montage macht alle drei `omc_*` sichtbar, mit einer Gegenprobe (`/bridge` entfernen ⇒ MISSING), die belegt, dass das Gruen aus der Montage kommt. Beide Sites: 6/0 und insgesamt 1253 PASS / 0 FAIL.
+## Die drei Linien
 
-**2026-10-29 — Die E-Linien-MATLAB-Bruecke ging an ihren Eigentuemer zurueck.** Das Inhalts-Repo entschied: die `omc_*`-Semantikbruecke gehoert OpenModelica (Interface und Semantik), uns (Site-Montage) und der UI (Nutzung) — und ist ausdruecklich *kein* Inhaltsvertrag, diese elf `.m`-Dateien bleiben also aus dem Forge-Katalog. Wir haben seine vier Behauptungen nachgefahren (alle wahr) und zwei Dinge gefunden, die es nicht wusste: `omc_bridge.js` hat **null Aufrufer** irgendwo im OM-Repo oder dessen Produkt-Site — seine Abnahmesuite implementiert den Host inline — und die drei tragenden Semantiken (`cd` vor dem Simulieren, Byte-Transport ueber VFS-Grenzen fuer `loadFile`, und das Zurueckholen der Ergebnis-`.mat` in die Octave-MEMFS) leben nur in dieser Testdatei. Die Luecke ist also tiefer als "Dateien nicht kopiert": die Bruecke wurde nirgends verdrahtet. Wir haben Brief 024 in den OM-Eingang gelegt (mit Nachfahrbeweisen und drei Fragen zur Lieferform) und Ticket 70 als `needs-info` angelegt: wir waehlen bewusst keine Form und fangen nicht an zu kopieren, weil das einen Interface-Vertrag im Namen des Eigentuemers setzen wuerde. Erste Lieferung nach OMs Antwort ist eine Ende-zu-Ende-Suite mit **null Injektion** — der Beweis, dass `omc_simulate('BouncingBall')` allein durch Site-Montage funktioniert.
+Ein Interpreter, drei unabhaengig gepflegte Produktlinien. Die Aufteilung richtet sich nach
+**Erreichbarkeit fuer Nutzer und Lizenzierung — nie nach Leistung**.
 
-**2026-10-28 — Umgebung wiederhergestellt, zwei Tickets geschlossen, ein Instrument repariert.** Nach dem Neustart des Build-Containers (ein Shutdown zwei Tage zuvor hatte ihn beendet) meldet `doctor` alles gruen, und zwei zuvor uebersprungene Gates laufen nun wirklich: der Upstream-Pin-Witness (2 Pins identisch) und die Plugin-Registry-Pruefung (deklarierte Artefakte stimmen je Lane). Ticket 69 ist geschlossen — beide Abnahmekriterien greifen, und der erwartete OpenModelica-JS-Ledger-Schluessel war tatsaechlich laengst veroeffentlicht, sodass die Projektion beide Downloaddateien traegt statt nur bg.wasm. Ticket 63 ist geschlossen: jedes Instrument seiner Abdeckungsmatrix wurde heute erneut gefahren und tabelliert, wobei eine echte Faeulnis auffiel — `rustsort-spike` linkte nicht mehr (`operator new[]` undefiniert, weil `emcc` C++ ohne C++-Runtime uebersetzte); `-sDEFAULT_TO_CXX` in beiden Linkzeilen stellte G2 (22 Domaenen, null Fehler), G2b (4/4 Mutationen gefangen) und G3 (Verhaeltnis 0.241) wieder her. Dieses Rig ist der einzige Beleg fuer die Abschaffung des Grillings — braeche es still, waere der Beleg hohl.
+| Branch | Ziel | Voraussetzung | Frei |
+|---|---|---|---|
+| **`wasm32-final`** | wasm32, ein Thread | keine — **die einzige Linie ohne COI** | ja |
+| **`master`** | wasm64 + Threads | COI-Header + Multithreading | ja |
+| **`IllegalPerformance`** | wasm64 + Threads + Rust-Kernel | COI-Header | nein — patcht die Toolchain weg von der Upstream-Unterstuetzung |
 
-**2026-10-27 — Ticket 69 umgesetzt, Ticket 67 geschlossen, Ursache für 22 rote Assertions gefunden.**
-`form:"tree"`-Einträge tragen jetzt eine optionale `files[]`-Map (`Dateiname → {bytes, sha256}`):
-das Schema fixiert alle fünf Bindungen (nur für tree; `form:"file"` mit `files` ist ein Fehler;
-einzige Herkunft der Shas ist das Ledger des Produzenten, die Montage *projiziert* sie nur), der
-Validator bekam sechs positive/negative Selbsttestfälle (57→63), `forge-catalog.py` projiziert
-den omc-Closure aus dem OpenModelica-Ledger (`omc_web_wasm_sha` / `omc_web_js_sha`, also beide
-Downloaddateien statt nur bg.wasm) und gleicht ihn gegen die Site-Bytes ab, und Gate **R15**
-prüft jede deklarierte Datei gegen die Site (43/0). `browse()` reicht das als `detail.files`
-durch; `accept-market-browse` ging von 17 auf 21/0 — inklusive des bewussten Punktes, dass die
-Closure-Summe (74,635,990) von `size` (74,735,455) abweicht, denn `size` ist die Verzeichnissumme
-per Design. Ticket 67 ist geschlossen: `.github/` ist jetzt versioniert (drei Workflows),
-`gates.yml` wurde Punkt für Punkt gegen `registry --run commit` abgeglichen, und
-`readme-sync.yml` fährt dasselbe `--changed`-Kriterium wie pre-push.
+Wird `master` ohne `crossOriginIsolated` ausgeliefert, faellt die Seite **still** auf die
+wasm32-Linie zurueck: kein Fehler, nur eine andere Linie. Eine Site zeigt genau zwei Zellen:
+`base` (wasm32) und `w64` (wasm64). Jeder andere Zellenname ist eine tote Linie, und ein
+Gate weist ihn ab.
 
-Die 22 roten Assertions eine Woche zuvor stammten aus einem Produzentenfehler: der `sync-js`-Fix
-des Audio-Batches schrieb Einträge neu und setzte handgepflegte `deps`/`aliases` auf Defaults
-zurück — `webgraphics.deps = ["__init_web__"]` (dadurch fand `graphics_toolkit("web")` sein
-Modul nicht) und die 49 `__sl_*__`-Aliase von `control-oct` (dadurch scheiterten
-`c2d`/`step`/`norm`). Unbemerkt blieb es, weil nach jenem Batch nur eine einzelne Suite lief,
-nicht der volle Sweep, den die Doktrin verlangt. Der Fix verlagert die Herkunft von
-`deps`/`addpath`/`alias_dir` in `meta.json` (neuer Selbsttest 5/0), stellt beide verlorenen
-Werte wieder her und trennt die Audio-Stub-Aliase nach `m/audio-stub/`, das ans *Ende* des
-Pfads angehängt wird — echte Implementierungen gewinnen, Stubs bleiben Rückfall. Beide Sites
-laufen jetzt die volle Suite mit **1253 PASS / 0 FAIL**.
+## Leistung
 
-Auch G5 aus Ticket 63 (Rust-Toolchain-Invariante) ist umgesetzt: `build/113/check-rust-toolchain.py` prüft vier Invarianten (datumsgepinnter Channel — schwebende Namen pinnen nichts; `staticlib` in `crate-type`, weil ein cdylib E4s Schwachsymbol-Nullprüfung aushebeln würde; `panic = "abort"`, da wasm kein Unwind kennt; und je Lane das exakte Target, wasm64 zwingend über `build-std` + `wasm64-unknown-unknown`). Selbsttest 6/0, Ledger-Schlüssel `rust_patch_toolchain_ok` wörtlich nachgespielt; beim Einhängen ins Ledger fiel sofort ein echter Fehler auf — der Befehl trug eine Klammernotiz und lieferte rc=2, genau die Form, die der Bare-Value-Vertrag abfangen soll.
+Wandzeit in Sekunden, kleiner ist besser. Referenz nativ: `octave-cli` 11.3.0 auf dieser
+Maschine (Median aus 5 warmen Laeufen); die wasm-Werte sind Mediane aus 3 verschraenkten
+Laeufen. Gemessen am 2026-10-07.
 
-## Leistung (gemessen 2026-10-07, Median aus 5 nativen / 3 wasm-Läufen)
+Rohdaten: [`docs/charts/perf-data.json`](docs/charts/perf-data.json).
+Bericht und Log: `HISTORY.md` §5.96, `w64-logs/bigcompare-final.log`.
 
-![Fünf-Wege-Leistungsvergleich](docs/charts/perf-5way.svg)
+![Fuenf-Wege-Leistungsvergleich](docs/charts/perf-5way.svg)
 
-| Arbeitslast (s) | nativ ref-BLAS | nativ OpenBLAS ×24 | wasm32-final | wasm64-NEXT | **IllegalPerformance** |
+| Last | nativ Referenz-BLAS | nativ OpenBLAS ×24 | wasm32-final | wasm64 | IllegalPerformance |
 |---|---|---|---|---|---|
-| dot 1e7 | 0,0082 | **0,0048** | 0,0080 | 0,0100 | 0,0110 |
-| matmul 500 | 0,0257 | **0,0029** | 0,0220 | 0,0040 | 0,0050 |
-| matmul 1000 | 0,1971 | **0,0089** | 0,1600 | 0,0230 | 0,0240 |
-| lu 800 | 0,0415 | **0,0147** | 0,0340 | 0,0140 | 0,0150 |
-| lu 1500 | 0,2598 | **0,0636** | 0,2180 | 0,0620 | 0,0720 |
-| svd 400 | 0,1650 | 0,2243 | 0,1740 | **0,1550** | 0,1870 |
-| sum 1e7 | 0,0086 | **0,0076** | 0,0080 | 0,0080 | 0,0090 |
-| **sort 2e6** | 0,2111 | 0,2020 | 0,2280 | 0,2400 | **0,1110** |
-| loop 1e6 | **0,4934** | 0,5226 | 0,6220 | 0,5780 | 0,5890 |
+| dot 1e7 | 0.0082 | 0.0048 | 0.0080 | 0.0100 | 0.0110 |
+| matmul 500 | 0.0257 | 0.0029 | 0.0220 | 0.0040 | 0.0050 |
+| matmul 1000 | 0.1971 | 0.0089 | 0.1600 | 0.0230 | 0.0240 |
+| lu 800 | 0.0415 | 0.0147 | 0.0340 | 0.0140 | 0.0150 |
+| lu 1500 | 0.2598 | 0.0636 | 0.2180 | 0.0620 | 0.0720 |
+| svd 400 | 0.1650 | 0.2243 | 0.1740 | 0.1550 | 0.1870 |
+| sum 1e7 | 0.0086 | 0.0076 | 0.0080 | 0.0080 | 0.0090 |
+| sort 2e6 | 0.2111 | 0.2020 | 0.2280 | 0.2400 | 0.1110 |
+| loop 1e6 | 0.4934 | 0.5226 | 0.6220 | 0.5780 | 0.5890 |
 
-![IllegalPerformance-Beschleunigung gegenüber jeder Basis](docs/charts/perf-speedup-IP.svg)
+Geometrisches Mittel gegen die native Referenz: wasm32-final 1.05×, wasm64 1.99×,
+IllegalPerformance 1.96×.
 
-**IllegalPerformance als Vielfaches** (Basiszeit ÷ IP-Zeit; geometrisches Mittel
-über alle 9):
+![Beschleunigung von IllegalPerformance gegenueber jeder Basis](docs/charts/perf-speedup-IP.svg)
 
-- **1,96× gegenüber nativem Octave** (Standard-ref-BLAS; nur-BLAS-Achsen **3,16×**)
-- **1,86× gegenüber wasm32-final** (die eingefrorene wasm32-Linie; matmul 1000
-  allein **6,7×**)
-- **0,99× gegenüber wasm64-NEXT** — überall Parität, außer dem definierenden
-  Gewinn: **sort 2,16×**
-- **0,80× gegenüber nativem OpenBLAS ×24** — die native Multithreading-Grenze
-  liegt bei reinem BLAS noch 1,25× vorn, aber IllegalPerformance **gewinnt
-  sort (1,82×) und svd (1,20×)**
+Die wasm-Linien schlagen ein einthreadiges natives Octave bei BLAS-lastiger Arbeit, weil
+sie ein OpenBLAS mit relaxed-SIMD-FMA mitbringen und es multithreaded ausfuehren. Bei
+`matmul` schlagen sie ein handoptimiertes 24-Thread-OpenBLAS **nicht** (0.0230 s gegen
+0.0089 s). Speicherbandbreiten-gebundene Lasten (`dot`, `sum`) landen auf jeder Linie beim
+selben Wert.
 
-## IEEE-754-Produktionsbewertung
+Der Rust-Sort-A/B ist eine **andere Messung** (am Produktartefakt statt am Kernel):
+`w64_rustsort_ab_asc_ms` 165 ms, `w64_rustsort_ab_asc_ratio` 0.506 ⇒ 2.0×.
+Erneut ausfuehren: `bash build/113/sort-ab.sh`.
 
-Ein 24-Feld-Batterie (`test/fixtures/ieee754/battery.m`) lief auf **6
-Konfigurationen** (4 wasm-Spuren + nativ ref-BLAS + nativ OpenBLAS ×24):
+## Numerische Korrektheit
 
-- **23/24 Felder überall bitidentisch**: round-half-to-even, ±0-Bitmuster,
-  kanonisches NaN, Inf/Division, Subnormale, eps-Grenzen, gesetzter `rand`
-  (MT19937 nativ↔wasm identisch), `sin`/`pow`/Division (musl vs glibc
-  stichprobenartig bitidentisch).
-- Der einzige Unterschied = **dgemm-Summenreihenfolge gegenüber einer
-  schrittweisen Referenz** (max. 6,6 ulp) — **auch im nativen OpenBLAS
-  vorhanden** (3522 von 10000 Elementen, 4,99e-16). Jede Addition/Multiplikation
-  ist korrekt gerundet; nur die Reihenfolge weicht ab → IEEE-konform.
-- `relaxed_madd` (81 Stellen, OpenBLAS-rsimd-Kernel): WebAssembly erlaubt
-  fused *oder* unfused — **beide sind IEEE-754-konforme Ergebnisse**.
-  Offenlegung: w64-BLAS-Ergebnisse können **zwischen Browser-Engines** im
-  letzten Ulp variieren (gleiche Klasse wie natives OpenBLAS über
-  CPU-Mikroarchitekturen hinweg). Elementare Mathematik ist unberührt
-  (0 Abweichung).
+Ergebnisse werden mit nativem Octave auf identischen Eingaben verglichen, Bit fuer Bit
+statt naeherungsweise.
 
-**Urteil: wasm32-final und die IllegalPerformance-Linie sind für die
-Produktion freigegeben.** Reproduktion: `test/fixtures/ieee754/battery.m`,
-Protokolle in `w64-logs/ieee-*.log`.
+| Bereich | Befund |
+|---|---|
+| Elementarmathematik (`libm`) | Bit-identisch zu musl fuer `sin`, `exp`, `log`, `pow` |
+| Sortieren (Rust-Kernel) | Bit-identisch ueber 22 Domaenen, inklusive NaN und duplikatreicher Eingaben |
+| Arithmetik, `sum`, `lu`, `svd`, … | Bit-identisch |
+| BLAS/LAPACK | gleiche Quellen und Flags; relaxed-SIMD-FMA aendert die Summationsreihenfolge, daher wird diese Achse gegen ein dokumentiertes Toleranzband verglichen |
 
-## Was auf der IllegalPerformance-Linie gelandet ist
+Ein `libm`-Ersatz-Spike wurde per Messung abgelehnt: geometrisches Mittel 0.964 pro Aufruf
+(`libm_spike_geomean`), bei einer Schwelle von 1.5×. Erneut ausfuehren:
+`sh build/113/bench-libm-spike.sh 8`.
 
-- **rust-sort** — ein Rust-Kernel (driftsort) für `sort`, als
-  *Quellnaht* angebunden: schwaches Symbol + Linkzeit-Knauf (`RUST_SORT`);
-  Entfernen = Neulinken ohne Bibliothek, null Baumobjekt-Änderung.
-  Differentialtor: 22 Domänen bitidentisch + 4/4 Mutanten erwischt;
-  **sort 2e6 = 2,16× gegenüber wasm64-NEXT, 1,82× gegenüber nativem OpenBLAS**.
-- **G6-Latenzinstrument** — Charge-Quit-Latenzobergrenze für jeden
-  blockbasierten Kernel (Kandidat ④ xpow-Treiber mit ≤2,1 % **verworfen**).
-- Abschlussaudit: libm (IEEE-festgenagelt), fill/fft (bandbreitengebunden),
-  xpow-Treiber (≤2,1 %) — **kein bekannter Spielraum mehr**
-  (Reproduzenten in `w64-logs/`).
+Der Rust-Sort-Kernel haengt hinter zwei Gates: ein Differenz-Gate vergleicht 22
+Eingabedomaenen Bit fuer Bit, und ein Mutations-Selbsttest injiziert absichtliche Fehler in
+den Kernel und verlangt, dass das Differenz-Gate sie faengt (4/4 gefangen). Ein Kernel wird
+nur uebernommen, wenn beide bestehen. Erneut ausfuehren:
+`bash test/fixtures/rustsort-spike/run-spike.sh`.
 
 ## Architektur
 
-Vier Deployment-**Spuren** desselben Interpreters, automatisch pro
-Browser-Fähigkeit gewählt (`lanes.js`): `base` (wasm32, single-thread) →
-`w64` (memory64 + Threads + FMA + mimalloc +
-★ Drei-Linien-Entscheid 2026-10-17: die `threads`-Spur (wasm32+atomics) war fehlgebildet und wurde gelöscht — Experimente sind an die drei Zweige gebunden. Ursprüngliche Kette: `threads` →
-rust-sort) / `w64-base`. Ohne COI-Header serviert sinkt man **lautlos** auf
-`base` — siehe das [Deployment-Ticket](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
+1. **Der Interpreter.** Upstream-Octave, geforkt unter `upstream/octave` (Branch
+   `wasm/11.3.0`), kompiliert mit Emscripten 6.0.12. Upstream-Releases landen ueber
+   Merge → Rebuild → Linien-SOP; `witness-upstream-pin.py` prueft bei jedem Commit, dass
+   der Baum im Container dem Fork-Pin entspricht.
 
-Austauschbare Komponenten (BLAS, Allokator, Rust-Kernel) sind **Plugins mit
-Kontrakt**: Modustabellen-Knauf → declared-Label → Artefakt-Sonde →
-zweiseitiges Tor (`plugin-check.py`) → Faktenschlüssel. Octave-Updates
-landen über die **Fork/Submodule-Pipeline**: `upstream/octave` (Branch
-`wasm/11.3.0`) ist unser Fork — Upstream mergen, neu bauen, Spur-SOP laufen
-(`build/113/NOTES-upstream.md`); die Pin/Witness-Tore
-(`witness-upstream-pin.py`) behaupten bei jedem Commit Containerbaum == Fork-Pin.
+2. **Die Linien.** Dasselbe wasm, gebaut pro Ziel (wasm32, wasm64+Threads) und pro
+   Komponentensatz (BLAS-Variante, Allokator, Rust-Kernel). Linienwissen ist **Daten**:
+   [`build/lanes.json`](build/lanes.json) ist die einzige Quelle, und
+   `check-lanes-single-source.py` gleicht sie gegen **vier Konsumenten** ab — den
+   Linienwaehler der Seite, den Site-Generator, das Reinheits-Gate und die Plugin-Tabelle.
 
-## Ausführen
+3. **Die Asset-Schicht.** `.oct`-Module, `.m`-Buendel und Datendateien werden bei Bedarf
+   geladen und in das In-Memory-Dateisystem von Octave geschrieben, mit sha256-Pruefung pro
+   Datei. Pakete kommen entweder vom Shelf (vorgebaute Tarballs) oder werden im Browser von
+   einer mitgelieferten clang/lld-Toolchain kompiliert. Beachten Sie: `addpath` liest
+   **MEMFS**, nicht den HTTP-Baum der Site — alles, was Octave sehen soll, muss zuerst in
+   MEMFS geschrieben werden.
+
+4. **Das Faktensystem.** Jede Aussage ueber den Build ist ein Ledger-Eintrag mit eigenem
+   Nachfahrbefehl. [`build/FACTS.json`](build/FACTS.json) haelt die Zahlen, `STATE.md` den
+   Live-Status, `HISTORY.md` die Append-only-Aufzeichnung, und 64 Gates (14 Plattform,
+   50 Repo-spezifisch) pruefen, ob Dokumente, Artefakte und Ledger uebereinstimmen.
+
+Austauschbare Komponenten sind **Plugins mit Vertrag**, keine Build-Flags: Modustabellen-
+Schalter → deklariertes Label im Artefakt → Artefakt-Probe → Zweiweg-Gate → Ledger-Eintrag.
+
+## Bauen und starten
 
 ```sh
+# eine gebaute Site ausliefern (COI-Header sind fuer die w64-Linie Pflicht)
 python3 build/serve-coi.py --dir /mnt/hdd/octave-wasm-build/site --port 8761
-# öffne http://127.0.0.1:8761/   (COI-Header sind Pflicht — siehe Issue #2)
 ```
 
-Dieses Repository enthält **keine CI-Auto-Deploy** — Deployment ist manuell, siehe [DEPLOY.md](DEPLOY.md).
-Harte Deploy-Anforderungen + Abnahmeprogramm: [DEPLOY.md](DEPLOY.md) und
-[Issue #2](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/2).
-UI-Anbindung: [Embed-API](docs/embed-api.md) und
-[Issue #1](https://github.com/ArchivalEra/Octave-Full-Wasm/issues/1).
+Ein normales `python3 -m http.server` kann keine COI-Header senden, und die Seite liefert
+dann **still** die wasm32-Linie aus.
 
-## Zweige (drei unabhängig wartbare Linien)
+Ein Neubau von Grund auf braucht den `o113`-Container (Emscripten 6.0.12 plus den
+Octave-Fork) und die Rezepte in [`build/CLIBS.md`](build/CLIBS.md). Das Neulinken eines
+bestehenden Baums laeuft ueber **einen** Einstiegspunkt — `bash build/113/relink.sh link
+product` — der alle Umgebungsvariablen fuer einen Modus besitzt; nicht von Hand setzen.
+`bash build/113/relink.sh explain product` druckt das Rezept.
 
-| Zweig | Fork-Pin (`upstream/octave`) | Rolle |
-|---|---|---|
-| `wasm32-final` | — (eingefroren) | wasm32-Archivlinie |
-| ~~`wasm64-NEXT`~~ | ~~`a5a7208`~~ | **2026-10-17 geloescht** (Nutzeranweisung — laengst in master gemerged; 0 eigene Commits gegen master gemessen; Branch-Referenz lokal/origin/mirror entfernt, History ueber master erhalten). Seine Rolle (gemaessigte wasm64-Linie) traegt **master** (Drei-Linien-Modell) |
-| `IllegalPerformance` | `f4bf15b` (+ rust-sort-Naht) | aggressive wasm64-Linie — **ausgeliefert 2026-10-07** (8761 w64 = `f6fec91f`, IEEE-bewertet, sort 2,16× gegenüber dieser Basis) |
+Das Deployment ist manuell; es gibt kein CI-Auto-Deploy. Siehe [`DEPLOY.md`](DEPLOY.md).
+Den Interpreter in eine eigene Seite einbetten: [`docs/embed-api.md`](docs/embed-api.md).
 
-Alle drei essen Upstream-Octave-Updates über dieselbe Fork-Pipeline
-(`upstream/octave` Branch `wasm/11.3.0`); jede Linie pinnt ihren eigenen
-Fork-Commit. Linienwechsel im gemeinsamen Build-Container = submodule update +
-neu provisionieren + `relink.sh`/`link-web.sh` dieser Linie deployen +
-`OCTAVE_WASM_BASE` auf die Site dieser Linie zeigen lassen + `core.hooksPath` auf die
-Hooks dieser Linie setzen (Faktensystem liegt auf `IllegalPerformance` in
-`reflect-hooks/`, auf den anderen beiden in `.githooks/`) — siehe `maintaince.md`.
+## Repo-Karte
 
-## Repository-Karte
+| Pfad | Was |
+|---|---|
+| [`STATE.md`](STATE.md) | Live-Status — was jetzt wahr ist |
+| [`maintaince.md`](maintaince.md) | Richtung und Karte |
+| [`HISTORY.md`](HISTORY.md) | Append-only-Aufzeichnung pro Charge |
+| [`CONTEXT.md`](CONTEXT.md) | Glossar — eine massgebliche Definition pro Begriff |
+| [`AGENTS.md`](AGENTS.md) | Betriebsvertrag fuer Mitarbeitende in diesem Repo |
+| [`build/FACTS.json`](build/FACTS.json) | Ledger der gemessenen Zahlen; jeder Schluessel traegt seinen Nachfahrbefehl |
+| [`build/lanes.json`](build/lanes.json) | Einzige Quelle des Linienwissens |
+| [`build/CLIBS.md`](build/CLIBS.md) | Build-Rezepte der C-Bibliotheken |
+| `build/113/` | Build-Rezepte, Gates, Linien-Skripte, technische Notizen |
+| `bridge/` | Browser-Glue: Asset-Loader, Linienwaehler, Worker, Seiten-Host |
+| `test/browser/` | Browser-Abnahmesuiten |
+| `zreflect/` | Faktensystem: Gate-Registry, Knob-Registry, Ledger |
+| `upstream/` | Octave-Fork (Submodule) |
+| `shelf/` | Paket-Shelf (eigenes Repo, Submodule) |
+| `mail/` | Repo-uebergreifende Korrespondenz — der Eingang dieses Repos |
 
-- `STATE.md` — Live-Status; `build/FACTS.json` — Messwert-Ledger (jeder Schlüssel
-  mit Wiederholbefehl)
-- `zreflect/` — das Faktensystem (**Einfacht-Refaktorierung adoptiert 2026-10-09**:
-  Gate-Plattform / entdecktes Gate-Register / Knopf-Register / World-Gate);
-  `zreflect/measure_octave.py` ist die Datenschicht dieses Repos,
-  `reflect-hooks/Einfacht.env` der Knopf-Träger
-- `HISTORY.md` — append-only Chargenaufzeichnung (§5.77–§5.107 tragen die obigen
-  Belege)
-- `maintaince.md` — Richtungskarte; `docs/embed-api.md` — Embed-Kontrakt;
-  `DEPLOY.md` — Deployment
-- **Octave-Forge On-Demand-Pull** (v1 läuft, 2026-10-09; **ausgeliefert 2026-10-10** an
-  8761/8768/Repo-`site/`): `OctaveAssets.catalog()` liest ein Site-Regal,
-  `OctaveAssets.install(name)` lädt+prüft+installiert ein Paket (samt Abhängigkeitsabschluss) erst
-  **auf Anfrage** — **0 Bytes für nie genutzte Pakete**. Regal = `shelf/`-Submodule (nur Metadaten,
-  eine Datei pro Paket); Site-Katalog = `build/forge-catalog.py` (Tor:
-  `build/113/check-forge-catalog.py`); Abnahme = `test/browser/accept-forge-ondemand.mjs`;
-  Design = `build/113/NOTES-forge-ondemand.md` (das
-  **Octave-Forge-On-Demand-Pull**-Pluginsystem: Client-Regal + Laufzeit-Installation,
-  verzahnt mit der Fork/Lock-Pipeline; v1 deckt reine `.m`-Pakete ab, `.oct`-Beschleuniger = v2/T8)
-- `build/113/` — Spur-Bauprone + Tore; `test/browser/` — Abnahme-Harness
-  (`SWEEP_JOBS=4` parallelisierbar; letzter grüner Lauf = `accept_suites` /
-  `accept_pass` im Ledger)
-- Grafik (seit 2026-10-09 **Engine-autoritativ**): `bridge/octave-core.js`
-  schützt den Kern-`m/plot`-Baum vor Host-Schatten-Stubs (Snapshot + Restore +
-  Löschen von Neuanlagen), `p5canvas.js`/`queue.js` lösen das Modul über
-  `window.__octaveHosts` auf — so erreichen Figuren im Embed-Modus das DOM;
-  Abnahme = `accept-gfx-isolation` + `accept-gfx-render`
-- Worker-Modus (`?worker=1`, **repariert 2026-10-10**): jede `eval` kam nie zurück (der
-  Worker-Zweig rief weiterhin `octaveUiAppend` auf, nachdem der Seitenadapter
-  extrahiert worden war) — der Ausgabe-Flush kann die Warteschlange nicht mehr
-  blockieren; Abnahme = `accept-worker`
-- `.scratch/open-questions/issues/` — lokaler Ticket-Tracker
-- `docs/agents/upstream-issues.md` — Issues, zurückgespiegelt an [Einfacht](https://github.com/ArchivalEra/Einfacht) (Archivkopien); `docs/agents/ui-issue-interface-change.md` — Mitteilung von Schnittstellen-/Verhaltensänderungen an das UI-Repo
+## Repo-Inhalt
 
-Die Liste der verfolgten Dateien (Pfad + Bytes) pflegt der Hook im
-[AUTO:FILES-Block von README.md](README.md).
+<!-- AUTO:FILES -->
+<!-- /AUTO -->
 
-## Hooks
+## Hooks und Gates
 
-Dieses Repo nutzt eine Whitelist-`.gitignore` (standardmäßig verweigern, pro
-Pfad freigeben) + git hooks:
+Die Gates liegen in `reflect-hooks/` und sind ueber `core.hooksPath` verdrahtet.
+`pre-commit` rechnet die Maschinenbloecke in dieser README und in `STATE.md` neu, faehrt
+dann die Faktensystem-Gates, die Repo-spezifischen Gates (Whitelist, Konsistenz,
+Falsifizierbarkeit, Readiness-Antimuster, Mail-Grenze) und beide Selbsttest-Baenke.
+`pre-push` verlangt zusaetzlich, dass alle drei READMEs im selben Push aktualisiert werden.
 
-- `pre-commit`: rechnet den AUTO-Block der README nach, prüft die Whitelist,
-  lässt die Faktus/Konsistenz/Plugin/Instrument-Tore laufen und das
-  **dreisprachige README-Synchronisationstor**
-  (`check_readme_sync.py`, aus [Einfacht](https://github.com/ArchivalEra/Einfacht)
-  übernommen): alle drei Sprach-READMEs müssen existieren, nicht leer und
-  querverlinkt sein.
-- `pre-push`: README-Frische + der **Push-Set-Modus** des dreisprachigen Tors —
-  ein Push, der eine Sprach-README berührt, muss alle drei im selben Batch
-  aktualisieren.
-- Installation: `bash .githooks/install.sh` (setzt `core.hooksPath`).
+Von Hand ausfuehren:
+
+```sh
+. reflect-hooks/Einfacht.env
+python3 zreflect/registry.py --run commit              # alle Gates mit runs_at="commit"
+sh gates-selftest.sh && sh build/gates-selftest.sh     # beweisen, dass jedes Gate rot werden kann
+```
+
+Jedes Gate traegt `--selftest`. Ein Gate, dessen Fehlschlag nicht gezeigt werden kann, ist
+kein Gate.
+
+## Mitwirken
+
+Lesen Sie zuerst [`AGENTS.md`](AGENTS.md) — das ist der Betriebsvertrag, kein Styleguide.
+Drei Regeln sind absolut: keine serverseitige Ausfuehrung, kein Force-Push und kein
+Umschreiben der Historie, und jede neue Datei muss in die `.gitignore`-Whitelist eingetragen
+werden, sonst weist das pre-commit-Gate sie ab.
 
 ## Lizenz
 
-**AGPL-3.0-or-later** (Volltext: [`LICENSE`](LICENSE)). Die verteilte
-wasm-Binärdatei linkt statisch GPLv3-Octave, GPLv2+-FFTW, LGPL-libsndfile und
-mehrere BSD/permissive-Komponenten — dieser Mix hat **keine Wahl außer
-AGPL-3.0**.
+AGPL-3.0-or-later fuer den Build-Glue, den Browser-Host und die Aenderungen am
+Octave-Fork. Octave selbst ist GPL-3.0-or-later; BLAS/LAPACK, SuiteSparse, FFTW und
+verwandte Bibliotheken behalten ihre eigenen Lizenzen. Einige mitgelieferte Komponenten sind
+GPL-2.0-only, was mit AGPL-3.0 unvereinbar ist, daher kann diese Kombination nur unter
+AGPL-3.0 verteilt werden.
 
-Dieses Programm ist freie Software: Sie können es unter den Bedingungen der GNU
-Affero General Public License, wie von der Free Software Foundation
-veröffentlicht, weiterverbreiten und/oder modifizieren, entweder gemäß Version 3
-der Lizenz oder (nach Ihrer Option) jeder späteren Version. Das Programm wird
-in der Hoffnung weiterverbreitet, dass es nützlich ist, aber **OHNE JEDE
-GARANTIE**; sogar ohne die implizite Garantie der MARKTFÄHIGKEIT oder der
-EIGNUNG FÜR EINEN BESTIMMTEN ZWECK.
+Dieses Programm ist freie Software: Sie koennen es unter den Bedingungen der GNU Affero
+General Public License, wie von der Free Software Foundation veroeffentlicht (Version 3
+oder jede spaetere Version), weiterverbreiten und/oder veraendern. Die Verteilung erfolgt
+ohne jede Gewaehrleistung, nicht einmal der impliziten Gewaehrleistung der
+Marktfaehigkeit oder Eignung fuer einen bestimmten Zweck.
 
-Gemäß AGPL-3.0 §13 erhalten Nutzer, die über ein Netzwerk mit ihm interagieren,
-das Recht auf den entsprechenden Quellcode: **dieses Repository ist dieser
-Quellcode**; der Build reproduziert vollständig im `o113`-Container (Rezepte in
-`build/CLIBS.md`). Komponentenlizenzen und -urheberrechte:
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+Nach AGPL-3.0 §13 haben Nutzer, die ueber ein Netzwerk mit dem Programm interagieren,
+Anspruch auf den zugehoerigen Quellcode: dieses Repository ist dieser Quellcode, und der
+Build ist im `o113`-Container reproduzierbar. Lizenzen und Urheberrechte der einzelnen
+Komponenten: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

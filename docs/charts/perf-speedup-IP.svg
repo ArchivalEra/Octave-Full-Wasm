@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="544" font-family="sans-serif" font-size="11">
+<rect width="100%" height="100%" fill="#fdfdfc"/>
+<text x="150" y="20" font-size="13" font-weight="bold">IllegalPerformance — speedup vs each baseline (x-times, log scale; 1.0 = parity) · higher is better</text>
+<rect x="493.4" y="34" width="626.6" height="474" fill="#f0f6f0"/>
+<line x1="493.4" y1="34" x2="493.4" y2="504" stroke="#999" stroke-dasharray="4,3"/>
+<text x="497.4" y="46" fill="#777">1.0×</text>
+<line x1="493.4" y1="34" x2="493.4" y2="504" stroke="#e2e2e2"/>
+<text x="140" y="64.0" text-anchor="end" fill="#333">dot 1e7</text>
+<rect x="409.6" y="52.0" width="83.8" height="8" fill="#8a8f98"><title>dot 1e7 vs native ref-BLAS = 0.75×</title></rect>
+<rect x="256.9" y="61.0" width="236.5" height="8" fill="#2b6cb0"><title>dot 1e7 vs native OpenBLAS x24 = 0.44×</title></rect>
+<rect x="402.5" y="70.0" width="90.8" height="8" fill="#dd6b20"><title>dot 1e7 vs wasm32-final = 0.73×</title></rect>
+<rect x="466.2" y="79.0" width="27.2" height="8" fill="#38a169"><title>dot 1e7 vs wasm64-NEXT = 0.91×</title></rect>
+<text x="140" y="110.0" text-anchor="end" fill="#333">matmul 500</text>
+<rect x="493.4" y="98.0" width="466.9" height="8" fill="#8a8f98"><title>matmul 500 vs native ref-BLAS = 5.14×</title></rect>
+<rect x="338.0" y="107.0" width="155.4" height="8" fill="#2b6cb0"><title>matmul 500 vs native OpenBLAS x24 = 0.58×</title></rect>
+<rect x="493.4" y="116.0" width="422.5" height="8" fill="#dd6b20"><title>matmul 500 vs wasm32-final = 4.40×</title></rect>
+<rect x="429.7" y="125.0" width="63.6" height="8" fill="#38a169"><title>matmul 500 vs wasm64-NEXT = 0.80×</title></rect>
+<text x="140" y="156.0" text-anchor="end" fill="#333">matmul 1000</text>
+<rect x="493.4" y="144.0" width="600.5" height="8" fill="#8a8f98"><title>matmul 1000 vs native ref-BLAS = 8.21×</title></rect>
+<rect x="210.5" y="153.0" width="282.9" height="8" fill="#2b6cb0"><title>matmul 1000 vs native OpenBLAS x24 = 0.37×</title></rect>
+<rect x="493.4" y="162.0" width="541.0" height="8" fill="#dd6b20"><title>matmul 1000 vs wasm32-final = 6.67×</title></rect>
+<rect x="481.2" y="171.0" width="12.1" height="8" fill="#38a169"><title>matmul 1000 vs wasm64-NEXT = 0.96×</title></rect>
+<text x="140" y="202.0" text-anchor="end" fill="#333">lu 800</text>
+<rect x="493.4" y="190.0" width="290.2" height="8" fill="#8a8f98"><title>lu 800 vs native ref-BLAS = 2.77×</title></rect>
+<rect x="487.6" y="199.0" width="5.8" height="8" fill="#2b6cb0"><title>lu 800 vs native OpenBLAS x24 = 0.98×</title></rect>
+<rect x="493.4" y="208.0" width="233.4" height="8" fill="#dd6b20"><title>lu 800 vs wasm32-final = 2.27×</title></rect>
+<rect x="473.7" y="217.0" width="19.7" height="8" fill="#38a169"><title>lu 800 vs wasm64-NEXT = 0.93×</title></rect>
+<text x="140" y="248.0" text-anchor="end" fill="#333">lu 1500</text>
+<rect x="493.4" y="236.0" width="366.0" height="8" fill="#8a8f98"><title>lu 1500 vs native ref-BLAS = 3.61×</title></rect>
+<rect x="458.0" y="245.0" width="35.4" height="8" fill="#2b6cb0"><title>lu 1500 vs native OpenBLAS x24 = 0.88×</title></rect>
+<rect x="493.4" y="254.0" width="315.9" height="8" fill="#dd6b20"><title>lu 1500 vs wasm32-final = 3.03×</title></rect>
+<rect x="450.7" y="263.0" width="42.6" height="8" fill="#38a169"><title>lu 1500 vs wasm64-NEXT = 0.86×</title></rect>
+<text x="140" y="294.0" text-anchor="end" fill="#333">svd 400</text>
+<rect x="457.7" y="282.0" width="35.7" height="8" fill="#8a8f98"><title>svd 400 vs native ref-BLAS = 0.88×</title></rect>
+<rect x="493.4" y="291.0" width="51.9" height="8" fill="#2b6cb0"><title>svd 400 vs native OpenBLAS x24 = 1.20×</title></rect>
+<rect x="472.8" y="300.0" width="20.5" height="8" fill="#dd6b20"><title>svd 400 vs wasm32-final = 0.93×</title></rect>
+<rect x="439.8" y="309.0" width="53.5" height="8" fill="#38a169"><title>svd 400 vs wasm64-NEXT = 0.83×</title></rect>
+<text x="140" y="340.0" text-anchor="end" fill="#333">sum 1e7</text>
+<rect x="480.4" y="328.0" width="13.0" height="8" fill="#8a8f98"><title>sum 1e7 vs native ref-BLAS = 0.96×</title></rect>
+<rect x="445.1" y="337.0" width="48.2" height="8" fill="#2b6cb0"><title>sum 1e7 vs native OpenBLAS x24 = 0.84×</title></rect>
+<rect x="459.8" y="346.0" width="33.6" height="8" fill="#dd6b20"><title>sum 1e7 vs wasm32-final = 0.89×</title></rect>
+<rect x="459.8" y="355.0" width="33.6" height="8" fill="#38a169"><title>sum 1e7 vs wasm64-NEXT = 0.89×</title></rect>
+<text x="140" y="386.0" text-anchor="end" fill="#333">sort 2e6</text>
+<rect x="493.4" y="374.0" width="183.3" height="8" fill="#8a8f98"><title>sort 2e6 vs native ref-BLAS = 1.90×</title></rect>
+<rect x="493.4" y="383.0" width="170.8" height="8" fill="#2b6cb0"><title>sort 2e6 vs native OpenBLAS x24 = 1.82×</title></rect>
+<rect x="493.4" y="392.0" width="205.3" height="8" fill="#dd6b20"><title>sort 2e6 vs wasm32-final = 2.05×</title></rect>
+<rect x="493.4" y="401.0" width="219.9" height="8" fill="#38a169"><title>sort 2e6 vs wasm64-NEXT = 2.16×</title></rect>
+<text x="140" y="432.0" text-anchor="end" fill="#333">loop 1e6</text>
+<rect x="442.9" y="420.0" width="50.5" height="8" fill="#8a8f98"><title>loop 1e6 vs native ref-BLAS = 0.84×</title></rect>
+<rect x="459.3" y="429.0" width="34.1" height="8" fill="#2b6cb0"><title>loop 1e6 vs native OpenBLAS x24 = 0.89×</title></rect>
+<rect x="493.4" y="438.0" width="15.5" height="8" fill="#dd6b20"><title>loop 1e6 vs wasm32-final = 1.06×</title></rect>
+<rect x="488.0" y="447.0" width="5.4" height="8" fill="#38a169"><title>loop 1e6 vs wasm64-NEXT = 0.98×</title></rect>
+<text x="295.7" y="520" text-anchor="middle" fill="#666">0.5×</text>
+<text x="493.4" y="520" text-anchor="middle" fill="#666">1.0×</text>
+<text x="691.0" y="520" text-anchor="middle" fill="#666">2×</text>
+<text x="888.7" y="520" text-anchor="middle" fill="#666">4×</text>
+<text x="1086.4" y="520" text-anchor="middle" fill="#666">8×</text>
+<rect x="150" y="530" width="11" height="11" fill="#8a8f98"/>
+<text x="165" y="539" fill="#333">vs native ref-BLAS</text>
+<rect x="300" y="530" width="11" height="11" fill="#2b6cb0"/>
+<text x="315" y="539" fill="#333">vs native OpenBLAS x24</text>
+<rect x="478" y="530" width="11" height="11" fill="#dd6b20"/>
+<text x="493" y="539" fill="#333">vs wasm32-final</text>
+<rect x="607" y="530" width="11" height="11" fill="#38a169"/>
+<text x="622" y="539" fill="#333">vs wasm64-NEXT</text>
+</svg>

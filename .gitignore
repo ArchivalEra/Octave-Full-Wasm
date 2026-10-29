@@ -9,6 +9,11 @@
 # **README 三件套的唯一产地**，IllegalPerformance / wasm32-final 两份指向这里。
 !README.zh.md
 !README.de.md
+# 性能图（2026-10-29）：README 引用 docs/charts/*.svg —— 不放行就是三张坏图。
+# ★ 实测教训：master 是 GitHub 默认分支，而这三张图此前**只在 IP 线**有 ⇒
+#   访客打开首页看到的就是三个断链图片（用户点令「还加载不出图片」）。
+!docs/charts/
+!docs/charts/*
 !LICENSE
 !THIRD-PARTY-NOTICES.md
 !maintaince.md

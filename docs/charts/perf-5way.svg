@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="460" font-family="sans-serif" font-size="11">
+<rect width="100%" height="100%" fill="#fdfdfc"/>
+<text x="60" y="18" font-size="13" font-weight="bold">Octave 11.3.0 — measured wall time (s, log scale) · lower is better</text>
+<line x1="60" y1="403.5" x2="1180" y2="403.5" stroke="#e2e2e2"/>
+<text x="14" y="407.5" fill="#666">1e-3</text>
+<line x1="60" y1="272.2" x2="1180" y2="272.2" stroke="#e2e2e2"/>
+<text x="14" y="276.2" fill="#666">1e-2</text>
+<line x1="60" y1="140.9" x2="1180" y2="140.9" stroke="#e2e2e2"/>
+<text x="14" y="144.9" fill="#666">1e-1</text>
+<text x="122.2" y="378" text-anchor="middle" fill="#333">dot 1e7</text>
+<rect x="112.0" y="283.6" width="18.4" height="80.4" fill="#8a8f98"><title>dot 1e7 / native ref-BLAS = 0.008s</title></rect>
+<rect x="132.4" y="314.1" width="18.4" height="49.9" fill="#2b6cb0"><title>dot 1e7 / native OpenBLAS x24 = 0.005s</title></rect>
+<rect x="152.8" y="285.0" width="18.4" height="79.0" fill="#dd6b20"><title>dot 1e7 / wasm32-final = 0.008s</title></rect>
+<rect x="173.2" y="272.2" width="18.4" height="91.8" fill="#38a169"><title>dot 1e7 / wasm64-NEXT = 0.01s</title></rect>
+<rect x="193.7" y="266.8" width="18.4" height="97.2" fill="#c53030"><title>dot 1e7 / IllegalPerformance = 0.01s</title></rect>
+<text x="246.7" y="378" text-anchor="middle" fill="#333">matmul 500</text>
+<rect x="236.5" y="218.4" width="18.4" height="145.6" fill="#8a8f98"><title>matmul 500 / native ref-BLAS = 0.03s</title></rect>
+<rect x="256.9" y="342.8" width="18.4" height="21.2" fill="#2b6cb0"><title>matmul 500 / native OpenBLAS x24 = 0.003s</title></rect>
+<rect x="277.3" y="227.3" width="18.4" height="136.7" fill="#dd6b20"><title>matmul 500 / wasm32-final = 0.02s</title></rect>
+<rect x="297.7" y="324.5" width="18.4" height="39.5" fill="#38a169"><title>matmul 500 / wasm64-NEXT = 0.004s</title></rect>
+<rect x="318.1" y="311.8" width="18.4" height="52.2" fill="#c53030"><title>matmul 500 / IllegalPerformance = 0.005s</title></rect>
+<text x="371.1" y="378" text-anchor="middle" fill="#333">matmul 1000</text>
+<rect x="360.9" y="102.3" width="18.4" height="261.7" fill="#8a8f98"><title>matmul 1000 / native ref-BLAS = 0.2s</title></rect>
+<rect x="381.3" y="278.9" width="18.4" height="85.1" fill="#2b6cb0"><title>matmul 1000 / native OpenBLAS x24 = 0.009s</title></rect>
+<rect x="401.7" y="114.2" width="18.4" height="249.8" fill="#dd6b20"><title>matmul 1000 / wasm32-final = 0.16s</title></rect>
+<rect x="422.1" y="224.7" width="18.4" height="139.3" fill="#38a169"><title>matmul 1000 / wasm64-NEXT = 0.02s</title></rect>
+<rect x="442.5" y="222.3" width="18.4" height="141.7" fill="#c53030"><title>matmul 1000 / IllegalPerformance = 0.02s</title></rect>
+<text x="495.6" y="378" text-anchor="middle" fill="#333">lu 800</text>
+<rect x="485.4" y="191.1" width="18.4" height="172.9" fill="#8a8f98"><title>lu 800 / native ref-BLAS = 0.04s</title></rect>
+<rect x="505.8" y="250.3" width="18.4" height="113.7" fill="#2b6cb0"><title>lu 800 / native OpenBLAS x24 = 0.01s</title></rect>
+<rect x="526.2" y="202.5" width="18.4" height="161.5" fill="#dd6b20"><title>lu 800 / wasm32-final = 0.03s</title></rect>
+<rect x="546.6" y="253.1" width="18.4" height="110.9" fill="#38a169"><title>lu 800 / wasm64-NEXT = 0.01s</title></rect>
+<rect x="567.0" y="249.1" width="18.4" height="114.9" fill="#c53030"><title>lu 800 / IllegalPerformance = 0.01s</title></rect>
+<text x="620.0" y="378" text-anchor="middle" fill="#333">lu 1500</text>
+<rect x="609.8" y="86.5" width="18.4" height="277.5" fill="#8a8f98"><title>lu 1500 / native ref-BLAS = 0.26s</title></rect>
+<rect x="630.2" y="166.8" width="18.4" height="197.2" fill="#2b6cb0"><title>lu 1500 / native OpenBLAS x24 = 0.06s</title></rect>
+<rect x="650.6" y="96.5" width="18.4" height="267.5" fill="#dd6b20"><title>lu 1500 / wasm32-final = 0.22s</title></rect>
+<rect x="671.0" y="168.2" width="18.4" height="195.8" fill="#38a169"><title>lu 1500 / wasm64-NEXT = 0.06s</title></rect>
+<rect x="691.4" y="159.7" width="18.4" height="204.3" fill="#c53030"><title>lu 1500 / IllegalPerformance = 0.07s</title></rect>
+<text x="744.4" y="378" text-anchor="middle" fill="#333">svd 400</text>
+<rect x="734.2" y="112.4" width="18.4" height="251.6" fill="#8a8f98"><title>svd 400 / native ref-BLAS = 0.17s</title></rect>
+<rect x="754.6" y="94.9" width="18.4" height="269.1" fill="#2b6cb0"><title>svd 400 / native OpenBLAS x24 = 0.22s</title></rect>
+<rect x="775.1" y="109.4" width="18.4" height="254.6" fill="#dd6b20"><title>svd 400 / wasm32-final = 0.17s</title></rect>
+<rect x="795.5" y="116.0" width="18.4" height="248.0" fill="#38a169"><title>svd 400 / wasm64-NEXT = 0.15s</title></rect>
+<rect x="815.9" y="105.3" width="18.4" height="258.7" fill="#c53030"><title>svd 400 / IllegalPerformance = 0.19s</title></rect>
+<text x="868.9" y="378" text-anchor="middle" fill="#333">sum 1e7</text>
+<rect x="858.7" y="280.8" width="18.4" height="83.2" fill="#8a8f98"><title>sum 1e7 / native ref-BLAS = 0.009s</title></rect>
+<rect x="879.1" y="287.9" width="18.4" height="76.1" fill="#2b6cb0"><title>sum 1e7 / native OpenBLAS x24 = 0.008s</title></rect>
+<rect x="899.5" y="285.0" width="18.4" height="79.0" fill="#dd6b20"><title>sum 1e7 / wasm32-final = 0.008s</title></rect>
+<rect x="919.9" y="285.0" width="18.4" height="79.0" fill="#38a169"><title>sum 1e7 / wasm64-NEXT = 0.008s</title></rect>
+<rect x="940.3" y="278.2" width="18.4" height="85.8" fill="#c53030"><title>sum 1e7 / IllegalPerformance = 0.009s</title></rect>
+<text x="993.3" y="378" text-anchor="middle" fill="#333">sort 2e6</text>
+<rect x="983.1" y="98.3" width="18.4" height="265.7" fill="#8a8f98"><title>sort 2e6 / native ref-BLAS = 0.21s</title></rect>
+<rect x="1003.5" y="100.9" width="18.4" height="263.1" fill="#2b6cb0"><title>sort 2e6 / native OpenBLAS x24 = 0.2s</title></rect>
+<rect x="1023.9" y="94.0" width="18.4" height="270.0" fill="#dd6b20"><title>sort 2e6 / wasm32-final = 0.23s</title></rect>
+<rect x="1044.4" y="91.0" width="18.4" height="273.0" fill="#38a169"><title>sort 2e6 / wasm64-NEXT = 0.24s</title></rect>
+<rect x="1064.8" y="135.0" width="18.4" height="229.0" fill="#c53030"><title>sort 2e6 / IllegalPerformance = 0.11s</title></rect>
+<text x="1117.8" y="378" text-anchor="middle" fill="#333">loop 1e6</text>
+<rect x="1107.6" y="49.9" width="18.4" height="314.1" fill="#8a8f98"><title>loop 1e6 / native ref-BLAS = 0.49s</title></rect>
+<rect x="1128.0" y="46.7" width="18.4" height="317.3" fill="#2b6cb0"><title>loop 1e6 / native OpenBLAS x24 = 0.52s</title></rect>
+<rect x="1148.4" y="36.7" width="18.4" height="327.3" fill="#dd6b20"><title>loop 1e6 / wasm32-final = 0.62s</title></rect>
+<rect x="1168.8" y="40.9" width="18.4" height="323.1" fill="#38a169"><title>loop 1e6 / wasm64-NEXT = 0.58s</title></rect>
+<rect x="1189.2" y="39.8" width="18.4" height="324.2" fill="#c53030"><title>loop 1e6 / IllegalPerformance = 0.59s</title></rect>
+<rect x="60" y="420" width="11" height="11" fill="#8a8f98"/>
+<text x="75" y="429" fill="#333">native ref-BLAS</text>
+<rect x="206" y="420" width="11" height="11" fill="#2b6cb0"/>
+<text x="221" y="429" fill="#333">native OpenBLAS x24</text>
+<rect x="380" y="420" width="11" height="11" fill="#dd6b20"/>
+<text x="395" y="429" fill="#333">wasm32-final</text>
+<rect x="505" y="420" width="11" height="11" fill="#38a169"/>
+<text x="520" y="429" fill="#333">wasm64-NEXT</text>
+<rect x="623" y="420" width="11" height="11" fill="#c53030"/>
+<text x="638" y="429" fill="#333">IllegalPerformance</text>
+</svg>
