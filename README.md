@@ -363,7 +363,7 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `LICENSE` (34523 bytes)
 - `README.de.md` (77965 bytes)
 - `README.zh.md` (69511 bytes)
-- `STATE.md` (133438 bytes)
+- `STATE.md` (133449 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (79991 bytes)
 - `bridge/compile-worker.mjs` (17088 bytes)
