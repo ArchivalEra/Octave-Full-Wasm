@@ -165,6 +165,8 @@ Deployment hard-requirements + acceptance program: [DEPLOY.md](DEPLOY.md) and
 
 **kind/role line closed (2026-10-20, mail/055)**: the content repo's acceptance letter confirms 15/15 entries self-describe — 13 packages, llvm-wasm (toolchain), pyodide (language-bridge, the Q1 vocabulary's third value in first use) — with kind semantics correct (engine carries it, bridges default). The line closed in three days from ticket to done (047 ticket → 050 schema → 052 engine entry → 053 missed label → 054 fix), the acceptance ledger reading: schema origin + semantic copy + table data + loader judge all aligned, zero hard-coded name checks. No outstanding items on either side; the UI reads the completed table whenever it wires up.
 
+**2026-10-29 — E-line MATLAB bridge handed back to its owner.** The content repo ruled that the `omc_*` MATLAB-semantics bridge belongs to OpenModelica (interface and semantics), to us (site assembly), and to the UI (consumption) — explicitly *not* a content contract, so those eleven `.m` files stay out of the forge catalog. We re-ran its four claims (all true) and found two things it did not know: `omc_bridge.js` has **zero callers** anywhere in the OM repo or its product site — its acceptance suite implements the host inline instead — and the three load-bearing semantics (`cd` before simulating, cross-VFS byte transport for `loadFile`, and moving the result `.mat` back into the Octave MEMFS) live only in that test file. So the gap is deeper than "files not copied": the bridge was never wired anywhere. We sent letter 024 to the OM inbox with the re-run evidence and three delivery-shape questions, and opened issue 70 as `needs-info`: we deliberately do not pick a shape and start copying, because that would set an interface contract on the owner's behalf. The first deliverable once OM answers is an end-to-end suite with **zero injection** — proving `omc_simulate('BouncingBall')` works from site assembly alone.
+
 **2026-10-28 — environment restored, two tickets closed, one instrument repaired.** With the build container restarted (it had been killed by a shutdown two days earlier), `doctor` reports fully green and two gates that previously skipped now actually run: the upstream-pin witness (2 pins identical) and the plugin registry check (declared artifacts match per lane). Issue 69 is closed — both settlement criteria pass, and the OpenModelica JS ledger key it was waiting on had in fact already been published, so the projection carries both download files rather than just bg.wasm. Issue 63 is closed with every instrument in its coverage matrix re-run today and tabulated, and it turned up a real rot: `rustsort-spike` no longer linked (`operator new[]` undefined, because `emcc` was compiling C++ without the C++ runtime) — adding `-sDEFAULT_TO_CXX` to both link lines restored G2 (22 domains, zero failures), G2b (4/4 mutations caught) and G3 (ratio 0.241). That rig is the sole evidence behind cancelling the grilling process, so it silently breaking would have made the evidence hollow.
 
 **2026-10-27 — issue 69 landed, issue 67 resolved, and a 22-assertion regression root-caused.**
@@ -356,9 +358,9 @@ on `IllegalPerformance` and in `.githooks/` on the other two) — see `maintainc
 - `DEPLOY.md` (9405 bytes)
 - `HISTORY.md` (494490 bytes)
 - `LICENSE` (34523 bytes)
-- `README.de.md` (74943 bytes)
-- `README.zh.md` (67064 bytes)
-- `STATE.md` (128453 bytes)
+- `README.de.md` (76274 bytes)
+- `README.zh.md` (68121 bytes)
+- `STATE.md` (130799 bytes)
 - `THIRD-PARTY-NOTICES.md` (4285 bytes)
 - `bridge/assets-loader.js` (79991 bytes)
 - `bridge/compile-worker.mjs` (17088 bytes)

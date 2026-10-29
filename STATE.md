@@ -3,6 +3,36 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-29 · E 线桥交接：收件 062 + 记工单 70 + 投 OM 024）
+
+- **★ 收件 `062`（内容仓 `108-host`）= E 线归属裁定，我方接受**：UI「OpenModelica 终端」
+  在 `__omc` 未起时走 fallback ⇒ `omc_simulate(...)` ⇒ `Error (rc=2)`。内容仓把归属判为
+  **产权在 OM / 装配在我方 / 消费在 UI**、且**不是内容契约**（这批 `.m` 不进
+  `forge-catalog.json`），并要求**我们两家自行约定交付形态**。四条判据我方复跑 **4/4 为真**
+  （我方全树 `omc_*.m` = 0；OM `bridge/` 12 件齐；它的验收靠 `injectFile` 运行时注入；
+  我方站点同样 0 件）。
+
+- **★★ 我方查到的两条新事实（内容仓不知道，比它的描述深一层）**：
+  1. **`omc_bridge.js` 零调用方** —— 全 OM 仓 + 其产品站点都查过（排除定义文件本身后 0 处）；
+     它的验收套件里 `serveOnce()` 是**套件内自己实现的宿主**（`accept-omc-bridge.mjs:150`
+     注释原文）。⇒ 缺口不止"没铺到宿主站点"，而是**这个桥从未被接线**。
+  2. **三条承重语义只活在测试文件里**：`cd`（omc 输出目录跟 cwd 走，否则 `resultFile` 空）、
+     `loadFile` 必须**跨 VFS 搬字节**（omc 是另一个 wasm，实测 `wasi_path_open → -1`）、
+     `simulate` 结果 `.mat` 要**回搬**进 Octave MEMFS 并以 `MAT <path>` 告知。
+     ⇒ 只照接口签名写产品实现的人必然重踩。
+
+- **已投 `024-host` 进 OM 收件箱**（`OpenModelica-Full-Wasm/mail/024-host-matlab-bridge-delivery-shape.md`）：
+  复跑四条判据 + 两条新事实 + **§3 三问**（谁铺/铺哪/谁 addpath；`serve()` 启动时序；
+  产品态验收判据）+ 我方边界承诺（不碰协议语义、不碰内容契约）。
+  **只读它仓源码，未读它仓 `mail/`。**
+
+- **记工单 70**（`needs-info`，等 OM 答 §3 三问）：第一交付物 = 产品态 e2e 套件
+  （**零 injectFile、零手写 addpath**，只靠站点装配 ⇒ `omc_simulate('BouncingBall')`
+  返回数据矩阵）。**不自行选形态先铺** —— 那等于替产权方定接口契约。
+
+- **站点现状（复跑）**：`site/omc/` 只有引擎 4 件（`files[]` 带逐件 sha）；
+  `omc_*.m` = 0。即**编译器在、桥不在、没人 boot 它**。
+
 ## 现在是什么（2026-10-28 · 环境恢复 + 两单收口 + spike 仪器修复）
 
 - **★ 环境恢复（用户确认 sudo 已给）**：`o113` 容器（Exited 137，两天前关机杀的）已起；
