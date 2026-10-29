@@ -58,7 +58,7 @@ page_files () {
   for f in index.html assets-loader.js octave-core.js lane.js queue.js p5canvas.js \
            octave-worker.js webaudio.js webaudiorec.js webfilepick.js webnet.js \
            octave-page.js octave-embed.js embed-demo.html \
-           compile-worker.mjs multi-tu.mjs; do
+           compile-worker.mjs multi-tu.mjs octave-omc-bridge.js; do
     printf '%s\n' "$f"
   done
 }

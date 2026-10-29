@@ -616,6 +616,25 @@
           return null;
         });
       }).then(function () {
+        // ★ E 线桥的 MEMFS 装配（工单 70，2026-10-29）：**串在 ready 之前**，但只等
+        //   第 ① 段（写 12 件小文件 + addpath，实测 **39 ms**）——**不 boot omc 引擎**
+        //   （74 MB 级，放这里会把开机从 1.3 s 拖到十几秒，违反"重活不进开机路径"）。
+        //   为什么必须串进来、而不是 `onReady` 之后异步起（实测踩到）：OM 的产品态套件
+        //   （`accept-omc-bridge-product.mjs`）在页面就绪后**立刻**探 `exist('omc_*')`；
+        //   挂在 onReady 之后异步 ⇒ 探针那一刻 MEMFS 还空 ⇒ 假红 3 条。
+        //   实测：ready 后立即探 = MISSING；等 12 s 再探 = FOUND。
+        //   ⇒ **桥的 `.m` 可见性属于"就绪"定义**；引擎 boot + serve 仍在后台（`.ready`）。
+        //   站点没供 omc/bridge/ ⇒ 合法形状（`.memfs` reject），这里 swallow，不致命。
+        var ob = global.OctaveOmcBridge;
+        if (!ob || !ob.ensure) return null;
+        ob.ensure({ core: { module: Module }, base: baseOf() });
+        var memfsP = ob.memfs;
+        return (memfsP ? Promise.resolve(memfsP) : Promise.resolve(null))
+          .catch(function (e) {
+            warn('[omc-bridge] MEMFS 装配未完成（不致命）: ' + (e && e.message || e));
+            return null;
+          });
+      }).then(function () {
         st.ready = true;
         host.onReady(null);
       }).catch(function (e) {

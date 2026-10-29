@@ -44,6 +44,8 @@
      必须排在 octave.js **之前**（内核要提供 instantiateWasm / postRun 等配置）。 -->
 <script type="text/javascript" src="octave-core.js"></script>
 <script type="text/javascript" src="octave-page.js"></script>
+<!-- E 线 MATLAB 语义桥的页面装配（工单 70）：按需触发，不在开机路径上 -->
+<script type="text/javascript" src="octave-omc-bridge.js"></script>
 <!-- ★ B6（2026-09-27）：**选档**（线程档 / 基础档）。
      `lane.js` 用**同步**判据（crossOriginIsolated + SharedArrayBuffer）定档，然后**在解析期**
      按档加载胶水 —— 线程档产物在没有跨源隔离的页面上连实例化都做不到，所以不能等异步探测。

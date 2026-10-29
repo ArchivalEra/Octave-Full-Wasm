@@ -3,6 +3,38 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-10-29 · E 线桥**交付完成**：OM 回信 025 → 装配落地 → 工单 70 结案）
+
+- **★ 收件 `026`（OM `mail/025`）：三问逐条答完，且它纠正了我一条形态建议**（我复核成立）：
+  我原以为"站点落 `omc/bridge/` + addpath"就够 —— **错**。`addpath` 走 **MEMFS**，站点
+  HTTP 路径不在其中（我方独立验：MEMFS 根只有 tmp/home/dev/proc/fonts/src/usr；站点路径
+  `exist=0`；MEMFS 写文件后 addpath ⇒ `exist=2`）。⇒ 形态是**两段**：站点目录 = 字节来源；
+  运行期必须**写 MEMFS 再 addpath**。这是本批最有价值的一条纠错。
+
+- **★ 交付物（我方侧，全部带自证）**：
+  · `build/113/provision-omc-bridge.sh`：12 件字节供给（**投影** OM 的 `bridge/manifest.json`，
+    逐件核 sha&bytes，反证清单外文件）；自证 **4/0**。两站各 13 件（12 交付 + 清单本身）。
+  · `bridge/octave-omc-bridge.js`：四步装配（MEMFS → boot omc → import 桥 → serve）+ 三档
+    失败态 + 两段式句柄（`.memfs` 完成 ⇒ 桥 `.m` 可见；`.ready` ⇒ 引擎+桥全通）。
+    **引擎真实形态 = ESM（wasm-bindgen）**：`export { initSync, __wbg_init as default }` ——
+    我第一版猜的三个 Emscripten 全局工厂名**全部不存在**（产物自证纠正）。
+  · `bridge/octave-core.js`：把 `.memfs` 那一段**串进 boot 链**（`st.ready = true` 之前，
+    实测 **39 ms**）；omc 引擎 boot 仍在后台（74 MB 级，不进开机路径 ⇒ 开机仍 **1.3 s**）。
+  · `test/browser/accept-omc-e2e.mjs`：工单 70 的**结算件**，6 条含两条反向
+    （E5 摘掉 `/bridge` ⇒ 三项必须 MISSING）。两站 **6/0**。
+
+- **★★ 我查出的判据缺陷（OM 产品态套件 3 条假红的真因）**：
+  它的就绪门是 `M.eval_string('x=1+1;') === 0`，**实测 877 ms 就通过**，而本站 boot 链
+  到 **1354 ms** 才装完（`__octaveReady`）⇒ 它在 **477 ms 空窗**里探 `exist('omc_*')`
+  ⇒ 必然 MISSING。换成本站 76 套统一的 `__octaveReady` 门重探同一页面 ⇒ **8/8 全绿**。
+  这不是装配缺陷，是判据的时序缺陷。已投 `027-host` 请它改门（或说明它的定义）。
+
+- **验收**：两站全量**都零红**（PASS 数见 [[accept_pass]]）；8761/8768 `BOOT OK 1.3s`；
+  三处 parity 完全一致；`accept-omc-e2e` 两站 6/0。
+
+- **仍开放**：`omc_simulate('BouncingBall')` 端到端数据矩阵需要 omc 引擎 boot 稳定完成
+  （E2：8768=`ready`、8761=`omc-not-ready`）—— 74 MB ESM 引擎的 boot 耗时归 OM 侧。
+
 ## 现在是什么（2026-10-29 · E 线桥交接：收件 062 + 记工单 70 + 投 OM 024）
 
 - **★ 收件 `062`（内容仓 `108-host`）= E 线归属裁定，我方接受**：UI「OpenModelica 终端」
@@ -1298,7 +1330,7 @@
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 52 | |
-| 最近一次**全绿**回归 | `20261028-123954` · **55 套 / 1,253 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20261029-201924` · **55 套 / 1,253 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20261019` · tar.zst 65,944,760 B · `abd8622a709425e7…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `IllegalPerformance`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

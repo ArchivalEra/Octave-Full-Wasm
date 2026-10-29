@@ -205,6 +205,11 @@ function createOctaveHost(opts) {
             },
             onReady: function () { inst.ready = true; if (isDefault) {
                 G.__octaveReady = true;
+                // ⚠️ E 线桥的装配**不在这里**（2026-10-29 实测更正）：它归 `octave-core.js`
+                //   开机链的 .then（`st.ready = true` 之前），因为 MEMFS 的 12 件必须
+                //   在"就绪"那一刻就已可见 —— OM 的产品态套件就绪后立刻探 `exist()`，
+                //   挂在 onReady 之后异步起会让它探到空 MEMFS（假红 3 条，实测）。
+                //   这里**不要**再调 ensure()：boot 链已经调过，且 ensure 是幂等的。
             } },
         },
     });
