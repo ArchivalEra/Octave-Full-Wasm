@@ -60,9 +60,14 @@ const e1 = await page.evaluate(async () => {
   } catch (e) { out.err = String(e && e.message || e); }
   return out;
 });
-check(e1.manifestOk && e1.n === 12 && e1.bad.length === 0,
+// ★ 无桥站上清单就是 404 ⇒ `bad` 从未初始化。此前直接 `e1.bad.join` ⇒ **整页崩**
+//   （TypeError，套件不出汇总行 ⇒ 看起来像"挂死"而不是"报红"）。F1 的第三类要求
+//   空输入必须**干净地报红**，不是崩。⇒ 一律 `(e1.bad || [])`。
+check(e1.manifestOk && e1.n === 12 && (e1.bad || []).length === 0,
   'E1 站点清单 12 件全可达（HTTP 200）',
-  `n=${e1.n} bad=${e1.bad.join(',') || '无'} ${e1.err || ''}`);
+  e1.manifestOk
+    ? `n=${e1.n} bad=${(e1.bad || []).join(',') || '无'}`
+    : `清单不可达（HTTP ${e1.status ?? '?'}）；无桥站点在此合法 —— 后三条会干净报红`);
 
 // ── E2 页面自动装配（状态机）──────────────────────────────────────────────────
 const e2 = await page.evaluate(() => ({
@@ -120,7 +125,11 @@ const e5 = await page.evaluate(async (names) => {
   const M = window.Module;
   const saved = {};
   try {
-    for (const f of M.FS.readdir('/bridge')) {
+    // ★ `/bridge` 可能根本不存在（无桥站点）⇒ readdir 抛错。那不是缺陷：
+    //   "没有桥 ⇒ 三项必须 MISSING" 恰恰是本条要成立的方向。先判存在。
+    let dirFiles = [];
+    try { dirFiles = M.FS.readdir('/bridge'); } catch (e) { dirFiles = []; }
+    for (const f of dirFiles) {
       if (f === '.' || f === '..') continue;
       saved[f] = M.FS.readFile('/bridge/' + f);
     }
@@ -147,7 +156,7 @@ const e5 = await page.evaluate(async (names) => {
     M.eval_string("addpath('/bridge');");
     return out;
   } catch (e) {
-    return 'ERR ' + String(e && e.message || e);
+    return 'ERR ' + String((e && e.message) || (e && e.stack) || e);
   }
 }, ['omc_simulate_model', 'omc_getVersion', 'omc_mat_load']);
 check(/^omc_simulate_model MISSING$/m.test(e5) && /^omc_getVersion MISSING$/m.test(e5),

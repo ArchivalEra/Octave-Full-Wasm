@@ -189,6 +189,10 @@ Drei Regeln sind absolut: keine serverseitige Ausfuehrung, kein Force-Push und k
 Umschreiben der Historie, und jede neue Datei muss in die `.gitignore`-Whitelist eingetragen
 werden, sonst weist das pre-commit-Gate sie ab.
 
+## Notiz zum Gate-Design
+
+Eine Korrektur aus dem neuesten Schreiben von OpenModelica, festgehalten, weil sie aendert, wie dieses Repo Gates schreibt: das Bereitschaftsgatter der Produkt-Suite griff rund 400 ms *bevor* die Asset-Schicht etwas in MEMFS geschrieben hatte, wodurch drei Zusicherungen gegen ein funktionierendes Deployment fehlschlugen. OpenModelica loeste das, indem es darauf gatet, dass `/bridge` in MEMFS nicht leer ist, statt auf das globale Ready-Flag irgendeiner Site — und lehnte die Anregung dieses Repos, an `__octaveReady` zu binden, zu Recht ab: das ist das Implementierungsdetail einer Site und wuerde aus einer Lieferpruefung eine Selbstpruefung machen. Dasselbe Experiment legte zwei Defekte in der Ende-zu-Ende-Suite dieses Repos offen (sie stuerzte ab statt rot zu melden, wenn das Manifest fehlte, und warf einen Fehler, wenn `/bridge` nicht existierte); beide sind behoben, die Suite meldet nun 6/0 auf beiden Sites und 3 bestanden / 3 fehlgeschlagen auf einer absichtlich brueckenlosen Kontrollsite. Als wiederverwendbare Regel festgehalten: **auf einen Vertrag gaten, nicht auf die globale Variable einer Implementierung.**
+
 ## Lizenz
 
 AGPL-3.0-or-later fuer den Build-Glue, den Browser-Host und die Aenderungen am

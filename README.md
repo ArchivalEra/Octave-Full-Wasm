@@ -162,12 +162,12 @@ group                           files        bytes
 site/                             228     333.5 MB
 build/                            456       3.3 MB
 test/                             156       1.0 MB
-(root)                             13     758.9 KB
+(root)                             13     761.2 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     378.0 KB
 .scratch/                          79     343.5 KB
 bridge/                            20     303.2 KB
-mail/                              42     182.5 KB
+mail/                              42     184.8 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     102.4 KB
 docs/                              13      75.6 KB
@@ -205,6 +205,10 @@ Read [`AGENTS.md`](AGENTS.md) first — it is the operating contract, not a styl
 Three rules are absolute: no server-side execution, no force-push or history rewriting,
 and every new file must be added to the `.gitignore` whitelist or the pre-commit gate
 rejects it.
+
+## Notes on gate design
+
+One correction from OpenModelica's latest letter, recorded because it changed how this repo writes gates: the product-state suite's readiness gate used to pass about 400 ms *before* the asset layer had written anything into MEMFS, which made three assertions fail against a working deployment. OpenModelica fixed it by gating on `/bridge` being non-empty in MEMFS rather than on any site's global ready flag — correctly refusing this repo's suggestion to bind to `__octaveReady`, because that is one site's implementation detail and would turn a delivery check into a self-check. The same experiment exposed two defects in this repo's own end-to-end suite (it crashed instead of reporting red when the manifest was absent, and threw when `/bridge` did not exist); both are fixed, and the suite now reports 6/0 on both sites and 3 pass / 3 fail on a deliberately bridge-less control site. Recorded here as the reusable rule: **gate on a contract, not on an implementation's global variable.**
 
 ## License
 
