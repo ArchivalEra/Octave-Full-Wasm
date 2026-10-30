@@ -22,6 +22,22 @@
 `--no-coi` 起一个**不发头**的实例，指向**同一个目录** ⇒ 同一份产物、两种头部形态，
 `test/browser/probe-lane.mjs` 靠这一对服务器验"选档对不对"以及"选错档必须响亮地失败"。
 
+## 缓存策略（2026-10-30，OM mail/030 的实测逼出来的）
+
+**`no-cache` + `ETag`，不是"不发头"也不是 `no-store`。** 三者的实测差别（OM 在它仓量、
+我方在此复核：不发头时两次刷新各传 31 MB 全量）：
+
+| 头 | 第 2/3 次刷新 | 问题 |
+|---|---|---|
+| `no-store` | 全量重传 | **禁用缓存**：74 MB 每次刷新都重下 |
+| 不发头 | 全量重传（无 ETag 时） | 浏览器不可重验，只能整份拿 |
+| **`no-cache` + `ETag`** | **304，几百字节** | 没变就 304，变了才 200 |
+
+为什么必须**重验**而不是"干脆允许缓存"：本仓纪律「不许用老产物」要求页面每次拿到的是
+当前站点的字节 —— `no-cache` 正是"问一句"的语义（语义上等价于 must-revalidate，
+但会让离线副本也重验），配 `ETag` 后代价只有几百字节。
+**不发 `no-store`**（那是禁用缓存的另一头，OM 实测每次重下 74 MB）。
+
 用法：
   python3 build/serve-coi.py --dir <站点目录> --port 8761           # 带头（线程档会被选中）
   python3 build/serve-coi.py --dir <站点目录> --port 8770 --no-coi  # 不带头（落回基础档）
@@ -56,12 +72,23 @@ MIME = {
 }
 
 
-def headers_for(path, coi=True):
-    """纯函数：给一个路径返回该加的响应头（自证直接喂它）。"""
+def headers_for(path, coi=True, etag=None):
+    """纯函数：给一个路径返回该加的响应头（自证直接喂它）。
+
+    `etag` 给了才发 `ETag` + `Cache-Control: no-cache`（见文件头"缓存策略"）。
+    """
     h = []
     if coi:
         h += COI_HEADERS
+    if etag:
+        h.append(("ETag", etag))
+        h.append(("Cache-Control", "no-cache"))
     return h
+
+
+def etag_for(st):
+    """由 stat 结果派生的弱 ETag（size + mtime_ns）。不需要读文件内容。"""
+    return 'W/"%x-%x"' % (st.st_size, st.st_mtime_ns)
 
 
 def mime_for(path):
@@ -72,9 +99,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     coi = True
 
     def end_headers(self):
-        for k, v in headers_for(self.path, self.coi):
+        etag = None
+        p = self.translate_path(self.path)
+        try:
+            if os.path.isfile(p):
+                etag = etag_for(os.stat(p))
+        except OSError:
+            etag = None
+        for k, v in headers_for(self.path, self.coi, etag):
             self.send_header(k, v)
         super().end_headers()
+
+    def send_head(self):
+        """给 `SimpleHTTPRequestHandler` 补 304：客户端带 If-None-Match 且 ETag 相同时
+        只回 304（几百字节），不传文件体。这是"重验"的实际兑现。"""
+        path = self.translate_path(self.path)
+        inm = self.headers.get("If-None-Match")
+        if inm and os.path.isfile(path):
+            try:
+                cur = etag_for(os.stat(path))
+            except OSError:
+                cur = None
+            if cur and inm == cur:
+                # ⚠️ 只 send_response，不要重复发 ETag/Cache-Control ——
+                #    end_headers() 会按当前路径再发一遍（实测会出两份同名头）。
+                self.send_response(304)
+                self.end_headers()
+                return None
+        return super().send_head()
 
     def log_message(self, fmt, *args):        # 保持安静（探针自己会断言，日志没用）
         pass
@@ -111,6 +163,14 @@ def main(argv):
 
 
 # ── 自证：纯函数部分（头 / MIME）。不注册进 gates-selftest（它不是闸门，是服务）──────
+class _Stat:
+    """自证用的 stat 替身（只有 etag_for 需要的两个字段）。"""
+
+    def __init__(self, size, mtime_ns):
+        self.st_size = size
+        self.st_mtime_ns = mtime_ns
+
+
 CASES = [
     ("带头 ⇒ 两个头都在", lambda: dict(headers_for("/x", True)) ==
      {"Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp"}),
@@ -119,6 +179,18 @@ CASES = [
     (".wasm ⇒ application/wasm", lambda: mime_for("/a/octave.wasm") == "application/wasm"),
     (".data ⇒ 二进制（不是 text/plain）", lambda: mime_for("/octave.data") == "application/octet-stream"),
     ("未知扩展名 ⇒ 二进制兜底", lambda: mime_for("/x.weird") == "application/octet-stream"),
+    # ★ 缓存三态（2026-10-30，OM mail/030 实测逼出来的）：正 / 反 / 空
+    ("给了 etag ⇒ 发 ETag + Cache-Control: no-cache",
+     lambda: dict(headers_for("/x", True, 'W/"1-2"')).get("Cache-Control") == "no-cache"
+     and dict(headers_for("/x", True, 'W/"1-2"')).get("ETag") == 'W/"1-2"'),
+    ("★ 反向：任何路径都**不许**发 no-store（那是禁用缓存，实测每次重下 74 MB）",
+     lambda: all("no-store" not in v
+                 for coi in (True, False) for et in (None, 'W/"1-2"')
+                 for _k, v in headers_for("/x", coi, et))),
+    ("★ 空输入：没给 etag ⇒ 不发任何缓存头（不许编一个假 ETag）",
+     lambda: [k for k, _ in headers_for("/x", True, None) if k in ("ETag", "Cache-Control")] == []),
+    ("etag_for 由 size+mtime 派生且稳定（同一 stat 两次同值）",
+     lambda: (lambda st: etag_for(st) == etag_for(st))(_Stat(1234, 5678))),
 ]
 
 

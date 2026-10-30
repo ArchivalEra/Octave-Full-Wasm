@@ -162,7 +162,7 @@ group                           files        bytes
 site/                             228     333.5 MB
 build/                            456       3.3 MB
 test/                             156       1.0 MB
-(root)                             13     753.5 KB
+(root)                             13     758.8 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     378.0 KB
 .scratch/                          79     343.5 KB
@@ -213,6 +213,10 @@ The other letter measured the UI's Pages output at 1.26 GB — 256 MB past GitHu
 `AGENTS.md` was rewritten on 2026-10-30 (user instruction: *"agents.md can be rewritten; the old bloated thing really should be discarded"*). It shrank from 282 lines to 145 by separating three kinds of content that had accumulated in one file: the rules that must not be broken (kept, condensed), the command sequences (removed — the `build/` scripts are their own documentation and each carries a `--selftest`), and the full narratives of past incidents (removed — they live in `HISTORY.md` under `§5.x`). One entry had been duplicated verbatim. What survives in the "silently failing pitfalls" section keeps one sentence per item explaining *why* the failure is silent, because that is what distinguishes a contract from a list of scolding.
 
 The same instruction relaxed the correspondence rule: the course site's repository was previously off-limits, and is now **read-only plus letter delivery** — a letter may be added to its `mail/`, nothing else. The premise of the three mail rules turned out to be "the recipient has an inbox" rather than "the recipient is inside the coalition", and that site built one on the same day. `outbox/` is demoted to a fallback for recipients without an inbox.
+
+Serving a site over HTTP had a defect worth recording: `build/serve-coi.py` sent neither `Cache-Control` nor `ETag`, so every reload of the page transferred the full 119.9 MB again — three loads, three full transfers, measured with CDP `Network.loadingFinished` under a persistent profile. The fix is `ETag` derived from `size`+`mtime_ns` (no content hashing of a 29 MB file) plus `Cache-Control: no-cache`, with a `send_head()` override returning 304 on `If-None-Match`. After the change the first load transfers 119.9 MB and every subsequent reload transfers 12,790 B — a 99.99% reduction. `no-cache` rather than permissive caching because the repo's "never serve a stale artifact" rule wants revalidation, and not `no-store` because that disables caching outright (which is the failure another repo hit and reported). The self-test grew from 5 to 9 cases including a reverse assertion that no path may ever emit `no-store`.
+
+One lesson from that fix: the first 304 branch re-sent `ETag`/`Cache-Control`, and `end_headers()` sent them again, producing two headers with the same name. Duplicate headers raise no error but a downstream client may read the wrong one.
 
 ## Notes on gate design
 

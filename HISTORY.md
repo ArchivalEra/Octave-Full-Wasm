@@ -6271,3 +6271,44 @@ outbox 里两封历史存档（`044`→LLVM-wasm `013`、`045`→extra-content `
 13 个路径全存在、`§5.71` 在 HISTORY 里、`promote-webgl.sh` 与 `promote-w64-lane.sh` 都在。
 **重写操作契约最容易犯的错是"删掉了某条真的承重规则"**，所以新文件每条断言都指向一个
 可跑的东西（脚本 / 台账键 / 闸门）。
+
+## §5.117 HTTP 缓存头：119.9 MB → 12.8 KB（2026-10-30，OM mail/030 触发）
+
+**触发**：OM 来信报"`Cache-Control: no-store` 让 74 MB 每次刷新重下"。
+
+**① 归属澄清**：那个 `no-store` **不在我仓**。我仓 `build/serve-coi.py` 的 `headers_for()`
+只加两条 COI 头，从不碰 `Cache-Control`；`git log --all -S 'no-store'` 对该文件**零命中**。
+它在 **OM 仓**的同名脚本里（它自己已于 10-29 改掉）。两个仓各有一个 `serve-coi.py`，
+是这次混淆的根源 —— 我在回信里请它点名"我仓的"。
+
+**② 但核心观察在我这边同样成立，而且更弱的一种**：我既不发 `Cache-Control` 也**不发
+`ETag`** ⇒ 浏览器没有可重验凭据 ⇒ 只能整份拿。CDP `Network.loadingFinished` 累加实测
+（持久 profile）：**119,878,350 B × 3 次**，一次不少。
+
+**③ 修法**（`build/serve-coi.py`）：
+- `ETag: W/"<size>-<mtime_ns>"` —— 由 stat 派生，**不读文件内容**（29 MB 文件不重复哈希）；
+- `Cache-Control: no-cache` —— **必须重验**（本仓"不许用老产物"纪律要的是重验，不是缓存；
+  也不是 `no-store` —— 那是禁用缓存的另一头，正是 OM 踩的坑）；
+- 覆盖 `send_head()`：`If-None-Match` 命中时回 **304**；
+- `headers_for(path, coi, etag)` 加 etag 参数（纯函数，自证直接喂）。
+
+自证 **5 → 9 PASS / 0 fail**，新增四条含**反向**（任何路径不许发 `no-store`）与
+**空输入**（没给 etag ⇒ 不发任何缓存头，不许编假 ETag）。
+
+**④ 修后实测**：首次 119,878,350 B → 第二/三次刷新各 **12,790 B**（304 重验）。
+降幅 **99.99%**。响应头 `ETag: W/"1c426e5-…"` + `Cache-Control: no-cache`；
+条件请求回 `HTTP/1.0 304 Not Modified`。
+
+**⑤ 一处自证的教训（值得记）**：第一版 304 分支里我又发了一次 `ETag`/`Cache-Control`，
+而 `end_headers()` 会按路径再发一遍 ⇒ 响应里出现**两份同名头**。修法 = 304 分支只
+`send_response(304)` + `end_headers()`。**同名头重复不报错、但下游可能取错值**。
+
+**⑥ 回归**：8761 全量 **56 套 / 1259 PASS / 0 FAIL**（改服务脚本必须验）。
+
+**⑦ 顺带收进 AGENTS 坑段两条**：缓存头三态（只认 `no-cache` + `ETag`）；以及 OM 如实报的
+「**"失败"先排除仪器**」—— 它一次弱网测量报 2/2 失败，实为探针超时上限 180 s 短于真实
+传输 199 s。
+
+**⑧ OM 的 boot 分布我收了**（环回 1.3 s / 64 Mbit 18.0 s / 4.8 Mbit 199.9 s，**三档 0 失败**）
+⇒ `8761 = omc-not-ready` 确认是时序不是失败率。它建议"UI 别裸等待、要有进度与取消"——
+归 UI；我方只保证状态机够用（`__octaveOmcBridge.{state,detail}`），UI 要更细进度则我方加。
