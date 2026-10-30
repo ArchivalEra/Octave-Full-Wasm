@@ -162,7 +162,7 @@ group                           files        bytes
 site/                             228     333.5 MB
 build/                            456       3.3 MB
 test/                             156       1.0 MB
-(root)                             13     767.7 KB
+(root)                             13     753.5 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     378.0 KB
 .scratch/                          79     343.5 KB
@@ -209,6 +209,10 @@ rejects it.
 Two letters arrived on 2026-10-30. A course site asked for a downloadable wasm32 artifact; this repository had **zero releases**, so the first one is now published (`wasm32-11.3.0-1ed3e528`, 37.96 MiB raw / 9.90 MiB gzip, with per-file sha256 in `SHA256SUMS.json`). The artifact's `octave.wasm` sha is byte-identical to the base cell served in production, so external consumers get what is actually running rather than a separately built binary.
 
 The other letter measured the UI's Pages output at 1.26 GB — 256 MB past GitHub's 1 GB hard limit — with 617 MiB of duplicated bytes. Re-running its numbers confirmed them, but its attribution was one layer off: the layout scripts live in the UI repository, while the duplication itself came from here. Two of the three product branches still carried dead lane directories (`threads/` and `w64-base/`, 76 MiB each) inside their `site/` mirrors, left over from the October 1st four-cell layout that the later three-line rulings removed from only one branch. The UI copies each branch's `site/` wholesale, so 113 MiB of its duplication was dead lanes arriving from this repo. Both branches are cleaned; the live site was already correct, so this fixed the mirrors that the UI reads, not the deployment.
+
+`AGENTS.md` was rewritten on 2026-10-30 (user instruction: *"agents.md can be rewritten; the old bloated thing really should be discarded"*). It shrank from 282 lines to 145 by separating three kinds of content that had accumulated in one file: the rules that must not be broken (kept, condensed), the command sequences (removed — the `build/` scripts are their own documentation and each carries a `--selftest`), and the full narratives of past incidents (removed — they live in `HISTORY.md` under `§5.x`). One entry had been duplicated verbatim. What survives in the "silently failing pitfalls" section keeps one sentence per item explaining *why* the failure is silent, because that is what distinguishes a contract from a list of scolding.
+
+The same instruction relaxed the correspondence rule: the course site's repository was previously off-limits, and is now **read-only plus letter delivery** — a letter may be added to its `mail/`, nothing else. The premise of the three mail rules turned out to be "the recipient has an inbox" rather than "the recipient is inside the coalition", and that site built one on the same day. `outbox/` is demoted to a fallback for recipients without an inbox.
 
 ## Notes on gate design
 

@@ -1,282 +1,145 @@
 # AGENTS.md · Octave-Full-Wasm
 
-> **接续先读两份**：`maintaince.md`（**方向与地图**，只指方向不抄数字）+
-> `STATE.md`（活状态：现在是什么 + 文末机器块）。
-> 记忆架构规约 = `docs/agents/memory.md`（Einfacht 吞噬形态：HANDOFF 已退役）。
-> **并行度线**（SIMD/线程/Worker/嵌入契约）在 `build/113/PLAN-threads.md`，与本条并行、共享同一个产物。
-> 历史与旧数字在 **`HISTORY.md`**（`§5.x`/`§9`/`§10`，append-only；正文里单写的这些编号都指它）。
-> 分门别类的坑：C 库配方 `build/CLIBS.md`、图形线 `build/113/NOTES-webgl.md`、JSPI 机制 `build/113/NOTES-jspi.md`。
-> **黑话看不懂就读 `CONTEXT.md`**（术语表：每个词一条权威定义 + 一行可复跑的证据）。
+本文件是**在本仓工作的操作契约**。它只写三件事：不可违背的规则、去哪里找事实、踩过的坑
+（哪些动作会静默失败）。
 
-## 路径铁律
-- 仓库：`/mnt/hdd/zcode-projects/Octave-Full-Wasm`（**唯一**可改的 git 仓）
-- 构建容器：docker `o113`（11.3.0 车道；`obuild`/`odld`/`obench` 是更早的车道）
-- 第三方源码/产物：`/mnt/hdd/octave-wasm-build/`、`/tmp/opencode/`
-- **不常用工具链/一次性浏览器下载**：`/mnt/hdd/crossbuild-tools/`（playwright 浏览器在
-  `pw-browsers/`，用时设 `PLAYWRIGHT_BROWSERS_PATH`；WebKit 的依赖修正见 NOTES-threads.md）
-- **禁止**碰课程仓 `/mnt/hdd/zcode-projects/GONGCHENGSHUXUE20260917`
+**不写**执行顺序、命令清单、历史事故的完整叙述 —— 那些分别在：
+- **怎么跑**：`build/` 下的脚本自己就是文档（`relink.sh explain <模式>`、各脚本 `--selftest`）
+- **为什么这样**：`HISTORY.md`（append-only，§5.x 编号）
+- **现在是什么**：`STATE.md`
+- **黑话**：`CONTEXT.md`
 
-## 三条不可违背
-1. **纯客户端计算**：Octave 恒跑在浏览器 wasm 内 —— 禁止任何服务端执行代码的端点。
-2. 不 force-push / 不删 git 对象 / 不改历史；**禁用 `--no-verify`**。
-3. **白名单仓库**：新增文件必须同步 `!路径` 进 `.gitignore`，否则 pre-commit 直接拒。
+> 若本文件与脚本行为冲突，**信脚本**（它是可执行的），然后修本文件。
 
-## mail 边界（2026-10-15 用户点令，本仓曾越界实测）
-**跨 agent 通信是"收件箱"制，三条**：① **投递落点 = 收信方的 `mail/`**（不留在发信方自己仓）；
-② **只读自己仓的 `mail/`** —— **不读别仓的 `mail/`**（那是别人的私人往来，即使那仓 public）；
-③ 本仓收件箱由 `.githooks/check-mail-boundary.py` 守（`**To:**` 必须指名 host，反例必红）。
-**根因**（这次事故）：本仓曾是四仓里**唯一没有 `mail/`** 的 ⇒ 写给我的信无处可投，
-只能落回发信仓 ⇒ 逼我去翻别人目录找信 ⇒ 撞进 content↔LLVM / content↔OM 的私人往来。
-**补上收件箱 = 把投递方向摆正**；规则详版 + 现有信件路由表见 `mail/README.md`。
+---
 
-## 线划分 = 三线模型（2026-10-12 成文；2026-10-17 用户点令**纠偏重述**，此前"四格=四条产品线"的理解是错的）
+## 一、不可违背（违反即回滚）
 
-**最终只有三条线**，横跨所有与 Octave-UI 对接的仓库（其他仓库也**只会有**这三种线）：
+1. **纯客户端计算**：Octave 恒跑在浏览器 wasm 内。**禁止任何服务端执行代码的端点。**
+2. **不 force-push、不删 git 对象、不改历史**；**禁用 `--no-verify`**。
+3. **课程仓 `/mnt/hdd/zcode-projects/GONGCHENGSHUXUE20260917` 只读 + 只投信**
+   （2026-10-30 用户点令放行投递）。**可写**：它 `mail/` 里新增信件（投递 = 落文件，
+   不提交、不推它仓）。**不可写**：它的其余任何路径、它的 git 提交。
+   原因：它是外部消费者，有自己的维护者 —— 我们只与它通信，不替它改代码。
 
-| 线 | 产物 | 定位 |
+## 二、路径（唯一可改的仓与它的邻居）
+
+| 位置 | 是什么 |
+|---|---|
+| `/mnt/hdd/zcode-projects/Octave-Full-Wasm` | **唯一可改的 git 仓** |
+| `/mnt/hdd/octave-wasm-build/` | 站点、产物、日志、镜像仓（非 git 仓，可写） |
+| `/mnt/hdd/crossbuild-tools/` | 一次性工具链、playwright 浏览器 |
+| docker 容器 `o113` | 11.3.0 车道的构建环境 |
+
+## 三、三线模型（分档只由两件事决定）
+
+| 线 | 产物 | 门槛 |
 |---|---|---|
-| **wasm32** | wasm32 单线程（无 `-pthread`） | **一石二鸟**：避开 wasm64 的问题 + **无 COI 要求**（`SharedArrayBuffer` 门槛不存在）⇒ 任何浏览器、任何静态托管都能跑。**无 COI 环境下的唯一线** |
-| **master** | wasm64 **多线程**（必须 COI） | wasm64 = 主线基础上实现多线程的线。**必须 COI + 多线程，无 COI 浏览器上一律落 wasm32(base)**——`w64-base`（wasm64 单线程回退格）已于 2026-10-19 用户点令**死档化**：wasm64 不存在单线程产品形态 |
-| **IllegalPerformance** | wasm64 多线程 + **Rust 补丁** | **non-free 线**："脱离开源社区"（Rust 打补丁）——用户原话。**主线性能榨干之前不开 IP 线** |
+| **`wasm32-final`** | wasm32 单线程 | **无** —— 无 COI 环境下的唯一线 |
+| **`master`** | wasm64 多线程 | 必须 COI + 多线程 |
+| **`IllegalPerformance`** | wasm64 多线程 + Rust 补丁 | 必须 COI；**non-free** |
 
-**分档的唯二依据**（用户点令原文，2026-10-17）：
-1. **用户能否使用**（浏览器支持 / COI 要求——"分档从来不是因为性能"）；
-2. **是否作为 non-free 软件**（Rust 补丁 = 脱离开源社区）。
+**分档依据只有两条**：① 用户能否使用（浏览器支持 / COI 要求）② 是否作为 non-free 软件。
+**与性能无关。**
 
-**时间判据**（用户给过的事实）：Safari 一年前就支持 wasm64 ⇒ **COI 与更新的浏览器内核才是踏入 master 线的条件**。
-**架构纯度判据可执行**：`python3 build/113/check-lane-purity.py --lane <档> --host <wasm> --oct <目录…>`
-（三条：①宿主 ②车道 `.oct` ③站点**本档专属**目录 `oct-<lane>/octdir-<lane>`；**DEAD_LANES={threads,w64-base}**；
-错档逐条点名、rc=1。**别把基础档目录 `assets/oct`/`assets/octdir` 喂进去** ——
-多档站里它们合法装着另一档的 `.oct`，查了必假红，实测 8761 上 44 处假报）。
-已接进 `promote-w64-lane.sh` 第 5 步自检。
+站点只显示两格：`base`（wasm32）与 `w64`（wasm64）。`threads` 与 `w64-base` 是**死档**，
+任何地方出现都是缺陷（机器判据：`build/113/check-lane-purity.py`）。
 
-**为什么要成文**：混编的失败模式是"两边都建成功、自检全绿、运行期才炸"——
-本仓实测三次：wasm32 对象链进 wasm64（`ida.c.o: wasm32 object file can't be linked in
-wasm64 mode`，`__ode15__` 整批挂掉）；错档模块进宿主（加载器只给
-`incorrect architecture (wasm32 vs wasm64)`，与"缺符号"的
-`reading 'value'` 混在一起时无法区分）；以及 `NOTES-emsdk-upgrade` §7.5/§7.6 那两个假阳。
-**★ 2026-10-17 第二次点令（执行完毕，见 HISTORY §5.108）：threads 档已整档删除。**
-用户原话：「wasm32 不允许拥有多线程档」「不允许出其他畸形儿」⇒ 站点四格矩阵退役，
-站点只剩**两格**（base / w64；w64-base 已死档 2026-10-19——无 COI 落 base）；**试验场与分支牢绑定**：
-只存在 `wasm32-final` / `master` / `IllegalPerformance` 三个实验场，**新实验 = 新分支，
-不许往站点加格**（机器判据 = `check-lane-purity.py` 的 DEAD_LANES：车道名 threads ⇒ 必红；
-站点出现 `threads/` 或 `manifest.threads.json` ⇒ promote/parity 双闸门必红）。
+**新实验 = 新分支，不许往站点加格。**
 
-**2026-10-17 的教训（用户为此叹气）**：我和用户对"分档"的理解一直没统一——我把四格当四条线、
-把性能当分档依据（"极限性能"的预编译三档拆法就是这么错的）。**分档 = 用户可达性 + 许可线，与性能无关。**
+## 四、事实纪律
 
-## 验收底线
-`http://127.0.0.1:8761/` 永远是**最近一次通过浏览器实测**的构建。新实验失败**不许**让它退化：
-失败就回退（`cp site/octave.{wasm,js,data} siteWebGL/`，或站点备份目录）+ 记档 + 继续下一批。
+**每句"现在如此"都必须能被一条复跑命令证明。** 照抄旧话是文档说假话的唯一来源。
 
-★ **上站候选必须过「全量」才叫候选**（2026-10-02 真踩到）：NT=8 候选当初只验了"数值四套"
-就发运，全量里 **`accept-dldfcn`（唯一大量压 `dlopen` 的套件）71/0→44/27** ——
-热自旋池线程挡住了 dlopen 需要的表/内存增长安全点（NT=4 从不暴露）。⇒ **换产物/改线程数/
-改 GL/改资源** 的批次，进件前必须跑一次 `PROBES=1` 全量（至少含 `accept-dldfcn`），
-只跑几个"数值套件"不算候选（那条捷径正是这次事故的形状）。
-
-## 事实纪律（每句"现在如此"都要能被复跑的命令证明）
-**照抄旧话是文档说假话的唯一来源**（一天里抓到过 5 处）。四条：
-1. **数值/行为只认实测**，并把**复跑方式写在断言旁边**；写不出复跑方式的句子 → 只能放进 HISTORY 当历史。
-2. **口径搬进代码了（2026-09-26 批次 A1）——别再照抄文档拼命令**：
-   重链的**唯一入口是 `bash build/113/relink.sh link product`**（模式 `product` / `scalar` / `m1`
-   决定**全部环境变量**（条数见 `build/FACTS.json` 的 `env_vars`；★ 曾写 22 是**错的** ——
-   A1 加了 `BUILD_MODE` 标签变量，另有 `P5_OBJS` 是脚本内数组不算）**，一个都不许手设**。要看口径就打
-   `bash build/113/relink.sh explain product`（**那就是文档，生成物**）；
-   `bash build/113/relink.sh --selfcheck` 是它的可测契约（link-web.sh 读的每个变量都必须被
-   模式表覆盖；反向实测能红）。**重配**仍是一整组
-   `WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1`（漏 `WITH_OPENGL=1`
-   ⇒ 默认 toolkit 静默掉回 `web`，而构建/链接/自检**全绿**）。
-   历史口径与踩坑留在 HISTORY §5.26 / §5.38 / §5.54（**当历史读，别当配方**）。
-   产物自证不靠 grep 了：链接时写出 `octave.build.json`（只记**量到的事实**），
-   **`verdict=="ok"` 才可部署**；现役 `octave.wasm` 的 sha 与 `measured.simd.v128` 见
-   `build/FACTS.json` 的 `wasm_sha` / `wasm_v128`（**正文不手抄数字**）。
-   ⚠️ 手跑 `link-web.sh` 的产物 `declared` 是 null ⇒ 判拒；补判：
-   `relink.sh verify <模式> --out <目录>`。手查仍可用 `llvm-objdump -d <wasm> | grep -c v128`
-   （现役值 = `build/FACTS.json` 的 `wasm_v128`，非 SIMD 那版 = 0；⚠️ 别用 `grep simd128`，那是**假**判据）。
-3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）必须**浏览器侧**实测；
+1. **数字只认实测**，且**复跑方式写在断言旁边**。写不出复跑方式的句子 ⇒ 只能进 HISTORY
+   当历史，不许留在活状态文档里。
+2. **数字的唯一产地是台账**：`build/FACTS.json`（每个键自带 `cmd`）。文档正文写
+   `[[键名]]` 引用，**不手抄数字**（闸门 `check_facts.py` 会拦裸数字）。
+3. **"能编过 ≠ 能用了"**：碰运行期行为（GL / 字体 / 加载路径 / 资源）必须**浏览器侧**实测。
    构建成功 + 产物自检绿**不算**功能验收。
-4. **断言要能证伪**：替身不能比真实对象松；新契约至少配一条**反向**断言（该报错的必须报错）。
-   行为变了就**翻面**（改断言，别改检查器）；`probe-*` 会腐烂 ⇒ 每批用 `PROBES=1` 跑一遍。
-5. **断言有生命周期：实测 / 推断 / 翻案**（F3，2026-09-26）：活状态文档里**只写实测**；
-   推断写进 `build/113/NOTES-*.md`，并注明**哪个实验能结案**（写不出结案实验的推断 = 猜想，
-   别写）；被推翻的断言登记进 `build/lib/retractions.json` —— `.githooks/check-retractions.py`
-   会在它**重新出现**时报错（实测代价：一条"线程档在 Pages 上跑不起来"在被更正后**仍留在
-   同一个文件里**，还带一份 HANDOFF 副本）。
-   闸门自身也吃这条：每个闸门必须 `--selftest`（`build/gates-selftest.sh`，接在 pre-commit）。
+4. **断言要能证伪**：每个闸门必须带 `--selftest`，且三类用例齐备 ——
+   **正常不报 / 该报的必须报 / 空输入必须报**。证不出会红的闸门不算闸门。
+5. **推断与实测分开**：推断写进 `build/113/NOTES-*.md` 并注明**哪个实验能结案**；
+   被推翻的断言登记进 `build/lib/retractions.json`（闸门会在它重现时报错）。
 
-## 批次收尾（固定动作，缺一步等于没做完）
-★ **开工预检（Einfacht #10 收编，2026-10-04）**：每批先跑
-  `sudo -E $(which python3) build/lib/doctor.py` —— stdout 必须是 **ok** 才开工；
-  `DOWN: <哪条>` = 环境问题点名（8761 活性+COI 头 / o113 容器 / 实验独占端口 8868，
-  策略在 `doctor.json`）。动机 = 两次实测：机器重启杀掉 8761 服务与容器、文件层全绿
-  但底线不可用（HISTORY §5.86）；8868 被占 ⇒ 探测误判（§5.83）。
-  ⚠ 本机用 sudo：shell 的 docker socket 需 root，否则 docker 项假阳 DOWN（工具在如实
-  报"探针看不见"）。
-★ **8761 只由 `build/promote-webgl.sh` 改**（2026-09-27 真踩到）：为了在 8768 上试页面改动，
-  我顺手把 `bridge/{lane.js,index.html}` 也 `cp` 进了 **8761 站点**，而那里没有 `threads/` 且**带头服务**
-  ⇒ 页面按 COI 选线程档 ⇒ `threads/octave.js` **404**，验收底线当时是坏的（回退三步见
-  `build/113/NOTES-threads.md` 末节；**threads 档现已删**，HISTORY §5.108）。
-  ⇒ 实验只 `cp` 到 `siteWebGL/`；`site/` 那一份交给 promote。
-  **只改某一档 / 某一类的批次走各自的受管辖入口**（都是 `--dry-run`/`--verify`/`--selftest`，
-  且都带"不许夹带别的改动"的反向断言）：页面资产批 = `build/promote-pages.sh`；
-  **wasm64 车道批 = `build/promote-w64-lane.sh`**（工单 30 起 —— 它守 base 未动 + **无任何
-  threads 痕迹**；`promote-webgl.sh` 的 threads 段已删换成幂等死档清理）。
-★ **服务方式（B6 起，2026-09-27）**：8761/8768 **必须带头**起 —— `python3 build/serve-coi.py
-  --dir <站点目录> --port 8761`（它发 `COOP: same-origin` + `COEP: require-corp`）。`python3 -m
-  http.server` 发不了这两个头 ⇒ 线程档选不中、页面**静默**落回基础档（不报错，只是没线程）。
-  测"基础档"那一侧时另起一台 `--no-coi`（同一份目录）。
-`sh build/glue-selftest.sh`（宿主秒级）→ **8768 验绿**（`sweep.sh http://127.0.0.1:8768/`）
-→ promote 8761（`build/promote-webgl.sh`；纯资产批用 `assets.py bundle-m` + `sync-js`；
-  **M2 车道必须 `GL_OUT=$SRC_OUT`** —— 只传 SRC_OUT 会把 out-webgl 旧件盖上新产物，§5.49）
-→ **开机自检** `sh build/check-boot.sh http://127.0.0.1:8761/`（30 秒，**不过就别往下走**）
-→ **部署件 SHA 检查**（★ 用户点名的铁律，2026-09-25；改完程序用老产物跑 = 本会话多次事故）：
-  `sh build/check-deploy-sha.sh <站点目录> <刚构建的wasm sha> <URL>` +
-  `node test/browser/probe-artifact-sha.mjs <URL> [页面实际选中的那一档的 sha]` —— 三层
-  （磁盘/HTTP/页面自证）不全绿就停。
-  ★ **三格站点（带头 ⇒ 页面跑 `w64/`）**：第二参数要么留空（探针会走 ③a 身份证判据：
-  页面实例化的字节 == 那一档自己 `octave.build.json` 记的 sha），要么传 **w64 档**的 sha；
-  传根目录基础档的 sha 没有意义（页面根本不实例化它）。
-→ **同步仓库 `site/`**（入库的可部署镜像，部署说明 DEPLOY.md）：
-  `rsync -a --delete /mnt/hdd/octave-wasm-build/site/ site/` 后一并提交
-→ **8761 全量回归**（`sweep.sh http://127.0.0.1:8761/`，每批**再跑一次 `PROBES=1`**）
-  ★ **两格（2026-10-19 二次裁决后）**：站点 = 根目录三大件（base/wasm32 线）+ `w64/`；
-  `threads/` 与 `w64-base/` **都必须不存在**（probe-lane 双死档断言：`?lane=threads|w64-base`
-  ⇒ 覆盖失效落 base、页面照常 ready）。
-  `SITE_DIR=<站点目录> sh build/…` 跑 `probe-lane` 验"带头选 w64 / **不带头（哪怕有 memory64）⇒ base** / 选错档硬失败"。
-  ★ **w64 车道批（工单 30 起）**：`w64/` + `assets/{oct-w64,octdir-w64}` +
-  `assets/manifest.w64.json`，档清单由 `gen-lanes.sh` 重生成。
-  期望：带头 ⇒ `w64`（shared）、不带头 ⇒ `base`（master 线必须 COI；w64-base 死档）、
-  **无 memory64 ⇒ `base`**、无 COI 强选 `w64` ⇒ 硬失败。w64 批**只走**
-  `build/promote-w64-lane.sh`（它现在拒收**任何 threads/w64-base 痕迹**的站点）。
-→ `sh build/make-dist.sh`（并核对**包内 wasm 与部署件同 sha**）
-→ **三处一致**（8761 / 8768 / 仓库 `site/`）`sh build/check-site-parity.sh --strict`
-→ 六道闸门 → 提交 → 推持久盘镜像。**8761 在 promote 之前一动不动。**
+## 五、验收底线
 
-## 提交前（事实系统 = Einfacht 平台 + 本仓专属闸门）
-> **2026-10-09 采纳重构版；2026-10-10 追平上游 C1–C5**（`zreflect/` 机制层 + `reflect-hooks/`
-> 钩子 + `gates-selftest.sh` 发现式自证台）。本仓的**数据层**在 `zreflect/measure_octave.py`
-> （数据 vs 机制分离：换仓库只换那一个文件，机制原样可升级）。旋钮的唯一可复现来源 =
-> `reflect-hooks/Einfacht.env`。钩子已指向 `reflect-hooks`（`git config core.hooksPath`）。
-> **C1–C5 带来的三条纪律**（照上游 `AGENTS.md`，本仓已采纳）：
-> · **谓词 = 声明，不是文件名**（C1）：执行面读 `registry --run <相位>`，**不再 glob
->   `check_*.py`**。频率是声明字段 `runs_at="commit"|"start-of-work"`，不是命名意外
->   （`doctor.py` 曾经只能靠"它没叫 check_"表达"不挂 pre-commit"）。名字不再承重 ⇒
->   "孤儿"概念消失。平台模块也声明自己：`MODULE = module_meta(名, 一句话, selftest=True/False)`
->   —— `selftest=True` ⇒ 必须真能 `--selftest` 且被 harness 实跑；没声明的 `.py` ⇒ registry 报。
-> · **off 与"跑过且通过"必须可区分**（C2）：`gate.off()` 打 `OFF:` 标记（rc 仍 0），
->   执行面聚合 `ran / off / failed`。**"全绿"不许把"没跑"算进去** —— 本仓实测过
->   `ran 8 / off 5` 这种"看着全绿其实只跑了一半"的形状。
-> · **"必须一致"的要配对账器**（C4）：声明旋钮 ⊆ 实读旋钮、登记表 ⊆ 三语 README 配置表、
->   夹具改名集唯一产地（`registry.FIXTURE_RENAMES`）—— 各配可复跑对账，接进 `registry.problems()`。
->   **没有对账器的"必须一致" = 迟早不一致。**
-> 下面手工复跑的就是钩子跑的那几道：
+`http://127.0.0.1:8761/` 永远是**最近一次通过浏览器实测**的构建。新实验失败**不许**让它退化。
+
+**换产物 / 改线程数 / 改 GL / 改资源**的批次，进件前必须跑一次全量（`PROBES=1`）。
+只跑几个"数值套件"不算候选 —— 曾经这样放过一个 `dlopen` 回归（HISTORY §5.71）。
+
+**每批固定动作**（细节在脚本里，不在这里复述）：
+
 ```bash
-# 平台层（**执行面唯一产地**，上游 C1 起；别 glob、别手写清单）：机器块 + 闸门 + 自证
-python3 zreflect/facts.py --render-doc STATE.md   # 重渲染事实块 + 闸门名录块（--check 验新鲜）
-python3 zreflect/registry.py --run commit         # ★ 跑所有 runs_at="commit" 的闸门（ran/off/failed 三档）
-sh gates-selftest.sh                              # ★ 平台闸门自证（含跨仓库可配置性反向断言）
-# 本仓专属层（平台无对应件）：AUTO 区块 + 活状态断言 + 一致性 + 可证伪 + 白名单 + 就绪 + pin 见证
-python3 .githooks/update-readme.py --check        # README 的 AUTO:FILES 要新鲜
-python3 .githooks/update-state.py --check         # STATE 的 AUTO:STATE 机器块
-python3 .githooks/check-state.py                  # 活状态断言不得与产物矛盾（只查 STATE.md）
-python3 .githooks/check-consistency.py            # 挂载点/启动清单/车道路径一致
-python3 .githooks/check-wants.py                  # 断言可证伪性（裸数字匹配/截断后匹配）
-python3 .githooks/check-whitelist.py              # 白名单覆盖
-python3 .githooks/check-readiness-pattern.py      # 就绪反模式（工单 40/42）
-python3 .githooks/witness-upstream-pin.py         # 上游 pin 见证（容器树 == submodule pin）
-python3 build/113/plugin-check.py                 # 部件插件登记闸门（工单 61）：登记表↔产物 declared 双向
-sh build/gates-selftest.sh                        # ★ 本仓专属闸门自证（40 个，含构建侧）
+sudo -E $(which python3) build/lib/doctor.py      # 预检，stdout 必须是 ok
+sh build/sweep.sh http://127.0.0.1:8768/           # 实验站先绿
+sh build/promote-pages.sh                          # 或 promote-webgl / promote-w64-lane
+sh build/check-boot.sh http://127.0.0.1:8761/      # 不过就别往下走
+sh build/check-deploy-sha.sh <站点> <sha> <URL>    # 磁盘/HTTP/页面自证三层
+sh build/sweep.sh http://127.0.0.1:8761/           # 与 PROBES=1 各一次
+sh build/check-site-parity.sh --strict             # 8761 / 8768 / 仓库 site/ 一致
 ```
-**★ 闸门自证（F1，2026-09-26）**：前几道查仓库，自证那道查**检查器本身**。
-本仓实测过：~20 个检查器里只有 1 个能证明自己会红，而"收集-断言"式闸门在输入消失时
-**静默变绿**（三处站点同时缺 `VERSION` ⇒ parity 报"完全一致"；`declared == {}` ⇒ `verdict:"ok"`；
-`glue-selftest` `0/0` 算全过）。⇒ 现在**每个闸门必须带 `--selftest`**，且三类用例齐备：
-**正常不报 / 该报的必须报 / 空输入必须报**。平台本体：`zreflect/gate.py`（rc 契约 +
-零值守卫 + 发现式名录）。新增平台闸门 = 落一个 `GATE = gate.meta(…)` 声明行，名录自动长出来；
-新增本仓专属闸门**必须**在 `build/gates-selftest.sh` 的名单里登记 —— 名单外的闸门就是没人盯着的闸门。
-⚠️ **闸门有盲区**：`check-whitelist.py` 只看**已暂存**的文件 ⇒ 被 `.gitignore` 忽略且从未
-`git add` 的文件它看不见（曾因此漏掉 4 个承重文件）。新增目录后主动看一眼
-`git status --short --ignored <目录>`。
 
-## 操作习惯与硬坑（踩过的，别再来一次）
-- ★ **禁止使用 `sleep`**（用户点名，2026-09-27）。**任何形式都不行** —— `sleep 3`、`sleep 3 && …`、
-  `until …; do sleep 1; done` 都算。
-  · 原因（实测）：ZCode 的 120 s 前台预算到点会把命令**转后台并救活**，
-    **唯独 `sleep` 开头的命令直接被杀**（`Command timed out after 10m`）⇒ 等待本身把工作弄丢；
-    而"轮询一次"只是把同一件事再看一遍，白花一个工具调用 + 它读回来的 token。
-  · 正确做法：**长任务用 `run_in_background: true` 起**（后台任务**没有超时**），
-    起完就返回、去干别的，**等完成通知**；需要盯着已有进程就用
-    `tail -f --pid=<pid> <日志>`（进程一死 `tail` 自己退出 ⇒ 通知即完成），
-    或直接读它写好的产物（`sweep-logs/<时间戳>/`、`FACTS.json`、`*.log`）。
-  · 已经后台化的任务**绝不重跑**：重跑 = 双倍工作 + 两份互相打架的日志。
-- **重活用 `setsid nohup … &` 起、输出只 `tail -n`/`grep`**（前台长命令会占住预算）。
-  **跑验收时别并行干重活**（并发 docker commit / 压缩曾让一个套件假崩）。
-- **测试用例从仓库原路径直跑**（`cd harness && node /mnt/hdd/.../test/browser/x.mjs`）——
-  别 `cp` 一份到 harness 再跑：改完仓库用旧副本跑，断言红绿全错位（实测两次，2026-09-25）。
-- ★ **跑测试前先验产物 SHA**：`check-deploy-sha.sh` + `probe-artifact-sha.mjs` 三层
-  （磁盘/HTTP/页面实例化字节）——"改完程序用老产物跑"本会话踩了三次（promote 覆盖、
-  harness 旧副本、清缓存后的站点），都是 SHA 一查就现形。
-- **测试用例从仓库原路径直跑**（`cd harness && node /mnt/hdd/.../test/browser/x.mjs`）——
-  别 `cp` 一份到 harness 再跑：改完仓库用旧副本跑，断言红绿全错位（实测两次）。
-- **容器里的构建脚本是另一份拷贝**：改完仓库的 `configure-113-full.sh` / `link-web.sh` /
-  `main.cc` 必须 `docker cp` 进容器（`main.cc` → `/src/websrc/main.cc`，构建脚本 → `/src/bin/`），
-  否则跑的是旧的。（`link-web.sh` 自己会编 `main.cc`，不用手动编。）
-- **别猜挂载点**：`assets.py bundle-m <名字> <目录> <挂载点> <输出>` 的挂载点**逐字读
-  `build/assets-meta.json`**（`pkgfix` = `/usr/src/octave/m/pkg`、`plotbridge` =
-  `/usr/src/octave/m/plotbridge`）。**少写一层**会把文件铺到 `m/` 根上，桥的"摘桥目录"路径手术
-  就会把整棵核心 m 树摘掉（真发生过：`clf` 报 `no core implementation cached`）。
-- ★ **测 dlopen 必须每次用全新页面**（2026-10-12 实测）：同一页连续两次
-  `loadDynamicLibrary` 会因加载器内部状态给出**不一致**的结果（我第一次就是这样把
-  一个真失败误判成 OK，差点把两条真缺口当成已经满足）。判据：一个模块 = 一次
-  `page.goto`；要测 N 个模块就开 N 个页面（或把它们编进一个模块里各调一次）。
-- **探测/自检不许放在开机路径上**：坏产物会让**整页卡死**（JSPI 那次），连带所有浏览器验收全挂。
-  探测器要**按需触发 + 带超时**，它的失败模式必须和被探测的东西解耦。
-- **JSPI × dlopen 三条机制**（实测，详见 `NOTES-jspi.md`）：① 链里有 dlopen ⇒ 它**上游整条入口**
-  都可能挂起、**不能被同步调用**（会抛 `SuspendError: trying to suspend without WebAssembly.promising`）；
-  ② **顺序即机制** —— 先走一次被 promising 包装的入口，之后同步 dlopen 就正常了；
-  ③ **启动路径上碰 dlopen 会直接让页面起不来**。
-- **两处旗标不对称**：`-sEXPORTED_RUNTIME_METHODS` 写不存在的名字是**编译期硬错**（并中止编译）；
-  `-sJSPI_EXPORTS` 写不存在的名字**无害**。`--preload-file` 按**第一个 `@`** 切 `src@dst`
-  （`m/@ftp` 源路径自带 `@` ⇒ 整棵 m 树曾被复制错位，见 HISTORY §5.13）。
-- ★ **"赋值了但没被引用"的旗标会静默失效**（2026-09-24 深夜，HISTORY §5.46）：
-  `link-web.sh` 里 `JSPI_FLAGS` 只在分支里赋值，而 `em++` **链接行从来没引用它**
-  ⇒ `WITH_JSPI=1` 的产物里**宏进了 C++、`-sJSPI` 没进链接**，构建/链接/五条自检**全绿**，
-  浏览器侧却把"绑定不异步"当成"JSPI 坏了"，白查一晚。
-  ⇒ **改旗标组之后，必须有一条"从产物里读出来"的自检**（这里就是
-  `grep -o 'WebAssembly\.promising' "$OUT/octave.js"`）；**只信命令行的旗标组不算验收**。
-- ★ **`Module.execute_interp()` 之前不许碰解释器**（同上，§5.46）：那之前的 `eval_string` /
-  `eval_async` / `feval` **一律抛 `RuntimeError: null function`**（同步异步一样）。
-  开机路径上的任何探测/预热**必须 try/catch**，否则异常会打断 `postRun` 剩下的步骤
-  ⇒ `__octaveReady` 永远 false ⇒ **页面看起来"卡死"**（G1 那次事故的真身）。
-- **shell 陷阱**（本会话反复咬人，各闸门注释里也有）：`pkill -f 'x'` **会匹配到自己这条命令行**
-  （用 `'x[y]'` 括号技巧）；`rc=$?` 接在管道后拿的是最后一个命令的状态；`&&` 放在 `&` 前会把整条链
-  后台化；`echo` 里的反引号会被当命令替换；`grep -c` 零命中**退出 1**；`grep -E` 里 `{` 是区间表达式；
-  正则字符类漏数字（`[A-Z_]+` 匹配不到 `P5_OBJS`）；`-sENV=…` 不是 emcc 5.0.7 的设置项。
-- 结论只认**产物**：`sha256sum`、`sweep-logs/<时间戳>/`、探针输出；不认印象。
+**8761 只由受管辖的 promote 脚本改**（`promote-webgl.sh` / `promote-w64-lane.sh` /
+`promote-pages.sh`，按批次类型选）。实验只写 `siteWebGL/`。
 
-## Agent skills
+## 六、mail 边界
 
-### Issue tracker
+跨 agent 通信是**收件箱制**：
 
-工单是本仓的 markdown 文件，在 `.scratch/open-questions/issues/NN-*.md` 下 —— **本地 tracker，
-不用 GitHub Issues**（本仓是私有仓且从未建过任何 issue；活状态由 `STATE.md` 承载，工单只装
-"未结案"）。见 `docs/agents/issue-tracker.md`。
+1. **投递落点 = 收信方的 `mail/`**（不留在发信方自己仓）。
+2. **只读自己仓的 `mail/`** —— 不读别仓的 `mail/`（那是别人的私人往来，哪怕对方仓是 public）。
+3. 本仓收件箱由 `.githooks/check-mail-boundary.py` 守：`**To:**` 必须指名本仓。
 
-### Triage labels
+**外部消费者也按同一套走**（2026-10-30 用户点令）：课程站已建 `mail/`，信直接投它仓
+`mail/`（`**To:**` 指名它）；它回信投我方 `mail/`。上面三条规则的**前提只是"对方有信箱"**，
+不是"对方在 coalition 内"。
 
-五个规范角色写成工单头部 `**Status:**` 行的字符串（`needs-triage` / `needs-info` /
-`ready-for-agent` / `ready-for-human` / `wontfix`）。`wontfix` **不是删除** —— "我们决定不查这个"
-本身是一条结论，删掉它下一个人会重问一遍。见 `docs/agents/triage-labels.md`。
+`/mnt/hdd/octave-wasm-build/outbox/` 是**备用**落点 —— 只在对方还没建信箱时用。
 
-### Domain docs
+## 七、提交前
 
-单上下文：根 `CONTEXT.md`（`docs/adr/` 尚未创建 ⇒ 静默跳过）。见 `docs/agents/domain.md`。
+**执行面只有一个产地**：`python3 zreflect/registry.py --run commit` 会跑所有
+`runs_at="commit"` 的闸门。**别 glob `check_*.py`，别手写清单**。
 
-### 悬案台账（本仓专属，2026-09-27 起）
+```bash
+. reflect-hooks/Einfacht.env                       # 旋钮（唯一可复现来源）
+python3 zreflect/registry.py --run commit          # ran / off / failed 三档
+sh gates-selftest.sh && sh build/gates-selftest.sh # 证明每个闸门能红
+```
 
-**未结案的问题不留在散文里**：一条悬案 = 一张工单，且**必须挂一个可跑的结算件**（头部
-`**Settling:**` 行）。写不出结算件的，只能降级成 `NOTES-*.md` 里的"猜想"，不许留在活状态。
-结算件尚不存在的悬案是**合法工单** —— 它的第一交付物就是造那个结算件（写
-`**Settling:** 不存在 —— 本工单的第一交付物`，别编假路径）。
-一句话理由：**没结案的问题等于没被问过**；`retractions.json` 管"被推翻的"，这里管"还没查清的"。
+**"全绿"不许把"没跑"算进去** —— `off` 是没查，不是通过。
+`check_facts.py` 会拦：文档里的裸数字、块与台账不一致、坏引用。
+
+## 八、会静默失败的坑
+
+这些动作**不报错**却结果错误。每条都踩过。
+
+- ★ **禁止使用 `sleep`**（任何形式）。ZCode 的前台预算到点会把命令转后台，
+  唯独 `sleep` 开头的直接被杀。长任务用 `run_in_background: true`；盯已有进程用
+  `tail -f --pid=<pid>`。**已后台化的任务绝不重跑。**
+- ★ **容器里的构建脚本是另一份拷贝**。改完仓库的脚本/`main.cc` 必须 `docker cp` 进容器，
+  否则跑的是旧的。
+- ★ **"赋值了但没被引用"的旗标会静默失效**。改旗标组之后必须有一条**从产物里读出来**的自检。
+- ★ **`Module.execute_interp()` 之前不许碰解释器**（`eval_string`/`feval` 全抛 `null function`）。
+  开机路径上的探测必须 `try/catch`，否则 `__octaveReady` 永远 false —— 页面看起来"卡死"。
+- ★ **`addpath` 读的是 MEMFS，不是站点 HTTP 目录**。要让 Octave 看见的文件必须先写进 MEMFS。
+- ★ **别猜挂载点**：`assets.py bundle-m` 的挂载点逐字读 `build/assets-meta.json`。
+  少写一层会把整棵核心 m 树摘掉。
+- ★ **测 dlopen 必须每次用全新页面**（同一页第二次调用结果不可信）。
+- **探测/自检不许放在开机路径上**：坏产物会让整页卡死，连带所有验收全挂。
+- **shell 陷阱**：`pkill -f 'x'` 会匹配到自己（用 `'x[y]'`）；`rc=$?` 接管道拿的是最后一个命令；
+  `&&` 放 `&` 前会把整条链后台化；`grep -c` 零命中退出 1。
+- **结论只认产物**：`sha256sum`、`sweep-logs/<时间戳>/`、探针输出。不认印象。
+
+## 九、Agent skills
+
+- **工单**：`.scratch/open-questions/issues/NN-*.md`（本地 tracker，不用 GitHub Issues）。
+  活状态在 `STATE.md`；工单只装"未结案"。
+- **Triage 标签**：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` /
+  `wontfix` / `resolved`，写在头部 `**Status:**` 行（只写角色词，解释写在下一行）。
+  见 `docs/agents/triage-labels.md`。
+- **悬案台账**：一条悬案 = 一张工单，且**必须挂一个可跑的结算件**（头部 `**Settling:**` 行）。
+  写不出结算件的，降级成 `NOTES-*.md` 里的猜想。见 `docs/agents/issue-tracker.md`。
+- **领域文档**：根 `CONTEXT.md`（术语表）。见 `docs/agents/domain.md`。
