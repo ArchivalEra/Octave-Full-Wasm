@@ -167,7 +167,7 @@ upstream-patches/                  20     435.1 KB
 zreflect/                          29     378.0 KB
 .scratch/                          79     343.5 KB
 bridge/                            20     303.2 KB
-mail/                              44     195.9 KB
+mail/                              45     200.0 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     102.4 KB
 docs/                              13      75.6 KB
@@ -176,7 +176,7 @@ reflect-hooks/                      6      19.3 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1124     340.5 MB
+(total)                          1125     340.5 MB
 ```
 
 Per-file listing: `git ls-files` — this block is a summary so the README stays readable.
