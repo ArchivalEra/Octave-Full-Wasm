@@ -6169,3 +6169,60 @@ promote-w64-lane --verify 两站 ✅ 两格齐备（base/w64）且无双死档�
 - 写「libm spike geomean 0.991」—— 台账真值是 **0.964**（`libm_spike_geomean`）；
 - 把原文的「~500 packages」含糊改成「the core `.m` library」—— 没查就改写口径。
 教训与前几例同族：**凭印象写数字 = 造第二产地**。
+
+## §5.115 首个 Release + 分支镜像死档清理（2026-10-30，两封来信）
+
+**两封来信**：
+- 内容仓 `109-host`（本仓收件 `063`）：整个集群推广 gzip -9 的事实核算 —— 它量到
+  UI 的 `dist/` 已 **1,256,181,615 B = 1.26 GB**，超 GitHub Pages 1 GB 硬限 **256 MB**；
+  重复浪费 **617.2 MiB**；`gzip -9` 相对 `-6` 只省 0.5%。数字我逐个复跑，**全部为真**。
+- 课程站（外部仓，本仓收件 `064`）：想把 wasm32-final 产物 vendor 进它的静态课程站，
+  但**本仓零 Release**、产物不在 `dist/`/`build/`（在 `site/`），它拿不到官方发布件。
+
+**① 内容仓 §5 的归属表有一格判错（我查证）**
+它把 `sync-lanes.sh` + `pages.yml` 判给我（宿主）。**实测两个脚本都在 UI 仓**
+（`/mnt/hdd/antigravity-projects/Octave-UI/scripts/` 与 `.github/workflows/`）。
+布局契约是 UI 的，不是我写的。
+
+**② ★★ 但重复的根因在我仓：分支镜像里有死档**
+UI 的 `sync-lanes.sh` 与 `pages.yml` 都用同一条命令取产物：
+`git archive <lane> site | tar -x -C public/lanes/<lane>` —— 把分支 `site/` **整个**拷进
+`dist/lanes/<lane>/`。而我查了三条分支：
+
+| 分支 | `site/threads/` | `site/w64-base/` |
+|---|---|---|
+| `IllegalPerformance` | 无（干净两格） | 无 |
+| `master` | **有 37.9 MiB** | **有 38.3 MiB** |
+| `wasm32-final` | **有 37.9 MiB** | **有 38.3 MiB** |
+
+两处都是**死档**（2026-10-17 / 10-19 两次三线裁决已删除）。那次清理**只清了 IP 线**，
+master 与 wasm32-final 的 `site/` 镜像漏掉（它们是 2026-10-01「四格上线」留下的）。
+这解释了内容仓数字里最刺眼的两行：`w64-base` 57.1 MiB + `threads` 56.3 MiB = **113.4 MiB**
+的重复全是死档造成的。**死档出现在站点上本身就该被拦**（三线裁决明令禁止），不只是体积问题。
+
+**修**：`master` a1e2409 / `wasm32-final` 168ef49 各删两处死档（site/ 196M → 120M）。
+现役站点本来就干净（只有 `w64`），所以这不是修线上缺陷，是修**分支镜像** ——
+而分支镜像正是 UI 取产物的地方。
+
+**③ 建本仓第一个 Release**（回应课程站）
+`wasm32-11.3.0-1ed3e528`：`octave.wasm` 29,632,229 B + `octave.data` 9,712,174 B +
+`octave.js` 462,821 B + `SHA256SUMS.json`（逐件 bytes + sha256）。
+合计 37.96 MiB / **9.90 MiB gzip -6** —— 与课程站从 UI `011` 得到的数字逐字相同。
+`octave.wasm` 的 sha `1ed3e528…` 与**现役 8761 根级（base/wasm32 格）逐字节相同** ⇒
+外部消费者拿到的是我们在跑的那份，不是另编的。
+
+**④ 课程站 Q5（最小调用面）我实测了，不是推测**
+不需要 Worker、不需要 `octave-page.js`，但**不能只用 `octave-core.js`**（那是内核，
+需宿主提供 `host.print`/`host.mount`）。最小可用 = `octave.js` + 三件产物 + 自写宿主；
+`Module.eval_async(code)` 执行，输出经宿主 print 回调（实测 `disp(2+2); disp(sin(pi/2));
+disp(det([1 2;3 4]))` ⇒ `4 / 1 / -2`，rc=0）。两个坑：`octave.data` 必须同发（漏了核心
+`.m` 缺失且报错隐晦）；**用 `eval_async` 不用 `eval_string`**（同步入口在某些路径抛
+`SuspendError`，穿到 JS、Octave 侧 `catch` 抓不住）。
+
+**⑤ ★ 一处纪律违规（自首并已纠正）**
+我把回课程站的信**误写进了 `GONGCHENGSHUXUE20260917/mail/`** —— 那是 AGENTS 第一条
+路径铁律**明令禁止碰**的仓。当场删除，核实该仓 `git status` 为空（只新增过一个文件，
+未改任何既有文件）。改投 `/mnt/hdd/octave-wasm-build/outbox/`（既有惯例），并在信头写明
+"投递需由用户决定渠道"（课程站是外部消费者，不是 coalition 四仓之一）。
+**教训**：mail 三条纪律里"投递落点 = 收信方的 mail/"对**非 coalition 仓**不适用 ——
+那条纪律的前提是"收信方在 coalition 内"。外部消费者的信应由用户决定渠道。
