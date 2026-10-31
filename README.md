@@ -233,6 +233,31 @@ whitelist has no entry for ports. The other 74 are genuine hand-copied measureme
 because it only checks whether ledger values were quoted, not whether a number was ever measured --
 which is exactly the hole upstream #24 closes, and this repo sits squarely inside it.
 
+Two things landed together on 2026-10-31. First, the Einfacht mechanism layer was upgraded
+from upstream pin `45ca586` to `6e4e6e8`, bringing three new disciplines that this repo had no
+equivalent for: a constant-truth assertion detector (#23), a reverse whitelist check that every
+number in prose must have a source (#24), and a rule that the word "history" is not itself a
+source (#25). Upgrading turned `check_facts` red with 121 findings -- 47 port numbers from the
+fixed deployment matrix (upstream has no port shape) and 74 genuinely hand-copied measurements
+that had never entered the ledger. All 121 are now resolved: eleven became ledger keys with real
+producer paths (including two cache sizes re-measured and logged this session), the rest are
+wrapped in inline code as one-off values. The gate went from red to green, and twenty of those
+findings turned out to be prose that disagreed with reality -- a header count, an `.oct` size,
+two SymPy call counts and an index size that no longer match anything measurable. Those are
+logged, not silently fixed.
+
+
+Second, the three-line model was checked against the possibility of collapsing into one line.
+The measurement is unambiguous: `build/113/relink.sh` already expresses three products as three
+parameter sets -- `MEMORY64`, `MALLOC`, `RUST_SORT`, `MAXIMUM_MEMORY` and six path prefixes all
+differ between the wasm32 and wasm64 modes, twelve differences in total. The non-free Rust kernel
+is an upstream submodule pin plus a build switch, so licence separation lives in the artifact
+rather than in a branch: a free product never links the Rust archive. Of the 47 commits that the
+other two branches carry alone, 46 turned out to be the same fix applied twice (the files are
+byte-identical here); exactly one was a real gap -- an OpenMP false-positive workaround that
+keeps `__glpk__.oct` from silently building as a 1,494-byte stub. That gap is now closed on this
+branch. A settlement script asserts all of this, mutation-tested so it can go red.
+
 ## Notes on gate design
 
 One correction from OpenModelica's latest letter, recorded because it changed how this repo writes gates: the product-state suite's readiness gate used to pass about 400 ms *before* the asset layer had written anything into MEMFS, which made three assertions fail against a working deployment. OpenModelica fixed it by gating on `/bridge` being non-empty in MEMFS rather than on any site's global ready flag — correctly refusing this repo's suggestion to bind to `__octaveReady`, because that is one site's implementation detail and would turn a delivery check into a self-check. The same experiment exposed two defects in this repo's own end-to-end suite (it crashed instead of reporting red when the manifest was absent, and threw when `/bridge` did not exist); both are fixed, and the suite now reports 6/0 on both sites and 3 pass / 3 fail on a deliberately bridge-less control site. Recorded here as the reusable rule: **gate on a contract, not on an implementation's global variable.**

@@ -217,6 +217,33 @@ Ledger kamen. Das alte Gate liess sie durch, weil es nur prueft, ob Ledger-Werte
 nicht ob eine Zahl je gemessen wurde -- genau das Loch, das Upstream #24 schliesst, und dieses Repo
 sitzt mittendrin.
 
+Am 2026-10-31 sind zwei Dinge zusammen gelandet. Erstens wurde die Einfacht-Mechanikschicht vom
+Upstream-Pin `45ca586` auf `6e4e6e8` gehoben, was drei neue Disziplinen mitbringt, fuer die es hier
+kein Gegenstueck gab: einen Detektor fuer immer-wahre Zusicherungen (#23), eine reverse Whitelist,
+nach der jede Zahl im Fliesstext eine Quelle braucht (#24), und die Regel, dass das Wort
+"Historie" selbst keine Quelle ist (#25). Nach dem Upgrade wurde `check_facts` rot mit 121
+Befunden -- 47 Portnummern aus der festen Deployment-Matrix (Upstream kennt keine Port-Form) und
+74 echt abgeschriebene Messwerte, die nie ins Ledger kamen. Alle 121 sind nun aufgeloest: elf
+wurden Ledger-Schluessel mit echten Produzentenpfaden (darunter zwei Cache-Groessen, die in dieser
+Sitzung neu gemessen und protokolliert wurden), der Rest ist als Einmalwert in Inline-Code
+gewickelt. Das Gate ging von rot auf gruen, und zwanzig dieser Befunde entpuppten sich als
+Fliesstext, der der Wirklichkeit widerspricht -- eine Header-Zahl, eine `.oct`-Groesse, zwei
+SymPy-Aufrufzaehlungen und eine Indexgroesse, die zu nichts Messbarem mehr passen. Diese sind
+festgehalten, nicht stillschweigend korrigiert.
+
+
+Zweitens wurde das Drei-Linien-Modell gegen die Moeglichkeit geprueft, auf eine Linie
+zusammenzufallen. Die Messung ist eindeutig: `build/113/relink.sh` druesckt drei Produkte bereits
+als drei Parametersaetze aus -- `MEMORY64`, `MALLOC`, `RUST_SORT`, `MAXIMUM_MEMORY` und sechs
+Pfadpraefixe unterscheiden sich zwischen den wasm32- und wasm64-Modi, zwoelf Unterschiede
+insgesamt. Der non-free Rust-Kernel ist ein Upstream-Submodule-Pin plus ein Build-Schalter, also
+lebt die Lizenz-Trennung im Artefakt statt in einem Branch: ein freies Produkt linkt das
+Rust-Archiv nie. Von den 47 Commits, die die beiden anderen Branches allein tragen, waren 46
+derselbe Fix zweimal angewandt (die Dateien sind hier byte-identisch); genau einer war eine echte
+Luecke -- eine OpenMP-Falschpositiv-Behandlung, die verhindert, dass `__glpk__.oct` still als
+1.494-Byte-Stub gebaut wird. Diese Luecke ist hier geschlossen. Ein Abrechnungsskript sichert all
+das zu und wurde per Mutation geprueft, damit es rot werden kann.
+
 ## Notiz zum Gate-Design
 
 Eine Korrektur aus dem neuesten Schreiben von OpenModelica, festgehalten, weil sie aendert, wie dieses Repo Gates schreibt: das Bereitschaftsgatter der Produkt-Suite griff rund 400 ms *bevor* die Asset-Schicht etwas in MEMFS geschrieben hatte, wodurch drei Zusicherungen gegen ein funktionierendes Deployment fehlschlugen. OpenModelica loeste das, indem es darauf gatet, dass `/bridge` in MEMFS nicht leer ist, statt auf das globale Ready-Flag irgendeiner Site — und lehnte die Anregung dieses Repos, an `__octaveReady` zu binden, zu Recht ab: das ist das Implementierungsdetail einer Site und wuerde aus einer Lieferpruefung eine Selbstpruefung machen. Dasselbe Experiment legte zwei Defekte in der Ende-zu-Ende-Suite dieses Repos offen (sie stuerzte ab statt rot zu melden, wenn das Manifest fehlte, und warf einen Fehler, wenn `/bridge` nicht existierte); beide sind behoben, die Suite meldet nun 6/0 auf beiden Sites und 3 bestanden / 3 fehlgeschlagen auf einer absichtlich brueckenlosen Kontrollsite. Als wiederverwendbare Regel festgehalten: **auf einen Vertrag gaten, nicht auf die globale Variable einer Implementierung.**
