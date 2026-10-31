@@ -207,6 +207,16 @@ Drei Korrekturen aus Nutzeranweisungen haben die GitRoll-Arbeit umgelenkt. **Die
 
 Die Bereinigung der von GitRoll gemeldeten Schuld ging weiter: ein konservativer `var`→`let`-Konverter senkte die 363 Befunde auf 20 und verweigert Formen, bei denen Block-Scoping das Verhalten aendern wuerde (`for (var …)`-Schleifen mit Closure-Erfassung, oberste `var`, die auf `window`/`self` leaken); der Fork dieses Repos eines Drittanbieter-Service-Workers lehnt nun Nachrichten fremder Herkunft ab. Die verbleibende Arbeit ist in Ticket 72 katalogisiert: 16 `for (var …)`-Stellen mit Einzelfallpruefung, 57 Komplexitaetsbefunde mit eigenem Refactoring-Plan und rund 447 Stilhinweise.
 
+Die Pruefung des Einfacht-Upgrades (Upstream-Pin `45ca586` nach `6e4e6e8`) steht als Ticket 73.
+Der Probeaustausch wurde vollstaendig gefahren und zurueckgerollt: zwoelf von dreizehn Gates bleiben
+gruen, das einzige rote ist `check_facts`, das nun 121 nicht belegte Zahlen im Fliesstext meldet.
+Siebenundvierzig davon sind Portnummern aus der festen Deployment-Matrix dieses Repos (`8761`,
+`8768`, ...) -- die Shape-Whitelist von Upstream kennt keinen Eintrag fuer Ports. Die anderen 74 sind
+echte abgeschriebene Messwerte in `STATE.md` (`119,878,350`, `29,632,229`, `12,790`), die nie ins
+Ledger kamen. Das alte Gate liess sie durch, weil es nur prueft, ob Ledger-Werte zitiert wurden,
+nicht ob eine Zahl je gemessen wurde -- genau das Loch, das Upstream #24 schliesst, und dieses Repo
+sitzt mittendrin.
+
 ## Notiz zum Gate-Design
 
 Eine Korrektur aus dem neuesten Schreiben von OpenModelica, festgehalten, weil sie aendert, wie dieses Repo Gates schreibt: das Bereitschaftsgatter der Produkt-Suite griff rund 400 ms *bevor* die Asset-Schicht etwas in MEMFS geschrieben hatte, wodurch drei Zusicherungen gegen ein funktionierendes Deployment fehlschlugen. OpenModelica loeste das, indem es darauf gatet, dass `/bridge` in MEMFS nicht leer ist, statt auf das globale Ready-Flag irgendeiner Site — und lehnte die Anregung dieses Repos, an `__octaveReady` zu binden, zu Recht ab: das ist das Implementierungsdetail einer Site und wuerde aus einer Lieferpruefung eine Selbstpruefung machen. Dasselbe Experiment legte zwei Defekte in der Ende-zu-Ende-Suite dieses Repos offen (sie stuerzte ab statt rot zu melden, wenn das Manifest fehlte, und warf einen Fehler, wenn `/bridge` nicht existierte); beide sind behoben, die Suite meldet nun 6/0 auf beiden Sites und 3 bestanden / 3 fehlgeschlagen auf einer absichtlich brueckenlosen Kontrollsite. Als wiederverwendbare Regel festgehalten: **auf einen Vertrag gaten, nicht auf die globale Variable einer Implementierung.**

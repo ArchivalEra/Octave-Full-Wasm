@@ -224,6 +224,15 @@ Three corrections from user direction reshaped the GitRoll work. **Browser floor
 
 PythonGraph/ES5 debt cleanup continued: a conservative `var`→`let` converter took the 363 findings down to 20, refusing shapes where block scoping would change behaviour (`for (var …)` loops with closure capture, top-level `var` that leaks onto `window`/`self`), and the repo's own fork of a third-party service worker now rejects messages from other origins. Remaining work is catalogued in ticket 72: 16 `for (var …)` sites needing per-site judgement, 57 cognitive-complexity findings needing their own refactor plan, and ~447 style suggestions.
 
+Audit of the Einfacht upgrade (upstream pin `45ca586` to `6e4e6e8`) is written up as ticket 73.
+The trial swap was run in full and then rolled back: twelve of thirteen gates stay green, and the
+only red is `check_facts`, which now reports 121 unaccounted numbers in prose. Forty-seven of those
+are port numbers from this repo's fixed deployment matrix (`8761`, `8768`, ...) -- upstream's shape
+whitelist has no entry for ports. The other 74 are genuine hand-copied measurements in `STATE.md`
+(`119,878,350`, `29,632,229`, `12,790`) that never entered the ledger. The old gate let them through
+because it only checks whether ledger values were quoted, not whether a number was ever measured --
+which is exactly the hole upstream #24 closes, and this repo sits squarely inside it.
+
 ## Notes on gate design
 
 One correction from OpenModelica's latest letter, recorded because it changed how this repo writes gates: the product-state suite's readiness gate used to pass about 400 ms *before* the asset layer had written anything into MEMFS, which made three assertions fail against a working deployment. OpenModelica fixed it by gating on `/bridge` being non-empty in MEMFS rather than on any site's global ready flag — correctly refusing this repo's suggestion to bind to `__octaveReady`, because that is one site's implementation detail and would turn a delivery check into a self-check. The same experiment exposed two defects in this repo's own end-to-end suite (it crashed instead of reporting red when the manifest was absent, and threw when `/bridge` did not exist); both are fixed, and the suite now reports 6/0 on both sites and 3 pass / 3 fail on a deliberately bridge-less control site. Recorded here as the reusable rule: **gate on a contract, not on an implementation's global variable.**

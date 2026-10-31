@@ -81,6 +81,7 @@
 !build/113/*
 !build/113/check-ci-bootstrap.sh
 !build/113/check-rust-toolchain.py
+!build/113/check-einfacht-upgrade.sh
 !build/113/coi-sw-origin-selftest.mjs
 !build/113/var-to-let.mjs
 !build/113/provision-omc-bridge.sh
