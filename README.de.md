@@ -244,6 +244,20 @@ Luecke -- eine OpenMP-Falschpositiv-Behandlung, die verhindert, dass `__glpk__.o
 1.494-Byte-Stub gebaut wird. Diese Luecke ist hier geschlossen. Ein Abrechnungsskript sichert all
 das zu und wurde per Mutation geprueft, damit es rot werden kann.
 
+Die drei Branches wurden am 2026-10-31 zu einer. Bevor irgendetwas geloescht wurde, bekamen
+beide auslaufenden Branch-Heads annotierte Archiv-Tags (`archive/master-a1e2409`,
+`archive/wasm32-final-168ef49`), gepusht zu beiden Remotes -- die beiden Branches tragen 47 Commits,
+die keine Vorfahren der ueberlebenden Linie sind, und ohne Referenz wuerden diese Objekte
+unerreichbar und spaeter eingesammelt. Ein Tag haelt sie ueber `git log <tag>` auffindbar, ohne sie
+zu Wartungszielen zu machen. Die Durchsicht ergab, dass nichts zu retten war: 46 der 47 waren
+derselbe Fix zweimal angewandt (byte-identische Dateien hier), und die einzige echte Luecke -- eine
+OpenMP-Falschpositiv-Behandlung, die verhindert, dass `__glpk__.oct` als 1.494-Byte-Stub gebaut
+wird -- wurde vor dem Loeschen heruebergeholt. Die ueberlebende Linie erzeugt alle drei Produkte
+aus drei Parametersaetzen, was das Abrechnungsskript nun zusichert. Loeschstand: `wasm32-final` ist
+lokal und auf beiden Remotes weg; `master` ist auf dem Mirror weg, existiert aber auf origin
+weiter, weil GitHub das Loeschen des Standardbranches eines Repositories verweigert -- das ist der
+Umbenennungsschritt, kein Fehlschlag.
+
 ## Notiz zum Gate-Design
 
 Eine Korrektur aus dem neuesten Schreiben von OpenModelica, festgehalten, weil sie aendert, wie dieses Repo Gates schreibt: das Bereitschaftsgatter der Produkt-Suite griff rund 400 ms *bevor* die Asset-Schicht etwas in MEMFS geschrieben hatte, wodurch drei Zusicherungen gegen ein funktionierendes Deployment fehlschlugen. OpenModelica loeste das, indem es darauf gatet, dass `/bridge` in MEMFS nicht leer ist, statt auf das globale Ready-Flag irgendeiner Site — und lehnte die Anregung dieses Repos, an `__octaveReady` zu binden, zu Recht ab: das ist das Implementierungsdetail einer Site und wuerde aus einer Lieferpruefung eine Selbstpruefung machen. Dasselbe Experiment legte zwei Defekte in der Ende-zu-Ende-Suite dieses Repos offen (sie stuerzte ab statt rot zu melden, wenn das Manifest fehlte, und warf einen Fehler, wenn `/bridge` nicht existierte); beide sind behoben, die Suite meldet nun 6/0 auf beiden Sites und 3 bestanden / 3 fehlgeschlagen auf einer absichtlich brueckenlosen Kontrollsite. Als wiederverwendbare Regel festgehalten: **auf einen Vertrag gaten, nicht auf die globale Variable einer Implementierung.**

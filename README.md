@@ -258,6 +258,19 @@ byte-identical here); exactly one was a real gap -- an OpenMP false-positive wor
 keeps `__glpk__.oct` from silently building as a 1,494-byte stub. That gap is now closed on this
 branch. A settlement script asserts all of this, mutation-tested so it can go red.
 
+The three branches became one on 2026-10-31. Before deleting anything, both retiring branch
+heads were given annotated archive tags (`archive/master-a1e2409`, `archive/wasm32-final-168ef49`)
+pushed to both remotes -- the two branches carry 47 commits that are not ancestors of the surviving
+line, and without a reference those objects would become unreachable and be collected. A tag keeps
+them查able via `git log <tag>` without making them maintenance targets. The row of commits turned
+out to need nothing salvaged: 46 of the 47 were the same fix applied twice (byte-identical files
+here), and the single real gap -- an OpenMP false-positive workaround that stops `__glpk__.oct`
+from building as a 1,494-byte stub -- was brought over before deletion. The surviving line
+produces all three products from three parameter sets, which the settlement script now asserts.
+Deletion status: `wasm32-final` is gone locally and on both remotes; `master` is gone on the
+mirror but still exists on origin because GitHub refuses to delete a repository's default branch
+-- that is the rename step, not a failure.
+
 ## Notes on gate design
 
 One correction from OpenModelica's latest letter, recorded because it changed how this repo writes gates: the product-state suite's readiness gate used to pass about 400 ms *before* the asset layer had written anything into MEMFS, which made three assertions fail against a working deployment. OpenModelica fixed it by gating on `/bridge` being non-empty in MEMFS rather than on any site's global ready flag — correctly refusing this repo's suggestion to bind to `__octaveReady`, because that is one site's implementation detail and would turn a delivery check into a self-check. The same experiment exposed two defects in this repo's own end-to-end suite (it crashed instead of reporting red when the manifest was absent, and threw when `/bridge` did not exist); both are fixed, and the suite now reports 6/0 on both sites and 3 pass / 3 fail on a deliberately bridge-less control site. Recorded here as the reusable rule: **gate on a contract, not on an implementation's global variable.**
