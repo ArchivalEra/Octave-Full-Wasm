@@ -171,6 +171,88 @@ class _Stat:
         self.st_mtime_ns = mtime_ns
 
 
+def _e2e_cases():
+    """★ **端到端**自证：真起一个临时服务、真发 HTTP 请求、真看状态码与体长。
+
+    为什么必须有这一段（2026-10-30，OM `mail/032` 的自查点醒）：上面那批全是**纯字符串
+    断言**（`headers_for` 里有没有那个键），它们只证明"头拼对了"，证明不了
+    "带 `If-None-Match` 时服务**真的**回 304、**真的**不传文件体"。
+    **测了头 ≠ 测了行为** —— 闸门可以是绿的，而绿的语义是假的。
+    同族前例：`bad.join` 那条崩溃（套件崩了不出汇总行，看起来像挂死）。
+    """
+    import http.client
+    import tempfile
+    import threading
+
+    cases = []
+
+    def _serve_once(tmpdir):
+        """起一个临时服务（端口 0 = 内核分配），返回 (port, shutdown_fn)。"""
+        socketserver.TCPServer.allow_reuse_address = True
+        handler = functools.partial(lambda *a, **kw: Handler(*a, directory=tmpdir, **kw))
+        srv = socketserver.TCPServer(("127.0.0.1", 0), handler)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        return srv.server_address[1], lambda: (srv.shutdown(), srv.server_close())
+
+    def _req(port, path, hdrs):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.request("GET", path, headers=hdrs)
+        r = c.getresponse()
+        body = r.read()
+        h = dict(r.getheaders())
+        c.close()
+        return r.status, body, h
+
+    def _with_tmp(fn):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "a.bin"), "wb") as fh:
+                fh.write(b"x" * 4096)
+            port, stop = _serve_once(d)
+            try:
+                return fn(port)
+            finally:
+                stop()
+
+    def _same_etag_304(port):
+        st, _b, h = _req(port, "/a.bin", {})
+        et = h.get("ETag")
+        if not et:
+            return False
+        st2, body2, h2 = _req(port, "/a.bin", {"If-None-Match": et})
+        return st2 == 304 and len(body2) == 0
+
+    def _mismatch_200(port):
+        st, body, _h = _req(port, "/a.bin", {"If-None-Match": 'W/"deadbeef-0"'})
+        return st == 200 and len(body) == 4096
+
+    def _no_conditional_200(port):
+        st, body, h = _req(port, "/a.bin", {})
+        return st == 200 and len(body) == 4096 and h.get("Cache-Control") == "no-cache"
+
+    def _304_headers_not_duplicated(port):
+        """★ 反向：304 响应里 ETag/Cache-Control 各只许一份（实测踩过重复发的坑）。"""
+        st, _b, h = _req(port, "/a.bin", {})
+        et = h.get("ETag")
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.request("GET", "/a.bin", headers={"If-None-Match": et})
+        r = c.getresponse()
+        r.read()
+        names = [k.lower() for k, _v in r.getheaders()]
+        c.close()
+        return names.count("etag") <= 1 and names.count("cache-control") <= 1
+
+    cases.append(("★ 端到端：同 ETag ⇒ 真回 304 且体长 0",
+                  lambda: _with_tmp(_same_etag_304)))
+    cases.append(("★ 端到端：ETag 不匹配 ⇒ 200 且真传 4096 B（不许恒 304）",
+                  lambda: _with_tmp(_mismatch_200)))
+    cases.append(("★ 端到端：不带条件 ⇒ 200 全量 + Cache-Control: no-cache",
+                  lambda: _with_tmp(_no_conditional_200)))
+    cases.append(("★ 端到端反向：304 响应里 ETag/Cache-Control 各只一份（防重复发）",
+                  lambda: _with_tmp(_304_headers_not_duplicated)))
+    return cases
+
+
 CASES = [
     ("带头 ⇒ 两个头都在", lambda: dict(headers_for("/x", True)) ==
      {"Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp"}),
@@ -191,7 +273,7 @@ CASES = [
      lambda: [k for k, _ in headers_for("/x", True, None) if k in ("ETag", "Cache-Control")] == []),
     ("etag_for 由 size+mtime 派生且稳定（同一 stat 两次同值）",
      lambda: (lambda st: etag_for(st) == etag_for(st))(_Stat(1234, 5678))),
-]
+] + _e2e_cases()
 
 
 def selftest():

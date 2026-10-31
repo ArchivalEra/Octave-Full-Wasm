@@ -26,7 +26,14 @@ PREFIX=/usr/src/octave/m/forge
 mkdir -p "$SITE/assets/pkg" "$FORGE/src"
 
 echo "== 1) 取包（Octave $OCTAVE_VER 兼容版 + 依赖闭包）=="
-python3 "$REPO/build/forge-fetch.py" --octave "$OCTAVE_VER" --dest "$FORGE" $PKGS
+# ★ 工单 71（2026-10-31）：本文件第 17 行本来就有 `set -e` ⇒ 非零退出**会自动中止**，
+#   所以这里的 bug 一直是"forge-fetch 恒返回 0"（见它的 resolve/main），不是"调用方不看"。
+#   修在 forge-fetch 侧；这里显式 `|| { …; exit 1; }` 只是把意图写清（并给一条自己的
+#   报错行），与 set -e 冗余 —— 保留是为了让"这一步失败 ⇒ 立刻停"在读代码时可见。
+python3 "$REPO/build/forge-fetch.py" --octave "$OCTAVE_VER" --dest "$FORGE" $PKGS || {
+  echo "FATAL: forge-fetch 失败（见上）—— 拒绝用不完整的包集继续构建" >&2
+  exit 1
+}
 
 echo "== 2) 解包 =="
 for t in "$FORGE"/*.tar.gz; do
