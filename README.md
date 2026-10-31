@@ -160,9 +160,9 @@ the interpreter in your own page: [`docs/embed-api.md`](docs/embed-api.md).
 ```
 group                           files        bytes
 site/                             228     333.5 MB
-build/                            457       3.3 MB
+build/                            459       3.3 MB
 test/                             156       1.0 MB
-(root)                             13     758.8 KB
+(root)                             13     758.9 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     378.0 KB
 .scratch/                          80     352.2 KB
@@ -176,7 +176,7 @@ reflect-hooks/                      6      19.3 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1131     340.6 MB
+(total)                          1133     340.6 MB
 ```
 
 Per-file listing: `git ls-files` — this block is a summary so the README stays readable.
@@ -219,6 +219,8 @@ Serving a site over HTTP had a defect worth recording: `build/serve-coi.py` sent
 One lesson from that fix: the first 304 branch re-sent `ETag`/`Cache-Control`, and `end_headers()` sent them again, producing two headers with the same name. Duplicate headers raise no error but a downstream client may read the wrong one.
 
 GitRoll scanning reported 931 findings against this repo (issue #7, one BLOCKER). Auditing them turned up exactly one real defect: the Forge fetcher resolved packages by recording failures only on stderr, while its caller never inspected a return value, so a missing or version-incompatible package produced exit code 0 — the build then packaged an incomplete shelf with every gate green. The fix makes unresolved packages and checksum-mismatched downloads equally fatal, separates environment failures (exit 2) from resolution failures (exit 1), and adds an eight-case self-test; mutating either guard back to its old behaviour turns the self-test red. The remaining 930 findings are split by ownership and documented on the issue: 363 `var` usages are a deliberate ES5 compatibility choice rather than debt, the single reported vulnerability sits in a third-party service-worker library, and the complexity findings are readability work that needs its own ticket.
+
+Three corrections from user direction reshaped the GitRoll work. **Browser floor is Chrome 123**, so the 363 `var` findings are real debt rather than a compatibility requirement — my earlier classification was wrong. A conservative converter now rewrites them (363 → 20 remaining), refusing four shapes: `for (var …)` loops (block scoping changes closure capture), top-level `var` that deliberately leaks onto `window`/`self` (measured: converting `var Module = core.module` broke the worker's plot path), `var` inside comments, and multi-declaration lines. Each file is V8-compiled before it is written. The single reported vulnerability also got fixed in this repo's fork of the third-party service worker: messages are now rejected unless their origin matches, because upstream accepted anything — letting any page deregister the worker or weaken COEP from `require-corp` to `credentialless`. Both carry self-tests, both were mutation-tested to prove they go red, and the gate bench grew from 51 to 53.
 
 ## Notes on gate design
 

@@ -28,14 +28,14 @@
 
   function OctaveEmbed(modRef, opts) {
     opts = opts || {};
-    var seq = 0;
-    var subs = { output: [], error: [], state: [], figure: [] };
-    var state = 'booting';
-    var geometrySeq = 0;
+    let seq = 0;
+    let subs = { output: [], error: [], state: [], figure: [] };
+    let state = 'booting';
+    let geometrySeq = 0;
 
     // ★ 几何导出器（m 源，工单 50）：走图形对象树（**不过 drawnow/GL**），v1 覆盖
     //   line/text/坐标区语义；输出结构 = {xlim,ylim,xscale,yscale,title,xlabel,ylabel,objects[]}
-    var GEOM_EXPORT_M = [
+    let GEOM_EXPORT_M = [
     'function s = __oct_geometry_export__(gh)',
     '  s = struct();',
     '  ax = get(gh, "currentaxes");',
@@ -85,13 +85,13 @@
     }
 
     // ── 输出订阅：挂在实例输出区的 DOM 变更上（core 的 print 汇会写进 mount 的 pre）──
-    var outEl = (opts.mount && document.querySelector(opts.mount)) || document.getElementById('output');
+    let outEl = (opts.mount && document.querySelector(opts.mount)) || document.getElementById('output');
     if (outEl && typeof MutationObserver === 'function') {
       new MutationObserver(function (muts) {
         for (var i = 0; i < muts.length; i++) {
-          var add = muts[i].addedNodes;
+          let add = muts[i].addedNodes;
           for (var j = 0; j < add.length; j++) {
-            var t = add[j].textContent || '';
+            let t = add[j].textContent || '';
             if (!t) continue;
             for (var s = 0; s < subs.output.length; s++) {
               try { subs.output[s](t); } catch (e) {}
@@ -103,22 +103,22 @@
 
     // ── 图形订阅：#p5figure 容器出 <canvas>/<img> 即回调（默认实例边界，见文件头）──
     function watchFigures() {
-      var box = document.getElementById('p5figure');
+      let box = document.getElementById('p5figure');
       if (!box || typeof MutationObserver !== 'function') return;
       new MutationObserver(function () {
-        var els = box.querySelectorAll('canvas,img');
+        let els = box.querySelectorAll('canvas,img');
         for (var i = 0; i < subs.figure.length; i++) {
           try { subs.figure[i](els.length ? els[els.length - 1] : null); } catch (e) {}
         }
       }).observe(box, { childList: true, subtree: true });
     }
-    var hosts = global.__octaveHosts || [];
-    var isDefault = hosts.length > 0 && hosts[0].mod === modRef;
+    let hosts = global.__octaveHosts || [];
+    let isDefault = hosts.length > 0 && hosts[0].mod === modRef;
     if (isDefault) { watchFigures(); }
     else { opts.quiet || (typeof console !== 'undefined' && console.warn &&
       console.warn('[octave-embed] 非默认实例：onFigure 不可用（图形上屏是默认实例单例，E6 边界）')); }
 
-    var mod = modRef;
+    let mod = modRef;
 
     function q(s) { return String(s).replace(/'/g, "''"); }   // Octave 单引号转义
 
@@ -126,16 +126,16 @@
     function evalJSON(expr) {
       return new Promise(function (resolve) {
         seq += 1;
-        var p = '/tmp/.octave_embed_' + seq + '.json';
-        var code = "fid=fopen('" + p + "','w'); try, T__=(" + expr +
+        let p = '/tmp/.octave_embed_' + seq + '.json';
+        let code = "fid=fopen('" + p + "','w'); try, T__=(" + expr +
           "); fprintf(fid,'%s',jsonencode(T__)); catch e; fprintf(fid,'%s',jsonencode(struct('err',e.message))); end; fclose(fid);";
         setState('busy');
-        var rc;
+        let rc;
         try { rc = mod.eval_string(code); } catch (e) { rc = -1; }
         setState('idle');
-        var val = null, err = null;
+        let val = null, err = null;
         try {
-          var txt = new TextDecoder().decode(mod.FS.readFile(p));
+          let txt = new TextDecoder().decode(mod.FS.readFile(p));
           val = JSON.parse(txt);
           if (val && typeof val === 'object' && val.err !== undefined) err = val.err;
         } catch (e) { err = 'embed 值通道失败：' + String(e).slice(0, 120); }
@@ -151,7 +151,7 @@
       get state() { return state; },
       eval: function (code) {
         setState('busy');
-        var rc;
+        let rc;
         try { rc = mod.eval_string(code); } catch (e) { rc = -1; }
         setState('idle');
         if (rc !== 0) fireError('eval 失败 rc=' + rc + '（Octave 错误文本走 on.output 通道）');
@@ -170,7 +170,7 @@
       },
       input: function (text) {
         // 预填 stdin 队列（默认实例的 stdinLine 先读队列再 prompt —— index.html 的契约）
-        var w = global;
+        let w = global;
         if (!w.__octaveStdin) w.__octaveStdin = [];
         w.__octaveStdin.push(String(text));
         return w.__octaveStdin.length;
@@ -186,11 +186,11 @@
         read: function (p) { return new TextDecoder().decode(mod.FS.readFile(p)); },
         write: function (p, text) { mod.FS.writeFile(p, String(text)); return true; },
         ls: function (d) {
-          var out = [];
-          var names = mod.FS.readdir(d);
+          let out = [];
+          let names = mod.FS.readdir(d);
           for (var i = 0; i < names.length; i++) {
             if (names[i] === '.' || names[i] === '..') continue;
-            var st = null;
+            let st = null;
             try { st = mod.FS.stat(d + '/' + names[i]); } catch (e) {}
             out.push({ name: names[i], dir: !!(st && (st.mode & 0x4000)), size: st ? st.size : null });
           }
@@ -199,9 +199,9 @@
         rm: function (p) { mod.FS.unlink(p); return true; },
         // 下载到真文件（浏览器侧 Blob）；上传走 input[type=file] → write()
         download: function (p) {
-          var data = mod.FS.readFile(p);
-          var blob = new Blob([data]);
-          var a = document.createElement('a');
+          let data = mod.FS.readFile(p);
+          let blob = new Blob([data]);
+          let a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           a.download = p.split('/').pop();
           document.body.appendChild(a); a.click();
@@ -212,11 +212,11 @@
       figures: {
         // 导出最后一张图：canvas 直接 toDataURL；img 用 src（publish 通道已给 dataURL）
         export: function () {
-          var box = document.getElementById('p5figure');
+          let box = document.getElementById('p5figure');
           if (!box) return null;
-          var c = box.querySelector('canvas:last-of-type');
+          let c = box.querySelector('canvas:last-of-type');
           if (c && c.toDataURL) return c.toDataURL('image/png');
-          var img = box.querySelector('img:last-of-type');
+          let img = box.querySelector('img:last-of-type');
           return img ? img.src : null;
         },
         // ★ 几何数据通道（工单 50，UI RFC #1 采纳项）：**数据驱动、不过 drawnow/GL**——
@@ -224,23 +224,23 @@
         //   WebGPU/任何渲染器自己画。写导出函数到 /tmp → addpath → 调用 → JSON 回读
         //   （evalJSON 值通道同款管道）。
         geometry: function (figH) {
-          var seqg = ++geometrySeq;
-          var jp = '/tmp/.octave_geom_' + seqg + '.json';
-          var mp = '/tmp/__oct_geometry_export.m';
+          let seqg = ++geometrySeq;
+          let jp = '/tmp/.octave_geom_' + seqg + '.json';
+          let mp = '/tmp/__oct_geometry_export.m';
           mod.FS.writeFile(mp, GEOM_EXPORT_M);
-          var code =
+          let code =
             "try, addpath('/tmp'); " +
             (figH ? ("__gh__=" + figH + "; ") : "__gh__=gcf; ") +
             "T__=__oct_geometry_export(__gh__); " +
             "fid=fopen('" + jp + "','w'); fprintf(fid,'%s',jsonencode(T__)); fclose(fid); " +
             "catch e; fid=fopen('" + jp + "','w'); fprintf(fid,'%s',jsonencode(struct('err',e.message))); fclose(fid); end";
           setState('busy');
-          var rc;
+          let rc;
           try { rc = mod.eval_string(code); } catch (e) { rc = -1; }
           setState('idle');
-          var val = null, err = null;
+          let val = null, err = null;
           try {
-            var txt = new TextDecoder().decode(mod.FS.readFile(jp));
+            let txt = new TextDecoder().decode(mod.FS.readFile(jp));
             val = JSON.parse(txt);
             if (val && typeof val === 'object' && val.err !== undefined) err = val.err;
           } catch (e) { err = 'geometry 通道失败：' + String(e).slice(0, 120); }
@@ -266,18 +266,18 @@
           return;
         }
         if (!opts.mount) {
-          var d = document.createElement('div');
+          let d = document.createElement('div');
           d.id = 'octave-embed';
           document.body.appendChild(d);
           opts.mount = '#octave-embed';   // ★ 回填：facade 的输出观察器要用它
         }
-        var mount = opts.mount;
+        let mount = opts.mount;
         // ★ createOctaveHost 返回的是 **Module 形态对象**（直接喂 OCTAVE）；就绪信号在
         //   注册表 `window.__octaveHosts`（{id,ready,mod,…}）里，不在返回值上 ——
         //   实测教训：把返回值当 inst 读 .ready ⇒ 永远 undefined ⇒ create 永远 pending。
         // ★ lane 计划必须透传（与 index.html 的 dispatch 同款）：页面已按档 document.write
         //   了胶水，内核的 lane 计划若缺省 = base ⇒ 资产清单错配（实测：demo 页纹理创建失败）。
-        var mod;
+        let mod;
         try {
           mod = global.createOctaveHost({
             base: opts.base || '', mount: mount,
@@ -290,11 +290,11 @@
           return;
         }
         global.OCTAVE(mod);
-        var t = 0;
+        let t = 0;
         (function wait() {
-          var ent = (global.__octaveHosts || []).find(function (h) { return h.mod === mod; });
+          let ent = (global.__octaveHosts || []).find(function (h) { return h.mod === mod; });
           if (ent && ent.ready === true) {
-            var h = OctaveEmbed(mod, opts);
+            let h = OctaveEmbed(mod, opts);
             h._setIdle();
             resolve(h);
             return;

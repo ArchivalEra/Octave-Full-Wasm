@@ -32,7 +32,7 @@
   // 站点清单：装配期生成的 lanes.js 会设 global.__octaveLanes
   function declaredLanes(env) {
     try {
-      var inv = env && env.__octaveLanes;
+      let inv = env && env.__octaveLanes;
       if (Object.prototype.toString.call(inv) === '[object Array]' && inv.length) return inv;
     } catch (e) { /* 下面退回历史形态 */ }
     return null;   // 未声明
@@ -41,9 +41,9 @@
   function hasMemory64(env) {
     if (env && typeof env.memory64 === 'boolean') return env.memory64;
     try {
-      var WA = (env && env.WebAssembly) || (typeof WebAssembly !== 'undefined' ? WebAssembly : null);
+      let WA = (env && env.WebAssembly) || (typeof WebAssembly !== 'undefined' ? WebAssembly : null);
       if (!WA || typeof WA.Memory !== 'function') return false;
-      var m = new WA.Memory({ initial: 1n, address: 'i64' });
+      let m = new WA.Memory({ initial: 1n, address: 'i64' });
       return m instanceof WA.Memory;
     } catch (e) {
       return false;
@@ -56,8 +56,8 @@
   //    这正是我们要能证伪的那一条（`probe-lane` 的反证档：**必须响亮地失败**）。
   function override(env) {
     try {
-      var q = (env && env.location && env.location.search) || '';
-      var m = /[?&]lane=(w64|w64-threads|base)(?:&|$)/.exec(q);
+      let q = (env && env.location && env.location.search) || '';
+      let m = /[?&]lane=(w64|w64-threads|base)(?:&|$)/.exec(q);
       return m ? m[1] : null;
     } catch (e) { return null; }
   }
@@ -65,11 +65,11 @@
   // 纯函数：给一份"环境事实"返回该选哪一档（自证/探针可直接喂合成输入）
   function pickFrom(env) {
     env = env || {};
-    var coi = env.crossOriginIsolated === true;
-    var sab = typeof env.SharedArrayBuffer === 'function';
-    var m64 = hasMemory64(env);
+    let coi = env.crossOriginIsolated === true;
+    let sab = typeof env.SharedArrayBuffer === 'function';
+    let m64 = hasMemory64(env);
 
-    var auto;
+    let auto;
     if (m64) {
       auto = (coi && sab)
         ? { lane: 'w64', why: '跨源隔离 + SharedArrayBuffer + memory64 可用（目标 wasm64 线程档）' }
@@ -87,19 +87,19 @@
 
     // ★ 第三轴（工单 23）：能力可行 **且** 站点部署了 —— 否则按优先级退下一优。
     //   没有清单时只认 [base]（threads 已删；wasm64 两档必须在清单里才可选）。
-    var inv = declaredLanes(env);
-    var floor = ['base'];
-    var avail = inv || floor;
-    var whyInv = inv ? ('站点清单声明 ' + inv.join('/'))
+    let inv = declaredLanes(env);
+    let floor = ['base'];
+    let avail = inv || floor;
+    let whyInv = inv ? ('站点清单声明 ' + inv.join('/'))
                      : '站点**没有**档清单（lanes.js 缺失）⇒ 按 [base] 判定';
     if (avail.indexOf(auto.lane) < 0) {
-      var order = ['w64', 'base'];
-      var fallback = null;
+      let order = ['w64', 'base'];
+      let fallback = null;
       for (var i = 0; i < order.length; i++) {
         if (avail.indexOf(order[i]) >= 0) {
           // 只退到**能力可行**的那几档：wasm64 线程档要求 COI+SAB+m64
-          var cand = order[i];
-          var okCap = (cand === 'base') || (cand === 'w64' && coi && sab && m64);
+          let cand = order[i];
+          let okCap = (cand === 'base') || (cand === 'w64' && coi && sab && m64);
           if (okCap) { fallback = cand; break; }
         }
       }
@@ -114,14 +114,14 @@
       }
     }
 
-    var ov = override(env);
+    let ov = override(env);
     // ★ B6（2026-09-27 实测）：**Worker 模式（`?worker=1`）默认落基础档**。
     //   原因：线程产物在 DedicatedWorker 里当**主宿主**是未验证组合 —— 实测 `accept-worker`
     //   在 COI 下 4 PASS / 12 FAIL（症状 `Module.eval_string is not a function`：pthread 胶水
     //   在这个上下文里没把导出挂上），而**同一份页面在基础档下 16/0 全绿**（8770 实测）。
     //   （threads 档已删；显式 `?lane=` 覆盖永远赢（可证伪）。
     //   不做静默降级）。⚠️ 这条只在**没有显式覆盖**时生效 —— 显式 `?lane=` 永远赢（可证伪）。
-    var q = (function () {
+    let q = (function () {
       try { return (env.location && env.location.search) || ''; } catch (e) { return ''; }
     })();
     if ((/[?&]worker=1(?:&|$)/.test(q) || typeof env.importScripts === 'function') && !ov) {
@@ -134,7 +134,7 @@
                     + '（实测 accept-worker 4/12）⇒ 用基础档（wasm32 线 = 单线程）' };
     }
     if (ov && ov !== auto.lane) {
-      var whyWarn = '';
+      let whyWarn = '';
       if ((ov === 'w64' || ov === 'w64-threads') && !coi) {
         whyWarn = '；⚠️ 没有 COI ⇒ 线程档会**硬失败**（这是有意的可证伪档；无 COI 唯一线 = base）';
       } else if ((ov === 'w64' || ov === 'w64-threads') && !m64) {
@@ -146,7 +146,7 @@
     return { lane: auto.lane, coi: coi, sab: sab, memory64: m64, forced: false, why: auto.why };
   }
 
-  var FILES = {
+  let FILES = {
     w64: { lane: 'w64', dir: 'w64/',
            js: 'w64/octave.js', wasm: 'w64/octave.wasm', data: 'w64/octave.data',
            manifest: 'assets/manifest.w64.json' },

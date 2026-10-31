@@ -36,14 +36,14 @@ function scheduleFrame(fn) {
  * 从"每行一次"降到"每 ~16ms 一次"。
  */
 function createCoalescedPreSink(el) {
-    var pending = [];
-    var scheduled = false;
-    var lastFlush = perfNow();
-    var lastScroll = 0;
+    let pending = [];
+    let scheduled = false;
+    let lastFlush = perfNow();
+    let lastScroll = 0;
     function autoScroll() {
         // ★ 读 scrollHeight 会强制同步布局 —— 这是实测里 DOM 成本的大头（107ms 调用 vs
         //   ~430ms 布局）。所以：① 只在 flush 后读；② 200ms 节流（旧版同值）。
-        var now = perfNow();
+        let now = perfNow();
         if (now - lastScroll <= SCROLL_THROTTLE_MS)
             return;
         lastScroll = now;
@@ -55,7 +55,7 @@ function createCoalescedPreSink(el) {
         scheduled = false;
         if (!pending.length)
             return;
-        var text = pending.join('');
+        let text = pending.join('');
         pending = [];
         el.appendChild(document.createTextNode(text));
         lastFlush = perfNow();
@@ -78,7 +78,7 @@ function createCoalescedPreSink(el) {
 }
 /** 页面级默认 sink：找/建 `#output`（旧版语义：没有就 append 到 body）。 */
 function createPageSink() {
-    var el = document.getElementById('output');
+    let el = document.getElementById('output');
     if (!el) {
         el = document.createElement('pre');
         el.id = 'output';
@@ -88,7 +88,7 @@ function createPageSink() {
 }
 // ── 输入捕获（页面级；需要 document，留在 JS）──────────────────────────────────
 function createClickQueue() {
-    var q = {
+    let q = {
         list: [],
         length: function () { return q.list.length; },
         push: function (c) { q.list.push(c); },
@@ -100,17 +100,17 @@ function createClickQueue() {
 /** 全局 pointerdown：把命中 IMG/CANVAS 的点击**扇出**给所有 armed 实例（C6）。 */
 function installPointerFanout() {
     window.addEventListener('pointerdown', function (e) {
-        var el = e.target;
+        let el = e.target;
         if (!el || (el.tagName !== 'IMG' && el.tagName !== 'CANVAS'))
             return;
-        var r = el.getBoundingClientRect();
+        let r = el.getBoundingClientRect();
         if (!r.width || !r.height)
             return;
-        var click = [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
+        let click = [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
             e.button === 2 ? 3 : (e.button === 1 ? 2 : 1)];
-        var hit = false;
+        let hit = false;
         for (var i = 0; i < G.__octaveHosts.length; i++) {
-            var h = G.__octaveHosts[i];
+            let h = G.__octaveHosts[i];
             if (h.armed) {
                 h.clicks.push(click);
                 hit = true;
@@ -140,21 +140,21 @@ function installInterruptKeys() {
 // opts.id    实例名     opts.lane  选档计划（缺省=页面计划；**必须转发**，见下）
 // 返回 Module 形态对象（喂给 OCTAVE()）；第一个实例是"默认实例"，拿走全部 window.* 别名。
 function createOctaveHost(opts) {
-    var o = opts || {};
-    var base = o.base || '';
-    var isDefault = (G.__octaveHosts.length === 0);
-    var inst = {
+    let o = opts || {};
+    let base = o.base || '';
+    let isDefault = (G.__octaveHosts.length === 0);
+    let inst = {
         id: o.id || (isDefault ? 'default' : ('inst-' + G.__octaveHosts.length)),
         clicks: [], armed: false, ready: false, mem: null, mod: null,
     };
     // 输出落点：指定 mount 就在挂点里开自己的 <pre>；否则用页面级 sink。
     // ⚠ 挂点解析在**注册之前**：不存在必须 throw，且不许在注册表留下幽灵实例。
-    var sink;
+    let sink;
     if (o.mount) {
-        var mountEl = document.querySelector(o.mount);
+        let mountEl = document.querySelector(o.mount);
         if (!mountEl)
             throw new Error('createOctaveHost: 找不到挂点 ' + o.mount);
-        var outEl = document.createElement('pre');
+        let outEl = document.createElement('pre');
         mountEl.appendChild(outEl);
         sink = createCoalescedPreSink(outEl);
     }
@@ -162,9 +162,9 @@ function createOctaveHost(opts) {
         sink = createPageSink();
     }
     G.__octaveHosts.push(inst);
-    var clicks = createClickQueue();
+    let clicks = createClickQueue();
     inst.clicks = clicks.list; // 兼容：既有断言读 inst.clicks 长度
-    var core = G.createOctaveCore({
+    let core = G.createOctaveCore({
         base: base, mode: 'single', isDefault: isDefault, home: o.home,
         state: inst, clicks: clicks,
         // ★ 必须转发 lane：不转发 ⇒ 页面按档加载了 w64 的胶水，内核却取根目录产物
@@ -177,11 +177,11 @@ function createOctaveHost(opts) {
             printErr: function (t) { console.warn(t); sink.append(t + '\n'); },
             note: function (m) { console.warn(m); },
             stdinLine: function () {
-                var q = G.__octaveStdin;
+                let q = G.__octaveStdin;
                 if (q && q.length)
                     return String(q.shift());
                 if (typeof G.prompt === 'function') {
-                    var r = G.prompt('Input: ');
+                    let r = G.prompt('Input: ');
                     return r === null ? null : r;
                 }
                 return null;
@@ -198,7 +198,7 @@ function createOctaveHost(opts) {
                 //    并更新别名（保证"测试读的与 boot 链用的"仍是同一份状态）。
                 if (isDefault && G.OctaveAssets && G.Module === mod)
                     return G.OctaveAssets;
-                var loader = G.createOctaveAssets(mod, b, isReady);
+                let loader = G.createOctaveAssets(mod, b, isReady);
                 if (isDefault)
                     G.OctaveAssets = loader;
                 return loader;

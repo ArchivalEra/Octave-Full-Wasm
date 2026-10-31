@@ -27,14 +27,14 @@
 // 需要改 webgl_toolkit.cc（canvas 契约 + OffscreenCanvas）并**重链**，属 B5 phase 2。
 
 /* global OCTAVE, createOctaveAssets */
-var HOME = '/home/web_user';        // 由 opts.home 覆盖（多 worker 必须各用各的，否则同源撞同一个库）
+let HOME = '/home/web_user';        // 由 opts.home 覆盖（多 worker 必须各用各的，否则同源撞同一个库）
 'use strict';
 
-var BASE = '';                      // 由主线程第一条消息里的 opts.base 覆盖（默认同目录）
-var booted = false;      // 仅用于记录（就绪由 st.ready 表达）
+let BASE = '';                      // 由主线程第一条消息里的 opts.base 覆盖（默认同目录）
+let booted = false;      // 仅用于记录（就绪由 st.ready 表达）
 // 点击队列**对象**（内核按这个接口用：clear/length/push/shift）；
 // `self.__octaveClicks` 仍指向里面的**数组**（webjslib 原始实现与既有断言读它）。
-var clickQ = {
+let clickQ = {
   list: [],
   length: function () { return clickQ.list.length; },
   push: function (c) { clickQ.list.push(c); },
@@ -47,7 +47,7 @@ function send(m) { self.postMessage(m); }
 // 裸发的问题：`for i=1:50000, printf(...)` 会产生 5 万条 postMessage，主线程事件循环被
 // 淹没 ⇒ 页面 tick 再次跌零（worker 不卡 CPU 但卡消息队列）。这里按"16ms 或 8KB"合批；
 // **发 result 之前必须 flush**，否则输出与结果顺序会乱。
-var outBuf = [], outBytes = 0, outTimer = null;
+let outBuf = [], outBytes = 0, outTimer = null;
 function flushOut() {
   if (outTimer) { clearTimeout(outTimer); outTimer = null; }
   if (!outBuf.length) return;
@@ -71,15 +71,15 @@ function out(t) {
 //   ⇒ 理论上不需要任何重链/新旗标，只要 shim 把 canvas 交给它。
 //   若成立，worker 模式就有**真渲染后端**了（渲染→glReadPixels→PNG→postMessage→页面贴图）。
 //   `style` 用普通可写属性（OffscreenCanvas 是可扩展对象，工具包会写 style）。
-var _glCanvas = null;
+let _glCanvas = null;
 function makeCanvas(id) {
-  var c = new OffscreenCanvas(16, 16);
+  let c = new OffscreenCanvas(16, 16);
   c.id = id || '';
   c.style = {};                     // 工具包会写 cssText/position 等，给个可写壳
   _glCanvas = c;                    // EM_ASM 建完会写 c.id ⇒ 之后 getElementById/querySelector 能查到
   return c;
 }
-var fakeCanvas = { id: '', style: {}, width: 16, height: 16,
+let fakeCanvas = { id: '', style: {}, width: 16, height: 16,
                    getContext: function () { return null; },
                    getBoundingClientRect: function () { return { left: 0, top: 0, width: 0, height: 0 }; } };
 // ★ 显式标记"我在 worker 里"：assets-loader 的 `kind:'js'` 包必须走 importScripts。
@@ -110,13 +110,13 @@ self.document = {
 };
 self.window = self;                 // 产物里 `window.OctaveP5.show(...)` 靠它
 // 图形成品：toolkit 渲染完会调它（路径在 MEMFS 里）⇒ 读出来 postMessage 给主线程贴图。
-var OctaveP5 = {
+let OctaveP5 = {
   show: function (path) {
     try {
-      var M = self.Module;
+      let M = self.Module;
       if (!M || !M.FS) return;
-      var bytes = M.FS.readFile(path);
-      var copy = bytes.slice ? bytes.slice(0) : new Uint8Array(bytes);
+      let bytes = M.FS.readFile(path);
+      let copy = bytes.slice ? bytes.slice(0) : new Uint8Array(bytes);
       send({ kind: 'plot', path: String(path), ab: copy.buffer, bytes: copy.length });
     } catch (e) { out('[worker] OctaveP5.show 读取失败: ' + e); }
   },
@@ -136,11 +136,11 @@ self.__octaveClicksArmed = false;
 //   worker 里 `crossOriginIsolated` 继承自页面（同源 worker），判据与页面侧同一份（lane.js）。
 //   ⚠️ 顺序不能反：线程档胶水在被 import 的那一刻就会建 **shared** 内存，没有隔离会直接崩。
 importScripts('assets-loader.js', 'octave-core.js', 'lanes.js', 'lane.js');
-var LANE = octaveLaneFiles(octaveLaneState.lane);
+let LANE = octaveLaneFiles(octaveLaneState.lane);
 importScripts(LANE.js);
 
-var st = { armed: false, ready: false, mem: null, mod: null };
-var core = createOctaveCore({
+let st = { armed: false, ready: false, mem: null, mod: null };
+let core = createOctaveCore({
   // ⚠️ base 传**函数**（活取）：BASE 是 `opts` 消息到达时才设的，晚于这一句。
   base: function () { return BASE; }, mode: 'worker', isDefault: true, home: HOME, state: st, clicks: clickQ,
   lane: LANE,                                   // B6：选档计划（线程档时 wasm 在 threads/）
@@ -161,18 +161,18 @@ var Module = core.module;      // 顶层 var ⇒ 顺带挂上 self.Module（Octa
 OCTAVE(Module);
 
 // ── 请求队列：同一时刻只跑一个解释器任务（挂起期间也不例外）───────────────────
-var jobQueue = [], jobBusy = false;
+let jobQueue = [], jobBusy = false;
 function enqueue(m) { jobQueue.push(m); pumpQueue(); }
 function pumpQueue() {
   if (jobBusy || !jobQueue.length) return;
-  var m = jobQueue.shift();
+  let m = jobQueue.shift();
   jobBusy = true;
   runJob(m, function () { jobBusy = false; pumpQueue(); });
 }
 
 // ── 消息分发 ────────────────────────────────────────────────────────────────
 self.onmessage = function (ev) {
-  var m = ev.data || {};
+  let m = ev.data || {};
   if (m.kind === 'opts') {
     BASE = m.base || '';
     if (m.home) HOME = m.home;
@@ -189,7 +189,7 @@ self.onmessage = function (ev) {
     //   tk    = graphics_toolkit() 的实际值（经虚拟 FS 取回，不靠 printf 匹配）
     //   nogl  = 工具包的"无 GL 回落信号文件"是否存在（存在 ⇒ 没拿到 GL 上下文）
     //   glCtx = 我们自己交出去的那个 OffscreenCanvas 上是否真有 WebGL2 上下文
-    var d = {};
+    let d = {};
     try {
       Module.eval_string('fid=fopen("/tmp/_diag.txt","w"); fprintf(fid,"%s",graphics_toolkit()); fclose(fid);');
       d.tk = new TextDecoder().decode(Module.FS.readFile('/tmp/_diag.txt'));
@@ -229,8 +229,8 @@ self.onmessage = function (ev) {
 };
 
 function runJob(m, finished) {
-  var t0 = performance.now();
-  var done = function (rc, err) {
+  let t0 = performance.now();
+  let done = function (rc, err) {
     flushOut();                       // ★ 先冲输出再发结果（顺序）
     send({ id: m.id, kind: 'result', rc: rc, err: err || (function () {
       try { return String(Module.last_error_message() || ''); } catch (e) { return ''; }

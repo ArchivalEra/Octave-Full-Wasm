@@ -42,6 +42,8 @@ build/113/check-lanes-single-source.py --selftest
 build/113/check-pkg-module-table.py --selftest
 build/113/check-ci-bootstrap.sh --selftest
 build/forge-fetch.py --selftest
+build/113/var-to-let.mjs --selftest
+build/113/coi-sw-origin-selftest.mjs --selftest
 build/113/check-rust-toolchain.py --selftest
 build/113/oct-arch.py --selftest
 build/113/gen-keep-list.sh --selftest
