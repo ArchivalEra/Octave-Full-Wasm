@@ -96,6 +96,32 @@ def measure():
         if rel == "octave.wasm":
             facts["wasm_bytes"] = fact(os.path.getsize(p_), "stat -c%%s %s" % p_, "site/octave.wasm")
 
+    # ★ 部署件**逐件字节**（工单 73 / T3，2026-10-31）：`wasm_bytes` 只登了 wasm 那一件，
+    #   而 `octave.data` / `octave.js` 的字节曾在 STATE 正文里手抄（9,712,174 / 462,821），
+    #   **从没进过台账** ⇒ Einfacht #24 的反判据照出来了。凡"发布件逐件 bytes"都该上键：
+    #   外部消费者（课程站/内容仓）拿到的是这三件，字节本身就是交付身份的一部分。
+    for rel, key in (("octave.data", "data_bytes"), ("octave.js", "js_bytes")):
+        p_ = os.path.join(SITE, rel)
+        if os.path.exists(p_):
+            facts[key] = fact(os.path.getsize(p_), "stat -c%%s %s" % p_, "site/%s" % rel)
+
+    # ★ 客户端自编要的头数量（工单 73 / T3）：`NOTES-client-compile-design.md` 里的
+    #   "788" 是**设计期口径**（从 upstream 树数出来），站点实际 stage 的是这份 tarball；
+    #   两个数在不同树上是不同事实，正文引用必须说清是哪一个 ⇒ 这条量**已 stage 的那份**。
+    _hdr = os.path.join(SITE, "assets", "octinc", "octave-headers.tar.gz")
+    if os.path.exists(_hdr):
+        import tarfile                                     # noqa: PLC0415
+        try:
+            with tarfile.open(_hdr) as _tf:
+                _n = sum(1 for _m in _tf.getmembers()
+                         if _m.name.endswith((".h", ".hh", ".tcc")))
+            facts["octave_headers_count"] = fact(
+                _n, "tar -tzf %s | grep -cE '\\.h$|\\.hh$|\\.tcc$'" % _hdr,
+                "site/assets/octinc/octave-headers.tar.gz",
+                "wasm32 安装树里**已 stage** 的头数（compileExtension 的头路径规模）")
+        except (OSError, tarfile.TarError) as _e:
+            print("⚠ 读不到头 tarball %s：%s" % (_hdr, _e), file=sys.stderr)
+
     # ── 构建侧：link-web.sh 读多少个环境变量（模式表必须全覆盖它们 —— relink --selfcheck 管集合，
     #    这里管**数量**：六处文档都写着"22 个"，加第 23 个变量时它们会一起变错而构建全绿）──────
     lw = os.path.join(REPO, "build", "113", "link-web.sh")
@@ -711,12 +737,66 @@ def measure():
                                                            "python3 -c \"import json;print(json.load(open('%s'))['shelf_commit'])\" | cut -c1-12" % _cat,
                                                            os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
                                                            "catalog 由哪一版货架（submodule commit）生成")
+            # MSL 的 zip 字节（工单 73 / T3）：`form:"file"` 的 size == 该文件字节，
+            #   正文手抄过 19,482,938（"与字节逐字核过"）却从没进台账。
+            _msl = next((x for x in _packs if x.get("name") == "modelica-standard-library"), None)
+            if _msl and _msl.get("form") == "file" and _msl.get("size") is not None:
+                facts["msl_zip_bytes"] = fact(
+                    _msl["size"],
+                    "python3 -c \"import json;print([p['size'] for p in "
+                    "json.load(open('%s'))['packs'] if p['name']=='modelica-standard-library'][0])\""
+                    % _cat,
+                    os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                    "MSL 单 zip 字节（form:\"file\" ⇒ size == 该文件字节）")
             _octv = _c.get("octave") or ""
             if _octv:
                 facts["forge_catalog_octave"] = fact(_octv,
                                                      "python3 -c \"import json;print(json.load(open('%s'))['octave'])\"" % _cat,
                                                      os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
                                                      "货架按哪个 Octave 版本过滤（应从 fork 的 configure.ac 读）")
+            # ★ 能力层 `form:"tree"` 的**两条 size 口径**（工单 73 / T3，2026-10-31）：
+            #   `size` = 整目录字节预算，`url` 指树里主 wasm —— **两个不同的数**，正文
+            #   曾把 pyodide 的 22,013,349 与 9,598,218、omc 的 74,735,455 与闭包和
+            #   74,635,990 都手抄过（都没进台账）。它们是**站点交付体积**的实测，
+            #   由 catalog 装配时算出来 ⇒ 从 catalog 读是最诚实的一条（与装配器同源）。
+            for _nm, _k, _field, _why in (
+                    ("pyodide", "pyodide_tree_bytes", "size",
+                     "pyodide 整树 `assets/pyodide/` 字节预算（form:\"tree\" 的 size）"),
+                    ("pyodide", "pyodide_wasm_bytes", "url",
+                     "pyodide 树里主 wasm 的字节（与整树 size 不是同一个对象，都是有意设计）"),
+                    ("omc", "omc_tree_bytes", "size",
+                     "omc 整目录字节预算（MSL 等资产必须落兄弟目录，不许进此目录）")):
+                _p = next((x for x in _packs if x.get("name") == _nm), None)
+                if not _p:
+                    continue
+                if _field == "size" and _p.get("size") is not None:
+                    facts[_k] = fact(
+                        _p["size"],
+                        "python3 -c \"import json;print([p['size'] for p in "
+                        "json.load(open('%s'))['packs'] if p['name']=='%s'][0])\"" % (_cat, _nm),
+                        os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                        _why)
+                elif _field == "url" and _p.get("url"):
+                    # 树里主 wasm：catalog 只给相对 url ⇒ 从站点解析出绝对路径再 stat
+                    _u = os.path.join(os.path.dirname(_cat), os.pardir, _p["url"])
+                    _u = os.path.normpath(_u)
+                    if os.path.exists(_u):
+                        facts[_k] = fact(
+                            os.path.getsize(_u), "stat -c%%s %s" % _u,
+                            os.path.relpath(_u, "/mnt/hdd/octave-wasm-build"),
+                            _why)
+            # omc 的**下载闭包和**（files[] 逐件 bytes 相加）：与 `size`（整目录含
+            # d.ts 等不进闭包的文件）**有意不相等** —— 正文那句"≠ 是有意设计"说的
+            # 就是这个差。两个数都要有出处，否则"有意设计"本身无法被核对。
+            _omc = next((x for x in _packs if x.get("name") == "omc"), None)
+            if _omc and isinstance(_omc.get("files"), dict):
+                facts["omc_files_bytes"] = fact(
+                    sum((_f or {}).get("bytes", 0) for _f in _omc["files"].values()),
+                    "python3 -c \"import json;p=[x for x in json.load(open('%s'))['packs'] "
+                    "if x['name']=='omc'][0];print(sum(f['bytes'] for f in p['files'].values()))\""
+                    % _cat,
+                    os.path.relpath(_cat, "/mnt/hdd/octave-wasm-build"),
+                    "omc files[] 下载闭包逐件 bytes 之和（与整目录 size 的差 = 不进闭包的文件）")
         except (OSError, ValueError) as _e:
             print("⚠ 读不到站点 catalog（%s）：%s" % (_cat, _e), file=sys.stderr)
 
@@ -1237,6 +1317,17 @@ def measure():
                 _stc.get("B"), "python3 -c \"import json;print(json.load(open('%s'))['summary']['sourceToCode']['B'])\"" % _pyc,
                 "w64-logs/sympy-pyc-ab.json",
                 ".pyc 档的源码→字节码编译次数（**必须 ≈0**；不为 0 则 A/B 无效 ⇒ 探针 rc=2）")
+            # ★ 源码档那一侧的编译次数（工单 73 / T3，2026-10-31）：正文两句都写过
+            #   "源码编译 472 次 / 每次冷启动重编 472 个模块"，而台账**只登了 B 档(0)** ——
+            #   472 是同一个 A/B 日志里的另一半读数，必须有出处（否则"472→0"这个
+            #   A/B 结论的一半没有落点）。
+            if _stc.get("A") is not None:
+                facts["sympy_pyc_compile_calls_source"] = fact(
+                    _stc.get("A"),
+                    "python3 -c \"import json;print(json.load(open('%s'))['summary']['sourceToCode']['A'])\"" % _pyc,
+                    "w64-logs/sympy-pyc-ab.json",
+                    "**源码轮子**档的源码→字节码编译次数（冷启动固定成本；.pyc 档是 "
+                    "sympy_pyc_compile_calls=[[sympy_pyc_compile_calls]]）")
             _by = _s.get("bytes", {})
             if _by:
                 facts["sympy_pyc_bytes_ratio"] = fact(

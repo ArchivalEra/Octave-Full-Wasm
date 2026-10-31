@@ -1,33 +1,23 @@
 #!/bin/sh
-# pre-commit：Einfacht 平台（重构版）+ 本仓专属闸门 —— 合流（2026-10-09 采纳）。
+# pre-commit：重渲染事实块并跑全部闸门 —— 从 Octave-Full-Wasm 的 pre-commit 迁移泛化。
 #
-# 两个原则（Einfacht 上游 + 本仓实践）：
+# 两个原则（那边踩出来的）：
 #   · 机器块是**机器维护**的：提交前重渲染并 `git add`，人不手改数字；
 #   · 提交时刻是**检查活状态断言**的最后一道闸（过了这一刻，过时断言就进了历史）。
-#
-# 结构 = **平台层**（zreflect/check_*.py，发现式名录 —— 别手写清单）
-#      + **本仓层**（.githooks/ 里平台没有对应件的那些：一致性 / 活状态断言 /
-#        断言可证伪 / 白名单 / 就绪反模式 / 上游 pin 见证）+ 本仓构建侧闸门。
 set -e
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# 可拔插件（Einfacht issue #8）：repo-local REFLECT_* 载体 = Einfacht.env，
-# 由 einfacht-env.sh 加载（钩子目录优先、仓库根次之）。删掉插件 ⇒ 本行守卫跳过。
+# 可拔插件（issue #8）：repo-local REFLECT_* 载体 = Einfacht.env，
+# 由 einfacht-env.sh 加载（钩子目录优先、仓库根次之；形状见
+# Einfacht.env.example）。钩子虽继承调用 shell 的环境，但那份
+# 来源靠「谁记得 export」—— 换机器 / 换 CI / 换人就没了；
+# 文件才是钩子可复现的来源。删掉插件 ⇒ 本行守卫跳过，钩子
+# 什么都不改地回落纯环境变量 —— 机制能拔，钩子本体通用。
 [ -f "$HERE/einfacht-env.sh" ] && . "$HERE/einfacht-env.sh"
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 cd "$REPO"
-GH="$REPO/.githooks"          # 本仓专属闸门所在（平台之外的那一层）
 
-# ── ⓪ 本仓的 AUTO 区块（README 文件清单 / STATE 部署状态）—— 平台不管这两块 ─────
-# ★ 顺序（2026-10-04 实测踩到）：**STATE 在前、README 在后** —— README 的 AUTO:FILES
-#   记的是各文件**字节数**，其中就有 STATE.md；旧顺序先算 README 再重算 STATE 机器块
-#   ⇒ STATE 大小一变，README 记的数当提交落地时就过期 ⇒ pre-push 必红、每批补一刀。
-python3 "$GH/update-state.py"
-git add STATE.md
-python3 "$GH/update-readme.py"
-git add README.md
-
-# ── ① 平台机器块重渲染（事实块 AUTO:FACTS + 闸门名录块 AUTO:GATES）─────────────
-#    ⚠️ 这里**只渲染，不重测**（Einfacht issue #4 ③）：重测由人负责 ——
+# ① 机器块重渲染（REFLECT_DOC 名字跟随环境；默认 STATE.md）
+#    ⚠️ 这里**只渲染，不重测**（issue #4 ③）：重测由人负责 ——
 #    python3 zreflect/facts.py（改口逐条 --accept-changes=k1,k2 放行）。
 DOC=${REFLECT_DOC:-STATE.md}
 if [ -f "$DOC" ]; then
@@ -35,40 +25,9 @@ if [ -f "$DOC" ]; then
   git add "$DOC"
 fi
 
-# ── ② 平台闸门：**执行面唯一产地**（上游 C1，2026-10-10 采纳）──────────────────
-#    `registry --run commit` 跑所有 `runs_at="commit"` 的闸门，聚合 ran/off/failed。
-#    ⚠️ **别再 glob `check_*.py`**：glob 与声明（`GATE = gate.meta(…, runs_at=…)`）
-#    是两套谓词，会分叉（doctor 曾只能靠"不叫 check_"表达频率）。执行面只认声明。
-#    off 态被单列（上游 C2）：`ran N / off M / failed K` —— **off 不是通过**。
-# ⚠️ 仪器旋钮**内联传**（不是全局 export）：它们是「配了就必须存在」的旋钮，而
-#   gates-selftest.sh 的跨仓库夹具只覆盖六个名字、不覆盖这两个 —— 全局配 ⇒ 夹具里
-#   GATE_REPO 是临时目录、路径解析失败 ⇒ 误报「名字写死在代码里」（2026-10-09 实测）。
-REFLECT_INSTRUMENTS=build/instruments.json REFLECT_INSTRUMENT_DAYS=30 \
-  REFLECT_LOCKS=build/upstream-lock.json REFLECT_PINS=build/pins.json \
-  python3 zreflect/registry.py --run commit || exit 1
-
-# ── ③ 本仓专属闸门（平台无对应件；来源与理由见各自文件头）──────────────────────
-python3 "$GH/check-state.py"            # 活状态断言不得与产物矛盾（只查 STATE.md）
-python3 "$GH/check-consistency.py"      # 挂载点/启动清单/车道路径一致
-python3 "$GH/check-wants.py"            # 验收套件断言的可证伪性
-python3 "$GH/check-whitelist.py"        # 白名单覆盖
-python3 "$GH/check-readiness-pattern.py"  # 就绪反模式（工单 40/42）
-# ★ mail 边界闸门（2026-10-15，用户点令）：本仓收件箱里只许有**写给本仓**的信
-#   （`**To:**` 必须指名 host）。实测事故：host 曾翻 LLVM/OM 的 mail/ 找信 ⇒ 越界；
-#   根因是"本仓没有收件箱" ⇒ 补上后再立此闸门守收信侧不变量。
-python3 "$GH/check-mail-boundary.py"
-# ★ 上游 pin 见证（仓库架构批 B4）：容器树 == submodule pin；读不到容器 ⇒ SKIP 明说。
-python3 "$GH/witness-upstream-pin.py"
-# ★ 部件插件登记闸门（工单 61）：登记表 ↔ 现役产物 declared 双向一致；站点读不到 ⇒ SKIP 明说。
-python3 "$REPO/build/113/plugin-check.py"
-# ★ Forge 货架目录闸门（工单 64 / 设计稿 §8.2）：目录 ↔ 货架档案 ↔ 仓库镜像字节三方一致
-#   （R1 fork AC_INIT 对读 / R2 货架 sha / R3 镜像字节 / R4 kinds↔tarball）；未装配 ⇒ SKIP 明说。
-python3 "$REPO/build/113/check-forge-catalog.py"
-# ★ 额外内容端口闸门（接缝 §4/§5 第①步）：golden 全过 + bad 全红 + schema 词表单一产地
-#   （R1 golden / R2 bad 反向 / R3 enum 产地 / R4 pkg+tree 两形态覆盖）。
-python3 "$REPO/build/extra-content/check-content-port.py"
-
-# ── ④ 闸门自证（F1）：闸门不能证明自己会红，就不许提交 ─────────────────────────
-#   前几道是"查仓库"，这一道是"查检查器本身"。平台闸门 + 本仓专属闸门都过一遍。
-sh "$REPO/gates-selftest.sh"
-sh "$REPO/build/gates-selftest.sh"
+# ② 全部闸门：**执行面唯一产地**（C1）—— `registry --run commit` 跑所有
+#    runs_at="commit" 的闸门并聚合 ran/off/failed。别再 glob `check_*.py`：
+#    glob 与声明（GATE = meta(…, runs_at=…)）是两套谓词，会分叉（doctor 曾
+#    只能靠「不叫 check_」表达频率）。执行面只认声明 —— 名字不再承重。
+#    off 态被单列（C2）：`ran N / off M / failed K`，off 不是通过。
+python3 zreflect/registry.py --run commit || exit 1

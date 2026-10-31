@@ -240,4 +240,3 @@ if __name__ == "__main__":
     sys.exit(main_selftest_or(sys.argv[1:],
                               "guard（台账写盘守卫：掉条 / 改口 / 逐条接受的接线）",
                               _cases, _run))
-

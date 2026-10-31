@@ -31,7 +31,6 @@ URL 与版本的对应关系是清单作者的主张，闸门不做网络验证�
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sys
 
@@ -176,4 +175,3 @@ GATE = meta("锁定源闸门", "锁定源清单（URL + 文件 + sha256 的内�
 
 if __name__ == "__main__":
     sys.exit(main_selftest_or(sys.argv[1:], "check_locks（锁定源清单）", _cases, main))
-

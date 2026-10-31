@@ -10,37 +10,37 @@
   `git log --all -S 'no-store'` 对该文件零命中）—— 在它仓的同名脚本里。**两仓各有一个
   `serve-coi.py` 是混淆根源**。
 - **但核心观察在我这边成立，而且是更弱的一种**：我既不发 `Cache-Control` 也不发 `ETag`
-  ⇒ 浏览器无可重验凭据 ⇒ 全量重传。CDP 实测**119,878,350 B × 3 次**，一次不少。
+  ⇒ 浏览器无可重验凭据 ⇒ 全量重传。CDP 实测**[[cache_first_bytes]] B × 3 次**，一次不少。
 - **修**：`ETag: W/"<size>-<mtime_ns>"`（stat 派生，不读内容）+ `Cache-Control: no-cache`
   （必须重验 —— 本仓纪律要的是**重验**不是缓存，也不是 `no-store`）+ 覆盖 `send_head()`
-  回 304。自证 **5 → 9/0**（含反向"不许发 no-store"与空输入"没 etag 就不发缓存头"）。
-- **修后实测**：首次 119,878,350 B → 第 2/3 次刷新各 **12,790 B**（降幅 99.99%）。
+  回 `304`。自证 **`5 → 9/0`**（含反向"不许发 no-store"与空输入"没 etag 就不发缓存头"）。
+- **修后实测**：首次 [[cache_first_bytes]] B → 第 2/3 次刷新各 **[[cache_reload_bytes]] B**（降幅 99.99%）。
   条件请求回 `HTTP/1.0 304 Not Modified`。
 - **回归**：8761 全量**零红**（56 套，PASS 数见 [[accept_pass]]）；开机自检 BOOT OK 1.4s。
-- **★ 一处自证教训**：304 分支里重复发了 `ETag`/`Cache-Control`（`end_headers()` 会再发一遍）
+- **★ 一处自证教训**：`304` 分支里重复发了 `ETag`/`Cache-Control`（`end_headers()` 会再发一遍）
   ⇒ 响应出两份同名头。**同名头重复不报错、但下游可能取错值。**
 - **AGENTS 坑段新增两条**：缓存头三态（只认 `no-cache` + `ETag`）；「"失败"先排除仪器」
-  （OM 一次弱网测量报 2/2 失败，实为探针超时 180 s 短于真实传输 199 s）。
+  （OM 一次弱网测量报 2/2 失败，实为探针超时 `180 s` 短于真实传输 `199 s`）。
 - **OM 的 boot 分布已收**：环回 1.3 s / 64 Mbit 18.0 s / 4.8 Mbit 199.9 s，**三档 0 失败**
   ⇒ `omc-not-ready` 是时序不是失败率；"UI 别裸等待"归 UI。
 
 ## 现在是什么（2026-10-30 · 首个 Release + 分支镜像死档清理）
 
 - **★ 本仓第一个 Release 已发**（回应课程站 `064` 的外部请求）：
-  tag `wasm32-11.3.0-1ed3e528`，asset 四件 —— `octave.wasm` 29,632,229 B +
-  `octave.data` 9,712,174 B + `octave.js` 462,821 B + `SHA256SUMS.json`（逐件 bytes+sha）。
+  tag `wasm32-11.3.0-1ed3e528`，asset 四件 —— `octave.wasm` [[wasm_bytes]] B +
+  `octave.data` [[data_bytes]] B + `octave.js` [[js_bytes]] B + `SHA256SUMS.json`（逐件 bytes+sha）。
   合计 37.96 MiB / **9.90 MiB gzip -6**，与课程站独立量得的数字逐字相同。
   `octave.wasm` sha `1ed3e528…` = **现役 8761 根级（base/wasm32 格）逐字节相同**
-  ⇒ 外部消费者拿到的是我们在跑的那份。下载验证：HTTP 200。
+  ⇒ 外部消费者拿到的是我们在跑的那份。下载验证：HTTP `200`。
 
-- **★★ 查出并修掉 UI dist 617 MiB 重复的根因（在我仓，不是 UI）**：
-  内容仓 `109-host`（收件 063）量到 UI `dist/` = 1,256,181,615 B（超 Pages 1 GB 硬限
-  256 MB）、重复浪费 617.2 MiB。**它把 `sync-lanes.sh`/`pages.yml` 判给我 —— 判错了，
+- **★★ 查出并修掉 UI dist `617 MiB` 重复的根因（在我仓，不是 UI）**：
+  内容仓 `109-host`（收件 063）量到 UI `dist/` = `1,256,181,615 B`（超 Pages `1 GB` 硬限
+  `256 MB`）、重复浪费 `617.2 MiB`。**它把 `sync-lanes.sh`/`pages.yml` 判给我 —— 判错了，
   两个脚本都在 UI 仓**。但重复的源头确实在我：UI 用 `git archive <lane> site` 取产物，
   而 **`master` 与 `wasm32-final` 的 `site/` 里残留着死档 `threads/`（37.9 MiB）与
   `w64-base/`（38.3 MiB）** —— 2026-10-17/10-19 两次三线裁决只清了 IP 线，这两条漏了。
   这正是内容仓数字里最刺眼的两行（57.1 + 56.3 = **113.4 MiB**）。
-  已修：`master` a1e2409 / `wasm32-final` 168ef49 各删两处（site/ 196M → 120M）。
+  已修：`master` a1e2409 / `wasm32-final` `168ef49` 各删两处（`site/ 196M → 120M`）。
 
 - **★ 课程站 Q5（最小调用面）实测答案**：不需要 Worker、不需要 `octave-page.js`，
   但**不能只用 `octave-core.js`**（内核需宿主提供 `host.print`/`host.mount`）。
@@ -64,31 +64,31 @@
 
 - **★ README 三件套重写（用户点令两轮）**：四个实测病 —— ① 图片加载不出（**master 分支
   从未有 `docs/charts/`**，三张图全断，而 master 是 GitHub 默认分支）② 又臭又长（英文
-  1419 行 / 119 KB + **87 KB 的 AUTO 逐文件清单**）③ 掺互相的语言（英文 README 里 132 个
+  `1419 行 / 119 KB` + **`87 KB` 的 AUTO 逐文件清单**）③ 掺互相的语言（英文 README 里 `132 个`
   汉字）④ 三份内容完全不一样（10/9/9 节，各写各的批次史）。
   修法：统一骨架 + 纯语言 + **批次史归 HISTORY**（新增 §5.110–§5.114）+ AUTO 块改分类摘要
   （`update-readme.py` 的逐文件清单从上千行降到约二十行，新增自证 4/0）+ master 补 `docs/charts/` 与白名单。
-  结果：119 KB / 70 KB / 79 KB → **11 KB / 9 KB / 11 KB**。
+  结果：`119 KB / 70 KB / 79 KB` → **`11 KB / 9 KB / 11 KB`**。
 
 - **★ 本批自我审计（adversarial-essay-sparring）抓到三处编造**：性能表复跑产地焊错
   （写成 `w64_rustsort_ab_*`，实为 `perf-data.json`+`HISTORY §5.96`）/ `libm` 几何均值
-  写 0.991（真值 **0.964**）/ 「~500 packages」未查即改写口径。教训同族：**凭印象写数字
+  写 `0.991`（真值 **[[libm_spike_geomean]]**）/ 「~500 packages」未查即改写口径。教训同族：**凭印象写数字
   = 造第二产地**。
 
-- **★ OM 门缺陷闭环（收件 028，它认并独立复现）**：它测 gap **396 ms**（我测 477 ms，同一
+- **★ OM 门缺陷闭环（收件 028，它认并独立复现）**：它测 gap `396 ms`（我测 `477 ms`，同一
   现象不同采样），两站改后 **9 PASS / 0 FAIL**。它**没照抄我的 `__octaveReady`**，理由成立：
   那是某站点的实现细节 ⇒ 绑它等于把"交付验收"退化成"某站点自检"；改用 **`/bridge` 在 MEMFS
   非空**（桥自己的契约，跨站点成立）。**我采纳并收回 `027` 的建议**。它另加 ★⑧ 门回归判据
   （就绪时 `/bridge` 必须非空，防"门太早"回归）。
 
 - **★ 它的反向用例逼出我方两个缺陷（已修）**：`accept-omc-e2e.mjs` 在无桥站**整页崩**
-  （清单 404 时 `bad` 未初始化 ⇒ `TypeError` ⇒ 不出汇总行 ⇒ 看起来像挂死而不是报红，正是
+  （清单 `404` 时 `bad` 未初始化 ⇒ `TypeError` ⇒ 不出汇总行 ⇒ 看起来像挂死而不是报红，正是
   F1 第三类要拦的形状）；E5 在 `/bridge` 不存在时 `readdir` 抛错。修后三向都对：
   8761 **6/0**、8768 **6/0**、无桥对照 8873 **3P/3F**。
 
 - **验收**：两站全量**都零红**（套数与 PASS 数见 [[accept_suites]] / [[accept_pass]]）；三线（master / wasm32-final /
   IllegalPerformance）本地 = origin = mirror 三方一致；master 上 6 个 `docs/` 引用零缺失
-  （GitHub API 探两张 SVG 均 200）。
+  （GitHub API 探两张 SVG 均 `200`）。
 
 ## 现在是什么（2026-10-29 · E 线桥**交付完成**：OM 回信 025 → 装配落地 → 工单 70 结案）
 
@@ -111,8 +111,8 @@
     （E5 摘掉 `/bridge` ⇒ 三项必须 MISSING）。两站 **6/0**。
 
 - **★★ 我查出的判据缺陷（OM 产品态套件 3 条假红的真因）**：
-  它的就绪门是 `M.eval_string('x=1+1;') === 0`，**实测 877 ms 就通过**，而本站 boot 链
-  到 **1354 ms** 才装完（`__octaveReady`）⇒ 它在 **477 ms 空窗**里探 `exist('omc_*')`
+  它的就绪门是 `M.eval_string('x=1+1;') === 0`，**实测 `877 ms` 就通过**，而本站 boot 链
+  到 `1354 ms` 才装完（`__octaveReady`）⇒ 它在 `477 ms` 空窗里探 `exist('omc_*')`
   ⇒ 必然 MISSING。换成本站 76 套统一的 `__octaveReady` 门重探同一页面 ⇒ **8/8 全绿**。
   这不是装配缺陷，是判据的时序缺陷。已投 `027-host` 请它改门（或说明它的定义）。
 
@@ -154,7 +154,7 @@
 
 ## 现在是什么（2026-10-28 · 环境恢复 + 两单收口 + spike 仪器修复）
 
-- **★ 环境恢复（用户确认 sudo 已给）**：`o113` 容器（Exited 137，两天前关机杀的）已起；
+- **★ 环境恢复（用户确认 sudo 已给）**：`o113` 容器（`Exited 137`，两天前关机杀的）已起；
   `sudo -n docker` 可用 ⇒ **doctor ok**（8761 / 8768 / 8868 / 容器四项全活）。
   连带解锁两项之前 SKIP 的闸门：`witness-upstream-pin` **真跑了**（2 个 pin 全一致）、
   `plugin-check` **真核了**（登记表 ↔ 现役产物 declared 逐车道一致）—— 之前是
@@ -188,7 +188,7 @@
   · 站点闸门 **R15**：`files[]` 逐件与站点字节对账（列了缺件/ sha 不符 / bytes 不符
     ⇒ 红）；自证 **40→43/0**。三站 rebake 后 catalog 逐字节一致，`validate --site` ×3 ok。
   · **浏览器验收**：`accept-market-browse` **17→21/0**，新增 B11a–B11d（omc 两件下发件 /
-    值 = OM 台账投影 / **闭包和 74,635,990 ≠ size 74,735,455 是有意设计** / 无 files 的
+    值 = OM 台账投影 / **闭包和 [[omc_files_bytes]] ≠ size [[omc_tree_bytes]] 是有意设计** / 无 files 的
     tree 条目 `detail.files === null`）。
 
 - **★ 工单 67（CI 从未入库）→ resolved**：`.gitignore` 放行 `!.github/workflows/*.yml`
@@ -197,7 +197,7 @@
   `--changed` 判据）；pre-push 注释翻面（"只有本地一道" → "本地 + CI 两道"）。
   结算件 `build/113/check-ci-bootstrap.sh` **rc=1 → rc=0**。
 
-- **★★ 22 红根因（音频批 658f001 埋下，至 10-26 才暴露）＝ `sync-js` 重置 meta**：
+- **★★ 22 红根因（音频批 `658f001` 埋下，至 10-26 才暴露）＝ `sync-js` 重置 meta**：
   那次为补 `audiodevinfo` 的 38 aliases 改了 `sync-js`，**重写条目时把手工维护的
   `deps` / `aliases` 抹成默认值**。两处承重真值丢失：
   · `webgraphics.deps` 丢掉 `["__init_web__"]` ⇒ `PKG_ADD` 里 `graphics_toolkit("web")`
@@ -274,11 +274,11 @@
   · **名字定案 = `modelica-standard-library`**（OM 申辩"通用缩写不可检索"获胜，
     内容仓采了；判据 = 名字携带上游身份，与 llvm-wasm/pyodide 同先例）；
   · `form:"file"`（单 zip，运行期 `omc_vfs_load_zip` 解压）+ `role:"package"` +
-    `consumer:["omc"]`；`size`=19,482,938 B（与字节逐字核过）；
-  · **落位 `assets/msl/`（兄弟目录）**——R14 守着的形状；实测三站 HTTP 200。
+     `consumer:["omc"]`；`size`=[[msl_zip_bytes]] B（与字节逐字核过）；
+  · **落位 `assets/msl/`（兄弟目录）**——R14 守着的形状；实测三站 HTTP `200`。
   · **★ 顺带修了一处装配器落点缺陷**（MSL 并入实测翻出）：`stage_upstream_bytes`
     原先**一律**把字节铺 `assets/forge/`，而生产者表的 url 是 `assets/msl/…`
-    ⇒ **两处口径分叉**（站点闸门 R7b 会报 404，与 llvm-wasm 那次同族）。
+    ⇒ **两处口径分叉**（站点闸门 R7b 会报 `404`，与 llvm-wasm 那次同族）。
     修法：**站内相对 url = 生产者的交付路径** ⇒ 落点照 url 铺；只有绝对 URL/带 query
     的重取入口才回退 `assets/forge/`（假目录树判例保留，自证加了一条反向断言）。
 - **★ omc 的 consumer 改 `["omc"]`（mail/059 §2 裁定）**：`consumer` = 条目服务的
@@ -301,7 +301,7 @@
   · **新供给脚本** `build/113/provision-omc.sh`（自证 4/0）：逐件 sha fail-closed +
     **兄弟目录硬约束反向断言**（陌生文件混进 omc/ ⇒ 拒）。
   · **条目**：`kind:"engine"` + `role:"toolchain"` + `arch:"omc"`（lane 值）+
-    `size` = 整目录 74,735,455 B；`version:"unversioned"`（OM 侧未给版本串 ⇒ **不编**）。
+    `size` = 整目录 [[omc_tree_bytes]] B；`version:"unversioned"`（OM 侧未给版本串 ⇒ **不编**）。
   · **拒绝文案改角色化**（实测抓到）：旧文案写死「clang/lld/sysroot」，omc 进来就撒谎
     ⇒ 改成「是编译工具链（role:toolchain）」；`install('omc')` ⇒ `NOT_INSTALLABLE`。
 - **★ MSL 兄弟目录硬约束落成机器判据（mail/057 §2 + §4 请求 3）**：
@@ -464,7 +464,7 @@
     本仓自建 `bridge/compile-worker.mjs`（分阶段），**编排仍 import 生产者
     `driver/compile-core.mjs`**（不复制）。
   · **供给层**：`build/upstream-lock.json` 加 `llvm-wasm` 条（v0.1.1，bundle sha 钉住）+
-    `build/113/provision-llvm-wasm.sh`（13 资产逐件核 sha → 站点；Octave 头 770 个从
+    `build/113/provision-llvm-wasm.sh`（13 资产逐件核 sha → 站点；Octave 头 [[octave_headers_count]] 个从
     **容器安装树**打包；`config.h.json` 25 宏从容器取）——自证 3/0。
   · **★ 已知边界（如实记，未解决）**：现编产物**能被识别**（`exist=3`、`which` 正确）
     但**跨边界调用失败**（`cell2cell` 报 `Invalid resizing operation…`），而**同站随站预编的
@@ -491,7 +491,7 @@
   · **保留**：`measure_octave.py`（数据层）、`mail-read.py`（本仓工具）、`build/facts.py`
     壳（补 `REFLECT_MEASURE_MODULE` 旋钮；与盲写守卫**互补**——守卫拦"写被 ignore 的目标"，
     壳补全套口径）。
-  · **验收六项全绿**：① 盲写守卫反测 rc=2+零字节；② 壳正测 163 条（直跑旋钮路径同过）；
+  · **验收六项全绿**：① 盲写守卫反测 `rc=2`+零字节；② 壳正测 `163 条`（直跑旋钮路径同过）；
     ③ 两台全绿（根台跨仓库夹具 14/14 + 本台 46 闸门+分工锁）；④ pre-commit 全链
     ran 10/failed 0；⑤ 数据层零牵连（重测**值零变化**，仅 measured_at 时间戳）；
     ⑥ 七文件与上游逐字节同源。
@@ -551,7 +551,7 @@
   `build/` = 本仓手写 46 条名单），**pre-commit 两个都跑**（`reflect-hooks/pre-commit:73,74`）
   ⇒ 同一件事两处产地，新增闸门义务不同（声明自动 vs 手写登记）；
   ② **`REFLECT_*` 默认值把写操作导向被 gitignore 掩盖的位置**：裸跑 `facts.py` 写仓库根
-  `FACTS.json`（60052 字节实测），而钩子读 `build/FACTS.json` ⇒ **重测"成功"但改口不生效**，
+  `FACTS.json`（`60052 字节`实测），而钩子读 `build/FACTS.json` ⇒ **重测"成功"但改口不生效**，
   `check_facts_replay` 一直红而根因是写错地方（本次会话真实代价 ≈40 分钟）；
   ③ **档位/车道知识散在三张登记表**：本次漏改 `manifest.json` 的 `THREADS_ARTIFACT`
   ⇒ **核心闸门 `probe-lane` 被 sweep 永久跳过而 summary 报 "0 FAIL"**（假绿）。
@@ -560,7 +560,7 @@
   静默变绿"的跨仓库版。
   · **追加评论（同日，同 issue 不新开单）**：② 升级为**路径根本不设防** —— 写盘不检查目标是否
   被 gitignore 掩盖、不提示默认路径；内容仓"裸跑没写盘"的自查**对但原因不是防护**（先
-  `--render-doc` 会读失败早退），换顺序即写出 **60604 字节**野文件（本仓实测）；
+  `--render-doc` 会读失败早退），换顺序即写出 **`60604 字节`**野文件（本仓实测）；
   **`_load_or_die` 的提示"先在仓库根跑一遍量测"本身在教人踩坑**（那正是写出野文件的动作）
   ⇒ 提示文本也是「默认值产地」的一部分。
 
@@ -635,7 +635,7 @@
     NOTES/PLAN-threads 加历史横幅。
   · **验收矩阵三格化**：probe-lane **33/0**（死档 URL `?lane=threads` ⇒ 覆盖失效落 base、
     页面照常 ready 的三重断言）；lane-pick 9/0；其余六套件枚举收窄。
-  · **台账**：threads_* 8 键 + oct_lane_* 3 键 allow-drop 掉档（**163 条**）；
+  · **台账**：threads_* 8 键 + oct_lane_* 3 键 allow-drop 掉档（**`163 条`**）；
     `locale_contract_lanes` 4→2（实测）；车道 .oct 键改 w64 形状。
   · **纪律固化**：check-lane-purity **三线权威枚举 + DEAD_LANES={threads}**（7 自证）；
     现役双档纯度实测绿（w64=44 .oct wasm64 / base=44 .oct wasm32）。
@@ -656,7 +656,7 @@
   · **端口定稿**：`description`（string）/`links`（`[{label,url}]`，icon 非规范键）进
     `content-list.schema.json` 正式键 + `$defs/link`；校验器只查类型/结构（「写对了没」无机器
     判据 —— 同 license 的诚实边界），自证 **41→46/0**（正反各钉：非字符串必报/缺 url 必报/
-    合法缺省不报）。**生产者真样件**（`--emit` 285af2f，13 包全带）过校验器双模式。
+    合法缺省不报）。**生产者真样件**（`--emit` `285af2f`，`13 包`全带）过校验器双模式。
   · **装配透传**：`resolve()` 从货架档案 `upstream.description/links` 摊平进站点目录
     （**对函数包**：缺省空值不省键 ⇒ UI 恒可渲染不用判有没有）；`--upstream` 路径透传 + `_site_fixups`
     （links 的 url strip/去转义 —— 只修结构噪声，不删坏形状项，让闸门点名）。自证 28→**32/0**。
@@ -906,10 +906,10 @@
     （R2/R4）⇒ **26 条假红** ⇒ 改为**按 `url` 前缀分域**（货架包走 R2–R5；能力层/生产者表走 **R7**）；
     ② 旧 R6 要求"能力层**必需** consumer"与裁决②"**可选**、缺省 octave"**自相矛盾**（对 LLVM 的 sysroot 假红）⇒ **翻面**。
     **新增 `--upstream-bytes`**（stage 生产者表引用的字节进站点，逐件核 sha）：只并表不 stage ⇒
-    目录指 **404**（R7b 拦）；端到端证明 = 并入 LLVM 真表 + stage ⇒ 站点闸门 **`ok`**（catalog 26 条）。
+    目录指 **`404`**（R7b 拦）；端到端证明 = 并入 LLVM 真表 + stage ⇒ 站点闸门 **`ok`**（catalog 26 条）。
   · **附件裁决（`size`/`url` 口径）**：**由 `form` 决定** —— 单文件 `size` == 该文件字节；
-    **`form:"tree"` 的 `size` = 整树字节预算**（现役 pyodide：22,013,349 = `assets/pyodide/` 整目录，
-    `url` 指树里主 wasm 9,598,218，**两者不是同一个对象、都是有意的**）。闸门加 **R8** sanity
+    **`form:"tree"` 的 `size` = 整树字节预算**（现役 pyodide：[[pyodide_tree_bytes]] = `assets/pyodide/` 整目录，
+    `url` 指树里主 wasm [[pyodide_wasm_bytes]]，**两者不是同一个对象、都是有意的**）。闸门加 **R8** sanity
     （单文件 `size`==字节；tree 的 `size` ≥ `url` 锚）——`size` 不参与 fail-closed（唯一依据是 sha256）。
   · 闸门/校验器自证计数进台账：`port_validator_selftest_pass` [[port_validator_selftest_pass]] /
     `port_gate_selftest_pass` [[port_gate_selftest_pass]] / `forge_gate_selftest_pass` [[forge_gate_selftest_pass]] /
@@ -958,7 +958,7 @@
   ② 每 op **首次调用**几何均值 **[[sympy_pyc_cold_geo_speedup]]×**（惰性子模块加载）；
   ③ **稳态 [[sympy_pyc_steady_geo_ratio]]×（≈不变，对照）**；④ 同会话二次 import 2.73 → 0.28 s。
   ★ **④ 的含义最值钱**：源码档**二次 import 仍要 2.73 s** ⇒ **浏览器里没有隐式字节码缓存**
-  （原生 CPython 会写 `__pycache__`，浏览器 site-packages 只读 ⇒ **每次冷启动重编 472 个模块**）
+  （原生 CPython 会写 `__pycache__`，浏览器 site-packages 只读 ⇒ **每次冷启动重编 [[sympy_pyc_compile_calls_source]] 个模块**）
   ⇒ `.pyc` 轮子的本质 ≠ "把执行变快"，而是"**把每次冷启动的固定成本砍掉 85%**"。
   代价仍是字节 [[sympy_pyc_bytes_ratio]]×（见 §1.3c）。
 
@@ -970,18 +970,18 @@
   `python_ipc_driver` 起 Python —— 而本构建 wasm 里 `pyexec`/`pyeval`/`pycall` 字节数
   **全 = 0**、`system`/`popen` 无 shell（webshim 清晰报错）⇒ 包原样跑不了。
   **用户的 Transcrypt 之问有两半，实测答案**：① **静态编译成 JS 不可行**（官方 README
-  第 45 行 *"No eval and exec of Python code"* × SymPy 实测 `eval(` **340** / `exec(` **61**
+  第 45 行 *"No eval and exec of Python code"* × SymPy 实测 `eval(` **`340`** / `exec(` **`61`**
   处）；② **预编译字节码（`.pyc`）可行且现在完全没做**（实测 `.pyc` 计数：pyodide
   stdlib = 0、sympy/mpmath 轮子 = 0）⇒ **A/B = [[sympy_pyc_speedup]]×**
   （`import sympy` [[sympy_import_ms_source]]→[[sympy_import_ms_pyc]] ms，
-  源码编译 472→[[sympy_pyc_compile_calls]] 次），代价 = 字节 **[[sympy_pyc_bytes_ratio]]×**
+  源码编译 [[sympy_pyc_compile_calls_source]]→[[sympy_pyc_compile_calls]] 次），代价 = 字节 **[[sympy_pyc_bytes_ratio]]×**
   （6.55→21.47 MB，gzip 后仍 3.29×）。
   台账键：`sympy_pyodide_{ok,diff,nocoi_ok,break_fails_loud}` / `sympy_import_ms_{source,pyc}` /
   `sympy_pyc_{speedup,compile_calls,bytes_ratio}` / `sympy_assets_bytes`。
 
 - **★ 补缺口的工作令已落档（2026-10-14）**：`build/113/PLAN-matlab-gaps.md` ——
   三条缺口（符号计算 / 库厚度 / 计划内三件）各带实测现状 + 复跑命令 + 验收与反向断言。
-  库厚度实测：货架 12 包 vs 上游索引 **144 个包全兼容 11.3.0**（纯候选 **102** 个）；
+  库厚度实测：货架 12 包 vs 上游索引 **`144 个包`全兼容 11.3.0**（纯候选 **`102` 个）；
   计划内三件在本仓**只剩接口/验收角色**（前端与 OM 均已交独立仓）。
 
 - **★ WebGPU 在 Worker 里可用且真算对（2026-10-14，推翻我自己的假结论）**。实测
@@ -1038,12 +1038,12 @@
 - **两份文档（2026-10-13）**：`build/113/REQUIREMENTS-store-and-matlab.md`（额外内容拉取接口契约
   + 贴近 MATLAB 的 C1–C4 + UI 师傅交接清单）、`build/113/NOTES-plugin-survey.md`
   （scilab/pathsim/pyblocksim 探查：**pathsim 首选**，MIT + 依赖仅 numpy/scipy/matplotlib
-  且 Pyodide 全有；pyblocksim 次选，GPL + 多 2 个非标准依赖；**scilab 不做**，464 MB C++ 且
+  且 Pyodide 全有；pyblocksim 次选，GPL + 多 2 个非标准依赖；**scilab 不做**，`464 MB` C++ 且
   语言不兼容 MATLAB）。
 - **纠正一个错前提（2026-10-13）**：`NOTES-forge-ondemand.md` §1 原写"12 MB 对每个用户
   强制下载"——**实测推翻**：开机 `assets/pkg/*.js` 传输 = **0.00 MB**（包懒加载），
   且 gzip 后 bundle（statistics 0.92 MB）比货架 tarball（1.44 MB）**更小**。
-  ⇒ 货架价值 = **广度**（能装的包 12 → 142，上游兼容数）+ 交付件体积，**不是**每用户带宽。
+  ⇒ 货架价值 = **广度**（能装的包 `12 → 142`，上游兼容数）+ 交付件体积，**不是**每用户带宽。
   原文已更正（保留旧文作对照）。
 - **货架扩到 12 包**（submodule `shelf`，已推 origin）：新增 `cgi`（纯 `.m`，证明
   "**从未预打包的包也能装**"）与 `datatypes`（杀手用例）。
@@ -1078,7 +1078,7 @@
   产物**（可删可重建）= 缓存，不是维护对象。
   接缝：A 只补一个洞（`pkg.m` 先问 catalog）；B 只加**一个方法**
   `OctaveAssets.compileExtension()`。**设计验证**：真包源码直编成功 ——
-  `miscellaneous/src/cell2cell.cc` + 合成 `config.h` + 788 真头 ⇒ 13446 B 真 `.oct`
+  `miscellaneous/src/cell2cell.cc` + 合成 `config.h` + `788 真头` ⇒ `13446 B` 真 `.oct`（⚠️ 两值均与现役实测不符，见工单 73 §遗留）
   ⇒ `addpath` 后 `exist=3` 且 `cell2cell({1,2},1)=1×1`、`(,2)=1×2` **语义正确**。
   ⚠️ 关键发现：`config.h`（25 宏）**不在 tarball 里**、是 `build-pkg-oct.sh` 合成的
   ⇒ 客户端要复现的核心知识 = 这 25 个宏，**必须是数据**（跟 catalog 走），不是硬编码。
@@ -1183,7 +1183,7 @@
   旋钮关）。w64 端到端 A/B = asc **0.491** / desc 0.487（2.0×，`w64_rustsort_ab_*`）；
   全量 PROBES=1 等效 1358/0；端到端逐位抽查双站一致（IEEE 红线）。
 - **rust-sort 已发运（2026-10-07）**：8761 的 w64 档 = f6fec91f（rust_sort+mimalloc+
-  e2-rsimd+wasm64），`promote-w64-lane.sh` 发运，全量 PROBES=1 1358/0 + IEEE 754 评估
+  e2-rsimd+wasm64），`promote-w64-lane.sh` 发运，全量 `PROBES=1 1358/0` + `IEEE 754` 评估
   通过（§5.97）+ 对撞 2.2×。**master 线 = 中庸 wasm64**（wasm64-NEXT，无 rust 缝，fork
   pin a5a7208）已改名推送（CI 部署仓库 site/）。三线独立：wasm32-final（冻结）/ 
   wasm64-NEXT / IllegalPerformance——换线四步规则见 `maintaince.md`。isui.ren 部署
@@ -1218,167 +1218,178 @@
 
 | 键 | 值 | 测于 | 复跑命令 |
 |---|---|---|---|
-| `accept_pass` | **1259** | 2026-10-30T13:38:19+0800 | `同上，把每个套件的 PASS 相加` |
-| `accept_suites` | **56** | 2026-10-30T13:38:19+0800 | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20261030-133122 里带汇总行的套件（且 0 FAIL）` |
-| `build_json_sha` | `d953d7a7929754be…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json | cut -d' ' -f1` |
-| `data_sha` | `f250530ae5abe378…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data | cut -d' ' -f1` |
-| `dist_lane_probe_fail` | **0** | 2026-10-30T13:38:21+0800 | `同上` |
-| `dist_lane_probe_pass` | **33** | 2026-10-30T13:38:21+0800 | `cd <dist 包目录> && python3 serve.py 8788；再 SITE_DIR=<dist 包目录> sh build/sweep.sh http://127.0.0.1:8788/ probe-lane > w64-logs/dist-probe-lane.log` |
-| `e2_lu800_ratio` | **1.4** | 2026-10-30T13:38:19+0800 | `上面两行的比值（车道 / E2）` |
-| `e2_lu800_s` | **0.043** | 2026-10-30T13:38:19+0800 | `同 E2 那一行` |
-| `e2_matmul500_ratio` | **1.9** | 2026-10-30T13:38:19+0800 | `上面两行的比值（车道 / E2）` |
-| `e2_matmul500_s` | **0.021** | 2026-10-30T13:38:19+0800 | `E2 单线程站点跑 bench-core.mjs（见 NOTES 的 A/B 表）` |
-| `e2_single_verdict` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.build.json）` |
-| `e2_single_wasm_bytes` | **29495868** | 2026-10-30T13:38:19+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm` |
-| `e2_single_wasm_sha` | `e570905ecc8927bf…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm | cut -d' ' -f1` |
-| `e2_threaded_lu800_s` | **0.02** | 2026-10-30T13:38:19+0800 | `同上` |
-| `e2_threaded_matmul500_ratio` | **6.7** | 2026-10-30T13:38:19+0800 | `车道 / 线程版（派生）` |
-| `e2_threaded_matmul500_s` | **0.006** | 2026-10-30T13:38:19+0800 | `E2 线程版站点跑 bench-core.mjs（该轮 300s 超时收尾，只到前几项）` |
-| `e2_threaded_oct_rc` | **124** | 2026-10-30T13:38:19+0800 | `timeout 600 sh test/browser/run.sh ...accept-113-oct.mjs <E2 线程版站点>; echo $?` |
-| `e2_threaded_verdict` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.build.json）` |
-| `e2_threaded_wasm_bytes` | **29908917** | 2026-10-30T13:38:19+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm` |
-| `e2_threaded_wasm_sha` | `bce7e4cc252d6481…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm | cut -d' ' -f1` |
-| `emcc6_probe_geomean` | **1.001** | 2026-10-30T13:38:19+0800 | `sh test/fixtures/emcc6-probe/run-probe.sh 1（读 w64-logs/emcc6-probe.log 的 geomean 行）` |
-| `env_vars` | **33** | 2026-10-30T13:38:19+0800 | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh | sort -u（去掉位置参数）` |
-| `exported_functions` | **710** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.exported_functions` |
-| `floor_matrix_engines` | **4** | 2026-10-30T13:38:21+0800 | `数 w64-logs/floor-*.log 里 `· ① 页面 ready` 判据行的引擎名（去重）` |
-| `floor_matrix_fail` | **0** | 2026-10-30T13:38:21+0800 | `同上` |
-| `floor_matrix_pass` | **16** | 2026-10-30T13:38:21+0800 | `同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）` |
-| `fonts_count` | **8** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.fonts` |
-| `forge_catalog_oct_packs` | **0** | 2026-10-30T13:38:19+0800 | `python3 -c "import json;print(len([p for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if 'oct' in (p.get('kinds') or [])]))"` |
-| `forge_catalog_octave` | **11.3.0** | 2026-10-30T13:38:19+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['octave'])"` |
-| `forge_catalog_packs` | **17** | 2026-10-30T13:38:19+0800 | `python3 -c "import json;print(len(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs']))"` |
-| `forge_catalog_selftest_pass` | **44** | 2026-10-30T13:38:21+0800 | `python3 build/forge-catalog.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
-| `forge_catalog_shelf_commit` | **7dfe77efff43** | 2026-10-30T13:38:19+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['shelf_commit'])" | cut -c1-12` |
-| `forge_gate_selftest_pass` | **43** | 2026-10-30T13:38:21+0800 | `python3 build/113/check-forge-catalog.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
-| `forge_shelf_packs` | **13** | 2026-10-30T13:38:19+0800 | `ls shelf/packages/*.json | wc -l` |
-| `forge_shelf_verified` | **13** | 2026-10-30T13:38:19+0800 | `grep -l '"verified": {' shelf/packages/*.json | wc -l` |
-| `hotpath_fft_blktrans_pct` | **19.1** | 2026-10-30T13:38:19+0800 | `python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6; tic; for k=1:10, y=fft(x); end' --lane w64` |
-| `hotpath_instrument_ok` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/113/hotpath.py calibrate` |
-| `hotpath_top` | **exp_inline 23.6%** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/hotpath-logs/20261005-142643/report.json 的 hotspots[0]（重活 ⇒ 不逐字复跑）` |
-| `hotpath_xpow_driver_pct` | **39.5** | 2026-10-30T13:38:19+0800 | `同上（elem_xpow + do_rc_map）` |
-| `hotpath_xpow_libm_pct` | **48.9** | 2026-10-30T13:38:19+0800 | `python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6+0.1; tic; for k=1:20, y=sqrt(x)+x.^0.7; end' --lane w64（读 w64-logs/hotpath-final3.log）` |
-| `hw_apis_available` | **3** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['hw'];print(sum(1 for k in ('serial','usb','hid') if d.get(k)))"` |
-| `ip_vs_next_sort_ip_ms` | **0.105** | 2026-10-30T13:38:19+0800 | `sh test/browser/run.sh test/browser/bench-lanes.mjs <8761> w64（读 w64-logs/bench-IP-vs-NEXT.log）` |
-| `ip_vs_next_sort_next_ms` | **0.237** | 2026-10-30T13:38:19+0800 | `同（<8869>）` |
-| `ip_vs_next_sort_ratio` | **0.443** | 2026-10-30T13:38:19+0800 | `派生：IP ÷ NEXT` |
-| `js_sha` | `caac68bf62015859…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.js | cut -d' ' -f1` |
-| `jspi_entry` | **True** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.jspi_entry` |
-| `lane6012_ip_verdict` | **ok** | 2026-10-30T13:38:21+0800 | `cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-ip.verdict` |
-| `lane6012_master_verdict` | **ok** | 2026-10-30T13:38:21+0800 | `cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-master.verdict` |
-| `lane6012_ok_lines` | **3** | 2026-10-30T13:38:21+0800 | `grep -l '^ok$' /mnt/hdd/octave-wasm-build/w64-logs/lane6012-*.verdict | wc -l` |
-| `lane6012_wasm32_verdict` | **ok** | 2026-10-30T13:38:21+0800 | `cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-wasm32.verdict` |
-| `lane_lu800_s` | **0.06** | 2026-10-30T13:38:19+0800 | `同车道那一行` |
-| `lane_matmul500_s` | **0.04** | 2026-10-30T13:38:19+0800 | `现役车道站点跑同一个 bench-core.mjs` |
-| `libm_spike_geomean` | **0.964** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-libm-spike.sh 8（读 w64-logs/libm-spike-verdict.txt 的 geomean 行）` |
-| `locale_contract_lanes` | **2** | 2026-10-30T13:38:19+0800 | `for l in w64 base; do sh test/browser/run.sh test/browser/probe-locale.mjs "http://127.0.0.1:8761/?lane=$l"; done （读 w64-logs/locale-all-lanes.log 的 '8 PASS / 0 FAIL' 计数）` |
-| `matrix_page_sha` | `54a7e1c261a2df2f…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/matrix-android.html | cut -d' ' -f1` |
-| `mem_live_ceiling_gib` | **7.45** | 2026-10-30T13:38:21+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/ > w64-logs/heap-ceiling.log` |
-| `native_netlib_loop1e6_s` | **0.500141** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh` |
-| `native_netlib_lu1500_s` | **0.25765** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh` |
-| `native_netlib_lu800_s` | **0.04076** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh` |
-| `native_netlib_matmul1000_s` | **0.196202** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh` |
-| `native_netlib_matmul500_s` | **0.027249** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
-| `native_openblas_lu1500_s` | **0.040473** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh` |
-| `native_openblas_lu800_s` | **0.026146** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
-| `native_openblas_matmul1000_s` | **0.009586** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh` |
-| `native_openblas_matmul1024_s` | **0.008517** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
-| `native_openblas_matmul2000_s` | **0.050018** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
-| `native_openblas_matmul500_s` | **0.003212** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
-| `native_openblas_threads` | **24** | 2026-10-30T13:38:21+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
-| `oct_base_files` | **17** | 2026-10-30T13:38:19+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' | wc -l` |
-| `oct_w64_files` | **17** | 2026-10-30T13:38:19+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/oct-w64 -name '*.oct' | wc -l` |
-| `octave_pin` | **f4bf15b792bf** | 2026-10-30T13:38:19+0800 | `git -C upstream/octave rev-parse --short=12 HEAD` |
-| `octdir_base_files` | **28** | 2026-10-30T13:38:19+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' | wc -l` |
-| `octdir_w64_files` | **28** | 2026-10-30T13:38:19+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/octdir-w64 -name '*.oct' | wc -l` |
-| `port_gate_selftest_pass` | **6** | 2026-10-30T13:38:21+0800 | `python3 build/extra-content/check-content-port.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
-| `port_validator_selftest_pass` | **63** | 2026-10-30T13:38:19+0800 | `python3 build/extra-content/validate-content-list.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
-| `probe_lane_fail` | **0** | 2026-10-30T13:38:19+0800 | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
-| `probe_lane_pass` | **33** | 2026-10-30T13:38:19+0800 | `SITE_DIR=<站点> sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
-| `pyodide_sync_probe_pass` | **4** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['pass'])"` |
-| `pyodide_sync_ready_ms` | **2288** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['result']['pyodideReadyMs'])"` |
-| `rust_fill_spike_ratio` | **1.094** | 2026-10-30T13:38:19+0800 | `sh test/fixtures/rustfill-spike/run-spike.sh（读 w64-logs/rustfill-spike.log 的比值行）` |
-| `rust_patch_toolchain_ok` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/113/check-rust-toolchain.py` |
-| `rust_sort_spike_base_ms` | **352.0** | 2026-10-30T13:38:19+0800 | `sh test/fixtures/rustsort-spike/run-spike.sh（读 w64-logs/rustsort-spike.log）` |
-| `rust_sort_spike_cand_ms` | **87.0** | 2026-10-30T13:38:19+0800 | `同上` |
-| `rust_sort_spike_ratio` | **0.249** | 2026-10-30T13:38:19+0800 | `派生：cand ÷ base` |
-| `symbolic_seam_fail` | **0** | 2026-10-30T13:38:21+0800 | `awk '/=== [0-9]+ PASS/{f=$5} END{print f}' /mnt/hdd/octave-wasm-build/w64-logs/accept-symbolic-seam.log` |
-| `symbolic_seam_pass` | **9** | 2026-10-30T13:38:21+0800 | `awk '/=== [0-9]+ PASS/{p=$2} END{print p}' /mnt/hdd/octave-wasm-build/w64-logs/accept-symbolic-seam.log` |
-| `sympy_assets_bytes` | **6757104** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['bytes']['disk']['coreTar'])"` |
-| `sympy_import_ms_pyc` | **380** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['importB_ms'])"` |
-| `sympy_import_ms_source` | **2757** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['importA_ms'])"` |
-| `sympy_perf_cold_start_ms` | **2276** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-perf-pyodide.json'))['timings'];print(round(d['load']+d['pkg']))"` |
-| `sympy_perf_pyodide_over_native` | **2.01** | 2026-10-30T13:38:21+0800 | `python3 test/fixtures/sympy-perf/compare.py（读最后一行 JSON 的 geo）` |
-| `sympy_pyc_bytes_ratio` | **3.28** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['bytes'];print(round(d['B']/d['A'],2))"` |
-| `sympy_pyc_cold_geo_speedup` | **1.29** | 2026-10-30T13:38:21+0800 | `python3 test/fixtures/sympy-perf/compare-pyc.py（读 cold_geo_speedup）` |
-| `sympy_pyc_compile_calls` | **0** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['sourceToCode']['B'])"` |
-| `sympy_pyc_import_speedup_pyodide` | **7.4** | 2026-10-30T13:38:21+0800 | `python3 test/fixtures/sympy-perf/compare-pyc.py（读末行 JSON 的 import_s.speedup）` |
-| `sympy_pyc_speedup` | **7.26** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['speedup'])"` |
-| `sympy_pyc_steady_geo_ratio` | **0.99** | 2026-10-30T13:38:21+0800 | `python3 test/fixtures/sympy-perf/compare-pyc.py（读 steady_geo_ratio）` |
-| `sympy_pyodide_break_fails_loud` | **True** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][2]['result']['ok'])"` |
-| `sympy_pyodide_diff` | **cos(x)** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][0]['result']['diff'])"` |
-| `sympy_pyodide_nocoi_ok` | **True** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'];print(d[1]['result']['ok'], d[1]['result']['diff'])"` |
-| `sympy_pyodide_ok` | **True** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][0]['result']['ok'])"` |
-| `upstream_submodule_count` | **19** | 2026-10-30T13:38:19+0800 | `git submodule status | wc -l` |
-| `w64_big_heap` | **True** | 2026-10-30T13:38:21+0800 | `同上（探针结尾的 `W64_BIG_HEAP=` 行）` |
-| `w64_build_recipe_ok` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/113/witness-build-inputs.py` |
-| `w64_build_tool_match` | **match** | 2026-10-30T13:38:19+0800 | `<重链 w64 后：python3 build/113/witness-build-provenance.py w64>` |
-| `w64_cand_exported_functions` | **751** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc 的 measured.exported_functions` |
-| `w64_cand_loop1e6_s` | **0.574** | 2026-10-30T13:38:21+0800 | `同上（loop 1e6）` |
-| `w64_cand_lu800_s` | **0.014** | 2026-10-30T13:38:21+0800 | `同上（lu 800）` |
-| `w64_cand_malloc` | **mimalloc** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc 的 declared.malloc / measured.malloc` |
-| `w64_cand_matmul500_s` | **0.005** | 2026-10-30T13:38:21+0800 | `<交错 3 轮取中位：HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8861/ w64（×3 ⇒ w64-logs/bench-mi2-r1..3.log）>` |
-| `w64_cand_verdict` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.build.json）` |
-| `w64_cand_vs_ship_lu800` | **1.0** | 2026-10-30T13:38:21+0800 | `派生：同上（lu 800）` |
-| `w64_cand_vs_ship_matmul500` | **1.25** | 2026-10-30T13:38:21+0800 | `派生：w64-logs/bench-mi2-r1..3.log 的中位 ÷ bench-ship2-r1..3.log 的中位` |
-| `w64_cand_wasm_bytes` | **30984954** | 2026-10-30T13:38:19+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.wasm` |
-| `w64_cand_wasm_sha` | `01fb52fc3b5dde30…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.wasm | cut -d' ' -f1` |
-| `w64_exported_functions` | **757** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.exported_functions` |
-| `w64_i64_insns` | **4175689** | 2026-10-30T13:38:21+0800 | `llvm-objdump -d <w64>/octave.wasm | grep -c i64（由 build/113/build-w64-lane.sh facts 写出，容器内跑）` |
-| `w64_lu800_s` | **0.079** | 2026-10-30T13:38:21+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log` |
-| `w64_malloc` | **mimalloc** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 declared.malloc / measured.malloc` |
-| `w64_matmul500_s` | **0.048** | 2026-10-30T13:38:21+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log` |
-| `w64_mem_5g_bytes` | **5242880000** | 2026-10-30T13:38:21+0800 | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
-| `w64_mem_8g_bytes` | **8589934592** | 2026-10-30T13:38:21+0800 | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
-| `w64_mem_probe_fail` | **0** | 2026-10-30T13:38:21+0800 | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
-| `w64_mem_shared_5g_bytes` | **5242880000** | 2026-10-30T13:38:21+0800 | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
-| `w64_ob_lib_wasm32_members` | **0** | 2026-10-30T13:38:21+0800 | `同上` |
-| `w64_ob_lib_wasm64_members` | **1557** | 2026-10-30T13:38:21+0800 | `E2_LANE=w64 docker exec o113 bash /src/bin/build-e2-lane.sh src patch build > w64-logs/e2-w64-build.log（读那行架构断言）` |
-| `w64_ob_lu800_s` | **0.014** | 2026-10-30T13:38:21+0800 | `同上（8761 现役那轮）` |
-| `w64_ob_matmul1000_native_ratio` | **0.38** | 2026-10-30T13:38:21+0800 | `派生：native-baseline.json 的 openblas24.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000` |
-| `w64_ob_matmul500_native_ratio` | **1.07** | 2026-10-30T13:38:21+0800 | `派生：w64-logs/native-baseline.json 的 openblas24.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500` |
-| `w64_ob_matmul500_s` | **0.003** | 2026-10-30T13:38:21+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/bench-ob-w64.log` |
-| `w64_ob_matmul500_speedup` | **15.3** | 2026-10-30T13:38:21+0800 | `派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项` |
-| `w64_ob_matmul500_vs_netlib` | **9.1** | 2026-10-30T13:38:21+0800 | `派生：w64-logs/native-baseline.json 的 netlib.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500` |
-| `w64_oct_files` | **46** | 2026-10-30T13:38:21+0800 | `同上（文件名：oct-wasm64.txt 的第二个数）` |
-| `w64_oct_wasm64` | **46** | 2026-10-30T13:38:21+0800 | `bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/llvm-readobj 逐个量）` |
-| `w64_relaxed_madd` | **6** | 2026-10-30T13:38:19+0800 | `<重活：产物 + test/fixtures/relaxed_madd_min.wasm 各数 fd 87 02>` |
-| `w64_rustsort_ab_asc_ms` | **165** | 2026-10-30T13:38:19+0800 | `bash build/113/sort-ab.sh /mnt/hdd/octave-wasm-build/site-illegalperf /mnt/hdd/octave-wasm-build/site-illegalperf-baseline 3（读 w64-logs/rust-sort-ab.log）` |
-| `w64_rustsort_ab_asc_ratio` | **0.506** | 2026-10-30T13:38:19+0800 | `派生：候选 ÷ 对照（asc 中位）` |
-| `w64_rustsort_ab_desc_ratio` | **0.551** | 2026-10-30T13:38:19+0800 | `派生：候选 ÷ 对照（desc 中位）` |
-| `w64_rustsort_base_ab_ms` | **326** | 2026-10-30T13:38:19+0800 | `同上` |
-| `w64_rustsort_cand_sha` | `f6fec91fc7a0f4b8…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm | cut -d' ' -f1` |
-| `w64_shared_memory` | **True** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.threads.shared_memory` |
-| `w64_v128` | **6295** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.simd.v128` |
-| `w64_verdict` | **ok** | 2026-10-30T13:38:19+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts/octave.build.json）` |
-| `w64_vs_netlib_loop1e6` | **0.67** | 2026-10-30T13:38:21+0800 | `派生：native-baseline.json 的 netlib.loop1e6 ÷ bench-ob-w64.log 的 loop 1e6` |
-| `w64_vs_netlib_lu1500` | **3.8** | 2026-10-30T13:38:21+0800 | `派生：native-baseline.json 的 netlib.lu1500 ÷ bench-ob-w64.log 的 lu 1500` |
-| `w64_vs_netlib_matmul1000` | **7.8** | 2026-10-30T13:38:21+0800 | `派生：native-baseline.json 的 netlib.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000` |
-| `w64_wasm64` | **True** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.wasm64` |
-| `w64_wasm_bytes` | **31246819** | 2026-10-30T13:38:19+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm` |
-| `w64_wasm_sha` | `0225d0b374f3bed9…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm | cut -d' ' -f1` |
-| `wasm_bytes` | **29632229** | 2026-10-30T13:38:19+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
-| `wasm_sha` | `1ed3e528561e4475…` | 2026-10-30T13:38:19+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm | cut -d' ' -f1` |
-| `wasm_v128` | **4752** | 2026-10-30T13:38:19+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
-| `webgpu_main_device` | **OK** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['device'])"` |
-| `webgpu_vendor` | **nvidia** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['vendor'])"` |
-| `webgpu_worker_compute_ok` | **True** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['computeOK'])"` |
-| `webgpu_worker_device` | **OK** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['device'])"` |
-| `webgpu_worker_webgl2` | **True** | 2026-10-30T13:38:21+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['webgl2'])"` |
-| `xpow_driver_spike_pct` | **2.1** | 2026-10-30T13:38:19+0800 | `bash test/fixtures/xpow-spike/run-spike.sh（读 w64-logs/xpow-spike.log）` |
-| `xpow_driver_spike_ratio` | **0.988** | 2026-10-30T13:38:19+0800 | `同上（cand/base）` |
+| `accept_pass` | **1259** | 2026-10-31T21:48:55+0800 | `同上，把每个套件的 PASS 相加` |
+| `accept_suites` | **56** | 2026-10-31T21:48:55+0800 | `数 /mnt/hdd/octave-wasm-build/sweep-logs/20261031-191756 里带汇总行的套件（且 0 FAIL）` |
+| `build_json_sha` | `d953d7a7929754be…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.build.json | cut -d' ' -f1` |
+| `cache_first_bytes` | **119878350** | 2026-10-31T20:00:00+0800 | `grep -oP 'first=\K[0-9]+' /mnt/hdd/octave-wasm-build/w64-logs/cache-bytes-20261031.log` |
+| `cache_reload_bytes` | **12790** | 2026-10-31T20:00:00+0800 | `grep -oP 'second=\K[0-9]+' /mnt/hdd/octave-wasm-build/w64-logs/cache-bytes-20261031.log` |
+| `data_bytes` | **9712174** | 2026-10-31T21:48:55+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.data` |
+| `data_sha` | `f250530ae5abe378…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.data | cut -d' ' -f1` |
+| `dist_lane_probe_fail` | **0** | 2026-10-31T21:48:57+0800 | `同上` |
+| `dist_lane_probe_pass` | **33** | 2026-10-31T21:48:57+0800 | `cd <dist 包目录> && python3 serve.py 8788；再 SITE_DIR=<dist 包目录> sh build/sweep.sh http://127.0.0.1:8788/ probe-lane > w64-logs/dist-probe-lane.log` |
+| `e2_lu800_ratio` | **1.4** | 2026-10-31T21:48:55+0800 | `上面两行的比值（车道 / E2）` |
+| `e2_lu800_s` | **0.043** | 2026-10-31T21:48:55+0800 | `同 E2 那一行` |
+| `e2_matmul500_ratio` | **1.9** | 2026-10-31T21:48:55+0800 | `上面两行的比值（车道 / E2）` |
+| `e2_matmul500_s` | **0.021** | 2026-10-31T21:48:55+0800 | `E2 单线程站点跑 bench-core.mjs（见 NOTES 的 A/B 表）` |
+| `e2_single_verdict` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.build.json）` |
+| `e2_single_wasm_bytes` | **29495868** | 2026-10-31T21:48:55+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm` |
+| `e2_single_wasm_sha` | `e570905ecc8927bf…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/single/octave.wasm | cut -d' ' -f1` |
+| `e2_threaded_lu800_s` | **0.02** | 2026-10-31T21:48:55+0800 | `同上` |
+| `e2_threaded_matmul500_ratio` | **6.7** | 2026-10-31T21:48:55+0800 | `车道 / 线程版（派生）` |
+| `e2_threaded_matmul500_s` | **0.006** | 2026-10-31T21:48:55+0800 | `E2 线程版站点跑 bench-core.mjs（该轮 300s 超时收尾，只到前几项）` |
+| `e2_threaded_oct_rc` | **124** | 2026-10-31T21:48:55+0800 | `timeout 600 sh test/browser/run.sh ...accept-113-oct.mjs <E2 线程版站点>; echo $?` |
+| `e2_threaded_verdict` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.build.json）` |
+| `e2_threaded_wasm_bytes` | **29908917** | 2026-10-31T21:48:55+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm` |
+| `e2_threaded_wasm_sha` | `bce7e4cc252d6481…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/e2-artifacts/threaded/octave.wasm | cut -d' ' -f1` |
+| `emcc6_probe_geomean` | **1.001** | 2026-10-31T21:48:55+0800 | `sh test/fixtures/emcc6-probe/run-probe.sh 1（读 w64-logs/emcc6-probe.log 的 geomean 行）` |
+| `env_vars` | **33** | 2026-10-31T21:48:55+0800 | `grep -oE '\$\{[A-Za-z0-9_]+:[-+]' /mnt/hdd/zcode-projects/Octave-Full-Wasm/build/113/link-web.sh | sort -u（去掉位置参数）` |
+| `exported_functions` | **710** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.exported_functions` |
+| `floor_matrix_engines` | **4** | 2026-10-31T21:48:57+0800 | `数 w64-logs/floor-*.log 里 `· ① 页面 ready` 判据行的引擎名（去重）` |
+| `floor_matrix_fail` | **0** | 2026-10-31T21:48:57+0800 | `同上` |
+| `floor_matrix_pass` | **16** | 2026-10-31T21:48:57+0800 | `同上（各日志结尾的 `=== N PASS / M FAIL ===` 求和）` |
+| `fonts_count` | **8** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.fonts` |
+| `forge_catalog_oct_packs` | **0** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print(len([p for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if 'oct' in (p.get('kinds') or [])]))"` |
+| `forge_catalog_octave` | **11.3.0** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['octave'])"` |
+| `forge_catalog_packs` | **17** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print(len(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs']))"` |
+| `forge_catalog_selftest_pass` | **44** | 2026-10-31T21:48:57+0800 | `python3 build/forge-catalog.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
+| `forge_catalog_shelf_commit` | **7dfe77efff43** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['shelf_commit'])" | cut -c1-12` |
+| `forge_gate_selftest_pass` | **43** | 2026-10-31T21:48:57+0800 | `python3 build/113/check-forge-catalog.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
+| `forge_shelf_packs` | **13** | 2026-10-31T21:48:55+0800 | `ls shelf/packages/*.json | wc -l` |
+| `forge_shelf_verified` | **13** | 2026-10-31T21:48:55+0800 | `grep -l '"verified": {' shelf/packages/*.json | wc -l` |
+| `hotpath_fft_blktrans_pct` | **19.1** | 2026-10-31T21:48:55+0800 | `python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6; tic; for k=1:10, y=fft(x); end' --lane w64` |
+| `hotpath_instrument_ok` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/113/hotpath.py calibrate` |
+| `hotpath_top` | **exp_inline 23.6%** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/hotpath-logs/20261005-142643/report.json 的 hotspots[0]（重活 ⇒ 不逐字复跑）` |
+| `hotpath_xpow_driver_pct` | **39.5** | 2026-10-31T21:48:55+0800 | `同上（elem_xpow + do_rc_map）` |
+| `hotpath_xpow_libm_pct` | **48.9** | 2026-10-31T21:48:55+0800 | `python3 build/113/hotpath.py profile 'x=(1:2e6)/1e6+0.1; tic; for k=1:20, y=sqrt(x)+x.^0.7; end' --lane w64（读 w64-logs/hotpath-final3.log）` |
+| `hw_apis_available` | **3** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['hw'];print(sum(1 for k in ('serial','usb','hid') if d.get(k)))"` |
+| `ip_vs_next_sort_ip_ms` | **0.105** | 2026-10-31T21:48:55+0800 | `sh test/browser/run.sh test/browser/bench-lanes.mjs <8761> w64（读 w64-logs/bench-IP-vs-NEXT.log）` |
+| `ip_vs_next_sort_next_ms` | **0.237** | 2026-10-31T21:48:55+0800 | `同（<8869>）` |
+| `ip_vs_next_sort_ratio` | **0.443** | 2026-10-31T21:48:55+0800 | `派生：IP ÷ NEXT` |
+| `js_bytes` | **462821** | 2026-10-31T21:48:55+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.js` |
+| `js_sha` | `caac68bf62015859…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.js | cut -d' ' -f1` |
+| `jspi_entry` | **True** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.jspi_entry` |
+| `lane6012_ip_verdict` | **ok** | 2026-10-31T21:48:57+0800 | `cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-ip.verdict` |
+| `lane6012_master_verdict` | **ok** | 2026-10-31T21:48:57+0800 | `cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-master.verdict` |
+| `lane6012_ok_lines` | **3** | 2026-10-31T21:48:57+0800 | `grep -l '^ok$' /mnt/hdd/octave-wasm-build/w64-logs/lane6012-*.verdict | wc -l` |
+| `lane6012_wasm32_verdict` | **ok** | 2026-10-31T21:48:57+0800 | `cat /mnt/hdd/octave-wasm-build/w64-logs/lane6012-wasm32.verdict` |
+| `lane_lu800_s` | **0.06** | 2026-10-31T21:48:55+0800 | `同车道那一行` |
+| `lane_matmul500_s` | **0.04** | 2026-10-31T21:48:55+0800 | `现役车道站点跑同一个 bench-core.mjs` |
+| `libm_spike_geomean` | **0.964** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-libm-spike.sh 8（读 w64-logs/libm-spike-verdict.txt 的 geomean 行）` |
+| `locale_contract_lanes` | **2** | 2026-10-31T21:48:55+0800 | `for l in w64 base; do sh test/browser/run.sh test/browser/probe-locale.mjs "http://127.0.0.1:8761/?lane=$l"; done （读 w64-logs/locale-all-lanes.log 的 '8 PASS / 0 FAIL' 计数）` |
+| `matrix_page_sha` | `54a7e1c261a2df2f…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/matrix-android.html | cut -d' ' -f1` |
+| `mem_live_ceiling_gib` | **7.45** | 2026-10-31T21:48:57+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/probe-heap-ceiling.mjs http://127.0.0.1:8761/ > w64-logs/heap-ceiling.log` |
+| `msl_zip_bytes` | **19482938** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print([p['size'] for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if p['name']=='modelica-standard-library'][0])"` |
+| `native_netlib_loop1e6_s` | **0.500141** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh` |
+| `native_netlib_lu1500_s` | **0.25765** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh` |
+| `native_netlib_lu800_s` | **0.04076** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh` |
+| `native_netlib_matmul1000_s` | **0.196202** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh` |
+| `native_netlib_matmul500_s` | **0.027249** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
+| `native_openblas_lu1500_s` | **0.040473** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh` |
+| `native_openblas_lu800_s` | **0.026146** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
+| `native_openblas_matmul1000_s` | **0.009586** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh` |
+| `native_openblas_matmul1024_s` | **0.008517** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
+| `native_openblas_matmul2000_s` | **0.050018** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
+| `native_openblas_matmul500_s` | **0.003212** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
+| `native_openblas_threads` | **24** | 2026-10-31T21:48:57+0800 | `sh build/113/bench-native.sh（机器空闲时跑；写 w64-logs/native-baseline.json）` |
+| `oct_base_files` | **17** | 2026-10-31T21:48:55+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/oct -name '*.oct' | wc -l` |
+| `oct_w64_files` | **17** | 2026-10-31T21:48:55+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/oct-w64 -name '*.oct' | wc -l` |
+| `octave_headers_count` | **770** | 2026-10-31T21:48:55+0800 | `tar -tzf /mnt/hdd/octave-wasm-build/site/assets/octinc/octave-headers.tar.gz | grep -cE '\.h$|\.hh$|\.tcc$'` |
+| `octave_pin` | **f4bf15b792bf** | 2026-10-31T21:48:55+0800 | `git -C upstream/octave rev-parse --short=12 HEAD` |
+| `octdir_base_files` | **28** | 2026-10-31T21:48:55+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/octdir -name '*.oct' | wc -l` |
+| `octdir_w64_files` | **28** | 2026-10-31T21:48:55+0800 | `find /mnt/hdd/octave-wasm-build/site/assets/octdir-w64 -name '*.oct' | wc -l` |
+| `omc_files_bytes` | **74635990** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;p=[x for x in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if x['name']=='omc'][0];print(sum(f['bytes'] for f in p['files'].values()))"` |
+| `omc_tree_bytes` | **74735455** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print([p['size'] for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if p['name']=='omc'][0])"` |
+| `port_gate_selftest_pass` | **6** | 2026-10-31T21:48:56+0800 | `python3 build/extra-content/check-content-port.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
+| `port_validator_selftest_pass` | **63** | 2026-10-31T21:48:55+0800 | `python3 build/extra-content/validate-content-list.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
+| `probe_lane_fail` | **0** | 2026-10-31T21:48:55+0800 | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
+| `probe_lane_pass` | **33** | 2026-10-31T21:48:55+0800 | `SITE_DIR=<站点> sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
+| `pyodide_sync_probe_pass` | **4** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['pass'])"` |
+| `pyodide_sync_ready_ms` | **2288** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['result']['pyodideReadyMs'])"` |
+| `pyodide_tree_bytes` | **22013349** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print([p['size'] for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if p['name']=='pyodide'][0])"` |
+| `pyodide_wasm_bytes` | **9598218** | 2026-10-31T21:48:55+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/assets/pyodide/pyodide/pyodide.asm.wasm` |
+| `rust_fill_spike_ratio` | **1.094** | 2026-10-31T21:48:55+0800 | `sh test/fixtures/rustfill-spike/run-spike.sh（读 w64-logs/rustfill-spike.log 的比值行）` |
+| `rust_patch_toolchain_ok` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/113/check-rust-toolchain.py` |
+| `rust_sort_spike_base_ms` | **352.0** | 2026-10-31T21:48:55+0800 | `sh test/fixtures/rustsort-spike/run-spike.sh（读 w64-logs/rustsort-spike.log）` |
+| `rust_sort_spike_cand_ms` | **87.0** | 2026-10-31T21:48:55+0800 | `同上` |
+| `rust_sort_spike_ratio` | **0.249** | 2026-10-31T21:48:55+0800 | `派生：cand ÷ base` |
+| `symbolic_seam_fail` | **0** | 2026-10-31T21:48:57+0800 | `awk '/=== [0-9]+ PASS/{f=$5} END{print f}' /mnt/hdd/octave-wasm-build/w64-logs/accept-symbolic-seam.log` |
+| `symbolic_seam_pass` | **9** | 2026-10-31T21:48:57+0800 | `awk '/=== [0-9]+ PASS/{p=$2} END{print p}' /mnt/hdd/octave-wasm-build/w64-logs/accept-symbolic-seam.log` |
+| `sympy_assets_bytes` | **6757104** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['bytes']['disk']['coreTar'])"` |
+| `sympy_import_ms_pyc` | **380** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['importB_ms'])"` |
+| `sympy_import_ms_source` | **2757** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['importA_ms'])"` |
+| `sympy_perf_cold_start_ms` | **2276** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-perf-pyodide.json'))['timings'];print(round(d['load']+d['pkg']))"` |
+| `sympy_perf_pyodide_over_native` | **2.01** | 2026-10-31T21:48:57+0800 | `python3 test/fixtures/sympy-perf/compare.py（读最后一行 JSON 的 geo）` |
+| `sympy_pyc_bytes_ratio` | **3.28** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['bytes'];print(round(d['B']/d['A'],2))"` |
+| `sympy_pyc_cold_geo_speedup` | **1.29** | 2026-10-31T21:48:57+0800 | `python3 test/fixtures/sympy-perf/compare-pyc.py（读 cold_geo_speedup）` |
+| `sympy_pyc_compile_calls` | **0** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['sourceToCode']['B'])"` |
+| `sympy_pyc_compile_calls_source` | **472** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['sourceToCode']['A'])"` |
+| `sympy_pyc_import_speedup_pyodide` | **7.4** | 2026-10-31T21:48:57+0800 | `python3 test/fixtures/sympy-perf/compare-pyc.py（读末行 JSON 的 import_s.speedup）` |
+| `sympy_pyc_speedup` | **7.26** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/sympy-pyc-ab.json'))['summary']['speedup'])"` |
+| `sympy_pyc_steady_geo_ratio` | **0.99** | 2026-10-31T21:48:57+0800 | `python3 test/fixtures/sympy-perf/compare-pyc.py（读 steady_geo_ratio）` |
+| `sympy_pyodide_break_fails_loud` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][2]['result']['ok'])"` |
+| `sympy_pyodide_diff` | **cos(x)** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][0]['result']['diff'])"` |
+| `sympy_pyodide_nocoi_ok` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;d=json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'];print(d[1]['result']['ok'], d[1]['result']['diff'])"` |
+| `sympy_pyodide_ok` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sympy.json'))['modes'][0]['result']['ok'])"` |
+| `upstream_submodule_count` | **19** | 2026-10-31T21:48:55+0800 | `git submodule status | wc -l` |
+| `w64_big_heap` | **True** | 2026-10-31T21:48:57+0800 | `同上（探针结尾的 `W64_BIG_HEAP=` 行）` |
+| `w64_build_recipe_ok` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/113/witness-build-inputs.py` |
+| `w64_build_tool_match` | **match** | 2026-10-31T21:48:55+0800 | `<重链 w64 后：python3 build/113/witness-build-provenance.py w64>` |
+| `w64_cand_exported_functions` | **751** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc 的 measured.exported_functions` |
+| `w64_cand_loop1e6_s` | **0.574** | 2026-10-31T21:48:57+0800 | `同上（loop 1e6）` |
+| `w64_cand_lu800_s` | **0.014** | 2026-10-31T21:48:57+0800 | `同上（lu 800）` |
+| `w64_cand_malloc` | **mimalloc** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc 的 declared.malloc / measured.malloc` |
+| `w64_cand_matmul500_s` | **0.005** | 2026-10-31T21:48:57+0800 | `<交错 3 轮取中位：HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8861/ w64（×3 ⇒ w64-logs/bench-mi2-r1..3.log）>` |
+| `w64_cand_verdict` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.build.json）` |
+| `w64_cand_vs_ship_lu800` | **1.0** | 2026-10-31T21:48:57+0800 | `派生：同上（lu 800）` |
+| `w64_cand_vs_ship_matmul500` | **1.25** | 2026-10-31T21:48:57+0800 | `派生：w64-logs/bench-mi2-r1..3.log 的中位 ÷ bench-ship2-r1..3.log 的中位` |
+| `w64_cand_wasm_bytes` | **30984954** | 2026-10-31T21:48:55+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.wasm` |
+| `w64_cand_wasm_sha` | `01fb52fc3b5dde30…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts-mimalloc/octave.wasm | cut -d' ' -f1` |
+| `w64_exported_functions` | **757** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.exported_functions` |
+| `w64_i64_insns` | **4175689** | 2026-10-31T21:48:57+0800 | `llvm-objdump -d <w64>/octave.wasm | grep -c i64（由 build/113/build-w64-lane.sh facts 写出，容器内跑）` |
+| `w64_lu800_s` | **0.079** | 2026-10-31T21:48:57+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log` |
+| `w64_malloc` | **mimalloc** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 declared.malloc / measured.malloc` |
+| `w64_matmul500_s` | **0.048** | 2026-10-31T21:48:57+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/speed-w64.log` |
+| `w64_mem_5g_bytes` | **5242880000** | 2026-10-31T21:48:57+0800 | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
+| `w64_mem_8g_bytes` | **8589934592** | 2026-10-31T21:48:57+0800 | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
+| `w64_mem_probe_fail` | **0** | 2026-10-31T21:48:57+0800 | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
+| `w64_mem_shared_5g_bytes` | **5242880000** | 2026-10-31T21:48:57+0800 | `sh test/browser/run.sh test/browser/probe-wasm64-mem.mjs > /mnt/hdd/octave-wasm-build/w64-logs/mem-probe.log` |
+| `w64_ob_lib_wasm32_members` | **0** | 2026-10-31T21:48:57+0800 | `同上` |
+| `w64_ob_lib_wasm64_members` | **1557** | 2026-10-31T21:48:57+0800 | `E2_LANE=w64 docker exec o113 bash /src/bin/build-e2-lane.sh src patch build > w64-logs/e2-w64-build.log（读那行架构断言）` |
+| `w64_ob_lu800_s` | **0.014** | 2026-10-31T21:48:57+0800 | `同上（8761 现役那轮）` |
+| `w64_ob_matmul1000_native_ratio` | **0.38** | 2026-10-31T21:48:57+0800 | `派生：native-baseline.json 的 openblas24.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000` |
+| `w64_ob_matmul500_native_ratio` | **1.07** | 2026-10-31T21:48:57+0800 | `派生：w64-logs/native-baseline.json 的 openblas24.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500` |
+| `w64_ob_matmul500_s` | **0.003** | 2026-10-31T21:48:57+0800 | `HARNESS=/mnt/hdd/octave-wasm-build/harness sh test/browser/run.sh test/browser/bench-lanes.mjs http://127.0.0.1:8761/ w64 > w64-logs/bench-ob-w64.log` |
+| `w64_ob_matmul500_speedup` | **15.3** | 2026-10-31T21:48:57+0800 | `派生：w64-logs/bench-ship-w64.log 的 matmul 500 ÷ w64-logs/bench-ob-w64.log 的同项` |
+| `w64_ob_matmul500_vs_netlib` | **9.1** | 2026-10-31T21:48:57+0800 | `派生：w64-logs/native-baseline.json 的 netlib.matmul500 ÷ w64-logs/bench-ob-w64.log 的 matmul 500` |
+| `w64_oct_files` | **46** | 2026-10-31T21:48:57+0800 | `同上（文件名：oct-wasm64.txt 的第二个数）` |
+| `w64_oct_wasm64` | **46** | 2026-10-31T21:48:57+0800 | `bash build-w64-lane.sh facts（容器内；用 /emsdk/upstream/bin/llvm-readobj 逐个量）` |
+| `w64_relaxed_madd` | **6** | 2026-10-31T21:48:55+0800 | `<重活：产物 + test/fixtures/relaxed_madd_min.wasm 各数 fd 87 02>` |
+| `w64_rustsort_ab_asc_ms` | **165** | 2026-10-31T21:48:55+0800 | `bash build/113/sort-ab.sh /mnt/hdd/octave-wasm-build/site-illegalperf /mnt/hdd/octave-wasm-build/site-illegalperf-baseline 3（读 w64-logs/rust-sort-ab.log）` |
+| `w64_rustsort_ab_asc_ratio` | **0.506** | 2026-10-31T21:48:55+0800 | `派生：候选 ÷ 对照（asc 中位）` |
+| `w64_rustsort_ab_desc_ratio` | **0.551** | 2026-10-31T21:48:55+0800 | `派生：候选 ÷ 对照（desc 中位）` |
+| `w64_rustsort_base_ab_ms` | **326** | 2026-10-31T21:48:55+0800 | `同上` |
+| `w64_rustsort_cand_sha` | `f6fec91fc7a0f4b8…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/artifacts-w64-rust-on/octave.wasm | cut -d' ' -f1` |
+| `w64_shared_memory` | **True** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.threads.shared_memory` |
+| `w64_v128` | **6295** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.simd.v128` |
+| `w64_verdict` | **ok** | 2026-10-31T21:48:55+0800 | `python3 build/facts.py（读 /mnt/hdd/octave-wasm-build/w64-artifacts/octave.build.json）` |
+| `w64_vs_netlib_loop1e6` | **0.67** | 2026-10-31T21:48:57+0800 | `派生：native-baseline.json 的 netlib.loop1e6 ÷ bench-ob-w64.log 的 loop 1e6` |
+| `w64_vs_netlib_lu1500` | **3.8** | 2026-10-31T21:48:57+0800 | `派生：native-baseline.json 的 netlib.lu1500 ÷ bench-ob-w64.log 的 lu 1500` |
+| `w64_vs_netlib_matmul1000` | **7.8** | 2026-10-31T21:48:57+0800 | `派生：native-baseline.json 的 netlib.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000` |
+| `w64_wasm64` | **True** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.wasm64` |
+| `w64_wasm_bytes` | **31246819** | 2026-10-31T21:48:55+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm` |
+| `w64_wasm_sha` | `0225d0b374f3bed9…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm | cut -d' ' -f1` |
+| `wasm_bytes` | **29632229** | 2026-10-31T21:48:55+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
+| `wasm_sha` | `1ed3e528561e4475…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm | cut -d' ' -f1` |
+| `wasm_v128` | **4752** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
+| `webgpu_main_device` | **OK** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['device'])"` |
+| `webgpu_vendor` | **nvidia** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['vendor'])"` |
+| `webgpu_worker_compute_ok` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['computeOK'])"` |
+| `webgpu_worker_device` | **OK** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['device'])"` |
+| `webgpu_worker_webgl2` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['webgl2'])"` |
+| `xpow_driver_spike_pct` | **2.1** | 2026-10-31T21:48:55+0800 | `bash test/fixtures/xpow-spike/run-spike.sh（读 w64-logs/xpow-spike.log）` |
+| `xpow_driver_spike_ratio` | **0.988** | 2026-10-31T21:48:55+0800 | `同上（cand/base）` |
 
-159 条事实。
+170 条事实。
 <!-- /AUTO:FACTS -->
 
 <!-- AUTO:GATES -->

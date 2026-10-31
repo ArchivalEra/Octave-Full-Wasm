@@ -23,7 +23,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gate import GATE_REPO, finish, guard_nonempty, main_selftest_or, meta  # noqa: E402
-from gate import repo, selftest                           # noqa: E402
 
 VALID_STATUS = ("needs-triage", "needs-info", "ready-for-agent",
                 "ready-for-human", "wontfix", "resolved")
@@ -169,4 +168,3 @@ GATE = meta("悬案闸门", "未结案的问题必须挂一个能跑的结算件
 if __name__ == "__main__":
     sys.exit(main_selftest_or(sys.argv[1:], "check_questions（悬案必须挂结算件）",
                               _cases, run))
-

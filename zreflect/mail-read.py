@@ -1,47 +1,75 @@
 #!/usr/bin/env python3
-# mail-read.py —— 读信入口（2026-10-18，采纳内容仓 mail/031 提案；用户点令「read 文件夹」）
+# mail-read.py —— 读信入口（2026-10-17，用户点令「read 文件夹」第三版定稿）
 #
-# ── 为什么是这个形状（前两版被否的教训，内容仓实测）──────────────────────────
+# ## 这份代码被分发给所有带 `mail/` 的仓（2026-10-31）
+#
+# 它**自包含**：只用标准库（os / sys / subprocess / tempfile / shutil），
+# 不 import 任何仓内模块，不假设仓库结构 —— 唯一的前提是**存在 `mail/` 目录**
+# （未读 = `mail/*.md`，已读 = `mail/read/*.md`，位置即状态）。
+#
+# 所以：换任何仓都能直接 `python3 zreflect/mail-read.py` 跑；`--selftest`
+# 会在临时目录里造夹具、不碰真 `mail/`，9 条用例自证。
+#
+# 分发规矩（四仓已在用的同一套）：投递 = 落文件到收信方 `mail/`；
+# 提交 = 收信方自己做（每仓闸门不同，发信方不代提交）。
+#
+# 为什么是这个形状（前两版被否的教训）：
 #   v1 闸门化（凭据推断 + pre-commit --check）✘ —— 违反信任边界：mail 不进断言面
 #      （mail/README.md 明写"本目录不进任何闸门的断言面"；闲散往来不可信是刻意的）。
 #   v2 会话注入（SessionStart hook）✘ —— 剥夺选择权：信硬塞上下文，人不能选择不读。
 #   v3 本版：**读信入口命令**。像 `git log` 一样——你决定读（选择权），读 = 打印全文
 #      并自动 git mv 进 read/（零手动搬运）。
 #
-# ── 为什么不是内核级读取检测（内容仓 2026-10-17 本机实测矩阵）──────────────────
+# 为什么不是内核级读取检测（实测矩阵，2026-10-17 本机）：
 #   atime     ✘ /mnt/hdd 挂 noatime（cat 后实测纹丝不动）；根分区仅 relatime
 #   inotify   △ 免 root 可用但无历史（监听进程不在场的事件永久丢失）
 #   fanotify  ✘ 实测 EPERM（需 CAP_SYS_ADMIN）
 #   auditd    ✘ auditctl 不可用（需 root）
 #   ⇒ 内核层没有"免 root + 有历史 + 覆盖一切读取"的机制；入口命令是工程最优解。
 #
-# ── 用法 ──────────────────────────────────────────────────────────────────────
+# 用法：
 #   python3 zreflect/mail-read.py                 # 列未读信（一屏速览，不动文件）
-#   python3 zreflect/mail-read.py 031             # 读信：打印全文 + git mv 进 read/
-#   python3 zreflect/mail-read.py 031 --keep      # 读但留在原处（回头再读/对照）
-#   python3 zreflect/mail-read.py --all           # 依次读全部未读信
+#   python3 zreflect/mail-read.py 030             # 读信：打印全文 + git mv 进 read/
+#   python3 zreflect/mail-read.py 030 --keep      # 读但留在原处（回头再读/对照）
+#   python3 zreflect/mail-read.py --all           # 依次读全部未读信（逐封确认）
 #
 # ⚠️ 有意不做的事（信任边界）：
 #   · 不进任何闸门 / 不产 rc 语义 / 不写 FACTS —— 信件内容永远不是机器可信输入；
 #   · 不自动拉取/推送 —— 读信是本地动作；
 #   · read/ 里的信只进不出（git mv 保留 --follow 历史；"不删"本意 = 内容不可消失）。
-#
-# ★ 本仓适配点（内容仓提案 §④ 点名的"特殊点"）：本仓有 `check-mail-boundary.py`
-#   守收信侧不变量。它用 `os.listdir(mail)` 且只收 `.md` ⇒ `read/` 子目录天然不被扫
-#   （不是 .md 文件）⇒ **零影响**。但它的**零值守卫**会咬人：若所有信都归档进 read/，
-#   `mail/*.md` 变空 ⇒ 闸门报"空输入不是通过"。**已同步修闸门**：未读区为空时退而扫
-#   `mail/read/*.md`（已读的信 `To:` 不变，同一条不变量照样成立），两处都空才报。
 import os
 import re
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gate import module_meta                            # noqa: E402
+# ⚠️ 真自包含（2026-10-31 修）：原来这里无条件 `from gate import module_meta`，
+# 于是这份脚本**离开 Einfacht 就跑不起来**（`gate.py` 是 Einfacht 的模块）。
+# 但这份代码要分发给所有带 `mail/` 的仓，其中有的仓没有 Einfacht —— 那种情形下
+# 一个 ImportError 就把「读信」这个最基本的动作废掉了，而读信本来只需要标准库。
+#
+# 所以：有 `gate` 就用它登记（本仓与 Einfacht 下游仓保持元数据完整）；
+# 没有就退化成一份等价的最小实现（同样的三个字段，同样的语义），并在 stderr
+# 说明一句 —— **退化要可闻，不许静默**。
+# ⚠️ 声明必须是**顶层赋值**（2026-10-31）：新版 registry 的 AST 提取只看
+#   `Module.body`（不看 `try:` 块内部）⇒ 原来在 try 里赋 MODULE 会被判为
+#   「平台模块没声明自己」。所以先取/造出 module_meta，再在**顶层**赋 MODULE。
+try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gate import module_meta
+except ImportError:
+    class _Meta:
+        """`gate.module_meta` 的最小等价物（无 Einfacht 时的退化）。"""
+        def __init__(self, name, summary, selftest=False):
+            self.name, self.summary, self.selftest = name, summary, selftest
 
-# ★ C5：平台模块必须声明自己。selftest=True（有 9 条自证，被自证台执行）；
-#   但它**不是闸门**（无 GATE 声明、不进 registry --run、无 rc 语义 —— 刻意的）。
-MODULE = module_meta("mail 读信入口", "读 = 打印 + 自动归档 read/（纯工具，不进断言面）",
+    def module_meta(name, summary, selftest=False):
+        return _Meta(name, summary, selftest)
+
+    pass   # 顶层赋值见下（AST 提取只认 Module.body）
+    print("note: 本仓无 zreflect/gate.py（非 Einfacht 仓）—— mail-read 以自包含模式运行",
+          file=sys.stderr)
+MODULE = module_meta("mail 读信入口",
+                     "读 = 打印 + 自动归档 read/（纯工具，不进断言面）",
                      selftest=True)
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -58,16 +86,8 @@ def unread():
     return [n for n in names if n.endswith(".md") and n != "README.md"]
 
 
-def read_archive():
-    """已读区（mail/read/）的信名，按编号序（只读名字，供闸门/统计用）。"""
-    try:
-        return sorted(n for n in os.listdir(READ) if n.endswith(".md"))
-    except OSError:
-        return []
-
-
 def _match(query):
-    """把用户输入（031 / 031-mail-read… / 完整名）匹配到未读信文件名。"""
+    """把用户输入（030 / 030-host… / 完整名）匹配到未读信文件名。"""
     if query in unread():
         return query
     hits = [n for n in unread() if n.startswith(query) or query in n]
@@ -77,17 +97,16 @@ def _match(query):
 def _archive(name):
     """读过了 ⇒ git mv 进 read/（未跟踪文件退普通 rename）。返回是否成功。
 
-    ⚠️ 同名冲突拒覆盖（内容仓试验场实测 bug#1，2026-10-18）：read/ 已有同名信时，
+    ⚠️ 同名冲突拒覆盖（试验场实测 bug#1，2026-10-18）：read/ 已有同名信时，
     git mv 本身会拒，但 rename 兜底会**静默覆盖** ⇒ 旧信丢失（违反"内容不可消失"）。
     修法：目标已存在 ⇒ 不动，报错让人处理（重投同名信本身可疑——编号就该唯一）。
-    **本仓采纳时必须带上这个修复**（提案 §④b 的硬要求）。
     """
     os.makedirs(READ, exist_ok=True)
     dst = os.path.join(READ, name)
     if os.path.exists(dst):
         print("FATAL: mail/read/%s 已存在 —— 同名重投？编号应唯一；"
-              "不覆盖旧信（内容不可消失）。新信留在未读区，先人工处置。" % name,
-              file=sys.stderr)
+              "不覆盖旧信（内容不可消失）。新信留在未读区，先人工处置。"
+              % name, file=sys.stderr)
         return False
     r = subprocess.run(["git", "-C", HERE, "mv", os.path.join("mail", name),
                         os.path.join("mail", "read", name)],
@@ -108,6 +127,7 @@ def cmd_list():
         return 0
     print("未读区 %d 封（读完自动进 read/）：" % len(names))
     for n in names:
+        # 一行速览：编号 + 标题行
         try:
             head = open(os.path.join(MAIL, n), encoding="utf-8",
                         errors="replace").readline().lstrip("# ").strip()
@@ -146,7 +166,8 @@ def main(argv):
         names = unread()
         if not names:
             return cmd_list()
-        for n in names:
+        for i, n in enumerate(names):
+            print("══ [%d/%d] %s ══" % (i + 1, len(names), n))
             cmd_read(n)
         return 0
     if not argv:
@@ -158,8 +179,7 @@ def main(argv):
 
 # ── 自证（纯函数档：列/匹配/归档的判据；不碰真 mail/）─────────────────────────
 def _selftest():
-    import tempfile
-    import shutil
+    import tempfile, shutil                                     # noqa: E401
     global HERE, MAIL, READ
     t = tempfile.mkdtemp()
     os.makedirs(os.path.join(t, "mail"))
@@ -178,19 +198,21 @@ def _selftest():
         ("归档后 read/ 里有它", lambda: os.path.exists(os.path.join(READ, "001-a.md"))),
         ("★ 归档不改变内容（逐字节）",
          lambda: open(os.path.join(READ, "001-a.md"), encoding="utf-8").read() == "# 001 · x\n"),
-        ("★ 未读区剩下的是没读的那封（002 还在）", lambda: "002-b.md" in unread()),
-        ("★ read_archive() 只列已读区（未读的信不在里面）",
-         lambda: read_archive() == ["001-a.md"]),
+        ("★ 未读区剩下的是没读的那封（002 还在）",
+         lambda: "002-b.md" in unread()),
         ("★ 同名冲突拒覆盖（试验场 bug#1）：read/ 已有同名 ⇒ _archive 拒 + 新信留未读区",
          lambda: (
+             # 再投一封同名 001-a，归档必须拒
              open(os.path.join(MAIL, "001-a.md"), "w").write("# 001 · 冲突版\n"),
              not _archive("001-a.md"),
+             # 旧信（read/ 里的）内容未被覆盖
              open(os.path.join(READ, "001-a.md"), encoding="utf-8").read() == "# 001 · x\n",
+             # 新信留在未读区
              "001-a.md" in unread(),
-         )[1] and (open(os.path.join(READ, "001-a.md"), encoding="utf-8").read()
-                   == "# 001 · x\n") and "001-a.md" in unread()),
+         )[1] and (open(os.path.join(READ, "001-a.md"), encoding="utf-8").read() == "# 001 · x\n")
+         and "001-a.md" in unread()),
     ]
-    # ⚠️ 顺序（内容仓第一版的真实 bug）：lambda 在执行时才读全局 MAIL/READ ——
+    # ⚠️ 顺序（本文件第一版的真实 bug）：lambda 在执行时才读全局 MAIL/READ ——
     #    恢复 saved 必须在**全部用例跑完之后**，否则夹具变量被换回真仓路径，
     #    用例全跑在真 mail/ 上（26 封 ⇒ "未读区 2 封"必 fail）。
     bad = 0
@@ -203,8 +225,9 @@ def _selftest():
         bad += 0 if ok else 1
     HERE, MAIL, READ = saved
     shutil.rmtree(t, True)
+    # 只打一行汇总（原本这里打了**两行**完全同义的汇总，是冗余输出）。
+    # 保留的这一行与 `--selftest` 的调用方约定一致（下游脚本按这一行判成败）。
     print("=== mail-read 自证：%d PASS / %d fail ===" % (len(cases) - bad, bad))
-    print("=== %d PASS / %d FAIL ===" % (len(cases) - bad, bad))
     return 1 if bad else 0
 
 
