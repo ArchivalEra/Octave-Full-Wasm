@@ -109,6 +109,20 @@ export LDFLAGS="-L$DEPS/lib ${LIBS[*]} -fPIC -fwasm-exceptions -Wl,--allow-multi
 export CFLAGS="-O2 -fwasm-exceptions -fPIC"
 export CXXFLAGS="-O2 -fwasm-exceptions -fPIC"
 
+# ── OpenMP / omp 探测：**两条都是 emcc 6.x 的假阳**（2026-10-12 实测于 wasm32-final，
+#    2026-10-31 回拿到本线 —— 它原本只在 wasm32-final 上，IP 线因为 .oct 从未在 6.0.12 下
+#    重编过而没踩到；一旦重编就会踩）────────────────────────────────────────────
+#   为什么：emcc 6.x 的 sysroot 带 <omp.h> 却**没有 libomp 实现**，而它的宽松链接让
+#   configure 的探测全部"成功" ⇒ 两个连锁后果：
+#     ① `ax_cv_c_openmp`/`ax_cv_cxx_openmp` 探到 `-fopenmp` 可用 ⇒ **后续每个库探测**
+#        都带 `-fopenmp` ⇒ 要求 shared-memory ⇒ glpk 这类没编 atomics 的归档链不过
+#        ⇒ `HAVE_GLPK` 静默变 undef ⇒ `__glpk__.oct` 出厂即**空桩**（1494B、0 个 glp_ 符号），
+#        而构建/链接/自检全绿（wasm32-final 上实测踩到）。
+#     ② `ac_cv_func_omp_get_num_threads` 假阳 ⇒ sysdep.cc 真去调它 ⇒ 主模块引用无人
+#        提供的符号 ⇒ M2 胶水生成自引用包装 ⇒ 开机无限递归（NOTES §7.6）。
+#   ⇒ 口径固化在**这里**（原先只活在操作员的环境变量里 = 没搬进口径的后果）。
+export ac_cv_func_omp_get_num_threads=no ax_cv_c_openmp=none ax_cv_cxx_openmp=none
+
 # ── 线程模型开关（B6，2026-09-27）──────────────────────────────────────────────
 # `WITH_THREADS=1` ⇒ 线程档：AX_PTHREAD **正常生效**（PTHREAD_CFLAGS=-pthread 顺着
 #   CFLAGS 进全树）⇒ wasm 内存是 shared ⇒ **浏览器侧硬要求 COOP/COEP**（闸门③ 被翻）。
