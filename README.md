@@ -160,14 +160,14 @@ the interpreter in your own page: [`docs/embed-api.md`](docs/embed-api.md).
 ```
 group                           files        bytes
 site/                             228     333.5 MB
-build/                            456       3.3 MB
+build/                            457       3.3 MB
 test/                             156       1.0 MB
 (root)                             13     758.8 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     378.0 KB
-.scratch/                          79     343.5 KB
+.scratch/                          80     352.2 KB
 bridge/                            20     303.2 KB
-mail/                              45     200.0 KB
+mail/                              49     229.0 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     102.4 KB
 docs/                              13      75.6 KB
@@ -176,7 +176,7 @@ reflect-hooks/                      6      19.3 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1125     340.5 MB
+(total)                          1131     340.6 MB
 ```
 
 Per-file listing: `git ls-files` — this block is a summary so the README stays readable.
