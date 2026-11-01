@@ -59,9 +59,13 @@ def parse_lane_js(text):
 
     # FILES：形如  `w64-base': { lane: 'w64-base', dir: 'w64-base/',`
     #          或  w64: { lane: 'w64', dir: 'w64/',`
-    m = re.search(r"var FILES = \{(.*?)\n  \};", text, re.S)
+    # ★ 2026-11-01：正则必须认 `var|let|const` —— 工单 72 的 var→let 清理把
+    #   `var FILES` 改成了 `let FILES`，而这里写死 `var` ⇒ 提取器**静默返回空**
+    #   ⇒ 闸门报"找不到 FILES 块"（真跑 2 处漂移）。这是"判据跟不上代码"的典型形状：
+    #   代码改对了、闸门反而红，而红的原因不是代码坏、是**判据只认一种写法**。
+    m = re.search(r"(?:var|let|const) FILES = \{(.*?)\n  \};", text, re.S)
     if not m:
-        out["problems"].append("lane.js 里找不到 `var FILES = {…}` 块")
+        out["problems"].append("lane.js 里找不到 `(var|let|const) FILES = {…}` 块")
     else:
         block = m.group(1)
         # 逐条目：'key': { … dir: '…' … }   （键可能带引号）
@@ -70,10 +74,10 @@ def parse_lane_js(text):
             dm = re.search(r"dir:\s*'([^']*)'", body)
             out["files"][key] = dm.group(1) if dm else None
 
-    # order 数组：var order = ['w64', 'w64-base', 'base'];
-    m = re.search(r"var order = \[([^\]]*)\]", text)
+    # order 数组：(var|let|const) order = ['w64', 'base'];  （同上：三种声明都认）
+    m = re.search(r"(?:var|let|const) order = \[([^\]]*)\]", text)
     if not m:
-        out["problems"].append("lane.js 里找不到 `var order = […]`（回退优先级）")
+        out["problems"].append("lane.js 里找不到 `(var|let|const) order = […]`（回退优先级）")
     else:
         out["order"] = re.findall(r"'([^']+)'", m.group(1))
 
@@ -352,6 +356,15 @@ def _rec(lanejs=None, gen=None, purity=None, plugins=None, decl=None):
 
 
 CASES = [
+    # ★ 2026-11-01：三份声明形式都认（真缺陷的验收用例）——
+    #   工单 72 把 lane.js 的 `var FILES`/`var order` 改成 `let`，而提取器只认 `var`
+    #   ⇒ 闸门**真跑报 2 处漂移**（"找不到 FILES 块"）。这条用例锁住"三种写法都能解析"。
+    ("★ 声明形式三选一都能解析（var/let/const FILES = {} / order = []）",
+     lambda: all(
+         not any("找不到" in p for p in parse_lane_js(
+             _LANEJS_OK.replace("var FILES", kw + " FILES")
+                       .replace("var order", kw + " order"))["problems"])
+         for kw in ("var", "let", "const"))),
     ("★ 正常不报：四份消费方与声明逐条对齐", lambda: _rec() == []),
     # —— 该报的必须报 ——
     ("★ 反向 R1：lane.js 少一档 ⇒ 必报（选了就回退/404）",

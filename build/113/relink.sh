@@ -73,14 +73,27 @@ out_default() {
     product) echo /src/websrc/product ;;
     scalar)  echo /src/websrc/scalar ;;
     m1)      echo /src/websrc/m1 ;;
-    w64)     echo /src/websrc/w64-out ;;              # wasm64 车道（PLAN-wasm64）
+    w64)     echo /src/websrc/w64-out ;;              # wasm64 + rust_sort 补丁（non-free）
+    w64-std) echo /src/websrc/w64-std-out ;;          # wasm64 **标准版**（无 rust_sort 补丁，free）
     # w64-base 已死档（2026-10-19 用户点令）：master 线必须 COI+多线程；
     # 无 COI 唯一线 = wasm32(base)。出目录的行删除；用该模式名调用会被下面 validate 拦。
     *)       echo "" ;;
   esac
 }
 
-modes_list() { echo "product scalar m1 w64"; }   # 三线裁决：threads（2026-10-17）/ w64-base（2026-10-19，master 线必须 COI+多线程）双死档
+modes_list() { echo "product scalar m1 w64 w64-std"; }
+# ★ 2026-11-01（用户点令「去除我们自己补丁的 w64 标准版的配方也得留着」）：
+#   `w64`      = wasm64 + mimalloc + **rust_sort 补丁**（IP 线的产物特征，non-free）
+#   `w64-std`  = wasm64 + mimalloc + **不带 rust_sort 补丁**（标准版，free）
+#
+#   为什么必须有独立名而不是"操作员记得设 RUST_SORT=0"：
+#   本仓早就有这个教训的形状 —— `build-w64-lane.sh:152` 硬调 `relink.sh link w64`，
+#   那**永远**拿到 RUST_SORT=1。标准版若没有名字，出它就只剩"人工 export 一个环境变量"
+#   这一条路，而那种口径既不会被 `explain` 记录、也不会被任何闸门拦。**没名字的配方
+#   就是会丢的配方。**
+#
+#   两者唯一的差别 = RUST_SORT；目录也分开（`w64-out` / `w64-std-out`）——
+#   同名目录会让"标准版覆盖掉补丁版"，那是不可逆的误覆盖。
 
 # 基线：结构优先 —— 下一级模式自己的产物在就用它，否则退回表里记录的现存路径。
 pick_baseline() {   # $1=下一级模式 $2=现存路径（表里记录）
@@ -99,7 +112,7 @@ mode_table() {      # 输出 KEY=VALUE 行（供 export）
     threads|w64-base)
       echo "FATAL: 模式 '$m' 是死档（threads：wasm32 不允许多线程；w64-base：master 线必须 COI+多线程，无 COI 唯一线 = wasm32/base）" >&2; exit 2 ;;
   esac
-  case "$m" in product|scalar|m1|w64) ;; *)
+  case "$m" in product|scalar|m1|w64|w64-std) ;; *)
     echo "FATAL: 未知模式 '$m'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 
   # 三模式共有：都是"完整产品形态"的能力面（区别只在 DCE / SIMD 两条轴，
@@ -165,8 +178,9 @@ EOF
         echo "BASELINE_WASM=$(pick_baseline m1 /src/websrc/out/octave.wasm)"
       fi
       ;;
-    w64|w64-base)
+    w64|w64-std|w64-base)
       # ★ wasm64 车道（2026-09-28，branch `wasm64`）：= threads 的形态 **+ memory64**。
+      #   `w64-std` 与 `w64` 走**完全相同**的参数面 —— 唯一差别在 RUST_SORT（见 mode_table）。
       #   目标形态见 `build/113/PLAN-wasm64.md` §0（memory64 主路径 + 单线程回退）。
       #   两个**新 prefix**（绝不覆盖现役）：farm `/usr/local-w64` + `/src/deps-w64`，
       #   由 `build-w64-lane.sh` 用 `-pthread -sMEMORY64=1` 的影子重编出来。
@@ -206,7 +220,9 @@ EOF
       #   probe-heap-ceiling 的 `W64_BIG_HEAP=yes`。w64-base 同抬（同为 memory64 车道，
       #   回退档不能回退"小"）。
       echo "MAXIMUM_MEMORY=8GB"
-      if [ "$m" = w64 ]; then
+      #   ⚠️ 判据是 `w64*` 而不是 `w64`：w64-std 是同一个架构形态的标准版（也是多线程），
+      #     漏了它会给标准版**去掉 -pthread** ⇒ 产物根本不是 w64 线（实测踩到一次）。
+      if [ "$m" = w64 ] || [ "$m" = w64-std ]; then
         if [ -n "${E2_OPENBLAS:-}" ]; then
           echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
         else
@@ -230,7 +246,9 @@ EOF
   #   写了 1 ⇒ 表里两行 `MEMORY64`（0 与 1），靠"后导出者覆盖前者"才生效。
   #   那正是本仓记过的"同一旗标两处"的形状（消费者若 `grep -m1` 就会拿到 0）；
   #   而且 `exports` 的条数也会比别的模式多一条（自证/对比会莫名其妙地不一致）。
-  case "$m" in w64|w64-base) ;; *) echo "MEMORY64=0" ;; esac
+  #   ⚠️ w64-std 也在这个分支里给过 1（它是 w64 的标准版，架构相同）⇒ 必须一起排除，
+  #     否则表里出现第二行 MEMORY64=0（实测踩到：漏写 w64-std 时 exports 打了两行 1/0）。
+  case "$m" in w64|w64-std|w64-base) ;; *) echo "MEMORY64=0" ;; esac
 
   # ★ 工单 59（2026-10-04）：**分配器旋钮** —— w64 车道换 mimalloc（工单 57 实测：墙钟 −27%、
   #   pthread 锁 10.3%→0%、体积 +0.2%、数值 79/0 + dldfcn 71/0；也是工单 61 插件系统的
@@ -239,7 +257,7 @@ EOF
   #   `-Wl,--export-if-defined=mi_version`；mimalloc 归档定义 mi_version、dlmalloc 没有
   #   （llvm-nm 实测 T）⇒ strip 过的产物也能从**导出段**量出分配器（身份证 measured.malloc）。
   #   同一变量只出现一行（上面 MEMORY64 的教训：两行 MALLOC 靠"后导出覆盖"是会翻车的形状）。
-  case "$m" in w64) echo "MALLOC=mimalloc" ;; *) echo "MALLOC=" ;; esac
+  case "$m" in w64|w64-std) echo "MALLOC=mimalloc" ;; *) echo "MALLOC=" ;; esac
 
   # ★ 工单 63（2026-10-05）：**rust-sort 插件旋钮**（候选③ spike ADOPT 4×；缝 =
   #   Array-base.cc 弱符号 octave_rust_sort_f64，fork f4bf15b）。wasm32 车道
@@ -250,7 +268,14 @@ EOF
   #   -Wl,--export-if-defined=octave_rust_sort_f64 ⇒ 导出段量出 measured.rust_sort。
   #   ★ 2026-10-05 发运：w64 默认翻 1（产品决定）——每批 w64 重链自带 rust_sort，
   #   product/threads 仍默认 0（wasm32-final 冻结，不再做 wasm32 车道活）。
-  case "$m" in w64) echo "RUST_SORT=${RUST_SORT:-1}" ;; product) echo "RUST_SORT=${RUST_SORT:-0}" ;; *) echo "RUST_SORT=" ;; esac
+  # ★ w64-std = **标准版**：默认 0（不链 librustsort.a）。这与 w64 的默认 1 是个**硬分叉**，
+  #   不是同一个模式的两种配置 —— 两个模式产出两个产物（许可边界不同）。
+  case "$m" in
+    w64)      echo "RUST_SORT=${RUST_SORT:-1}" ;;
+    w64-std)  echo "RUST_SORT=${RUST_SORT:-0}" ;;
+    product)  echo "RUST_SORT=${RUST_SORT:-0}" ;;
+    *)        echo "RUST_SORT=" ;;
+  esac
 
   # ★ 仓库架构批 B4：上游树路径**透传**（provision/等价性验证用）。表从环境读——
   #   操作员设 OCT_TREE=... 时透传给 link-web.sh；不设则空 = 脚本默认路径。
@@ -282,8 +307,9 @@ EOF
            "FreeMono.otf", "FreeMonoBold.otf", "FreeMonoOblique.otf", "FreeMonoBoldOblique.otf"]}
 EOF
       ;;
-    w64)
+    w64|w64-std)
       # ★ wasm64 车道：显式声明 wasm64=true，与 wasm32 各档明确区分
+      #   w64-std 走同一段 —— 它唯一的不同是 RUST_SORT（declared 由下面从表推出）。
       # ★ E2 钩子（工单 31）：`E2_OPENBLAS` 有值时多声明 `e2_openblas` ⇒ check-build-manifest
       #   把 BLAS 溯源判据从"必须含 -w64"换成"必须指向 E2 目录"。
       _e2=""
@@ -402,7 +428,8 @@ cmd_list() {
   echo "product  $(out_default product)   现役形态：M2 + JSPI + 字体 + GL + IDBFS + SIMD BLAS"
   echo "scalar   $(out_default scalar)    同上但**无 SIMD**（product 的 A/B 对照，也是 product 的保活基线）"
   echo "m1       $(out_default m1)        M1（无 DCE），导出面最全（保活闸门差分基线；scalar 的基线）"
-  echo "w64      $(out_default w64)      wasm64 线程档：w64 + -pthread（MEMORY64=1）"
+  echo "w64      $(out_default w64)      wasm64 线程档 + mimalloc + **rust_sort 补丁**（non-free；IP 线产物）"
+  echo "w64-std  $(out_default w64-std)  wasm64 线程档 + mimalloc，**不带 rust_sort 补丁**（标准版，free）"
 }
 
 # ★ D1 的**反向断言**（静态、不需要容器）：link-web.sh 读的每个环境变量都必须由模式表推出。
@@ -887,6 +914,53 @@ cmd_selftest() {
     echo "PASS | ★ 工单 63：RUST_SORT=1 ⇒ declared 含 rust_sort；默认 ⇒ 不声明（反向断言）"
   else
     echo "fail | rust_sort declared 跟表走失败（on=$rd1 off=$rd0）"; bad=1
+  fi
+  # ⑮ ★ 2026-11-01（用户点令「标准版配方也得留着」）：**w64-std 必须是独立模式**，
+  #    且它与 w64 的差别**只有** RUST_SORT（架构/分配器/线程全同）。
+  #    为什么要有这三条：新配方若没被判据覆盖，下次谁改了共享分支、谁把 w64-std 的
+  #    -pthread 删掉，都不会有人知道（实测：我第一版就漏了 EXTRA_LDFLAGS 的判据，
+  #    标准版被去掉了 -pthread —— 那产物根本不是 w64 线）。
+  n=$((n + 1))
+  s_rust="$(bash "$0" exports w64-std 2>/dev/null | sed -n 's/^RUST_SORT=//p')"
+  w_rust="$(bash "$0" exports w64 2>/dev/null | sed -n 's/^RUST_SORT=//p')"
+  if [ "$s_rust" = "0" ] && [ "$w_rust" = "1" ]; then
+    echo "PASS | ★ w64-std 默认 RUST_SORT=0（标准版，不链 non-free）；w64 仍默认 1"
+  else
+    echo "fail | w64-std 的 RUST_SORT 分叉失效（std=$s_rust w64=$w_rust）"; bad=1
+  fi
+  n=$((n + 1))
+  # 架构/分配器/线程三者必须**逐字相同**（用 explain 的完整输出 diff，只允许白名单差异）
+  # ⚠️ 判据演进史（写下来，因为前两版都假红过）：
+  #   ① 第一版用 `diff explain | grep ... ` —— 在 `set -euo pipefail` 管道里，
+  #      `diff` **有差异时本身返回 1** ⇒ 整段自证静默中断（只打到 19 条、连汇总行都不印）。
+  #   ② 第二版改成 awk 白名单过滤 —— 漏了 `w64-out` 裸字面与 `declared` 行 ⇒ d=2 假红。
+  #   ③ 现在这版：**不比 `explain`**（它是列对齐渲染，差异面难枚举），比 `exports`
+  #      的 `KEY=VALUE` 行 —— 排除 `RUST_SORT` 后必须**逐字相同**。
+  #      exports 是机器可读的（自证第六条就钉着这点），一行一个变量，白名单只需一条。
+  _fw="$(mktemp)"; _fs="$(mktemp)"
+  bash "$0" exports w64      > "$_fw" 2>/dev/null || true
+  bash "$0" exports w64-std  > "$_fs" 2>/dev/null || true
+  # ★ 真凶在这里（前两版都没修对）：`set -euo pipefail` 下 **`diff` 有差异时返回 1**，
+  #   而 `d="$(diff … | …)"` 这个**赋值会继承该退出码** ⇒ `set -e` 当场杀掉整个脚本。
+  #   症状极具误导性：自证只打到第 19 条就停、rc=1、**连汇总行都不印**
+  #   ⇒ 看起来像"新用例没过"，实际是脚本崩了。
+  #   修法 = 管道首环节 `|| true`（把这行的退出码归零，计数交给 wc）。
+  d="$( { diff "$_fw" "$_fs" 2>/dev/null || true; } \
+        | awk '/^[<>]/ && !/^[<>] RUST_SORT=/' | wc -l)"
+  rm -f "$_fw" "$_fs"
+  if [ "$d" -eq 0 ]; then
+    echo "PASS | ★ w64-std 与 w64 的 exports 只差 RUST_SORT 一行（架构/分配器/线程逐字相同）"
+  else
+    echo "fail | w64-std 与 w64 的 exports 出现非预期差异（$d 行，见下）"
+    diff "$_fw" "$_fs" 2>/dev/null | awk '/^[<>]/' | head -5
+    bad=1
+  fi
+  n=$((n + 1))
+  # 反向：把 w64-std 从白名单里摘掉 ⇒ 必须被拒（证明它真的是个"登记过的模式"）
+  if bash "$0" exports w64-std >/dev/null 2>&1; then
+    echo "PASS | ★ w64-std 可被 exports 识别（不是未知模式）"
+  else
+    echo "fail | w64-std 不被识别 —— 配方等于没登记"; bad=1
   fi
   # ⑬ ★ 工单 59：分配器旋钮必须**从模式表推出** —— exports w64 有 MALLOC=mimalloc，
   #    其余模式空（同一变量一行）；且 declared 的 malloc 标签跟表走（w64 有、product 无）。

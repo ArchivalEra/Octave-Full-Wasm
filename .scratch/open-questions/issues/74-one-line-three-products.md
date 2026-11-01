@@ -34,6 +34,46 @@ rc=2 ⇒ 读不到（fail-closed）
 
 ⇒ 三条线的维护成本是三份，收益是零 —— 差异本来就能用**构建参数**表达。
 
+## ★ 2026-11-01 修正：三产物模型原来退化了两个（用户点令）
+
+用户原话：「**不行，去除我们自己补丁的 w64 标准版的配方也得留着**」。
+
+本工单原来的 Solution 写的是：
+
+> ⇒ **三个产物 = `product`（wasm32）/ `w64`（wasm64）/ `w64` + `RUST_SORT=1`（IP）**。
+
+**那句话自相矛盾**：`RUST_SORT=1` 本来就是 `w64` 的**默认值**（`relink.sh` 的模式表
+`case "$m" in w64) echo "RUST_SORT=${RUST_SORT:-1}"`）。所以"第三个产物" == "第二个产物"，
+"一条线出三种产物"**实际只出两种**。结算件 `check-one-line-three-products.sh` 当时写
+`MODES="product w64"`，只验两组 —— **第三个从未被覆盖**。
+
+真缺口是：**w64 的标准版（不带 rust_sort 补丁，free）没有名字**。它只能靠操作员记得
+`RUST_SORT=0 bash relink.sh link w64` 出，而那条口径既不被 `explain` 记录、也不被任何闸门拦。
+（历史上它确实出过：`/mnt/hdd/octave-wasm-build/artifacts-w64-rust-off/`，`rust_sort=None`。）
+
+**修法 = 给标准版一个独立模式名 `w64-std`**，三产物改成：
+
+| 模式 | 架构 | RUST_SORT | 许可 | 旧分支 |
+|---|---|---|---|---|
+| `product` | wasm32 | 0 | free | `wasm32-final` |
+| `w64-std` | wasm64 | **0** | **free** | `master` |
+| `w64` | wasm64 | **1** | non-free | `IllegalPerformance` |
+
+产物目录也分开（`product` / `w64-std-out` / `w64-out`）—— 同名目录会让标准版覆盖掉补丁版。
+
+### 为什么"留个环境变量口径"不算留下配方
+
+`build-w64-lane.sh:152` 硬调 `relink.sh link w64` ⇒ 那条路**永远**拿到 `RUST_SORT=1`。
+标准版若没有名字，出它就只剩"人工 export 一个环境变量"这一条路 —— 那种口径会丢，
+而且丢得静默。**没名字的配方就是会丢的配方。**
+
+### 验收（每条都能红）
+
+- `MODES="product w64-std w64"`，五条断言：①非空 ②两两不同 ③关键差异 ④许可边界（**两个 free 产物**）
+  ⑤标准版与补丁版除 `RUST_SORT` 外架构面逐字相同
+- `relink.sh --selftest` 新增 3 条（26/0）：`w64-std` 默认 0、与 `w64` 只差一行、可被 `exports` 识别
+- 反证实测：坏配方（`w64-std` 回 1）⇒ rc=1、②④ 点名；丢掉 `w64-std` ⇒ rc=2
+
 ## Solution
 
 **一条主干，三个产物。**

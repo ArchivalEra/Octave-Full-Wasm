@@ -148,10 +148,10 @@ group                           files        bytes
 site/                             228     333.5 MB
 build/                            462       3.4 MB
 test/                             157       1.0 MB
-(root)                             13     776.6 KB
+(root)                             13     782.0 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
-.scratch/                          83     375.3 KB
+.scratch/                          83     377.6 KB
 bridge/                            20     303.5 KB
 mail/                              52     253.9 KB
 vendor/                            21     123.5 KB

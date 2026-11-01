@@ -53,6 +53,50 @@
   它说的"10 个纯 .m 包"是**站点货架**（`assets/pkg/*.js` + `assets/oct/*.oct`），
   由 `install()` 才写进 MEMFS —— 与 Q1 是**同一个机制**。
 
+## 现在是什么（2026-11-01 · 三产物模型修正：`w64` 标准版必须有名字）
+
+- **用户点令**：「**不行，去除我们自己补丁的 w64 标准版的配方也得留着**」。这一令抓出
+  工单 74 的一个**逻辑洞**，而且它已经从洞里漏过去了。
+
+- **★★ 原模型自相矛盾**：工单 74 写"三个产物 = `product` / `w64` / `w64`+`RUST_SORT=1`"，
+  但 **`RUST_SORT=1` 本来就是 `w64` 的默认值**（模式表 `case w64) echo "RUST_SORT=${RUST_SORT:-1}"`）。
+  ⇒ "第三个" == "第二个"，**一条线实际只出两种产物**。结算件当时写 `MODES="product w64"`，
+  只验两组 —— 第三个从未被任何闸门覆盖。
+
+- **真缺口 = 标准版没有名字**：w64 的**标准版**（不带 rust_sort 补丁、**free**）只能靠
+  操作员记得 `RUST_SORT=0` 环境变量才出得**来**。而 `build-w64-lane.sh:152` 硬调
+  `relink.sh link w64` ⇒ 那条路**永远**拿到 `RUST_SORT=1`。**没名字的配方就是会丢的配方。**
+  （历史上它确实出过：`artifacts-w64-rust-off/`（`rust_sort=None`、`wasm64=True`、`mimalloc`）。
+
+- **修法：新模式 `w64-std`**。三产物现在是三个**有名字**的模式，各自对应旧三线之一：
+
+  | 模式 | 架构 | RUST_SORT | 许可 | 旧分支 | 产物目录 |
+  |---|---|---|---|---|---|
+  | `product` | wasm32 | 0 | free | `wasm32-final` | `/src/websrc/product` |
+  | `w64-std` | wasm64 | **0** | **free** | `master` | `/src/websrc/w64-std-out` |
+  | `w64` | wasm64 | **1** | non-free | `IllegalPerformance` | `/src/websrc/w64-out` |
+
+  目录**分开**是有意的：同名目录会让标准版覆盖掉补丁版（不可逆的误覆盖）。
+
+- **结算件从 2 模式扩到 3 模式，断言 4 → 5 条**（`check-one-line-three-products.sh`）：
+  ①非空 ②**两两**不同（下标去重，第一版前缀法误判报两遍）③关键差异 ④许可边界（**两个 free
+  产物都必须 0**）⑤★ 标准版与补丁版除 `RUST_SORT` **外架构面逐字相同**（防"给了名字但配方
+  没真分叉"，也防"标准版被顺手去掉 `-pthread`"）。
+
+- **★ 两处判据跟不上代码（都当场修了）**：
+  · `check-lanes-single-source.py` 的正写死 `var FILES`/`var order`，而工单 72 的 var→let 清理
+    把它们改成了 `let` ⇒ 提取器**静默返回空** ⇒ 闸门报 2 处漂移（**代码是对的，红的是判据**）。
+    修：正则认 `var|let|const`；自证 15 → **16/0**（新增"三种声明形式都能解析"）。
+  · `relink.sh --selftest` 的 diff 判据：`set -euo pipefail` 下 `diff` **有差异时返回 1**，
+    赋值继承 ⇒ `set -e` 当场杀脚本（症状：只打到 19 条、rc=1、**连汇总行都不印**，看起来像
+    "新用例没过"）。修：管道首环节 `|| true`；比较对象也从 `explain`（列对齐渲染）换成
+    `exports`（`KEY=VALUE`，白名单只需一条）。
+
+- **实测**（全部 rc=0）：`relink --selftest` **26/0**、`--selfcheck` 32 变量全覆盖、
+  `check-one-line-three-products` + `--selftest` **4/0**、`check-lanes-single-source` **16/0**
+  实跑"4 个消费方全部对齐"、闸门台 **55/55**、`var-audit` 仍 **0 处**。
+  反证：坏配方（`w64-std` 回 1）⇒ **rc=1** 且 ②④ 点名；丢掉 `w64-std` ⇒ **rc=2**。
+
 ## 现在是什么（2026-11-01 · 工单 72：`var` 清零 —— 隐式改显式，零例外）
 
 - **用户点令**：「补上 var 那 35 条，隐式改显式，**不准有任何合法例外**」。这一令推翻了本单原先

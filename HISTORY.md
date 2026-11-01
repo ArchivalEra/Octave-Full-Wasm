@@ -6383,3 +6383,42 @@ outbox 里两封历史存档（`044`→LLVM-wasm `013`、`045`→extra-content `
 
 结算件：`test/browser/probe-wasm32-symbolic-minimal.mjs` ⇒ **8 PASS / 0 FAIL**。
 回信 `068`（对方信箱 `003`）已投它仓 `mail/`。
+
+## §5.116 · 2026-11-01 · 三产物模型修正：`w64` 标准版必须有名字
+
+用户点令：「**不行，去除我们自己补丁的 w64 标准版的配方也得留着**」。
+
+### 抓出的洞：一阶自相矛盾
+
+工单 74 写"三个产物 = `product` / `w64` / `w64`+`RUST_SORT=1`"，而 **`RUST_SORT=1`
+本来就是 `w64` 的默认值**。⇒ "第三个" == "第二个"，**一条线实际只出两种产物**。
+结算件写 `MODES="product w64"`，只验两组 —— 第三个从未被覆盖。
+
+### 真缺口：标准版没名字 ⇒ 会丢
+
+w64 标准版（不带补丁、free）只能靠操作员记得 `RUST_SORT=0` 才出得来；而
+`build-w64-lane.sh:152` 硬调 `relink.sh link w64` ⇒ 那条路**永远** `RUST_SORT=1`。
+历史上它确实出过（`artifacts-w64-rust-off/`，`rust_sort=None`），但那条口径没进任何闸门。
+**没名字的配方就是会丢的配方。**
+
+### 修: 新模式 `w64-std`
+
+    product   wasm32  RUST_SORT=0  free      ← wasm32-final
+    w64-std   wasm64  RUST_SORT=0  free      ← master      （新增）
+    w64       wasm64  RUST_SORT=1  non-free  ← IllegalPerformance
+
+产物目录分开（`product` / `w64-std-out` / `w64-out`）：同名会让标准版覆盖掉补丁版。
+
+### 两处"判据跟不上代码"
+
+1. `check-lanes-single-source.py` 的正则写死 `var FILES`/`var order`，而 §5.114 的 var→let
+   清理改成了 `let` ⇒ 提取器静默返回空 ⇒ 闸门报 2 处漂移。**代码是对的，红的是判据。**
+   修：正则认 `var|let|const`；自证 15→16/0。
+2. `relink --selftest` 的 diff 判据：`set -euo pipefail` 下 `diff` 有差异返回 1，赋值继承
+   ⇒ `set -e` 杀脚本。症状极具误导：只打到 19 条、rc=1、**连汇总行都不印**，像"用例没过"。
+   修：管道首环节 `|| true`；比较对象从 `explain`（列对齐渲染）换成 `exports`（KEY=VALUE）。
+
+### 验收
+
+`relink --selftest` 26/0、`--selfcheck` 32 变量、three-products 4/0、lanes-single-source 16/0、
+闸门台 55/55、var-audit 仍 0。反证：坏配方 ⇒ rc=1 且 ②④ 点名；丢 `w64-std` ⇒ rc=2。
