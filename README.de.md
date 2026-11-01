@@ -258,6 +258,25 @@ lokal und auf beiden Remotes weg; `master` ist auf dem Mirror weg, existiert abe
 weiter, weil GitHub das Loeschen des Standardbranches eines Repositories verweigert -- das ist der
 Umbenennungsschritt, kein Fehlschlag.
 
+Beim Abschluss der `var`-Bereinigung kam eine dritte Instanz derselben stillen Falle zum
+Vorschein, die festgehalten gehoert, weil sie einen kompletten Regressionslauf gekostet hat.
+`bridge/octave-page.js` ist nicht in eine IIFE verpackt -- es ist ein Top-Level-Skript --, also
+erzeugt sein `var G = window` ein `window.G`. Wird das zu `let`, ist `G` auf den Skript-Scope
+beschraenkt, andere Skripte sehen es nicht mehr, und die ganze Seite stirbt: `accept-pkg` meldete
+sieben Abstuerze mit "Target page has been closed", `accept-p5-graphics` stuerzte sofort ab. Das
+Zurueckrollen dieser einen Datei stellte einen vollstaendig gruenen Lauf wieder her, was die
+Ursache bestaetigte. `G` steht jetzt zusammen mit `Module` auf der expliziten Top-Level-Whitelist
+des Konverters, mit dem Kriterium im Kommentar: eine Datei ohne `(function (global) {`-Wrapper hat
+Top-Level-`var`-Deklarationen, die globale Eigenschaften sind. Der Selbsttest des Konverters
+besteht weiterhin. Das neu geschriebene OpenModelica-Brueckenmodul wurde aus Konsistenzgruenden
+ebenfalls umgestellt, seine Ende-zu-Ende-Suite meldet weiterhin 6/0.
+
+
+Endabrechnung der 363 `var`-Befunde: 35 bleiben, jeder innerhalb einer legitimen Ausnahme -- 18
+`for (var ...)`-Schleifen, die Einzelfallpruefung zur Closure-Erfassung brauchen, eine Handvoll
+Top-Level-Deklarationen, die absichtlich auf `window` oder `self` leaken, und eine in einem
+Kommentar.
+
 ## Notiz zum Gate-Design
 
 Eine Korrektur aus dem neuesten Schreiben von OpenModelica, festgehalten, weil sie aendert, wie dieses Repo Gates schreibt: das Bereitschaftsgatter der Produkt-Suite griff rund 400 ms *bevor* die Asset-Schicht etwas in MEMFS geschrieben hatte, wodurch drei Zusicherungen gegen ein funktionierendes Deployment fehlschlugen. OpenModelica loeste das, indem es darauf gatet, dass `/bridge` in MEMFS nicht leer ist, statt auf das globale Ready-Flag irgendeiner Site — und lehnte die Anregung dieses Repos, an `__octaveReady` zu binden, zu Recht ab: das ist das Implementierungsdetail einer Site und wuerde aus einer Lieferpruefung eine Selbstpruefung machen. Dasselbe Experiment legte zwei Defekte in der Ende-zu-Ende-Suite dieses Repos offen (sie stuerzte ab statt rot zu melden, wenn das Manifest fehlte, und warf einen Fehler, wenn `/bridge` nicht existierte); beide sind behoben, die Suite meldet nun 6/0 auf beiden Sites und 3 bestanden / 3 fehlgeschlagen auf einer absichtlich brueckenlosen Kontrollsite. Als wiederverwendbare Regel festgehalten: **auf einen Vertrag gaten, nicht auf die globale Variable einer Implementierung.**

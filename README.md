@@ -271,6 +271,23 @@ Deletion status: `wasm32-final` is gone locally and on both remotes; `master` is
 mirror but still exists on origin because GitHub refuses to delete a repository's default branch
 -- that is the rename step, not a failure.
 
+A third instance of the same silent trap turned up while finishing the `var` cleanup, and it is
+worth recording because it cost a full regression run. `bridge/octave-page.js` is not wrapped in an
+IIFE -- it is a top-level script -- so its `var G = window` creates `window.G`. Converting that to
+`let` scopes `G` to the script, other scripts can no longer see it, and the whole page dies:
+`accept-pkg` reported seven crashes with "Target page has been closed" and `accept-p5-graphics`
+crashed outright. Rolling that one file back restored a full green run, which confirmed the cause.
+`G` is now on the converter's explicit top-level whitelist alongside `Module`, with the test
+written into the comment: a file with no `(function (global) {` wrapper has top-level `var`
+declarations that are global properties. The converter's self-test still passes. The newly written
+OpenModelica bridge module was converted as well for consistency, and its end-to-end suite still
+reports 6/0.
+
+Final accounting for the 363 `var` findings: 35 remain, every one inside a
+legitimate exception -- 18 `for (var ...)` loops that need per-site judgement about closure
+capture, a handful of top-level declarations that deliberately leak onto `window` or `self`, and
+one inside a comment.
+
 ## Notes on gate design
 
 One correction from OpenModelica's latest letter, recorded because it changed how this repo writes gates: the product-state suite's readiness gate used to pass about 400 ms *before* the asset layer had written anything into MEMFS, which made three assertions fail against a working deployment. OpenModelica fixed it by gating on `/bridge` being non-empty in MEMFS rather than on any site's global ready flag — correctly refusing this repo's suggestion to bind to `__octaveReady`, because that is one site's implementation detail and would turn a delivery check into a self-check. The same experiment exposed two defects in this repo's own end-to-end suite (it crashed instead of reporting red when the manifest was absent, and threw when `/bridge` did not exist); both are fixed, and the suite now reports 6/0 on both sites and 3 pass / 3 fail on a deliberately bridge-less control site. Recorded here as the reusable rule: **gate on a contract, not on an implementation's global variable.**
