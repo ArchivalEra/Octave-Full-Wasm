@@ -19,8 +19,8 @@ var G = window;
 // ── 输出 sink：合并刷新（工单 48 的核心）────────────────────────────────────────
 // 时间预算 16ms：**同步 eval 期间也能中途 flush**（rAF 在同步循环里不触发），
 // 于是既压掉"每行一次重排"、又保留"流式可见"（延迟界 ≈ 16ms）。异步突发时用 rAF 兜底。
-var FLUSH_BUDGET_MS = 16;
-var SCROLL_THROTTLE_MS = 200;
+let FLUSH_BUDGET_MS = 16;
+let SCROLL_THROTTLE_MS = 200;
 function perfNow() {
     return (window.performance && performance.now) ? performance.now() : Date.now();
 }

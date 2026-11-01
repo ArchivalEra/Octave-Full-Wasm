@@ -27,13 +27,13 @@
 (function (global) {
   'use strict';
 
-  var BRIDGE_DIR = 'omc/bridge';
-  var MEMFS_DIR = '/bridge';
-  var OM_RES = '/tmp/omc_res.txt';
-  var OM_REQ = '/tmp/omc_req.txt';
+  let BRIDGE_DIR = 'omc/bridge';
+  let MEMFS_DIR = '/bridge';
+  let OM_RES = '/tmp/omc_res.txt';
+  let OM_REQ = '/tmp/omc_req.txt';
 
   // 本模块状态机（UI 就靠读它决定显示什么；**不编假的 ready**）
-  var STATE = {
+  let STATE = {
     IDLE: 'idle',                            // 还没尝试
     NO_SITE_BYTES: 'no-site-bytes',          // 站点没有 omc/bridge/（这个站点没供 omc）
     ASSEMBLING: 'assembling',                // 写 MEMFS 中
@@ -43,9 +43,9 @@
     READY: 'ready'                           // 四步全过
   };
 
-  var state = STATE.IDLE;
-  var detail = '';
-  var started = null;                        // ensure() 的 promise（幂等）
+  let state = STATE.IDLE;
+  let detail = '';
+  let started = null;                        // ensure() 的 promise（幂等）
 
   function setState(s, d) {
     state = s;
@@ -60,10 +60,10 @@
   // 清单从站点读（`omc/bridge/manifest.json` 的 12 件；清单本身不在 entries 里）。
   // ★ 为什么读清单位置而不硬编码 12 个名字：OM 改桥就得改清单，硬编码会漂。
   async function assembleMemfs(M, base) {
-    var murl = (base || '') + BRIDGE_DIR + '/manifest.json';
-    var manifest;
+    let murl = (base || '') + BRIDGE_DIR + '/manifest.json';
+    let manifest;
     try {
-      var mr = await fetch(murl);
+      let mr = await fetch(murl);
       if (!mr.ok) {
         // 站点没供 omc/bridge/ ⇒ 合法形状（这个站点没有 omc 能力层），不是错误
         setState(STATE.NO_SITE_BYTES, murl + ' → HTTP ' + mr.status);
@@ -74,7 +74,7 @@
       setState(STATE.NO_SITE_BYTES, String(e && e.message || e));
       return false;
     }
-    var entries = (manifest && manifest.entries) || [];
+    let entries = (manifest && manifest.entries) || [];
     if (!entries.length) {
       setState(STATE.BRIDGE_NOT_ASSEMBLED, '清单 entries 为空（零值守卫）');
       return false;
@@ -84,13 +84,13 @@
     try {
       // 同步 FS API 挂在活跃 Octave 实例上（M.FS）；mkdir 幂等
       try { M.FS.mkdir(MEMFS_DIR); } catch (e) { /* 已存在 */ }
-      var written = 0;
+      let written = 0;
       for (var i = 0; i < entries.length; i++) {
-        var name = entries[i].file;
-        var url = (base || '') + BRIDGE_DIR + '/' + name;
-        var r = await fetch(url);
+        let name = entries[i].file;
+        let url = (base || '') + BRIDGE_DIR + '/' + name;
+        let r = await fetch(url);
         if (!r.ok) throw new Error(name + ' → HTTP ' + r.status);
-        var buf = new Uint8Array(await r.arrayBuffer());
+        let buf = new Uint8Array(await r.arrayBuffer());
         M.FS.writeFile(MEMFS_DIR + '/' + name, buf);
         written++;
       }
@@ -113,13 +113,13 @@
   //
   // 加载方式：动态 `import()`（ESM 只能这么进；本站点其余 JS 走 script 标签）
   async function bootOmc(base) {
-    var g = global;
+    let g = global;
     if (g.__omc) return g.__omc;                       // 已 boot（幂等）
-    var modUrl = (base || '') + 'omc/OpenModelicaCompiler.js';
+    let modUrl = (base || '') + 'omc/OpenModelicaCompiler.js';
 
     // 站点有没有这份引擎？没有 ⇒ 这个站点没供 omc（合法形状，不是错误）
     try {
-      var head = await fetch(modUrl, { method: 'HEAD' });
+      let head = await fetch(modUrl, { method: 'HEAD' });
       if (!head.ok) {
         setState(STATE.NO_SITE_BYTES, modUrl + ' → HTTP ' + head.status
                  + '（站点未供 omc 引擎）');
@@ -131,7 +131,7 @@
     }
 
     setState(STATE.OMC_NOT_READY, 'boot 中（ESM import）');
-    var ns;
+    let ns;
     try {
       // ★ 动态 import 的说明符必须是**绝对 URL**（2026-10-29 实测：相对串
       //   "omc/OpenModelicaCompiler.js" 被当模块名解析 ⇒
@@ -141,7 +141,7 @@
       setState(STATE.OMC_NOT_READY, 'ESM import 失败: ' + String(e && e.message || e));
       return null;
     }
-    var init = ns && ns.default;
+    let init = ns && ns.default;
     if (typeof init !== 'function') {
       setState(STATE.OMC_NOT_READY,
                'ESM 模块的 default 不是初始化函数（wasm-bindgen 形态变了？）');
@@ -149,18 +149,18 @@
     }
     try {
       // module_or_path 可以是站点 URL；wasm-bindgen 内部会 fetch
-      var wasmUrl = (base || '') + 'omc/OpenModelicaCompiler_bg.wasm';
-      var ret = await init({ module_or_path: wasmUrl });
+      let wasmUrl = (base || '') + 'omc/OpenModelicaCompiler_bg.wasm';
+      let ret = await init({ module_or_path: wasmUrl });
       // __wbg_init 返回的是导出的 wasm 绑定面（不是模块命名空间）——
       // 命名导出（omc_init 等）在 ns 上；把两边合成一个句柄交给桥。
-      var omc = {
+      let omc = {
         omc_init: ns.omc_init, omc_eval: ns.omc_eval, omc_abi: ns.omc_abi,
         omc_request_cancel: ns.omc_request_cancel,
         omc_enable_cancel_poll: ns.omc_enable_cancel_poll,
         _raw: ret, _ns: ns
       };
       if (typeof omc.omc_init === 'function') {
-        var ok = omc.omc_init();
+        let ok = omc.omc_init();
         if (ok === false) {
           setState(STATE.OMC_NOT_READY, 'omc_init() 返回 false');
           return null;
@@ -183,7 +183,7 @@
   function loadBridgeScript(base) {
     return new Promise(function (resolve, reject) {
       if (global.OmcBridge) return resolve(global.OmcBridge);
-      var s = global.document.createElement('script');
+      let s = global.document.createElement('script');
       s.src = (base || '') + BRIDGE_DIR + '/omc_bridge.js';
       s.onload = function () {
         if (global.OmcBridge) resolve(global.OmcBridge);
@@ -220,21 +220,21 @@
   //     `.memfs`  —— ① 完成（12 件写进 MEMFS + addpath）就 resolve ⇒ `.m` 已可见
   //     `.ready`  —— 四步全过才 resolve ⇒ `omc_*` 真能跑
   //   这两个是**真状态**，不是乐观值：失败时 reject 并带上 state/detail。
-  var memfsP = null, readyP = null;
+  let memfsP = null, readyP = null;
 
   function ensure(opts) {
     if (readyP) return readyP;                       // 幂等：重复调用拿同一个 promise
     opts = opts || {};
-    var M = (opts.core && opts.core.module) || global.Module;
+    let M = (opts.core && opts.core.module) || global.Module;
     if (!M || !M.FS || !M.eval_string) {
-      var e0 = new Error('没有活跃的 Octave 实例（Module.FS 缺失）');
+      let e0 = new Error('没有活跃的 Octave 实例（Module.FS 缺失）');
       setState(STATE.BRIDGE_NOT_ASSEMBLED, e0.message);
       memfsP = Promise.reject(e0);
       readyP = memfsP;
       readyP.catch(function () {});                  // 别让未处理 rejection 冒出来
       return readyP;
     }
-    var base = opts.base || '';
+    let base = opts.base || '';
 
     // ① MEMFS 先跑（快：12 个小文件）—— 这一段完成 = `omc_*.m` 对 addpath 可见
     memfsP = assembleMemfs(M, base).then(function (n) {
@@ -244,10 +244,10 @@
     memfsP.catch(function () {});                    // 上面同理
 
     readyP = (async function () {
-      var n = await memfsP;                          // ①（已完成的直接过）
-      var omc = await bootOmc(base);                 // ② 74 MB 级，慢
+      let n = await memfsP;                          // ①（已完成的直接过）
+      let omc = await bootOmc(base);                 // ② 74 MB 级，慢
       if (!omc) throw new Error(detail || 'omc 未就绪');
-      var OmcBridge;
+      let OmcBridge;
       try {
         OmcBridge = await loadBridgeScript(base);    // ③
         await serveBridge(OmcBridge, omc, M);
@@ -269,7 +269,7 @@
     setState(STATE.IDLE, '');
   }
 
-  var API = {
+  let API = {
     ensure: ensure, reset: reset, STATE: STATE,
     // 两个可等进度句柄（见 ensure 注释）：.memfs 完成 ⇒ `omc_*.m` 已可见；
     // .ready 完成 ⇒ 四步全过、`omc_*` 真能跑。未调用 ensure() 前都是 null。

@@ -29,7 +29,13 @@ const require = createRequire(import.meta.url);
 // 顶层 `var` 里**确实靠隐式挂全局**的名字（别处以 `self.X` / `window.X` 读它）。
 // 加名字必须给证据：`grep -c "self\.<名字>" <文件>` > 0。空口加就是凭印象。
 const TOP_LEVEL_GLOBALS = new Set([
-  'Module',   // bracket/octave-worker.js:160 —— OctaveP5.show 读 self.Module
+  'Module',   // bridge/octave-worker.js:160 —— OctaveP5.show 读 self.Module
+  // ★ 2026-11-01 实测补：`bridge/octave-page.js` **不是 IIFE**（是顶层脚本），
+  //   它的 `var G = window` 创建的是 `window.G` —— 转 `let` 后 G 只活在脚本作用域，
+  //   页面其它脚本读不到 ⇒ **整页崩**（accept-pkg 7 条 CRASH: Target page has been closed；
+  //   accept-p5-graphics 亦崩）。回滚后全绿。
+  //   判据：该文件无 `(function (global) {` 包裹 ⇒ 顶层 var 就是全局属性。
+  'G',        // bridge/octave-page.js:18 —— var G = window（全文件 25 处 G.xxx）
 ]);
 
 // 语法校验：把候选文本交给 V8 编译（不执行）。ESM 用 `module` 不可靠，
