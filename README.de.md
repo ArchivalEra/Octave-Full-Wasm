@@ -161,6 +161,30 @@ Den Interpreter in eine eigene Seite einbetten: [`docs/embed-api.md`](docs/embed
 ## Repo-Inhalt
 
 <!-- AUTO:FILES -->
+```
+group                           files        bytes
+site/                             228     333.5 MB
+build/                            462       3.4 MB
+test/                             157       1.0 MB
+(root)                             13     776.6 KB
+upstream-patches/                  20     435.1 KB
+zreflect/                          29     415.0 KB
+.scratch/                          83     375.3 KB
+bridge/                            20     303.5 KB
+mail/                              52     253.9 KB
+vendor/                            21     123.5 KB
+.githooks/                         15     106.2 KB
+docs/                              13      75.6 KB
+dist/                               2      23.8 KB
+reflect-hooks/                      6      14.9 KB
+.github/                            3       5.8 KB
+upstream/                          18       4.1 KB
+.zcode/                             1       1.6 KB
+(total)                          1143     340.7 MB
+```
+
+Dateiliste: `git ls-files` — dieser Block ist eine Zusammenfassung, damit das README lesbar bleibt.
+Erneut ausfuehren: `python3 .githooks/update-readme.py --check`
 <!-- /AUTO -->
 
 ## Hooks und Gates

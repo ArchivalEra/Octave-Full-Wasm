@@ -3,7 +3,14 @@
 # Copyright (C) 2026 ArchivalEra
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""重算 README.md 的 AUTO:FILES 区块（**分类摘要**，不是逐文件清单）。
+"""(2026-11-01) 重算**三份 README** 的 AUTO:FILES 区块（分类摘要，不是逐文件清单）。
+
+★ 为什么改成三份（真缺陷，pre-push 抓到的）：旧版只重算 `README.md`，而
+  `README.zh.md` / `README.de.md` 里**也有同一个 AUTO:FILES 块** ⇒ 那两份的块
+  永远是陈的。pre-push 的三语闸门要求"三份同批" ⇒ 任何改仓库文件数的提交
+  都会在推送时被拒（实测：加了两个 mail 文件，两份块数字落后而闸门拒绝推送）。
+  修法 = `--check` 与就地重写都对**三份**做同一件事；只有"缺 AUTO 块"的份跳过
+  （并**明说跳过**，不静默）。
 
 用法：
   update-readme.py            # 就地重写
@@ -68,7 +75,7 @@ def _human(n):
         n /= 1024.0
 
 
-def render_block(root="."):
+def render_block(root=".", lang="en"):
     files = tracked_files()
     rows = summarize(files, root)
     total_files = sum(r[1] for r in rows)
@@ -81,11 +88,25 @@ def render_block(root="."):
     lines.append("%-28s %8d %12s" % ("(total)", total_files, _human(total_bytes)))
     lines.append("```")
     lines.append("")
-    # ⚠️ 生成块内容必须是**英文**（2026-10-29）：它写进英文 README，掺中文就是"语言混杂"
-    #   （用户点令原话）。中文/德文 README 只**引用**这个块，不各写一份。
-    lines.append("Per-file listing: `git ls-files` — this block is a summary so the "
-                 "README stays readable.")
-    lines.append("Re-run: `python3 .githooks/update-readme.py --check`")
+    # ★ 2026-11-01 改口径（推翻 2026-10-29 那条"只英文写块"的决定，因为它有一个真缺陷）：
+    #   旧规矩 = 只有 README.md 有块、zh/de 只**引用**。后果：任何改变仓库文件数的提交
+    #   都只让 README.md 变 ⇒ pre-push 的三语闸门（"三份必须同批"）**永远拒绝推送**
+    #   （实测：加了两个 mail 文件，zh/de 没变，推送被拒）。
+    #   新规矩 = **三份都写块，但各用本语言** —— 语言纯度与"同批"两个要求同时满足。
+    #   （用户 2026-10-29 的"语言混杂"点令指的是英文 README 里掺中文，不是这条。）
+    _NOTE = {
+        "en": ("Per-file listing: `git ls-files` — this block is a summary so the "
+               "README stays readable.",
+               "Re-run: `python3 .githooks/update-readme.py --check`"),
+        "zh": ("逐文件清单：`git ls-files` —— 本块是摘要，README 因此保持可读。",
+               "复跑：`python3 .githooks/update-readme.py --check`"),
+        "de": ("Dateiliste: `git ls-files` — dieser Block ist eine Zusammenfassung, "
+               "damit das README lesbar bleibt.",
+               "Erneut ausfuehren: `python3 .githooks/update-readme.py --check`"),
+    }
+    _n, _r = _NOTE.get(lang, _NOTE["en"])
+    lines.append(_n)
+    lines.append(_r)
     lines.append(END)
     # 注意：末尾不加换行，由原文 END 之后的 post 原样提供换行，保证幂等。
     return "\n".join(lines)
@@ -130,6 +151,34 @@ def selftest():
         cases.append(("★ 空输入：空文件集 ⇒ 空行集（total 由调用方判零，不编假条目）",
                       empty == []))
 
+        # ④ ★ 三份 README **都**要重算（2026-11-01 真缺陷的反向用例）
+        #    旧版只写 README.md ⇒ zh/de 的 AUTO 块永远陈 ⇒ pre-push 三语闸门拒绝推送。
+        #    判据：造三份夹具（两份块陈旧），跑 refresh_one ⇒ 三份都变新；
+        #          再造一份**故意缺块** ⇒ 必须报"跳过、不是通过"（不静默）。
+        fx = {"README.md": "# A\n" + BEGIN + "\nOLD\n" + END + "\n",
+              "README.zh.md": "# B\n" + BEGIN + "\nOLD\n" + END + "\n",
+              "README.de.md": "# C\n" + BEGIN + "\nOLD\n" + END + "\n",
+              "README.broken.md": "# D\n(no auto block)\n"}
+        for name, body in fx.items():
+            with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+                fh.write(body)
+        cwd = os.getcwd()
+        os.chdir(d)
+        try:
+            sts = []
+            for name in ("README.md", "README.zh.md", "README.de.md"):
+                sts.append(refresh_one(name, blk, False)[0])
+            broken = refresh_one("README.broken.md", blk, False)
+            fresh_ok = all(s == 0 for s in sts)
+            # 两份改完后，再 --check 一次必须全是新鲜（幂等）
+            recheck = [refresh_one(n, blk, True)[0] for n in
+                       ("README.md", "README.zh.md", "README.de.md")]
+            cases.append(("★ 三份 README 全部重算 + 幂等 + 缺块明说跳过",
+                          fresh_ok and all(s == 0 for s in recheck)
+                          and broken[0] == 2 and "跳过" in broken[1]))
+        finally:
+            os.chdir(cwd)
+
     bad = 0
     for label, ok in cases:
         print("%s | %s" % ("PASS" if ok else "fail", label))
@@ -138,31 +187,49 @@ def selftest():
     return 1 if bad else 0
 
 
+READMES = ("README.md", "README.zh.md", "README.de.md")
+
+
+def refresh_one(name, block, check_only):
+    """就地重写（或只校验）一份 README 的 AUTO 块。返回 (状态, 消息)。
+
+    状态：0 = 新鲜/已重算，1 = --check 发现过期，2 = 该份没有 AUTO 块（跳过）。
+    """
+    with open(name, encoding="utf-8") as fh:
+        text = fh.read()
+    if BEGIN not in text or END not in text:
+        # ★ 不静默：明说这份没块、跳过（而不是假装"三份都查过了"）
+        return 2, "%s 没有 AUTO:FILES 区块（跳过，不是通过）" % name
+    pre, _, rest = text.partition(BEGIN)
+    _, _, post = rest.partition(END)
+    new_text = pre + block + post
+    if new_text == text:
+        return 0, "%s 新鲜" % name
+    if check_only:
+        return 1, "%s 的 AUTO 区块已过期：先提交（hook 会自动重算）再推" % name
+    with open(name, "w", encoding="utf-8") as fh:
+        fh.write(new_text)
+    return 0, "%s 已重算" % name
+
+
 def main():
     if "--selftest" in sys.argv:
         return selftest()
 
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    with open("README.md", encoding="utf-8") as fh:
-        text = fh.read()
-    if BEGIN not in text or END not in text:
-        print("README 缺少 AUTO:FILES 区块", file=sys.stderr)
-        return 2
-    pre, _, rest = text.partition(BEGIN)
-    _, _, post = rest.partition(END)
-    new_text = pre + render_block() + post
-    if "--check" in sys.argv:
-        if new_text != text:
-            print("README 的 AUTO 区块已过期：先提交（hook 会自动重算）再推", file=sys.stderr)
-            return 1
-        print("README 新鲜")
-        return 0
-    if new_text != text:
-        with open("README.md", "w", encoding="utf-8") as fh:
-            fh.write(new_text)
-        print("README 已重算")
-    else:
-        print("README 无变化")
+    check_only = "--check" in sys.argv
+    rc = 0
+    for name in READMES:
+        lang = "zh" if name.endswith(".zh.md") else ("de" if name.endswith(".de.md") else "en")
+        block = render_block(lang=lang)
+        st, msg = refresh_one(name, block, check_only)
+        print(msg, file=sys.stderr if st else sys.stdout)
+        if st == 1:
+            rc = 1
+        elif st == 2 and rc == 0:
+            # 缺块也算问题：三份都该有（这是本批修的那个缺陷的同族）
+            rc = 2
+    return rc
     return 0
 
 
