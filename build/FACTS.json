@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-10-31T21:48:57+0800",
+ "generated": "2026-11-01T18:41:24+0800",
  "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -1462,6 +1462,33 @@
    "replay": true,
    "measured_at": "2026-10-31T20:00:00+0800",
    "first_seen": "2026-10-31"
+  },
+  "webshims_js_bytes": {
+   "value": 39468,
+   "cmd": "stat -c '%s' /mnt/hdd/octave-wasm-build/site/assets/m/webshims.js",
+   "source": "site/assets/m/webshims.js",
+   "measured_at": "2026-11-01T18:41:24+0800",
+   "first_seen": "2026-11-01",
+   "note": "symbolic 接缝要 vendor 的第一件（11 个 .m 的自包含 JS 包，bundle-m 产出；不在 octave.data 里）",
+   "replay": false
+  },
+  "web_pause_oct_bytes": {
+   "value": 10834,
+   "cmd": "stat -c '%s' /mnt/hdd/octave-wasm-build/site/assets/oct/__web_pause_ms__.oct",
+   "source": "site/assets/oct/__web_pause_ms__.oct",
+   "measured_at": "2026-11-01T18:41:24+0800",
+   "first_seen": "2026-11-01",
+   "note": "symbolic 接缝要 vendor 的第二件（导出 __web_run_js__ 等 6 个兄弟别名）",
+   "replay": false
+  },
+  "pyodide_min_closure_bytes": {
+   "value": 20306779,
+   "cmd": "python3 -c \"import os;d='/mnt/hdd/octave-wasm-build/site/assets/pyodide/pyodide';print(sum(os.path.getsize(d+'/'+f) for f in ['pyodide.asm.wasm','pyodide.asm.mjs','python_stdlib.zip','sympy-1.14.0-py3-none-any.whl','mpmath-1.4.1-py3-none-any.whl','pyodide.js','pyodide.mjs','python_cli_entry.mjs']))\"",
+   "source": "site/assets/pyodide/pyodide/",
+   "measured_at": "2026-11-01T18:41:24+0800",
+   "first_seen": "2026-11-01",
+   "note": "Pyodide 最小闭包（symbolic 必需 8 件之和）",
+   "replay": false
   }
  }
 }

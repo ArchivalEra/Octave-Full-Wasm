@@ -3,6 +3,56 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-11-01 · 收件 067：wasm32 极简线能不能接 symbolic —— 实测答完四问）
+
+- **收件 `067`（课程站）**：它只 vendor 我方 **wasm32 Release 三件套**（`octave.js`/`.wasm`/`.data`），
+  无 `octave-core.js`、无 Worker、**无 COI 头**（静态托管），问 symbolic 能不能接。四问逐条答完，
+  回信 `068`（它信箱 `003`）已投。
+
+- **★ 我没有拿本仓站点回答它** —— 它的环境正是要证伪"有 `octave-core.js` 才成立"这个前提。
+  我起了一个**故意不发 COOP/COEP** 的本地静态服务，页面只放三件 + 两个小件，结算件
+  `test/browser/probe-wasm32-symbolic-minimal.mjs` ⇒ **8 PASS / 0 FAIL**。
+
+- **★★ Q1 我先答错、后被机器纠正（这是本批最有价值的一条）**：
+  我最初用另一个探针在**本仓站点**上看到 `exist('__webshim_python_cmd__')=2` ⇒ 差点回"已在
+  `octave.data` 里"。**那是假证据**：那个站点加载了 `assets/m/webshims.js`（`octave-core.js` 的
+  开机链装的），量到的是"已装载"不是"烘在 data 里"。
+  **机器纠正**：`python3 -c "print(open('octave.js','rb').read().count(b'webshim'))"` ⇒ **0**。
+  真相 = `webshims` 的 11 个 `.m` 是 `bundle-m` 生成的**独立 JS 包**（`assets/m/webshims.js`，
+  [[webshims_js_bytes]] B），运行期才写进 MEMFS。**结论 = 不在 data 里，但不需要重打包：多 vendor 这一个 JS。**
+  ⇒ 教训：**同一句 `exist`，装过与没装过是两个答案**；判"产地里有没有"要查**产地**，不是查运行期。
+
+- **★ 还查出第二件必带品（信件第 56–61 行那张表漏了它）**：`system.m:39` 的门是
+  `exist("__web_run_js__") != 3`，而 `__web_run_js__` 是 **`__web_pause_ms__.oct`（[[web_pause_oct_bytes]] B）的
+  兄弟别名**（一个模块导出 6 个函数，靠符号链接建 5 个别名，`webio` 先例）。
+  少的正是它 —— 探针第一次跑到 E5 时报「本构建没有 shell，也没有 Python 桥」。**补齐后 E5 = `st=0 out=42`。**
+  ⇒ 课程站要多 vendor 的合计 = [[webshims_js_bytes]] + [[web_pause_oct_bytes]] ≈ **49 KB**
+  （两件字节由台账给出，不在此手抄）。
+
+- **★ Q2 的决定性实测（在**它那套形态**里，不是别处）**：`probe-pyodide-sync` 的 4/0 是
+  一个自编 wasm 的独立探针测的，不是这形态。重测结果：
+  `coi=false` / `sab=undefined` / `sympy=1.14.0` / **`diff=cos(x)`（同步算出真结果）**
+  冷启动 `pyodideReadyMs ≈ 2200 ms`（含 `loadPackage('sympy')`）。
+  ⇒ **无 COI、无 JSPI、无 Asyncify、无 Atomics、无 Worker** 即可 —— 判据是 `runPython` 那行**没有 await**。
+  Pyodide 最小闭包 **≈ [[pyodide_min_closure_bytes]] B（≈ 20.2 MiB）**（超它 10 MB 预算，未到 40 MB 拒绝线）。**我不缩小口径骗它。**
+  ⇒ 懒加载成立（`.m` 侧只在第一次调 `python_ipc_system` 才碰 Pyodide）。
+
+- **★ 探针自己踩的两个坑（已写进信里给它，免得它重踩）**：
+  · `__octaveRunPython` 由 `emscripten_run_script` 在**全局作用域** eval ⇒ **必须读 `window.pyodide`**，
+    读闭包变量会报"Pyodide 未就绪"（我第一版就撞了）；
+  · **Octave 的 `system()` 单输出 = 退出码，不是 stdout**。`v=system(cmd)` 拿的是 `0`（`char(0)`=NUL）。
+    必须 `[st,out]=system(cmd)`。我第一版因此量出 `'\x00'`，而桥那侧记录的 `bridgeOutRaw` 一直是 `'42'`
+    ⇒ **又一次"先排除仪器"**。
+
+- **Q3 诚实答"没有更小的"**：`shelf/packages/symbolic.json` 的 `depends:["pyodide"]` 是硬依赖；
+  Octave Forge 没有纯 `.m` 的符号包。**省不掉 Pyodide**（sympy 是 Python 库）。
+  我给它两条口径：能接受 20 MB 懒加载 ⇒ 这条路成立；不能 ⇒ 请把符号计算从计划里划掉，
+  **不拿"技术上能"劝它接受不想要的体积**。
+
+- **Q4 纠正它的对账**：`octave.data` 里 **`pkg('list')` ⇒ `N=0`**（无任何 Forge 包）。
+  它说的"10 个纯 .m 包"是**站点货架**（`assets/pkg/*.js` + `assets/oct/*.oct`），
+  由 `install()` 才写进 MEMFS —— 与 Q1 是**同一个机制**。
+
 ## 现在是什么（2026-11-01 · 工单 72：`var` 清零 —— 隐式改显式，零例外）
 
 - **用户点令**：「补上 var 那 35 条，隐式改显式，**不准有任何合法例外**」。这一令推翻了本单原先
@@ -1374,6 +1424,7 @@
 | `port_validator_selftest_pass` | **63** | 2026-10-31T21:48:55+0800 | `python3 build/extra-content/validate-content-list.py --selftest | grep -oE '自证：[0-9]+ PASS' | grep -oE '[0-9]+'` |
 | `probe_lane_fail` | **0** | 2026-10-31T21:48:55+0800 | `同上（脚本结尾的 `=== N PASS / M FAIL ===`）` |
 | `probe_lane_pass` | **33** | 2026-10-31T21:48:55+0800 | `SITE_DIR=<站点> sh test/browser/run.sh test/browser/probe-lane.mjs > /mnt/hdd/octave-wasm-build/probe-lane.log` |
+| `pyodide_min_closure_bytes` | **20306779** | 2026-11-01T18:41:24+0800 | `python3 -c "import os;d='/mnt/hdd/octave-wasm-build/site/assets/pyodide/pyodide';print(sum(os.path.getsize(d+'/'+f) for f in ['pyodide.asm.wasm','pyodide.asm.mjs','python_stdlib.zip','sympy-1.14.0-py3-none-any.whl','mpmath-1.4.1-py3-none-any.whl','pyodide.js','pyodide.mjs','python_cli_entry.mjs']))"` |
 | `pyodide_sync_probe_pass` | **4** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['pass'])"` |
 | `pyodide_sync_ready_ms` | **2288** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-pyodide-sync.json'))['result']['pyodideReadyMs'])"` |
 | `pyodide_tree_bytes` | **22013349** | 2026-10-31T21:48:55+0800 | `python3 -c "import json;print([p['size'] for p in json.load(open('/mnt/hdd/octave-wasm-build/site/assets/forge-catalog.json'))['packs'] if p['name']=='pyodide'][0])"` |
@@ -1452,15 +1503,17 @@
 | `wasm_bytes` | **29632229** | 2026-10-31T21:48:55+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_sha` | `1ed3e528561e4475…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm | cut -d' ' -f1` |
 | `wasm_v128` | **4752** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |
+| `web_pause_oct_bytes` | **10834** | 2026-11-01T18:41:24+0800 | `stat -c '%s' /mnt/hdd/octave-wasm-build/site/assets/oct/__web_pause_ms__.oct` |
 | `webgpu_main_device` | **OK** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['device'])"` |
 | `webgpu_vendor` | **nvidia** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['main']['vendor'])"` |
 | `webgpu_worker_compute_ok` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['computeOK'])"` |
 | `webgpu_worker_device` | **OK** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['device'])"` |
 | `webgpu_worker_webgl2` | **True** | 2026-10-31T21:48:57+0800 | `python3 -c "import json;print(json.load(open('/mnt/hdd/octave-wasm-build/w64-logs/probe-webgpu-capability.json'))['worker']['webgl2'])"` |
+| `webshims_js_bytes` | **39468** | 2026-11-01T18:41:24+0800 | `stat -c '%s' /mnt/hdd/octave-wasm-build/site/assets/m/webshims.js` |
 | `xpow_driver_spike_pct` | **2.1** | 2026-10-31T21:48:55+0800 | `bash test/fixtures/xpow-spike/run-spike.sh（读 w64-logs/xpow-spike.log）` |
 | `xpow_driver_spike_ratio` | **0.988** | 2026-10-31T21:48:55+0800 | `同上（cand/base）` |
 
-170 条事实。
+173 条事实。
 <!-- /AUTO:FACTS -->
 
 <!-- AUTO:GATES -->

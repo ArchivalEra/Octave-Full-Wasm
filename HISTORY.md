@@ -6342,3 +6342,44 @@ outbox 里两封历史存档（`044`→LLVM-wasm `013`、`045`→extra-content `
 
 **删的是引用，不是内容**：`git branch -a` 上从此只有一条线；
 `git log archive/master-a1e2409` / `git show <tag>` 仍完整可查。
+
+## §5.115 · 2026-11-01 · 收件 067：wasm32 极简线接 symbolic（实测四问）
+
+课程站只 vendor wasm32 Release 三件套、无 `octave-core.js`、无 COI 头，问 symbolic 能否接。
+**结论：能，多 vendor 49 KB 两件 + 约 50 行宿主代码 + 懒加载 20.2 MiB Pyodide。**
+
+### ★ 一笔被机器纠正的假证据（本批最贵）
+
+我先用探针在**本仓站点**上看到 `exist('__webshim_python_cmd__','file')=2`，差点回"已在
+`octave.data` 里"。**那是假证据** —— 那个站点加载了 `assets/m/webshims.js`（开机链装的），
+量到的是"已装载"不是"烘在 data 里"。查**产地**：`octave.js` 里 `webshim` 出现 **0** 次。
+⇒ 真相：`webshims` 的 11 个 `.m` 是 `bundle-m` 生成的独立 JS 包，运行期写进 MEMFS。
+**教训**：同一句 `exist`，"装过"与"没装过"是两个答案；判"产地里有没有"要查产地。
+
+### 第二件必带品（来信那张表漏了）
+
+`system.m:39` 的门 `exist("__web_run_js__") != 3`，而 `__web_run_js__` 是
+`__web_pause_ms__.oct` 的**兄弟别名**（一个模块导出 6 个函数，靠符号链接，`webio` 先例）。
+缺它 ⇒ "本构建没有 shell，也没有 Python 桥"。补齐后端到端 `[st,out]=system(...) ⇒ st=0 out=42`。
+
+### Q2 在**它那套形态**里重测（不是别的形态）
+
+`probe-pyodide-sync` 的 4/0 是一个自编 wasm 的独立探针测的。重测（无 COI/无 JSPI/无 Worker）：
+`coi=false, sab=undefined, sympy=1.14.0, diff=cos(x)`，冷启动 ≈ 2200 ms。
+判据 = `runPython` 那行**没有 await**。
+
+### 仪器两次先错（"失败先排除仪器"的两次现场）
+
+① `__octaveRunPython` 由 `emscripten_run_script` 在全局作用域 eval ⇒ 必须读 `window.pyodide`，
+   读闭包变量报"Pyodide 未就绪"；
+② **Octave 的 `system()` 单输出是退出码**，`v=system(cmd)` 拿 `0`（`char(0)`=NUL）；
+   必须 `[st,out]=system(cmd)`。桥那侧记录的 `bridgeOutRaw` 一直是 `'42'` ⇒ 红的是探针不是产品。
+
+### 台账
+
+新增三条：`webshims_js_bytes` / `web_pause_oct_bytes` / `pyodide_min_closure_bytes`。
+**其中一条我手抄错了**（写 21189599，实测 20306779）—— 当场被自己的复算纠正，
+正是 AGENTS §四.2「手抄数字 = 造第二产地」。
+
+结算件：`test/browser/probe-wasm32-symbolic-minimal.mjs` ⇒ **8 PASS / 0 FAIL**。
+回信 `068`（对方信箱 `003`）已投它仓 `mail/`。
