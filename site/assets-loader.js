@@ -115,7 +115,7 @@
     function mkdirp(path) {
       let parts = path.split('/').filter(Boolean);
       let cur = '';
-      for (var i = 0; i < parts.length; i++) {
+      for (let i = 0; i < parts.length; i++) {
         cur += '/' + parts[i];
         try { fs().mkdir(cur); } catch (e) { /* 已存在 */ }
       }
@@ -167,7 +167,7 @@
 
     function writeFiles(files) {
       let n = 0;
-      for (var p in files) {
+      for (let p in files) {
         if (!Object.prototype.hasOwnProperty.call(files, p)) continue;
         mkdirp(p.replace(/\/[^/]*$/, ''));
         fs().writeFile(p, files[p]);
@@ -1093,7 +1093,7 @@
           //    compile-worker 的编译现场输入，不在那个语义里。role:'toolchain' 的
           //    NOT_INSTALLABLE 拒绝在 installLayer 层（更早/更准确）。
           if (hostArch) {
-            for (var _pi = 0; _pi < plan.length; _pi++) {
+            for (let _pi = 0; _pi < plan.length; _pi++) {
               if (plan[_pi].kind === 'engine') continue;
               let _pa = plan[_pi].arch;
               if (_pa && _pa !== hostArch) {

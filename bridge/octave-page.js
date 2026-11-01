@@ -15,18 +15,18 @@
 //   __octaveHosts / __octaveClicks / __octaveRequestInterrupt / 两个全局监听器）——
 //   embed 套件与既有页面只读这些名字。
 // ⚠ 依赖加载顺序不变：octave-core.js 与 octave.js（按档）**之间**。
-var G = window;
+const G = window;
 // ── 输出 sink：合并刷新（工单 48 的核心）────────────────────────────────────────
 // 时间预算 16ms：**同步 eval 期间也能中途 flush**（rAF 在同步循环里不触发），
 // 于是既压掉"每行一次重排"、又保留"流式可见"（延迟界 ≈ 16ms）。异步突发时用 rAF 兜底。
-let FLUSH_BUDGET_MS = 16;
-let SCROLL_THROTTLE_MS = 200;
+const FLUSH_BUDGET_MS = 16;
+const SCROLL_THROTTLE_MS = 200;
 function perfNow() {
     return (window.performance && performance.now) ? performance.now() : Date.now();
 }
 function scheduleFrame(fn) {
     if (typeof window.requestAnimationFrame === 'function')
-        requestAnimationFrame(function () { return fn(); });
+        requestAnimationFrame(() => fn());
     else
         setTimeout(fn, FLUSH_BUDGET_MS);
 }
@@ -43,7 +43,7 @@ function createCoalescedPreSink(el) {
     function autoScroll() {
         // ★ 读 scrollHeight 会强制同步布局 —— 这是实测里 DOM 成本的大头（107ms 调用 vs
         //   ~430ms 布局）。所以：① 只在 flush 后读；② 200ms 节流（旧版同值）。
-        let now = perfNow();
+        const now = perfNow();
         if (now - lastScroll <= SCROLL_THROTTLE_MS)
             return;
         lastScroll = now;
@@ -55,14 +55,14 @@ function createCoalescedPreSink(el) {
         scheduled = false;
         if (!pending.length)
             return;
-        let text = pending.join('');
+        const text = pending.join('');
         pending = [];
         el.appendChild(document.createTextNode(text));
         lastFlush = perfNow();
         autoScroll();
     }
     return {
-        append: function (text) {
+        append(text) {
             if (!text)
                 return;
             pending.push(text);
@@ -88,7 +88,7 @@ function createPageSink() {
 }
 // ── 输入捕获（页面级；需要 document，留在 JS）──────────────────────────────────
 function createClickQueue() {
-    let q = {
+    const q = {
         list: [],
         length: function () { return q.list.length; },
         push: function (c) { q.list.push(c); },
@@ -100,17 +100,17 @@ function createClickQueue() {
 /** 全局 pointerdown：把命中 IMG/CANVAS 的点击**扇出**给所有 armed 实例（C6）。 */
 function installPointerFanout() {
     window.addEventListener('pointerdown', function (e) {
-        let el = e.target;
+        const el = e.target;
         if (!el || (el.tagName !== 'IMG' && el.tagName !== 'CANVAS'))
             return;
-        let r = el.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
         if (!r.width || !r.height)
             return;
-        let click = [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
+        const click = [e.clientX - r.left, e.clientY - r.top, r.width, r.height,
             e.button === 2 ? 3 : (e.button === 1 ? 2 : 1)];
         let hit = false;
-        for (var i = 0; i < G.__octaveHosts.length; i++) {
-            let h = G.__octaveHosts[i];
+        for (let i = 0; i < G.__octaveHosts.length; i++) {
+            const h = G.__octaveHosts[i];
             if (h.armed) {
                 h.clicks.push(click);
                 hit = true;
@@ -140,10 +140,10 @@ function installInterruptKeys() {
 // opts.id    实例名     opts.lane  选档计划（缺省=页面计划；**必须转发**，见下）
 // 返回 Module 形态对象（喂给 OCTAVE()）；第一个实例是"默认实例"，拿走全部 window.* 别名。
 function createOctaveHost(opts) {
-    let o = opts || {};
-    let base = o.base || '';
-    let isDefault = (G.__octaveHosts.length === 0);
-    let inst = {
+    const o = opts || {};
+    const base = o.base || '';
+    const isDefault = (G.__octaveHosts.length === 0);
+    const inst = {
         id: o.id || (isDefault ? 'default' : ('inst-' + G.__octaveHosts.length)),
         clicks: [], armed: false, ready: false, mem: null, mod: null,
     };
@@ -151,10 +151,10 @@ function createOctaveHost(opts) {
     // ⚠ 挂点解析在**注册之前**：不存在必须 throw，且不许在注册表留下幽灵实例。
     let sink;
     if (o.mount) {
-        let mountEl = document.querySelector(o.mount);
+        const mountEl = document.querySelector(o.mount);
         if (!mountEl)
             throw new Error('createOctaveHost: 找不到挂点 ' + o.mount);
-        let outEl = document.createElement('pre');
+        const outEl = document.createElement('pre');
         mountEl.appendChild(outEl);
         sink = createCoalescedPreSink(outEl);
     }
@@ -162,12 +162,12 @@ function createOctaveHost(opts) {
         sink = createPageSink();
     }
     G.__octaveHosts.push(inst);
-    let clicks = createClickQueue();
+    const clicks = createClickQueue();
     inst.clicks = clicks.list; // 兼容：既有断言读 inst.clicks 长度
-    let core = G.createOctaveCore({
+    const core = G.createOctaveCore({
         base: base, mode: 'single', isDefault: isDefault, home: o.home,
         state: inst, clicks: clicks,
-        // ★ 必须转发 lane：不转发 ⇒ 页面按档加载了 w64 的胶水，内核却取根目录产物
+        // ★ 必须转发 lane：不转发 ⇒ 页面按档加载了 threads/w64 的胶水，内核却取根目录产物
         //   ⇒ 开机 BindingError / eval_string is not a function（probe-lane / embed-multi 实测）。
         //   缺省必须是**页面的选档计划**（页面只有一档）。
         lane: o.lane || G.__octaveLanePlan,
@@ -177,11 +177,11 @@ function createOctaveHost(opts) {
             printErr: function (t) { console.warn(t); sink.append(t + '\n'); },
             note: function (m) { console.warn(m); },
             stdinLine: function () {
-                let q = G.__octaveStdin;
+                const q = G.__octaveStdin;
                 if (q && q.length)
                     return String(q.shift());
                 if (typeof G.prompt === 'function') {
-                    let r = G.prompt('Input: ');
+                    const r = G.prompt('Input: ');
                     return r === null ? null : r;
                 }
                 return null;
@@ -198,18 +198,13 @@ function createOctaveHost(opts) {
                 //    并更新别名（保证"测试读的与 boot 链用的"仍是同一份状态）。
                 if (isDefault && G.OctaveAssets && G.Module === mod)
                     return G.OctaveAssets;
-                let loader = G.createOctaveAssets(mod, b, isReady);
+                const loader = G.createOctaveAssets(mod, b, isReady);
                 if (isDefault)
                     G.OctaveAssets = loader;
                 return loader;
             },
             onReady: function () { inst.ready = true; if (isDefault) {
                 G.__octaveReady = true;
-                // ⚠️ E 线桥的装配**不在这里**（2026-10-29 实测更正）：它归 `octave-core.js`
-                //   开机链的 .then（`st.ready = true` 之前），因为 MEMFS 的 12 件必须
-                //   在"就绪"那一刻就已可见 —— OM 的产品态套件就绪后立刻探 `exist()`，
-                //   挂在 onReady 之后异步起会让它探到空 MEMFS（假红 3 条，实测）。
-                //   这里**不要**再调 ensure()：boot 链已经调过，且 ensure 是幂等的。
             } },
         },
     });

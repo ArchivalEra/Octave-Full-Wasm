@@ -160,13 +160,13 @@ the interpreter in your own page: [`docs/embed-api.md`](docs/embed-api.md).
 ```
 group                           files        bytes
 site/                             228     333.5 MB
-build/                            462       3.4 MB
+build/                            461       3.3 MB
 test/                             156       1.0 MB
-(root)                             13     763.2 KB
+(root)                             13     767.9 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
-.scratch/                          83     371.6 KB
-bridge/                            20     303.2 KB
+.scratch/                          83     375.3 KB
+bridge/                            20     303.5 KB
 mail/                              49     229.0 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     102.4 KB
@@ -176,7 +176,7 @@ reflect-hooks/                      6      14.9 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1139     340.6 MB
+(total)                          1138     340.7 MB
 ```
 
 Per-file listing: `git ls-files` — this block is a summary so the README stays readable.
@@ -218,11 +218,19 @@ Serving a site over HTTP had a defect worth recording: `build/serve-coi.py` sent
 
 One lesson from that fix: the first 304 branch re-sent `ETag`/`Cache-Control`, and `end_headers()` sent them again, producing two headers with the same name. Duplicate headers raise no error but a downstream client may read the wrong one.
 
-GitRoll scanning reported 931 findings against this repo (issue #7, one BLOCKER). Auditing them turned up exactly one real defect: the Forge fetcher resolved packages by recording failures only on stderr, while its caller never inspected a return value, so a missing or version-incompatible package produced exit code 0 — the build then packaged an incomplete shelf with every gate green. The fix makes unresolved packages and checksum-mismatched downloads equally fatal, separates environment failures (exit 2) from resolution failures (exit 1), and adds an eight-case self-test; mutating either guard back to its old behaviour turns the self-test red. The remaining 930 findings are split by ownership and documented on the issue: 363 `var` usages are a deliberate ES5 compatibility choice rather than debt, the single reported vulnerability sits in a third-party service-worker library, and the complexity findings are readability work that needs its own ticket.
+GitRoll scanning reported 931 findings against this repo (issue #7, one BLOCKER). Auditing them turned up exactly one real defect: the Forge fetcher resolved packages by recording failures only on stderr, while its caller never inspected a return value, so a missing or version-incompatible package produced exit code 0 — the build then packaged an incomplete shelf with every gate green. The fix makes unresolved packages and checksum-mismatched downloads equally fatal, separates environment failures (exit 2) from resolution failures (exit 1), and adds an eight-case self-test; mutating either guard back to its old behaviour turns the self-test red. The single reported vulnerability sits in a third-party service-worker library and is fixed in this repo's fork. The complexity and style findings are readability work with its own ticket.
 
-Three corrections from user direction reshaped the GitRoll work. **Browser floor is Chrome 123**, so the 363 `var` findings are real debt rather than a compatibility requirement — my earlier classification was wrong. A conservative converter now rewrites them (363 → 20 remaining), refusing four shapes: `for (var …)` loops (block scoping changes closure capture), top-level `var` that deliberately leaks onto `window`/`self` (measured: converting `var Module = core.module` broke the worker's plot path), `var` inside comments, and multi-declaration lines. Each file is V8-compiled before it is written. The single reported vulnerability also got fixed in this repo's fork of the third-party service worker: messages are now rejected unless their origin matches, because upstream accepted anything — letting any page deregister the worker or weaken COEP from `require-corp` to `credentialless`. Both carry self-tests, both were mutation-tested to prove they go red, and the gate bench grew from 51 to 53.
+I first classified the 363 `var` findings as a deliberate ES5 compatibility choice. **That was wrong on two counts.** The browser floor is Chrome 123, so ES5 compatibility is not a requirement; and a third of those `var`s were not written by anyone at all — `build/build-embed-ts.sh` compiled `octave-page.ts` with `--target ES5`, and tsc downlevels every `const`/`let` to `var`. The source always said `const G`. The single reported vulnerability also got fixed in this repo's fork of a third-party service worker: messages are now rejected unless their origin matches, because upstream accepted anything — letting any page deregister the worker or weaken COEP from `require-corp` to `credentialless`. It carries a self-test and was mutation-tested to prove it goes red.
 
-PythonGraph/ES5 debt cleanup continued: a conservative `var`→`let` converter took the 363 findings down to 20, refusing shapes where block scoping would change behaviour (`for (var …)` loops with closure capture, top-level `var` that leaks onto `window`/`self`), and the repo's own fork of a third-party service worker now rejects messages from other origins. Remaining work is catalogued in ticket 72: 16 `for (var …)` sites needing per-site judgement, 57 cognitive-complexity findings needing their own refactor plan, and ~447 style suggestions.
+The converter that replaced them is an AST pass, not a line regex. `build/113/var-audit.mjs` parses each file with the real TypeScript parser and decides per declaration:
+
+| Shape | Question it asks | Verdict |
+|---|---|---|
+| `for (var i …)` | Does a function created **inside** the loop body reference `i`? Is `i` referenced after the loop in the same scope? | no to both → provably equivalent, rewrite to `let`; either yes → refuse and name the site |
+| top-level `var` in a classic script | Does anything in the repo read `window.X` / `self.X` / `globalThis.X` in **code** (comments and strings stripped)? | yes → must be written as an explicit assignment; no → rewrite |
+| any other `var` | Is the name referenced outside its block, or redeclared? | no to both → rewrite; either yes → red |
+
+The two implicit-global cases became explicit rather than exempt. `bridge/octave-worker.js` now says `self.Module = core.module; const Module = self.Module;` — the same object, but the global is a written contract instead of a side effect of one keyword. The old converter carried a hand-written `TOP_LEVEL_GLOBALS` whitelist naming `Module` and `G`; that file is deleted, because a whitelist inside the tool is how "legitimate exceptions" outlive their justification. Present state: zero `var` in repo-authored JS/TS, checked by `node build/113/var-audit.mjs` rather than asserted here. What remains open on ticket 72 is the separate readability debt — 57 cognitive-complexity findings and the style suggestions — neither of which is a correctness defect.
 
 Audit of the Einfacht upgrade (upstream pin `45ca586` to `6e4e6e8`) is written up as ticket 73.
 The trial swap was run in full and then rolled back: twelve of thirteen gates stay green, and the
@@ -271,22 +279,10 @@ Deletion status: `wasm32-final` is gone locally and on both remotes; `master` is
 mirror but still exists on origin because GitHub refuses to delete a repository's default branch
 -- that is the rename step, not a failure.
 
-A third instance of the same silent trap turned up while finishing the `var` cleanup, and it is
-worth recording because it cost a full regression run. `bridge/octave-page.js` is not wrapped in an
-IIFE -- it is a top-level script -- so its `var G = window` creates `window.G`. Converting that to
-`let` scopes `G` to the script, other scripts can no longer see it, and the whole page dies:
-`accept-pkg` reported seven crashes with "Target page has been closed" and `accept-p5-graphics`
-crashed outright. Rolling that one file back restored a full green run, which confirmed the cause.
-`G` is now on the converter's explicit top-level whitelist alongside `Module`, with the test
-written into the comment: a file with no `(function (global) {` wrapper has top-level `var`
-declarations that are global properties. The converter's self-test still passes. The newly written
-OpenModelica bridge module was converted as well for consistency, and its end-to-end suite still
-reports 6/0.
-
-Final accounting for the 363 `var` findings: 35 remain, every one inside a
-legitimate exception -- 18 `for (var ...)` loops that need per-site judgement about closure
-capture, a handful of top-level declarations that deliberately leak onto `window` or `self`, and
-one inside a comment.
+What that crash actually taught: `bridge/octave-page.js` is a **build artifact**, and I had been
+editing it by hand. The `G` panic was the artifact and its TypeScript source drifting apart, not a
+property of `let`. The fix was in the compiler target, not in the output file — and now the repo
+carries no `var` at all in code it authored.
 
 ## Notes on gate design
 

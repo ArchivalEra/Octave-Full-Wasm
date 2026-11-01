@@ -85,7 +85,7 @@
       // 同步 FS API 挂在活跃 Octave 实例上（M.FS）；mkdir 幂等
       try { M.FS.mkdir(MEMFS_DIR); } catch (e) { /* 已存在 */ }
       let written = 0;
-      for (var i = 0; i < entries.length; i++) {
+      for (let i = 0; i < entries.length; i++) {
         let name = entries[i].file;
         let url = (base || '') + BRIDGE_DIR + '/' + name;
         let r = await fetch(url);

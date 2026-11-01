@@ -50,13 +50,13 @@ check(/^throw/.test(badMount), '★ B 反向：挂点不存在必须 throw', bad
 
 // C：第二实例 boot（在页面里加挂点 + 工厂 + OCTAVE()）
 await page.evaluate(() => {
-  var d = document.createElement('div');
+  let d = document.createElement('div');
   d.id = 'host2';
   document.body.appendChild(d);
 });
 const created = await page.evaluate(() => {
   try {
-    var m2 = window.createOctaveHost({ mount: '#host2', home: '/home/web_user/i2', id: 'i2' });
+    let m2 = window.createOctaveHost({ mount: '#host2', home: '/home/web_user/i2', id: 'i2' });
     window.__mod2 = m2;
     OCTAVE(m2);
     return { ok: true, hosts: window.__octaveHosts.length };
@@ -67,25 +67,25 @@ check(created.ok && created.hosts === 2, '★ C1 第二实例创建并 OCTAVE()�
 let i2Ready = false;
 for (let t = 0; t < 900; t++) {
   if (await page.evaluate(() => {
-    var h = (window.__octaveHosts || []).find(x => x.id === 'i2');
+    let h = (window.__octaveHosts || []).find(x => x.id === 'i2');
     return !!(h && h.ready === true);
   }).catch(() => false)) { i2Ready = true; break; }
   await new Promise(r => setTimeout(r, 250));
 }
 check(i2Ready, '★ C2 第二实例 ready（自己的资产链跑完）', `i2Ready=${i2Ready}`);
 const out2 = await page.evaluate(() => {
-  var el = document.querySelector('#host2 pre');
+  let el = document.querySelector('#host2 pre');
   return { has: !!el, len: el ? el.textContent.length : -1 };
 });
 check(out2.has, '★ C3 i2 有自己的输出区（#host2 pre）', JSON.stringify(out2));
 
 // D：状态隔离 —— 交替 100 次 eval
 const alt = await page.evaluate(async () => {
-  var d = window.Module, m2 = window.__mod2;
-  var bad = 0;
-  for (var i = 0; i < 100; i++) {
-    var rc1 = d.eval_string('x=1; fid=fopen("/tmp/multi_a.txt","w"); fprintf(fid,"%d",x); fclose(fid);');
-    var rc2 = m2.eval_string('x=2; fid=fopen("/tmp/multi_b.txt","w"); fprintf(fid,"%d",x); fclose(fid);');
+  let d = window.Module, m2 = window.__mod2;
+  let bad = 0;
+  for (let i = 0; i < 100; i++) {
+    let rc1 = d.eval_string('x=1; fid=fopen("/tmp/multi_a.txt","w"); fprintf(fid,"%d",x); fclose(fid);');
+    let rc2 = m2.eval_string('x=2; fid=fopen("/tmp/multi_b.txt","w"); fprintf(fid,"%d",x); fclose(fid);');
     if (rc1 !== 0 || rc2 !== 0) bad++;
   }
   function rd(M, p) { try { return new TextDecoder().decode(M.FS.readFile(p)); } catch (e) { return 'ERR:' + String(e).slice(0, 60); } }
@@ -108,9 +108,9 @@ const assets = await page.evaluate(() => {
     try { return JSON.parse(new TextDecoder().decode(M.FS.readFile('/tmp/webassets.json'))); }
     catch (e) { return null; }
   }
-  var d = ledger(window.Module), m2 = ledger(window.__mod2);
+  let d = ledger(window.Module), m2 = ledger(window.__mod2);
   // ⚠️ eval_string 返回的是 **rc**，不是表达式值 —— exist() 的值要走 FS 写回读出
-  var i2HasAudioread = -1;
+  let i2HasAudioread = -1;
   try {
     window.__mod2.eval_string("fid=fopen('/tmp/multi_exist.txt','w'); fprintf(fid,'%d', exist('audioread')); fclose(fid);");
     i2HasAudioread = Number(new TextDecoder().decode(window.__mod2.FS.readFile('/tmp/multi_exist.txt')));

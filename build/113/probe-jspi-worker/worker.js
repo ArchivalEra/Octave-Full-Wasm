@@ -12,13 +12,13 @@
 //    `RangeError: Maximum call stack size exceeded`（栈顶显示 `_environ_get`，
 //    极具误导性）。⇒ **所有自定义名字一律 `q4*` 前缀**。
 
-var Q4N = 100;          // 挂起/恢复次数
-var Q4WAIT = 1;         // 每次等待毫秒（tick 仪器需要 >0）
+let Q4N = 100;          // 挂起/恢复次数
+let Q4WAIT = 1;         // 每次等待毫秒（tick 仪器需要 >0）
 
-var q4Log = [];
+let q4Log = [];
 function q4Say(s) { q4Log.push(String(s)); if (q4Log.length > 400) q4Log.shift(); }
 
-var q4Result = {
+let q4Result = {
   apiSuspending: typeof WebAssembly.Suspending === 'function',
   apiPromising: typeof WebAssembly.promising === 'function',
   n: Q4N, ok: 0, fails: [], ticks: 0, wallMs: 0, ping: null, error: null,
@@ -68,11 +68,11 @@ async function q4ProbeRun() {
     q4Result.error = 'api-missing: WebAssembly.promising 在 worker 里不存在';
     return;
   }
-  var wait = WebAssembly.promising(Module._worker_wait);
-  var t0 = performance.now();
-  for (var i = 0; i < Q4N; i++) {
+  let wait = WebAssembly.promising(Module._worker_wait);
+  let t0 = performance.now();
+  for (let i = 0; i < Q4N; i++) {
     try {
-      var r = await wait(Q4WAIT);
+      let r = await wait(Q4WAIT);
       if (r === Q4WAIT + 1) q4Result.ok++; else q4Result.fails.push('iter' + i + ':ret=' + r);
     } catch (e) {
       q4Result.fails.push('iter' + i + ':throw=' + String(e).slice(0, 120));
@@ -85,18 +85,18 @@ async function q4ProbeRun() {
   // rt  = 运行时 fetch → FS.writeFile（产品资产装载形态）
   // pre = --preload-file 烘进 main.data（产品 octave.data 形态）
   // 两个入口都经 side_chain 回调主模块的 worker_wait（挂起 import）⇒ 全链挂起。
-  var sideBuf = await (await fetch('side.wasm')).arrayBuffer();
+  let sideBuf = await (await fetch('side.wasm')).arrayBuffer();
   Module.FS.writeFile('/side_rt.wasm', new Uint8Array(sideBuf));
-  var dlopenRt = WebAssembly.promising(Module._worker_dlopen_rt);
-  var dlopenPre = WebAssembly.promising(Module._worker_dlopen_pre);
-  var tE4 = performance.now();
+  let dlopenRt = WebAssembly.promising(Module._worker_dlopen_rt);
+  let dlopenPre = WebAssembly.promising(Module._worker_dlopen_pre);
+  let tE4 = performance.now();
   q4Result.rt = await dlopenRt(50);     // 期望 52 = 50 +1(worker_wait) +1(side_chain)
   q4Result.pre = await dlopenPre(50);   // 期望 52
   q4Result.e4Ms = Math.round(performance.now() - tE4);
 
   // 反向断言（B6 的 worker 版）：**没包 promising** 的直调碰挂起 import 必须炸。
   try {
-    var r2 = Module._worker_wait(1);
+    let r2 = Module._worker_wait(1);
     q4Result.unpromising = 'no-throw:ret=' + r2;
   } catch (e) {
     q4Result.unpromising = 'throw:' + String(e).slice(0, 140);

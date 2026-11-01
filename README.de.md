@@ -201,13 +201,11 @@ Beim Ausliefern einer Site ueber HTTP gab es einen Defekt, der festgehalten geho
 
 Eine Lehre aus der Korrektur: der erste 304-Zweig sendete `ETag`/`Cache-Control` erneut, und `end_headers()` sendete sie noch einmal, sodass zwei Header gleichen Namens entstanden. Doppelte Header werfen keinen Fehler, aber ein nachgelagerter Client liest moeglicherweise den falschen.
 
-Ein GitRoll-Scan meldete 931 Befunde fuer dieses Repo (Issue #7, davon ein BLOCKER). Die Pruefung ergab genau einen echten Defekt: der Forge-Fetcher meldete Aufloesungsfehler nur auf stderr, waehrend der Aufrufer nie einen Rueckgabewert pruefte — ein fehlendes oder versionsinkompatibles Paket endete also mit Exit-Code 0, und der Build verpackte danach ein unvollstaendiges Regal, waehrend alle Gates gruen blieben. Die Korrektur macht unaufgeloeste Pakete und Downloads mit falscher Pruefsumme gleichermassen toedlich, trennt Umgebungsfehler (Exit 2) von Aufloesungsfehlern (Exit 1) und ergaenzt einen Selbsttest mit acht Faellen; wird eine der Wachen auf ihr altes Verhalten zurueckmutiert, wird der Selbsttest rot. Die uebrigen 930 Befunde sind nach Zustaendigkeit aufgeteilt und im Issue dokumentiert: 363 `var`-Verwendungen sind eine bewusste ES5-Kompatibilitaetsentscheidung statt Schuld, die einzige gemeldete Schwachstelle liegt in einer Drittanbieter-Service-Worker-Bibliothek, und die Komplexitaetsbefunde sind Lesbarkeitsarbeit, die ein eigenes Ticket braucht.
+Ein GitRoll-Scan meldete 931 Befunde fuer dieses Repo (Issue #7, davon ein BLOCKER). Die Pruefung ergab genau einen echten Defekt: der Forge-Fetcher meldete Aufloesungsfehler nur auf stderr, waehrend der Aufrufer nie einen Rueckgabewert pruefte — ein fehlendes oder versionsinkompatibles Paket endete also mit Exit-Code 0, und der Build verpackte danach ein unvollstaendiges Regal, waehrend alle Gates gruen blieben. Die Korrektur macht unaufgeloeste Pakete und Downloads mit falscher Pruefsumme gleichermassen toedlich, trennt Umgebungsfehler (Exit 2) von Aufloesungsfehlern (Exit 1) und ergaenzt einen Selbsttest mit acht Faellen; wird eine der Wachen auf ihr altes Verhalten zurueckmutiert, wird der Selbsttest rot. Die einzige gemeldete Schwachstelle liegt in einer Drittanbieter-Service-Worker-Bibliothek und ist im Fork dieses Repos behoben; die Komplexitaets- und Stilbefunde sind Lesbarkeitsarbeit mit eigenem Ticket.
 
-Drei Korrekturen aus Nutzeranweisungen haben die GitRoll-Arbeit umgelenkt. **Die Browser-Untergrenze liegt bei Chrome 123**, die 363 `var`-Befunde sind also echte Schuld statt einer Kompatibilitaetsanforderung — meine fruehere Einordnung war falsch. Ein konservativer Konverter schreibt sie um (363 → 20 verbleibend) und verweigert vier Formen: `for (var …)`-Schleifen (Block-Scoping aendert die Closure-Erfassung), oberste `var`, die absichtlich auf `window`/`self` leaken (gemessene Wunde: `var Module = core.module` nach let zu wandeln brach den Plot-Pfad des Workers), `var` in Kommentaren und Mehrfach-Deklarationen in einer Zeile. Jede Datei wird vor dem Schreiben von V8 kompiliert. Die einzige gemeldete Schwachstelle ist ebenfalls behoben, im Fork dieses Repos des Drittanbieter-Service-Workers: Nachrichten werden jetzt abgelehnt, wenn ihre Herkunft nicht uebereinstimmt, weil Upstream alles akzeptierte — jede Seite konnte den Worker abmelden oder COEP von `require-corp` auf `credentialless` abschwaechen. Beide tragen Selbsttests, beide wurden per Mutation geprueft, damit sie rot werden, und die Gate-Bank wuchs von 51 auf 53.
+Drei Korrekturen aus Nutzeranweisungen haben die GitRoll-Arbeit umgelenkt. **Die Browser-Untergrenze liegt bei Chrome 123**, die 363 `var`-Befunde sind also echte Schuld statt einer Kompatibilitaetsanforderung — meine fruehere Einordnung war falsch. Und die Korrektur geht noch tiefer: ein Drittel dieser `var`s hat niemand geschrieben — `build/build-embed-ts.sh` uebersetzte `octave-page.ts` mit `--target ES5`, und tsc degradiert jedes `const`/`let` zu `var`. Die Quelle sagte immer `const G`. Die einzige gemeldete Schwachstelle ist ebenfalls behoben, im Fork dieses Repos des Drittanbieter-Service-Workers: Nachrichten werden jetzt abgelehnt, wenn ihre Herkunft nicht uebereinstimmt, weil Upstream alles akzeptierte — jede Seite konnte den Worker abmelden oder COEP von `require-corp` auf `credentialless` abschwaechen. Sie traegt einen Selbsttest und wurde per Mutation geprueft.
 
-Die Bereinigung der von GitRoll gemeldeten Schuld ging weiter: ein konservativer `var`→`let`-Konverter senkte die 363 Befunde auf 20 und verweigert Formen, bei denen Block-Scoping das Verhalten aendern wuerde (`for (var …)`-Schleifen mit Closure-Erfassung, oberste `var`, die auf `window`/`self` leaken); der Fork dieses Repos eines Drittanbieter-Service-Workers lehnt nun Nachrichten fremder Herkunft ab. Die verbleibende Arbeit ist in Ticket 72 katalogisiert: 16 `for (var …)`-Stellen mit Einzelfallpruefung, 57 Komplexitaetsbefunde mit eigenem Refactoring-Plan und rund 447 Stilhinweise.
-
-Die Pruefung des Einfacht-Upgrades (Upstream-Pin `45ca586` nach `6e4e6e8`) steht als Ticket 73.
+Einfacht-Upgrades (Upstream-Pin `45ca586` nach `6e4e6e8`) steht als Ticket 73.
 Der Probeaustausch wurde vollstaendig gefahren und zurueckgerollt: zwoelf von dreizehn Gates bleiben
 gruen, das einzige rote ist `check_facts`, das nun 121 nicht belegte Zahlen im Fliesstext meldet.
 Siebenundvierzig davon sind Portnummern aus der festen Deployment-Matrix dieses Repos (`8761`,
@@ -258,24 +256,38 @@ lokal und auf beiden Remotes weg; `master` ist auf dem Mirror weg, existiert abe
 weiter, weil GitHub das Loeschen des Standardbranches eines Repositories verweigert -- das ist der
 Umbenennungsschritt, kein Fehlschlag.
 
-Beim Abschluss der `var`-Bereinigung kam eine dritte Instanz derselben stillen Falle zum
-Vorschein, die festgehalten gehoert, weil sie einen kompletten Regressionslauf gekostet hat.
-`bridge/octave-page.js` ist nicht in eine IIFE verpackt -- es ist ein Top-Level-Skript --, also
-erzeugt sein `var G = window` ein `window.G`. Wird das zu `let`, ist `G` auf den Skript-Scope
-beschraenkt, andere Skripte sehen es nicht mehr, und die ganze Seite stirbt: `accept-pkg` meldete
-sieben Abstuerze mit "Target page has been closed", `accept-p5-graphics` stuerzte sofort ab. Das
-Zurueckrollen dieser einen Datei stellte einen vollstaendig gruenen Lauf wieder her, was die
-Ursache bestaetigte. `G` steht jetzt zusammen mit `Module` auf der expliziten Top-Level-Whitelist
-des Konverters, mit dem Kriterium im Kommentar: eine Datei ohne `(function (global) {`-Wrapper hat
-Top-Level-`var`-Deklarationen, die globale Eigenschaften sind. Der Selbsttest des Konverters
-besteht weiterhin. Das neu geschriebene OpenModelica-Brueckenmodul wurde aus Konsistenzgruenden
-ebenfalls umgestellt, seine Ende-zu-Ende-Suite meldet weiterhin 6/0.
+Beim Abschluss der `var`-Bereinigung bin ich in einen Fall gelaufen, der die damalige
+Schlussfolgerung kippt. `bridge/octave-page.js` ist nicht in eine IIFE verpackt -- es ist ein Top-Level-
+Skript --, und `var G = window` darin zu `let` zu machen liess die ganze Seite sterben: `accept-pkg`
+meldete sieben Abstuerze mit "Target page has been closed", `accept-p5-graphics` stuerzte sofort ab.
 
+Ich ordnete die Ursache damals als "`G` leakt absichtlich auf `window` und wird von anderen Skripten
+gelesen, muss also `var` bleiben" ein und setzte `G` auf eine Whitelist. **Das war falsch.**
+`grep window.G` / `self.G` findet im ganzen Repo **nichts** -- kein externes Skript hat es je gelesen.
+Der echte Grund: `octave-page.js` ist ein **Build-Artefakt** aus `octave-page.ts` (`tsc --target ES5`),
+und das ES5-Ziel degradiert jedes `const`/`let` der Quelle zu `var` (die 29 `var` waren alle vom
+Compiler erzeugt, die Quelle sagte immer `const G`). Ich hatte das Artefakt von Hand editiert; Artefakt
+und Quelle liefen auseinander und der naechste Build stellte es zurueck.
 
-Endabrechnung der 363 `var`-Befunde: 35 bleiben, jeder innerhalb einer legitimen Ausnahme -- 18
-`for (var ...)`-Schleifen, die Einzelfallpruefung zur Closure-Erfassung brauchen, eine Handvoll
-Top-Level-Deklarationen, die absichtlich auf `window` oder `self` leaken, und eine in einem
-Kommentar.
+Die Korrektur sitzt im **Compilerziel**, nicht im Artefakt: `--target ES2020` (die Browser-Untergrenze
+liegt bei Chrome 123, ES5-Kompatibilitaet ist keine Anforderung mehr). Auch das Kriterium wurde
+ersetzt: der Whitelist-Konverter `var-to-let.mjs` ist geloescht, denn eine Whitelist im Werkzeug ist
+genau die Art, wie "legitime Ausnahmen" ihre Begruendung ueberleben. Jetzt entscheidet
+`build/113/var-audit.mjs` mit dem echten TypeScript-Parser pro Deklaration:
+
+| Form | Gefragt wird | Urteil |
+|---|---|---|
+| `for (var i …)` | Referenziert eine **im Schleifenrumpf erzeugte Funktion** `i`? Wird `i` nach der Schleife im selben Scope referenziert? | beides nein ⇒ beweisbar aequivalent, zu `let`; eines ja ⇒ verweigern und die Stelle nennen |
+| Top-Level-`var` in einem klassischen Skript | Liest irgendetwas im Repo `window.X` / `self.X` / `globalThis.X` **im Code** (Kommentare und Strings entfernt)? | ja ⇒ muss als explizite Zuweisung geschrieben werden; nein ⇒ umschreiben |
+| jedes andere `var` | Wird der Name ausserhalb seines Blocks referenziert oder neu deklariert? | beides nein ⇒ umschreiben; eines ja ⇒ rot |
+
+Die beiden impliziten Globals wurden nicht ausgenommen, sondern **explizit gemacht**:
+`bridge/octave-worker.js` schreibt jetzt `self.Module = core.module; const Module = self.Module;` --
+dasselbe Objekt, aber das Global ist ein geschriebener Vertrag statt ein Nebeneffekt eines Keywords.
+
+Stand: null `var` im selbst geschriebenen JS/TS dieses Repos, geprueft von
+`node build/113/var-audit.mjs`. Offen bleibt auf Ticket 72 die andere Sorte Arbeit -- 57
+Kognitionskomplexitaets-Befunde und die Stilhinweise -- Lesbarkeitsschuld, kein Korrektheitsdefekt.
 
 ## Notiz zum Gate-Design
 

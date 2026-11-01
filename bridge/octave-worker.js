@@ -157,7 +157,14 @@ let core = createOctaveCore({
     },
   },
 });
-var Module = core.module;      // 顶层 var ⇒ 顺带挂上 self.Module（OctaveP5.show 读它）
+// ★ 隐式改显式（工单 72，2026-11-01）：原来写 `var Module = core.module;` 靠的是
+//   **顶层 var 顺带挂上 self.Module** 这条隐式行为（`OctaveP5.show` 读 `self.Module`）。
+//   隐式挂全局的代价：读的人看不出它是全局；`var`/`let` 一个字的差别就能让整条图形链
+//   静默断开（实测：转 let 后 accept-worker ★H/★I2 红，`plots:0`），而且踩坑时没有任何
+//   编译器或闸门会提醒。⇒ 现在**两行显式**：① 挂到 `self`（名字写出来）；② 本地 `const`
+//   供本文件后续 12 处直接引用。行为逐字节等价，但契约从"隐式"变成"看得见"。
+self.Module = core.module;     // OctaveP5.show（本文件 :116）与 assets-loader 的默认实例惰性绑读它
+const Module = self.Module;    // 本文件内直接引用（与上面同一对象，不是副本）
 OCTAVE(Module);
 
 // ── 请求队列：同一时刻只跑一个解释器任务（挂起期间也不例外）───────────────────

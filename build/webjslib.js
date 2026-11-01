@@ -33,9 +33,9 @@ addToLibrary({
   },
   // v = [x, y, rectW, rectH]（画布 CSS px，y 向下）；返回按键 1/2/3，空 = -1
   web_ginput_pop_impl: function (ptr) {
-    var q = window.__octaveClicks || [];
+    let q = window.__octaveClicks || [];
     if (!q.length) return -1;
-    var c = q.shift();
+    let c = q.shift();
     HEAPF64[ptr >> 3] = c[0];
     HEAPF64[(ptr + 8) >> 3] = c[1];
     HEAPF64[(ptr + 16) >> 3] = c[2];

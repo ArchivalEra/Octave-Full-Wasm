@@ -3,6 +3,71 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-11-01 · 工单 72：`var` 清零 —— 隐式改显式，零例外）
+
+- **用户点令**：「补上 var 那 35 条，隐式改显式，**不准有任何合法例外**」。这一令推翻了本单原先
+  的口径（把 `for(var)` / 顶层隐式挂全局 / 注释里的 `var` 登记成"合法例外"）—— 理由成立：
+  **例外一旦写进工具，就再没人回头看它是否还是真的**。
+
+- **★ 先纠三笔我自己的错账**（都是"凭印象"造的第二产地）：
+  | 原账面 | 实测 | 怎么错的 |
+  |---|---|---|
+  | 「转换器剩余条数」那一栏 | 自写 JS 里其实 **72 处** | 旧工具按**行**正则，只扫部分目录，漏了 `build/`、`test/` 整片 |
+  | "`for(var)` 16 处" | **17 处** | 漏数 |
+  | "`G` 靠隐式挂全局，必须留 `var`" | **完全错** | `var G` 是 `tsc --target ES5` **降级造的**；源码 `.ts` 一直是 `const G` |
+
+- **★★ 最贵的一条教训（推翻我上一轮的归因）**：上次那个"把 `var G` 转 `let` ⇒ 整页崩
+  （accept-pkg 7 条 CRASH / accept-p5-graphics 崩）"的伤口，我当时判成"`G` 被别的脚本读"。
+  **判错了两次**：① `grep window.G` / `self.G` 全仓**零命中**，从没有外部脚本读过它；
+  ② 真因是 `bridge/octave-page.js` 是 `build/build-embed-ts.sh` 的**产物**，而我**直接手改了产物**
+  （把 29 条 `var` 手改成 `let`）⇒ 产物与 `.ts` 源码漂移，下一跑构建又打回去。
+  **判据从此写死**：产物不许手改；改 `.ts` 或改**编译目标**。
+
+- **修法（三条，各有机器判据）**：
+  · `build/build-embed-ts.sh`：`--target ES5` → **`--target ES2020`**（用户已把浏览器下限钉死在 Chrome 的某个具体版本，ES5 不再是要求 —— 版本号见 `README.md` 的同一段）。
+    ES5 目标把源码里每条 `const/let` 降级成 `var` —— 那 29 条 `var` **不是任何人写的**，是编译器造的。
+    改档后 `octave-page.js` 里 `const G` / `const FLUSH_BUDGET_MS` 原样保留（产物零 `var`）。
+  · `bridge/octave-worker.js`：`var Module = core.module;` → **`self.Module = core.module;
+    const Module = self.Module;`**（隐式挂全局 → **显式契约**，行为逐字节等价）。
+  · 17 处 `for(var)` → `for(let)`：AST 判据证明每处**体内无函数捕获、循环后无引用** ⇒ 可证等价。
+
+- **★ 工具换了（旧工具已 `git rm`）**：`var-to-let.mjs`（行正则 + 手写 `TOP_LEVEL_GLOBALS` 白名单）
+  → **`build/113/var-audit.mjs`**（真 TypeScript 5.9 解析器，三种形状三种机器判据）：
+  ① `for(var)`：问"体内函数捕获""循环后引用"，都无才改；② 顶层 `var`（classic script）：全仓查
+  `window.X`/`self.X`/`globalThis.X` 的**代码读法**（剥注释与字符串），有 ⇒ 必须写显式赋值；
+  ③ 其余：问"块外引用""重声明"，都无才改。自证 **10/0**（含 5 条反向：捕获 ⇒ 拒改、
+  循环后引用 ⇒ 拒改、`self.X` 读 ⇒ 必须显式、块外引用 ⇒ 拒改、manual 不被自动改）。
+  **白名单删掉是有意的**——工具里的白名单正是「合法例外」活过其理由的方式。
+
+- **★ 自证抓到我自己的两个真 bug（这就是为什么要自证）**：
+  · ②e 用例红 ⟹ `isTop` 判据写错（`VariableDeclarationList` 的父是 `VariableStatement`，
+    不是 `SourceFile`）⇒ 我第一版的"隐式挂全局"判据**从未生效**；
+  · 全仓探针把**注释里**的 `window.G` 算成"有人在读"⟹ 判据变成"谁提过名字"。
+    加 `stripCommentsAndStrings()` 才修好。
+
+- **实测证据**：
+  · `node build/113/var-audit.mjs` ⇒ **0 处 var / 0 个文件**（按产地排除的 47 件第三方/生成物逐条写明产地）
+  · `node build/113/var-audit.mjs --selftest` ⇒ **10 PASS / 0 FAIL**
+  · **容器实测** emcc 6.0.12 `--js-library` 喂 `let` ⇒ RC=0，产物里 `let q` 原样保留（`webjslib.js` 的改动安全）
+  · `sh build/gates-selftest.sh` ⇒ **55 个闸门全部能红**
+  · `sh build/promote-pages.sh` ⇒ 页面资产**四处一致**（仓库 bridge/ · 8761 · 8768 · 仓库 site/），
+    三大件（`octave.wasm`/`octave.js`/`octave.data`）**逐字节未动**
+  · `sh build/check-site-parity.sh --strict` ⇒ 三处完全一致
+
+- **★ 收件 `066`（LLVM-wasm `017`）：v0.1.4 已发布，且 v0.1.5 也已发 —— 我方 pin 仍停在
+  `v0.1.3`，落后两个版本**。它来信说 `e2588d2…` 那个 sha 是**编的**（已记它的翻案 R-013），
+  实测四处一致的是 `c5f4b873…`；这条我方早在 `046` 抓到了，它认了。**我方独立核过 release**：
+  `gh api repos/ArchivalEra/LLVM-wasm/releases` ⇒ `v0.1.5`（分片形态，资产数三位数）/
+  `v0.1.4`（整包形态）/ `v0.1.3`（我方现役 pin）。⇒ **升级 pin 是独立一批**（换站点字节 + 重跑 parity +
+  llvm-wasm 相关验收），不在本批混做；`build/upstream-lock.json` 的 `llvm-wasm` 条目仍是 v0.1.3 URL。
+  它另给一条契约细节：**zstd 分片每块是独立帧，不能当单一多帧流整串解**（逐块解再拼才对；
+  单块载荷全绿会把多块的问题藏住）—— 这条归内容仓契约，不是本仓。
+
+- **★ 抓到一次"回归跑在旧代码上"（本仓纪律的又一次现场证明）**：第一轮回归启动时，
+  8761 站点的 6 件页面 JS **还是旧版**（`octave-worker.js` repo=`4e81760b` vs 8761=`9f669cee`），
+  ⇒ 那轮全绿测的是**改动前**的代码，等于白跑。当场停掉、跑 `promote-pages.sh` 铺垫、重跑。
+  **教训**：改 `bridge/` 之后必须先 promote 再跑验收 —— `check-site-parity.sh` 就是为拦这个形状。
+
 ## 现在是什么（2026-10-30 · HTTP 缓存头修复：119.9 MB → 12.8 KB）
 
 - **★ 收件 030（OM）→ 查出我方一个真缺陷并修**：它报"`no-store` 让 74 MB 每次刷新重下"。
@@ -1428,7 +1493,7 @@
 | `octave.data` | 9,712,174 B raw / 3,155,047 B gz | sha256 `f250530ae5abe378…` |
 | 三大件 gzip 合计 | **10,328,040 B** | |
 | 资产条目 | 52 | |
-| 最近一次**全绿**回归 | `20261101-093906` · **56 套 / 1,259 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
+| 最近一次**全绿**回归 | `20261101-105320` · **32 套 / 606 PASS / 0 FAIL** | http://127.0.0.1:8761/ |
 | 交付包 | `octave-full-wasm-site-20261019` · tar.zst 65,944,760 B · `abd8622a709425e7…` | 包内 wasm （**与部署件同 sha** ✓） |
 | 仓库 | 分支 `master`（**HEAD 的 sha 与日期以 `git log -1` 为准，不写死在这里**） | |
 <!-- /AUTO:STATE -->

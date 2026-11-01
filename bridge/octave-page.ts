@@ -224,7 +224,7 @@ function createOctaveHost(opts?: HostOptions): unknown {
         //    （`G.Module === mod`，与赋值时序无关）：是 ⇒ 老行为；否 ⇒ 建一份绑到本实例 mod 的，
         //    并更新别名（保证"测试读的与 boot 链用的"仍是同一份状态）。
         if (isDefault && G.OctaveAssets && G.Module === mod) return G.OctaveAssets;
-        var loader = G.createOctaveAssets!(mod, b, isReady);
+        const loader = G.createOctaveAssets!(mod, b, isReady);
         if (isDefault) G.OctaveAssets = loader;
         return loader;
       },

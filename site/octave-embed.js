@@ -71,7 +71,7 @@
     //   Web 里 = evalJSON 的 error 字段 **加** on.error 订阅回调。此前 subs.error 只能
     //   注册、没有任何触发点（死订阅）—— 逐接口实测抓出来的。
     function fireError (msg) {
-      for (var i = 0; i < subs.error.length; i++) {
+      for (let i = 0; i < subs.error.length; i++) {
         try { subs.error[i](msg); } catch (e) { /* 订阅者异常不毒死解释器 */ }
       }
     }
@@ -79,7 +79,7 @@
     function setState(s) {
       if (state === s) return;
       state = s;
-      for (var i = 0; i < subs.state.length; i++) {
+      for (let i = 0; i < subs.state.length; i++) {
         try { subs.state[i](s); } catch (e) { /* 订阅者异常不毒死解释器 */ }
       }
     }
@@ -88,12 +88,12 @@
     let outEl = (opts.mount && document.querySelector(opts.mount)) || document.getElementById('output');
     if (outEl && typeof MutationObserver === 'function') {
       new MutationObserver(function (muts) {
-        for (var i = 0; i < muts.length; i++) {
+        for (let i = 0; i < muts.length; i++) {
           let add = muts[i].addedNodes;
-          for (var j = 0; j < add.length; j++) {
+          for (let j = 0; j < add.length; j++) {
             let t = add[j].textContent || '';
             if (!t) continue;
-            for (var s = 0; s < subs.output.length; s++) {
+            for (let s = 0; s < subs.output.length; s++) {
               try { subs.output[s](t); } catch (e) {}
             }
           }
@@ -107,7 +107,7 @@
       if (!box || typeof MutationObserver !== 'function') return;
       new MutationObserver(function () {
         let els = box.querySelectorAll('canvas,img');
-        for (var i = 0; i < subs.figure.length; i++) {
+        for (let i = 0; i < subs.figure.length; i++) {
           try { subs.figure[i](els.length ? els[els.length - 1] : null); } catch (e) {}
         }
       }).observe(box, { childList: true, subtree: true });
@@ -188,7 +188,7 @@
         ls: function (d) {
           let out = [];
           let names = mod.FS.readdir(d);
-          for (var i = 0; i < names.length; i++) {
+          for (let i = 0; i < names.length; i++) {
             if (names[i] === '.' || names[i] === '..') continue;
             let st = null;
             try { st = mod.FS.stat(d + '/' + names[i]); } catch (e) {}

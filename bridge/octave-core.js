@@ -502,7 +502,7 @@
       //   所以对这类"本产物本没有"的文件，判据是**存在即污染**：出现就删。
       let _gfxAbsent = {};                        // 核心 path → 开机是否确认不存在（true = 存在即删）
       function _snapshotGfx() {
-        for (var i = 0; i < _gfxCore.length; i++) {
+        for (let i = 0; i < _gfxCore.length; i++) {
           let p = _gfxCore[i];
           try {
             _gfxSnap[p] = Module.FS.readFile(p, { encoding: 'utf8' });
@@ -516,7 +516,7 @@
       let _gfxRepaired = [];                      // 诊断/断言用：修过哪些 path
       function _repairGfx() {
         let changed = false;
-        for (var i = 0; i < _gfxCore.length; i++) {
+        for (let i = 0; i < _gfxCore.length; i++) {
           let p = _gfxCore[i], snap = _gfxSnap[p];
           if (_gfxAbsent[p]) {                    // 开机没有 ⇒ 出现即删（见上面的 drawnow 教训）
             try { Module.FS.readFile(p); } catch (e) { continue; }   // 仍不存在 ⇒ 好
@@ -538,7 +538,7 @@
             } catch (e) { /* 还原失败不致命：下一次 eval 会再试 */ }
           }
         }
-        for (var j = 0; j < _gfxShadows.length; j++) {
+        for (let j = 0; j < _gfxShadows.length; j++) {
           let s = _gfxShadows[j];
           try { Module.FS.readFile(s); } catch (e) { continue; }   // 不存在 ⇒ 好
           try {

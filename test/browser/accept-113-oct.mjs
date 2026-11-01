@@ -94,10 +94,10 @@ const wrote = await page.evaluate(async () => {
   try {
     // ★ B6 双档：**夹具本身是 side module**（会被 dlopen）⇒ 线程档必须用 `-pthread` 版，
     //   否则载入失败（`failed to load Incompatible version or missing dependencies` —— 实测
-    var lane = (window.__octaveCaps && window.__octaveCaps.lane
+    let lane = (window.__octaveCaps && window.__octaveCaps.lane
                 && window.__octaveCaps.lane.chosen) || 'base';
     // w64-base/threads 双死档：w64 系档都取 w64/ 夹具，其余取根（base）
-    var fx = (lane === 'w64' || lane === 'w64-threads') ? 'w64/minioct.oct'
+    let fx = (lane === 'w64' || lane === 'w64-threads') ? 'w64/minioct.oct'
            : 'minioct.oct';
     const buf = await fetch(fx).then(r => r.arrayBuffer());
     const FS = window.Module.FS;

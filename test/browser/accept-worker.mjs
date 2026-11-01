@@ -205,7 +205,7 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
     const w1 = window.OctaveWorker;
     await w1.eval("fid=fopen('/home/web_user/iso_probe.txt','w'); fprintf(fid,'w1'); fclose(fid);");
     const w3 = new Worker('octave-worker.js');
-    var seq3 = 0, pend3 = {};
+    let seq3 = 0, pend3 = {};
     w3.onmessage = function (e) { const m = e.data || {};
       if (m.id && pend3[m.id]) { pend3[m.id](m); delete pend3[m.id]; } };
     const call3 = (code) => new Promise(res => { const id = ++seq3; pend3[id] = res; w3.postMessage({ id, kind: 'eval', code }); });
@@ -281,10 +281,10 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/chromium',
     '★ C3 terminate 结算：待办在 terminate 后立刻以 AbortError reject（无僵尸 Promise）', JSON.stringify(term));
   // 重启一个新 worker 并确认可用（换 home，避免与旧实例的 IDBFS 撞）
   const revived = await page.evaluate(async () => {
-    var d = document.createElement('div'); d.id = 'w2'; document.body.appendChild(d);
+    let d = document.createElement('div'); d.id = 'w2'; document.body.appendChild(d);
     const w2 = new Worker('octave-worker.js');
     window.__w2 = w2;
-    var seq = 0, pend = {};
+    let seq = 0, pend = {};
     w2.onmessage = e => { const m = e.data; if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id]; } };
     w2.postMessage({ kind: 'opts', base: '', home: '/home/web_user/w2' });
     const call = (kind, p) => new Promise(res => { const id = ++seq; pend[id] = res; w2.postMessage(Object.assign({ id, kind }, p)); });

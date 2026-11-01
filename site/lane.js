@@ -95,7 +95,7 @@
     if (avail.indexOf(auto.lane) < 0) {
       let order = ['w64', 'base'];
       let fallback = null;
-      for (var i = 0; i < order.length; i++) {
+      for (let i = 0; i < order.length; i++) {
         if (avail.indexOf(order[i]) >= 0) {
           // 只退到**能力可行**的那几档：wasm64 线程档要求 COI+SAB+m64
           let cand = order[i];
