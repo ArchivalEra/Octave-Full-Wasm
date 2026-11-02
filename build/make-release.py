@@ -61,6 +61,17 @@ PRODUCTS = [
 FILES = tuple(sorted(("octave.wasm", "octave.js", "octave.data")))
 
 
+def _own_version(tag):
+    """从 tag 抽本仓自己的版本号（`octave-full-wasm-v0.1.0` ⇒ `v0.1.0`）。
+
+    ⚠️ 不把整个 tag 塞进 manifest.id：契约方按 id 编 catalogue 条目名，
+       而 tag 带着产品前缀会变成 `Octave-Full-Wasm/octave-full-wasm-v0.1.0`（重名）。
+       没版本号可用时回落 `unreleased` —— **不编一个假版本**。
+    """
+    m = re.search(r"(v\d+\.\d+\.\d+)$", tag or "")
+    return m.group(1) if m else "unreleased"
+
+
 def sha256(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -183,7 +194,12 @@ def build(out, tag, problems):
 
     man = {
         "schema": 3,
-        "id": "Octave-Full-Wasm/%s" % (tag or "unreleased"),
+        # ★ 2026-11-02 用户点令：**必须跟 GNU 维护的 octave 区分**。
+        #   上游自己的 tag 是 `release-11-3-0` / release 名 `Octave 11.3.0`，我们的
+        #   `octave-11.3.0-r2` 会让两个产品在同一个命名空间里同名。形态照 LLVM-wasm：
+        #   tag `octave-full-wasm-vX.Y.Z`、manifest id `Octave-Full-Wasm/vX.Y.Z`
+        #   —— 版本号是**我们自己的**轴，不是上游的 11.3.0。
+        "id": "Octave-Full-Wasm/%s" % _own_version(tag),
         "chunkSize": CHUNK,
         "codecs": ["zstd", "gzip", "identity"],
         "license": {"id": LICENSE_ID, "url": LICENSE_URL},
@@ -236,6 +252,13 @@ def selftest():
 
     # ④ SPDX 形（'GPL-3.0-or-later' 里的 -OR- 不许被替换成算符）
     case("★ SPDX id 合法（连字符不被当算符）", idn(LICENSE_ID) and "-OR-" not in LICENSE_ID)
+
+    # ④b 版本轴：必须是**本仓自己的** vX.Y.Z，不许把上游 11.3.0 当我们的版本
+    #   （用户点令：跟 GNU 维护的 octave 区分）
+    case("★ 版本轴：octave-full-wasm-v0.1.0 ⇒ v0.1.0", _own_version("octave-full-wasm-v0.1.0") == "v0.1.0")
+    case("★ 反向：上游式 tag（octave-11.3.0-r2）不给出我们自己的版本号",
+         _own_version("octave-11.3.0-r2") == "unreleased")
+    case("★ 反向：空 tag ⇒ unreleased（不编假版本）", _own_version("") == "unreleased")
 
     # ⑤ 空输入必须报 —— ⚠️ 必须指**夹具目录**，不能指真 release/products
     #   （第一版就错在这里：真仓里有产物 ⇒ build() 真读到了它们 ⇒ 这条用例永远"不报"，

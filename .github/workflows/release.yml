@@ -30,6 +30,16 @@
 #   · 只验不发：Actions → release → Run workflow，`publish` 留空（false）
 #   · 验完就发：同上，`publish` 勾上
 #   · 推 tag 也会跑，但**仍然要** `publish=true` 才真发（tag 只负责给 manifest 一个 id）
+#
+# ── ★ 命名轴（2026-11-02 用户点令「必须跟 GNU 维护的 octave 区分」）
+#   上游 GNU Octave 自己的 tag 是 `release-11-3-0`、release 名 `Octave 11.3.0`。
+#   我们原来的 `octave-11.3.0-r2` 会让**两件不同产品在同一个命名空间里同名**。
+#   ⇒ 改用本仓自己的版本轴，形态照 LLVM-wasm（`v0.1.0` → `v0.1.6`）：
+#        tag          octave-full-wasm-vX.Y.Z
+#        manifest id  Octave-Full-Wasm/vX.Y.Z
+#        release 名   Octave-Full-Wasm vX.Y.Z — GNU Octave 11.3.0 wasm build
+#   「GNU Octave 11.3.0」这个事实留在 **title / notes** 里（那是描述），**不进 tag**
+#   （tag 是身份）。⇒ 上游版本号是人家的，我们的版本号是自己的。
 name: release
 
 on:
@@ -46,7 +56,8 @@ on:
         type: boolean
   push:
     tags:
-      - 'octave-*'
+      # 只认本仓自己的版本轴（上游式 `octave-11.3.0*` 不触发 —— 那会是两个产品同名）
+      - 'octave-full-wasm-v*'
 
 permissions:
   contents: write
@@ -174,7 +185,7 @@ jobs:
           set -e
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Octave 11.3.0 — three products (wasm32 / wasm64std / wasm64ip)" \
+            --title "Octave-Full-Wasm ${TAG#octave-full-wasm-} — GNU Octave 11.3.0 wasm build (wasm32 / wasm64std / wasm64ip)" \
             --notes-file release/RELEASE-NOTES.md \
             out/manifest.json
 

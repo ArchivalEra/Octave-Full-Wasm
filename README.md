@@ -163,7 +163,7 @@ site/                             228     332.8 MB
 release/                           13     115.7 MB
 build/                            463       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     793.0 KB
+(root)                             13     795.4 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
@@ -173,7 +173,7 @@ vendor/                            21     123.5 KB
 .githooks/                         15     106.2 KB
 docs/                              14      77.9 KB
 dist/                               2      23.8 KB
-.github/                            4      17.2 KB
+.github/                            4      18.1 KB
 reflect-hooks/                      6      14.9 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB

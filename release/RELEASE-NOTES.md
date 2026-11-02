@@ -1,4 +1,10 @@
-# Octave 11.3.0 — three products
+# Octave-Full-Wasm — GNU Octave 11.3.0, WebAssembly build
+
+> **Naming**: this release is identified as **`Octave-Full-Wasm/vX.Y.Z`** — our own version
+> axis, in the same shape as `LLVM-wasm/v0.1.6`. The upstream project publishes under
+> `release-11-3-0` / "Octave 11.3.0", so reusing that number here would put two different
+> products in the same namespace. "GNU Octave 11.3.0" stays in the title as a *description*
+> of what the binary contains, not as our identity.
 
 One trunk produces three artifacts from three parameter sets. All three are built by the
 **same** `build/113/link-web.sh` (the manifest's `tool.script_sha256` is identical across them,
