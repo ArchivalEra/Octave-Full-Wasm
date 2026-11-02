@@ -232,6 +232,18 @@
 #   当成了许可事实）；现纠正为三个产物**全部** AGPL-3.0-or-later。
 #   这条 `license.url` 必须指向一个**真存在**的文件（契约 §4.5）。
 !docs/RUST-SORT-KERNEL-LICENSE.md
+# ★ 2026-11-02（用户点令「用 action 自动出 release，绝对不能手动改」）：
+#   Release 的**唯一产地**是这三样 —— 字节入库 + 生成器 + workflow。
+#   · release/products/*/{octave.wasm,octave.js,octave.data}：产物字节（占位 116 MB，
+#     与 site/ 已经入库的产物同族；不放 site/ 是因为站点只显示 base/w64 两格）
+#   · release/products/*/octave.build.json：产物身份证（生成器**对读**它，verdict≠ok 不发）
+#   · release/RELEASE-NOTES.md：发布说明（workflow 从它读）
+!release/
+!release/products/
+!release/products/**
+!release/RELEASE-NOTES.md
+!build/make-release.py
+!.github/workflows/release.yml
 # 工单 38：嵌入 API 实现层 + 上手页（接口活文档）
 !bridge/octave-page.js
 !bridge/octave-omc-bridge.js

@@ -1,0 +1,126 @@
+# Release 的**唯一发布面**（用户点令 2026-11-02：「用 action 自动出 release，绝对不能手动改」）。
+#
+# ── 为什么必须有它 ──────────────────────────────────────────────────────────────
+# 我此前用手工 `gh release upload --clobber` 把一份**已发布**的 `manifest.json` 换掉了。
+# 两处错，且第二处比第一处严重：
+#   ① **release 不可变**是 Static-Contract v4 §0 的地基 —— clobber 等于改写历史；
+#   ② 「这份 manifest 从哪来」变得**不可复现** —— 只有我的一次命令，没有可重跑的东西。
+# ⇒ 现在发布只走这一条路：**仓里的字节 + build/make-release.py ⇒ 本工作流发布**。
+#   人手不发 release、不改 asset。要换产物就改 `release/products/` 再打 tag。
+#
+# ── 判据（逐条 fail-closed，任何一条红就不发布）────────────────────────────────
+#   ① `make-release.py --selftest` 必须绿（生成器自己会红才可信）
+#   ② 生成后 `check-release-v4.py <manifest> --base <out>` 必须 **0 FAIL**
+#      —— 用**契约方的**校验器，不是我自己写的一个"同意自己"的检查
+#   ③ 分片数 + manifest 数 == 目录里实际文件数（不许有孤儿文件被打包）
+#   ④ 许可必须 `AGPL-3.0-or-later` 且**零** `LicenseRef`（2026-11-02 的误标已撤回）
+#
+# ── 触发 ────────────────────────────────────────────────────────────────────
+#   只在 **tag** 上跑：`git tag octave-11.3.0 && git push origin octave-11.3.0`
+#   不在 push/PR 上跑（那会每提交都试图发 release）。
+#   `workflow_dispatch` 保留但**只做 dry-run**（生成 + 校验，不发布），方便先看结果。
+name: release
+
+on:
+  push:
+    tags:
+      - 'octave-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'dry-run 用的 tag 名（不会真发布）'
+        required: false
+        default: 'octave-dryrun'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 产物字节入库了（release/products/），普通 checkout 就够
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.x' }
+
+      - name: 装 zstd 编码器
+        # 契约允许 zstd/gzip/identity 三编码。缺 zstd 就**明说缺**，不静默退化成两编码
+        # （那会让 manifest 里的 codecs 声明变成假话 —— 本仓最忌的形状）。
+        run: pip install zstandard
+
+      - name: 生成器自证（三类用例必须齐）
+        run: python3 build/make-release.py --selftest
+
+      - name: 生成 manifest + 分片
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -e
+          python3 build/make-release.py --out out --tag "$TAG"
+
+      - name: 判据 ②：契约方校验器必须 0 FAIL
+        # 取的是**静态契约站点**上那份工具（与 Content 仓 tools/ 逐字节相同，
+        # sha256 ed877ee2…）。不从本仓复制 —— 要的是"外部权威说了算"。
+        run: |
+          set -e
+          curl -sSL --retry 3 --retry-delay 5 \
+            https://isui.ren/static/tools/check-release-v4.py -o /tmp/check-release-v4.py
+          sha256sum /tmp/check-release-v4.py
+          OUT="$(python3 /tmp/check-release-v4.py out/manifest.json --base out | tail -1)"
+          echo "$OUT"
+          case "$OUT" in
+            *"0 FAIL"*) ;;
+            *) echo "FATAL: 契约校验器有 FAIL ⇒ 不发布" >&2; exit 1 ;;
+          esac
+
+      - name: 判据 ③④：孤儿文件 + 许可口径
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, os, sys
+          man = json.load(open("out/manifest.json", encoding="utf-8"))
+          files = {c["file"] for e in man["entries"] for v in e["variants"] for c in v["chunks"]}
+          on_disk = {f for f in os.listdir("out") if f != "manifest.json"}
+          orphan = on_disk - files
+          missing = files - on_disk
+          bad = 0
+          if orphan:
+              print("FATAL: 目录里有 %d 个孤儿文件（不属于任何 chunk）：%s"
+                    % (len(orphan), sorted(orphan)[:5]), file=sys.stderr); bad = 1
+          if missing:
+              print("FATAL: manifest 声明了但盘上没有：%s" % sorted(missing)[:5], file=sys.stderr); bad = 1
+          # ④ 许可：全部 AGPL，零 LicenseRef
+          n_lr = sum("LicenseRef" in (e.get("license") or {}).get("id", "") for e in man["entries"])
+          if n_lr:
+              print("FATAL: %d 个 entry 仍带 LicenseRef（non-free 误标已撤回）" % n_lr, file=sys.stderr); bad = 1
+          for e in man["entries"]:
+              if (e.get("license") or {}).get("id") != "AGPL-3.0-or-later":
+                  print("FATAL: %s/%s 许可不是 AGPL-3.0-or-later" % (e["product"], e["name"]),
+                        file=sys.stderr); bad = 1
+          print("判据 ③④ 通过：%d 个 asset，%d 个 entry，零 LicenseRef"
+                % (len(on_disk), len(man["entries"])))
+          sys.exit(bad)
+          PY
+
+      - name: 发布（只手打 tag 时；workflow_dispatch 只 dry-run）
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          # 幂等：同 tag 已经存在 release ⇒ 直接失败，**不 clobber**
+          # （release 不可变；要重发就换 tag，这是 v4 §0 的口径）
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "FATAL: release $TAG 已存在 —— release 不可变，换 tag 重发" >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Octave 11.3.0 — three products (wasm32 / wasm64std / wasm64ip)" \
+            --notes-file release/RELEASE-NOTES.md \
+            out/*
