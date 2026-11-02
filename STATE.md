@@ -71,6 +71,40 @@
 - **现状**：`HEAD = origin = mirror = ad398f4`，`1da51e9` 对象在（可 `git log 1da51e9`）。
   后续一律 append-only，不再 force。
 
+## 现在是什么（2026-11-02 · ★ 撤两个旧 release + 改版本轴 `octave-full-wasm-vX.Y.Z`）
+
+- **用户点令**：「**撤掉你认为不贴近合规的那版，或者两版都撤然后发 octave-full-wasm 为名字
+  参考 LLVM 的版本号，因为这确实得跟 gnu 维护的 octave 区分**」。
+
+- **判据（为什么"确实得区分"）**：
+  · GNU Octave 自己的 release tag 是 `release-11-3-0`、release 名 `Octave 11.3.0`
+  · 我们的 tag 是 `octave-11.3.0-r2` ⇒ **同一命名空间里有两件不同产品同名**
+  · LLVM-wasm 用的是**它自己的产品轴**：`v0.1.0` → `v0.1.6`，manifest id `LLVM-wasm/v0.1.6`
+  ⇒ 上游版本号是**它的**身份，不是我们的。我们的产物是「GNU Octave 11.3.0 的 wasm 构建」。
+
+- **改名轴（照 LLVM 形态）**：
+  | | 旧（撤） | 新 |
+  |---|---|---|
+  | tag | `octave-11.3.0-r2` | `octave-full-wasm-vX.Y.Z` |
+  | manifest id | `Octave-Full-Wasm/octave-11.3.0-r2` | **`Octave-Full-Wasm/vX.Y.Z`** |
+  | release 名 | `Octave 11.3.0 — three products` | `Octave-Full-Wasm vX.Y.Z — GNU Octave 11.3.0 wasm build` |
+  「GNU Octave 11.3.0」留作**描述**（title/notes），**不進身份**（tag）。
+  `_own_version(tag)` 只抽本仓自己的 `vX.Y.Z`；上游式 tag ⇒ `unreleased`（**不编假版本**）。
+
+- **撤回的两版（身份留档在 `HISTORY.md` §5.117）**：
+  `octave-11.3.0-three-products-36b951e`（`36b951e8`）/ `octave-11.3.0-r2`（`565ccfc0`）。
+  **两版产物字节完全相同**（9 条 entry 的 `(product,name,sha256)` 逐条相同、
+  三编码分片逐字相同）；差别只有 `manifest.id` 与 entry 数组顺序
+  （旧=字母序、新=我生成器原顺序 ⇒ 已改 `sorted` 与内容仓一致）。
+  ⇒ **没有任何"内容更合规"的一版可以留**，所以两版都撤、重发一版。
+
+- **删 tag 不算"改历史"（AGENTS 第 2 条的边界，动前实测）**：
+  两个 tag 指向的 commit **都在 `master` 祖先链上**（`git merge-base --is-ancestor` ✓）
+  ⇒ 删 tag 只删**引用**，commit/对象全在（`git cat-file -t` 两处都返回 `commit`，
+  `git log master` 里仍查得到）。**但 release 的 82 个 asset 字节确实消失了** ——
+  它们能从 `release/products/`（已入库）+ `build/make-release.py` **重新生成**：
+  这是本批把发布改成 action 自动出的直接收益（**产物可复现，所以删了能重造**）。
+
 ## 现在是什么（2026-11-02 · Release 改成 action 自动出 —— 照 LLVM 管线的"先验再发"）
 
 - **用户两次点令**：①「**你应该使用 action 自动出 release，绝对不能手动改**」
