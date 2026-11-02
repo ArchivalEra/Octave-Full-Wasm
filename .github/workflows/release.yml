@@ -1,36 +1,52 @@
 # Release 的**唯一发布面**（用户点令 2026-11-02：「用 action 自动出 release，绝对不能手动改」）。
 #
-# ── 为什么必须有它 ──────────────────────────────────────────────────────────────
-# 我此前用手工 `gh release upload --clobber` 把一份**已发布**的 `manifest.json` 换掉了。
-# 两处错，且第二处比第一处严重：
-#   ① **release 不可变**是 Static-Contract v4 §0 的地基 —— clobber 等于改写历史；
-#   ② 「这份 manifest 从哪来」变得**不可复现** —— 只有我的一次命令，没有可重跑的东西。
-# ⇒ 现在发布只走这一条路：**仓里的字节 + build/make-release.py ⇒ 本工作流发布**。
-#   人手不发 release、不改 asset。要换产物就改 `release/products/` 再打 tag。
+# ── 形状照隔壁 LLVM-wasm 的管线（用户指路：「参考隔壁LLVM的管线，它是先验一遍再publish的」）
+#   它有三件我这里原来缺的：
+#     ① **手动触发 + `publish` 布尔**：同一个 workflow 既能"只验不发"，也能"验完就发"；
+#     ② **发布后反读**：从 GitHub 下载正在服务的字节逐条核（本仓翻案 R-012：
+#        关于 release 的声明只能由读 release 来核）；
+#     ③ **分批上传**：一次 `gh release create` 甩 82 个文件会撞超时，且半发布比不发布更坏
+#        （manifest 声明的资产 404 ⇒ 那 404 的含义变成"发布坏了"，而不是"载荷不存在"）。
 #
-# ── 判据（逐条 fail-closed，任何一条红就不发布）────────────────────────────────
+# ── 与 LLVM 的**一处不同**（有意）：载荷从哪来
+#   它几小时才建、不入库 ⇒ 从上一个 release 的 identity 分片拼回。
+#   我们**入库了**（`release/products/`，与 `site/` 已入库的产物同族）⇒ 直接读，
+#   不需要"从上一个 release 捞"。少一层搬运，就少一条会漂的链。
+#
+# ── 为什么必须有它（我此前怎么错的）
+#   我用手工 `gh release upload --clobber` 换掉了一份**已发布**的 `manifest.json`。
+#   ① 违反 v4 §0「release 不可变」；② 「这份 manifest 从哪来」变得不可复现。
+#   ⇒ 现在发布只走这一条路，且**已存在的 tag 一律拒**（要重发就换 tag）。
+#
+# ── 判据（逐条 fail-closed，任何一条红就不发布）
 #   ① `make-release.py --selftest` 必须绿（生成器自己会红才可信）
-#   ② 生成后 `check-release-v4.py <manifest> --base <out>` 必须 **0 FAIL**
-#      —— 用**契约方的**校验器，不是我自己写的一个"同意自己"的检查
-#   ③ 分片数 + manifest 数 == 目录里实际文件数（不许有孤儿文件被打包）
+#   ② `check-release-v4.py <manifest> --base <out>` 必须 **0 FAIL**
+#      —— 用**契约方**的校验器（从 isui.ren/static 取，并核 sha），不是"我同意我自己"
+#   ③ release 内容 **恰好等于** manifest 内容（多一个 asset 就是不合规；v4 §0）
 #   ④ 许可必须 `AGPL-3.0-or-later` 且**零** `LicenseRef`（2026-11-02 的误标已撤回）
+#   ⑤ 发布后反读：从 GitHub 拉回全部资产 ⇒ 再跑一次 ③④ + 契约校验 + 非 draft
 #
-# ── 触发 ────────────────────────────────────────────────────────────────────
-#   只在 **tag** 上跑：`git tag octave-11.3.0 && git push origin octave-11.3.0`
-#   不在 push/PR 上跑（那会每提交都试图发 release）。
-#   `workflow_dispatch` 保留但**只做 dry-run**（生成 + 校验，不发布），方便先看结果。
+# ── 触发
+#   · 只验不发：Actions → release → Run workflow，`publish` 留空（false）
+#   · 验完就发：同上，`publish` 勾上
+#   · 推 tag 也会跑，但**仍然要** `publish=true` 才真发（tag 只负责给 manifest 一个 id）
 name: release
 
 on:
-  push:
-    tags:
-      - 'octave-*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'dry-run 用的 tag 名（不会真发布）'
+        description: 'Release tag（进 manifest.id；真发布时它必须是新 tag）'
+        required: true
+        type: string
+      publish:
+        description: '真发布（false = 只生成+校验，不创建 release）'
         required: false
-        default: 'octave-dryrun'
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'octave-*'
 
 permissions:
   contents: write
@@ -38,38 +54,65 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
-          # 产物字节入库了（release/products/），普通 checkout 就够
           fetch-depth: 1
 
       - uses: actions/setup-python@v5
-        with: { python-version: '3.x' }
+        with:
+          python-version: '3.x'
+
+      - name: 输入归一（tag / publish）
+        id: inp
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            PUB="${{ inputs.publish }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            # 推 tag 只算"验"；真发要显式在 Actions 页勾 publish
+            PUB="false"
+          fi
+          [ -n "$TAG" ] || { echo "FATAL: 缺 tag" >&2; exit 1; }
+          echo "TAG=$TAG"    >> "$GITHUB_ENV"
+          echo "PUBLISH=$PUB" >> "$GITHUB_ENV"
+          echo "tag=$TAG publish=$PUB"
 
       - name: 装 zstd 编码器
         # 契约允许 zstd/gzip/identity 三编码。缺 zstd 就**明说缺**，不静默退化成两编码
-        # （那会让 manifest 里的 codecs 声明变成假话 —— 本仓最忌的形状）。
+        # （那会让 manifest 里的 `codecs` 变成假话 —— 本仓最忌的形状）。
         run: pip install zstandard
 
-      - name: 生成器自证（三类用例必须齐）
+      # ── ① 生成器自证 ──────────────────────────────────────────────────────
+      - name: 判据 ① 生成器自证（三类用例必须齐）
         run: python3 build/make-release.py --selftest
 
       - name: 生成 manifest + 分片
-        env:
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-        run: |
-          set -e
-          python3 build/make-release.py --out out --tag "$TAG"
+        run: python3 build/make-release.py --out out --tag "$TAG"
 
-      - name: 判据 ②：契约方校验器必须 0 FAIL
-        # 取的是**静态契约站点**上那份工具（与 Content 仓 tools/ 逐字节相同，
-        # sha256 ed877ee2…）。不从本仓复制 —— 要的是"外部权威说了算"。
+      # ── ② 契约方校验器（外部权威说了算）──────────────────────────────────
+      - name: 取契约方校验器并核指纹
+        # 从**静态契约站点**取，不从本仓复制 —— 要的是"外部说了算"。
+        # 核 sha 是为了防"站点被换了一份工具"这种静默漂移（与 provision-* 同款纪律）。
         run: |
           set -e
           curl -sSL --retry 3 --retry-delay 5 \
             https://isui.ren/static/tools/check-release-v4.py -o /tmp/check-release-v4.py
-          sha256sum /tmp/check-release-v4.py
+          GOT="$(sha256sum /tmp/check-release-v4.py | cut -d' ' -f1)"
+          echo "check-release-v4.py sha256=$GOT"
+          # 期望值：与 Content 仓 tools/ 那份逐字节相同（2026-11-02 实测 ed877ee2…）
+          WANT="ed877ee23ed28cf1"
+          case "$GOT" in
+            "$WANT"*) ;;
+            *) echo "FATAL: 契约校验器指纹变了（$GOT）—— 先核清楚是谁改的" >&2; exit 1 ;;
+          esac
+
+      - name: 判据 ② 契约校验必须 0 FAIL
+        run: |
+          set -e
           OUT="$(python3 /tmp/check-release-v4.py out/manifest.json --base out | tail -1)"
           echo "$OUT"
           case "$OUT" in
@@ -77,7 +120,8 @@ jobs:
             *) echo "FATAL: 契约校验器有 FAIL ⇒ 不发布" >&2; exit 1 ;;
           esac
 
-      - name: 判据 ③④：孤儿文件 + 许可口径
+      # ── ③④ release 内容 == manifest 内容；许可口径 ─────────────────────
+      - name: 判据 ③④ 无孤儿 + 许可全 AGPL
         run: |
           set -e
           python3 - <<'PY'
@@ -85,15 +129,13 @@ jobs:
           man = json.load(open("out/manifest.json", encoding="utf-8"))
           files = {c["file"] for e in man["entries"] for v in e["variants"] for c in v["chunks"]}
           on_disk = {f for f in os.listdir("out") if f != "manifest.json"}
-          orphan = on_disk - files
-          missing = files - on_disk
+          orphan, missing = on_disk - files, files - on_disk
           bad = 0
           if orphan:
               print("FATAL: 目录里有 %d 个孤儿文件（不属于任何 chunk）：%s"
                     % (len(orphan), sorted(orphan)[:5]), file=sys.stderr); bad = 1
           if missing:
               print("FATAL: manifest 声明了但盘上没有：%s" % sorted(missing)[:5], file=sys.stderr); bad = 1
-          # ④ 许可：全部 AGPL，零 LicenseRef
           n_lr = sum("LicenseRef" in (e.get("license") or {}).get("id", "") for e in man["entries"])
           if n_lr:
               print("FATAL: %d 个 entry 仍带 LicenseRef（non-free 误标已撤回）" % n_lr, file=sys.stderr); bad = 1
@@ -101,26 +143,96 @@ jobs:
               if (e.get("license") or {}).get("id") != "AGPL-3.0-or-later":
                   print("FATAL: %s/%s 许可不是 AGPL-3.0-or-later" % (e["product"], e["name"]),
                         file=sys.stderr); bad = 1
-          print("判据 ③④ 通过：%d 个 asset，%d 个 entry，零 LicenseRef"
+          print("判据 ③④ 通过：%d 个 asset，%d 个 entry，零 LicenseRef 且全 AGPL"
                 % (len(on_disk), len(man["entries"])))
           sys.exit(bad)
           PY
 
-      - name: 发布（只手打 tag 时；workflow_dispatch 只 dry-run）
-        if: github.event_name == 'push'
+      - name: 只验模式到此为止（publish=false）
+        if: env.PUBLISH != 'true'
+        run: |
+          echo "PUBLISH=false ⇒ 只生成+校验，不创建 release。"
+          echo "要真发：Actions → release → Run workflow，勾上 publish。"
+
+      # ── ⑤ 发布：先拒已存在的 tag，再分批传 ──────────────────────────────
+      - name: 拒绝重发（release 不可变）
+        if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
         run: |
           set -e
-          # 幂等：同 tag 已经存在 release ⇒ 直接失败，**不 clobber**
-          # （release 不可变；要重发就换 tag，这是 v4 §0 的口径）
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "FATAL: release $TAG 已存在 —— release 不可变，换 tag 重发" >&2
+            echo "FATAL: release $TAG 已存在 —— v4 §0「release 不可变」，要重发请换 tag" >&2
             exit 1
           fi
+
+      - name: 创建 release（只挂 manifest）
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Octave 11.3.0 — three products (wasm32 / wasm64std / wasm64ip)" \
             --notes-file release/RELEASE-NOTES.md \
-            out/*
+            out/manifest.json
+
+      # 分片按编码分批传（一次甩 81 个文件会撞超时）。
+      # 任何一批失败 ⇒ job 红。**半发布比不发布更坏**：manifest 声明的资产 404，
+      # 而 404 的含义会从"载荷不存在"变成"发布坏了"。
+      - name: 上传 zstd 分片
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.zstd.* --clobber
+
+      - name: 上传 gzip 分片
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.gzip.* --clobber
+
+      - name: 上传 identity 分片
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.identity.* --clobber
+
+      # ── ⑥ 发布后反读（本仓翻案 R-012：关于 release 的声明只能由读 release 来核）
+      - name: 判据 ⑤ 反读：下载已发布资产逐条核
+        if: env.PUBLISH == 'true'
+        env:
+          # ⚠️ 这两个 env 漏了会让 `gh` 直接退 4（LLVM 那边第一次跑就撞上），
+          #   症状是 job 红而发布其实是好的 —— 反读没跑成 ≠ 反读通过。
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          DRAFT="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          [ "$DRAFT" = "false" ] || { echo "FATAL: release 是 draft（客户端取不到）" >&2; exit 1; }
+
+          mkdir -p /tmp/vfy
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D /tmp/vfy --clobber
+
+          python3 - <<'PY'
+          import json, os, sys
+          v = '/tmp/vfy'
+          man = json.load(open(os.path.join(v, 'manifest.json'), encoding='utf-8'))
+          declared = {c['file'] for e in man['entries'] for vv in e['variants'] for c in vv['chunks']}
+          declared.add('manifest.json')
+          got = {f for f in os.listdir(v) if os.path.isfile(os.path.join(v, f))}
+          extra, missing = got - declared, declared - got
+          if extra:
+              sys.exit('FATAL: 已发布 release 含 manifest 未声明的资产：%s' % sorted(extra)[:5])
+          if missing:
+              sys.exit('FATAL: 已发布 release 缺 manifest 声明的资产：%s' % sorted(missing)[:5])
+          print('PASS 判据 ③（反读）release 内容 == manifest 内容（%d assets）' % len(got))
+          if man.get('schema') != 3:
+              sys.exit('FATAL: 已发布 manifest 的 schema 是 %r，不是 3' % man.get('schema'))
+          n_lr = sum('LicenseRef' in (e.get('license') or {}).get('id', '') for e in man['entries'])
+          if n_lr:
+              sys.exit('FATAL: 已发布 manifest 仍有 %d 个 LicenseRef' % n_lr)
+          print('PASS 判据 ④（反读）schema 3 + 许可全 AGPL + 零 LicenseRef')
+          PY
+
+          python3 /tmp/check-release-v4.py /tmp/vfy/manifest.json --base /tmp/vfy | tail -2

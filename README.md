@@ -173,8 +173,8 @@ vendor/                            21     123.5 KB
 .githooks/                         15     106.2 KB
 docs/                              14      77.9 KB
 dist/                               2      23.8 KB
+.github/                            4      17.2 KB
 reflect-hooks/                      6      14.9 KB
-.github/                            4      12.1 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
 (total)                          1161     455.8 MB
