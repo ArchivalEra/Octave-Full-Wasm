@@ -53,7 +53,12 @@ PRODUCTS = [
     ("wasm64std", "wasm64", "wasm64 + mimalloc, standard (does not link librustsort.a)"),
     ("wasm64ip", "wasm64", "wasm64 + mimalloc + Rust sort kernel (links librustsort.a)"),
 ]
-FILES = ("octave.wasm", "octave.js", "octave.data")
+# ⚠️ 顺序 = **字母序**（sorted），与内容仓 `make-manifest-v4.py` 的 `sorted(files)` 一致。
+#   为什么在意：契约对 entry 顺序**没有**判据（校验器里零顺序判据），但顺序不同会让
+#   「按 (product, name, sha256) 序列算指纹」的**判重**失效 —— 2026-11-02 内容仓就因此
+#   把我的两个 release 误报成"条目构成不同"（dc30fda2 vs 8d35ed0a），实际 9 条 sha 全同、
+#   只是我先用了 (wasm, js, data) 而对方是字母序。**顺序不承重，就别让它成为差异源。**
+FILES = tuple(sorted(("octave.wasm", "octave.js", "octave.data")))
 
 
 def sha256(b):
