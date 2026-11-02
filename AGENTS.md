@@ -37,7 +37,7 @@
 |---|---|---|
 | **`wasm32-final`** | wasm32 单线程 | **无** —— 无 COI 环境下的唯一线 |
 | **`master`** | wasm64 多线程 | 必须 COI + 多线程 |
-| **`IllegalPerformance`** | wasm64 多线程 + Rust 补丁 | 必须 COI；**non-free** |
+| **`IllegalPerformance`** | wasm64 多线程 + Rust 补丁 | 必须 COI；**non-free**（★ 此处 non-free 指**维护口径**「上游不收这个补丁」，**不是许可** —— 产物仍是 AGPL-3.0-or-later，见 `docs/RUST-SORT-KERNEL-LICENSE.md`。2026-11-02 用户指出我把它当许可写进了 Release，已撤回） |
 
 **分档依据只有两条**：① 用户能否使用（浏览器支持 / COI 要求）② 是否作为 non-free 软件。
 **与性能无关。**

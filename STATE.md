@@ -125,10 +125,13 @@
 - **Release（按 Static-Contract v4 + v1.1，schema 3）**：tag
   `octave-11.3.0-three-products-36b951e`，**3 product × 3 entry（entry 与 asset 数见 release，`gh api` 可数）**，
   用**他们的** `check-release-v4.py` 校验 ⇒ **校验全过（PASS 数见 release 说明的复跑输出）**。
-  三个 product：`wasm32`（free）/ `wasm64std`（free）/ `wasm64ip`（non-free，
-  许可 `AGPL-3.0-or-later AND LicenseRef-nonfree-rust-sort-kernel`）。
-  **`license.url` 指向 release 内真实存在的 `docs/NONFREE-RUST-KERNEL.md`**（已核在 master 可访问）
-  —— licence URL 不许打不开，否则是空头声明。
+  三个 product：`wasm32` / `wasm64std` / `wasm64ip`，**全部 `AGPL-3.0-or-later`**。
+  ⚠️ 曾把 `wasm64ip` 标成 `LicenseRef-nonfree-rust-sort-kernel` —— **那是错的，已撤回**：
+  rust-sort 内核是本仓自己的源码（`build/113/rust/src/lib.rs`，`no_std`，`Cargo.lock`
+  里只有 `rs_sort` 自己，零第三方依赖），缝在上游 GPL-3.0 树里且是弱符号 ⇒ 与 AGPL 兼容。
+  三个产物**没有任何 non-free 组件**。详见 `docs/RUST-SORT-KERNEL-LICENSE.md`。
+  **`license.url` 指向本仓根 `LICENSE`**（最权威、最不会漂的那份）——
+  licence URL 不许打不开，否则是空头声明。
 
 - **★ Release 的下载路径实测**（不是"传上去了"就算）：
   · `manifest.json` 走 **`gh api` 的 octet-stream** 取回 ⇒ 与本地那份 sha256 **逐字相同**
