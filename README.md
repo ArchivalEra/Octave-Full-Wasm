@@ -162,7 +162,7 @@ group                           files        bytes
 site/                             228     332.8 MB
 build/                            462       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     783.1 KB
+(root)                             13     783.5 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
@@ -170,13 +170,13 @@ bridge/                            20     303.5 KB
 mail/                              52     253.9 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     106.2 KB
-docs/                              13      75.6 KB
+docs/                              14      77.7 KB
 dist/                               2      23.8 KB
 reflect-hooks/                      6      14.9 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1144     340.1 MB
+(total)                          1145     340.1 MB
 ```
 
 Per-file listing: `git ls-files` — this block is a summary so the README stays readable.
@@ -285,6 +285,10 @@ property of `let`. The fix was in the compiler target, not in the output file �
 carries no `var` at all in code it authored.
 
 One more instrument failure worth recording, because the honest reading of it is the whole point. A full `PROBES=1` sweep came back with 0 FAIL, and one probe still flagged: `probe-toolchain-gap` returned `rc=3` with no summary line. It was not a broken product. The probe exits because two fixtures it needs — `p-throw.oct` and `p-nothrow.oct` — are not present; they have to be compiled inside the build container in a per-arch sysroot shape before the probe can say anything. The probe's own exit-code contract already labels `rc=3` as "environment problem, not a verdict about the gap", and no earlier sweep directory contains a result file for it, so it has simply never had its fixtures. The finding is logged in the state document rather than being counted green, because a sweep that reports a number while one probe silently produced nothing is exactly the shape this repo's gate discipline exists to catch.
+
+Building all three products at once surfaced a class of defect this repo keeps rediscovering, and it is worth naming: **a flag that is correct in the link line but missing at compile time**. The thread axis (`-pthread`) lived inside `EXTRA_LDFLAGS`, which only ever reaches the final `em++` call; `link-web.sh` compiles `main.o` and the graphics toolkit object with a separate command that never saw it. The result was not a subtle bug but a hard failure — `wasm-ld: --shared-memory is disallowed by main.o because it was not compiled with 'atomics'`. The fix promotes the thread axis to a declared property of the mode (`WITH_THREADS`) and feeds one array to all three call sites, which is the same discipline `MEMORY64` already had. Ten other defects fell out of the same shape: a new mode missing from a `case` whitelist (prefix guard, entry whitelist, rebuild path, `malloc` declaration), an install path that could not be overridden, two variables holding the same tree under different names, and a keep-set scanned from the wrong lane. Every one of them was found by a gate rather than by inspecting output, which is the point.
+
+The wasm32 line deserves its own sentence because it is the one whose reason to exist is compatibility. It ships **zero atomics** — verified against the artifact's bytes rather than against its build flags — and boots in a page that deliberately sends no COOP/COEP headers: `crossOriginIsolated === false`, `typeof SharedArrayBuffer === undefined`, and `2+2` still evaluates to `4`. A pointer into the GL archives had been following the lane tag, which would have quietly pulled atomics into the one product that must not have them; the fix pins it to the untagged archive and a self-test now asserts the whole surface (thread switch off, no pool, untagged GL, and the w64 product using its own).
 
 ## Notes on gate design
 

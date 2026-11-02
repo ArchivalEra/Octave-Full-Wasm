@@ -166,7 +166,7 @@ group                           files        bytes
 site/                             228     332.8 MB
 build/                            462       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     783.1 KB
+(root)                             13     783.5 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
@@ -174,13 +174,13 @@ bridge/                            20     303.5 KB
 mail/                              52     253.9 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     106.2 KB
-docs/                              13      75.6 KB
+docs/                              14      77.7 KB
 dist/                               2      23.8 KB
 reflect-hooks/                      6      14.9 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1144     340.1 MB
+(total)                          1145     340.1 MB
 ```
 
 Dateiliste: `git ls-files` — dieser Block ist eine Zusammenfassung, damit das README lesbar bleibt.
@@ -314,6 +314,28 @@ Stand: null `var` im selbst geschriebenen JS/TS dieses Repos, geprueft von
 Kognitionskomplexitaets-Befunde und die Stilhinweise -- Lesbarkeitsschuld, kein Korrektheitsdefekt.
 
 Ein weiterer Instrumentenausfall gehoert festgehalten, weil genau die ehrliche Lesart der Punkt ist. Ein vollstaendiger `PROBES=1`-Lauf kam mit 0 FAIL zurueck, und ein Probe wurde trotzdem markiert: `probe-toolchain-gap` lieferte `rc=3` ohne Zusammenfassungszeile. Es war kein kaputtes Produkt. Der Probe bricht ab, weil zwei benoetigte Fixtures -- `p-throw.oct` und `p-nothrow.oct` -- fehlen; sie muessen im Build-Container in per-arch-sysroot-Form kompiliert werden, bevor der Probe ueberhaupt etwas aussagen kann. Der eigene Exit-Code-Vertrag des Probes bezeichnet `rc=3` bereits als "Umgebungsproblem, kein Urteil ueber die Luecke", und in keinem frueheren Sweep-Verzeichnis liegt eine Ergebnisdatei dafuer, er hatte also schlicht nie seine Fixtures. Der Befund wird im Zustandsdokument festgehalten statt als gruen gezaehlt, denn ein Lauf, der eine Zahl meldet, waehrend ein Probe still nichts produziert hat, ist genau die Form, fuer die die Gate-Disziplin dieses Repos existiert.
+
+Alle drei Produkte auf einmal zu bauen hat eine Fehlerklasse ans Licht gebracht, die dieses Repo
+immer wieder neu entdeckt, und sie verdient einen Namen: **ein Schalter, der in der Link-Zeile stimmt,
+zur Compile-Zeit aber fehlt**. Die Thread-Achse (`-pthread`) lag in `EXTRA_LDFLAGS`, und das erreicht
+nur den letzten `em++`-Aufruf; `link-web.sh` uebersetzt `main.o` und das Grafik-Toolkit-Objekt mit einem
+separaten Kommando, das ihn nie sah. Das Ergebnis war kein subtiler Fehler, sondern ein harter Abbruch --
+`wasm-ld: --shared-memory is disallowed by main.o because it was not compiled with 'atomics'`. Die
+Korrektur befoerdert die Thread-Achse zu einer deklarierten Eigenschaft des Modus (`WITH_THREADS`) und
+speist ein Array in alle drei Aufrufstellen -- genau die Disziplin, die `MEMORY64` schon hatte. Zehn
+weitere Defekte fielen aus derselben Form: ein neuer Modus fehlte in einer `case`-Whitelist
+(Praefix-Guard, Eintrags-Whitelist, Rebuild-Pfad, `malloc`-Deklaration), ein Install-Pfad liess sich
+nicht ueberschreiben, zwei Variablen hielten denselben Baum unter verschiedenen Namen, und ein
+Keep-Set wurde in der falschen Fahrspur gescannt. Alle wurden von Gates gefunden, nicht durch
+Anschauen der Ausgabe -- das ist der Punkt.
+
+Die wasm32-Linie verdient einen eigenen Satz, weil sie die einzige ist, deren Daseinsgrund
+Kompatibilitaet ist. Sie liefert **null atomics** -- geprueft an den Bytes des Artefakts, nicht an
+seinen Build-Schaltern -- und bootet in einer Seite, die bewusst keine COOP/COEP-Header sendet:
+`crossOriginIsolated === false`, `typeof SharedArrayBuffer === undefined`, und `2+2` ergibt trotzdem
+`4`. Ein Zeiger in die GL-Archive war dem Lane-Tag gefolgt, was still atomics in das eine Produkt
+gezogen haette, das sie nicht haben darf; die Korrektur nagelt ihn auf das ungetaggte Archiv fest,
+und ein Selbsttest sichert jetzt die ganze Flaeche ab.
 
 ## Notiz zum Gate-Design
 

@@ -148,7 +148,7 @@ group                           files        bytes
 site/                             228     332.8 MB
 build/                            462       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     783.1 KB
+(root)                             13     783.5 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
@@ -156,13 +156,13 @@ bridge/                            20     303.5 KB
 mail/                              52     253.9 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     106.2 KB
-docs/                              13      75.6 KB
+docs/                              14      77.7 KB
 dist/                               2      23.8 KB
 reflect-hooks/                      6      14.9 KB
 .github/                            3       5.8 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1144     340.1 MB
+(total)                          1145     340.1 MB
 ```
 
 逐文件清单：`git ls-files` —— 本块是摘要，README 因此保持可读。
@@ -271,6 +271,10 @@ ES5 兼容不再是要求）。判据也换了：白名单版 `var-to-let.mjs` �
 工单 72 上仍未结案的是另一类东西——57 条认知复杂度告警与风格建议——那些是可读性债，不是正确性缺陷。
 
 还有一次仪器失效值得记，因为"怎么如实读它"正是重点。一次完整的 `PROBES=1` 全量跑完是 0 FAIL，但有一条探针仍被挂出来：`probe-toolchain-gap` 返回 `rc=3`、没有汇总行。**它不是产品坏了。** 这条探针退出的原因是它需要的两个夹具——`p-throw.oct` 与 `p-nothrow.oct`——不在；那两个夹具得先在构建容器里按 per-arch sysroot 形态编出来，探针才说得出话。它自己的退出码契约里就把 `rc=3` 标成「环境问题，不是关于缺口的结论」；而且往几轮的 sweep 目录里从来没有它的结果文件，说明它压根就没拿到过夹具。这条发现**记进活状态文档**，而不是被算成绿 —— 因为"整体报了个数、同时有一条探针悄悄什么都没产出"正是本仓闸门纪律要抓的形状。
+
+三个产物一次全编，翻出一类本仓反复重遇的缺陷，值得给它起个名字：**旗标在链接行里对、在编译期却缺席**。线程轴（`-pthread`）原来写在 `EXTRA_LDFLAGS` 里，而那份只喂最终的 `em++`；`link-web.sh` 编 `main.o` 和图形 toolkit 对象走的是另一条命令，**看不见它**。结果不是那种难查的小错，而是硬失败——`wasm-ld: --shared-memory is disallowed by main.o because it was not compiled with 'atomics'`。修法是把线程轴升格成模式的一条**声明属性**（`WITH_THREADS`），并用**同一个数组**喂三处调用点；这正是 `MEMORY64` 早就在用的纪律。另外十个缺陷是同一个形状：新模式漏进某个 `case` 白名单（前缀守卫、入口白名单、rebuild 路径、`malloc` 声明）、安装路径不可覆盖、两棵同一棵树挂了两个变量名、保活集扫错了车道。**每一个都是闸门找出来的，不是靠看输出看出来的**——这正是闸门的用处。
+
+wasm32 线值得单独说一句，因为它是唯一以**兼容性**为存在理由的那条。它发的是**零 atomics**——判据是对产物字节而不是对构建旗标——并且在一个**故意不发 COOP/COEP** 的页面里跑起来：`crossOriginIsolated === false`、`typeof SharedArrayBuffer === undefined`，而 `2+2` 照样算出 `4`。指向 GL 归档的那条路径原先跟着车道 tag 走，那会悄悄把 atomics 引进这个**唯一不许有它**的产物里；修法是把那条路径钉在不带 tag 的那份归档上，同时加了一条自证把整个面都钉住（线程开关关、无池、GL 不带 tag、w64 用自己的那份）。
 
 ## 关于闸门设计的记录
 
