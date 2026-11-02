@@ -71,6 +71,68 @@
 - **现状**：`HEAD = origin = mirror = ad398f4`，`1da51e9` 对象在（可 `git log 1da51e9`）。
   后续一律 append-only，不再 force。
 
+## 现在是什么（2026-11-02 · ★ 三产物全部实编 + wasm32 零 atomics 实测）
+
+- **用户点令**：「**32，64，non-free 三个产物都编译出来**」+「**32 版一定是完全去除
+  线程化的，这条线保留一切兼容性**」。
+
+- **三个产物全部产出，全部 `verdict=ok`，且 `tool.script_sha256` 三者相同**（同一份
+  `link-web.sh` 造出 —— "三个产物来自同一次工具"这条有机器证据，不是口头）：
+
+  | 产物 | arch | 字节 | sha16 | 许可 | 位置 |
+  |---|---|---|---|---|---|
+  | `product` | wasm32 | [[wasm_bytes]] | `a4f5a414` | free | `/src/websrc/product` |
+  | `w64-std` | wasm64 | [[w64_wasm_bytes]] | `19e2d367` | free（不带 rust_sort） | `/src/websrc/w64-std-out` |
+  | `w64` | wasm64 | [[w64_wasm_bytes]] | `78dea75c` | non-free（`rust_sort=f64-stable`） | `/src/websrc/w64-out` |
+
+- **★★ wasm32 线零 atomics —— 判据看产物字节，不看构建旗标**：
+  `test/browser/probe-wasm32-no-coi.mjs` ⇒ **5 PASS / 0 FAIL**：
+  `coi=false`（服务故意不发 COOP/COEP）/ `typeof SharedArrayBuffer === undefined` /
+  开机 `phase=done` / `2+2 = 4`（rc=0）/ **产物字节 `atomics` 计数 = 0**。
+  这条线存在的唯一理由就是"无 COI 也能跑"，所以这五条是它的全部意义。
+
+- **★ 差点亲手毁掉这条线（记下来）**：我给 `GL4ES_A` 加了 `LANE_TAG` 后缀（想跟其它
+  路径统一），而 `-6012` 那套 GL 归档是给**线程车道**建的 ⇒ 会把 atomics 引进这个
+  **唯一不许有它**的产物。修法 = wasm32 的 GL **不跟 tag**（钉在 untagged `gl4es-src`，
+  实测 69/69 成员不带 atomics），并加一条自证钉住整个面：
+  `"wasm32 线零线程痕迹（WITH_THREADS=0 / 无池 / GL 不跟 tag）；w64 用 w64 GL"`。
+
+- **★ 本轮修的 11 个真缺陷（同一个形状：链接行里对、编译期缺；或 `case` 白名单漏新模式）**：
+  1. `w64-std` 漏进**前缀守卫** case ⇒ 期望错前缀
+  2. 漏进**入口白名单** ⇒ `link w64-std` 直接 FATAL
+  3. 漏进 `rebuild` 的 `inst`/`_th` ⇒ 配置错
+  4. **`link-web.sh` 编 `main.o`/`webgl_toolkit.o` 不带 `-pthread`**
+     ⇒ `wasm-ld: --shared-memory is disallowed by main.o`（w64-std 首建死于此）
+     ⇒ 线程轴升格为模式属性 `WITH_THREADS` + **一个 `THREADS` 数组喂三处**
+  5. `declared` 的 `malloc` 靠 `case w64)` 白名单 ⇒ w64-std 少它 ⇒ **`verdict=rejected`**
+     ⇒ 改成只从模式表 `MALLOC` 读
+  6. `INST` 写死不可覆盖 ⇒ 用 w32 树时前缀守卫必拒 ⇒ `INST_TREE` 可覆盖
+  7. **`OCT` 与 `OCT_TREE` 是两个变量名** ⇒ 守卫绿但真链接用了另一棵树（**最坏的一种**）
+  8. wasm32 分支的 `DEPS`/`GL` 不跟 tag ⇒ 撞 `/usr/local-6012`
+  9. wasm32 的保活集用的是 w64 车道的 `keep-6012.txt` ⇒ 缺 `_Unwind_CallPersonality`
+  10. `OCT_SCAN_DIRS` 不跟 tag ⇒ 扫的是 9-22（emsdk **5.0.7**）的 `.oct`，它们导入
+      `_Unwind_CallPersonality`，而 **6.0.12 主模块不提供** ⇒ 差分判据报"新缺 1 个"、RC=4
+      ⇒ 改用 `octs-site-6012-w32`（10-12 用 6.0.12 重编的 17 个，不含该符号）
+  11. `product` 的 GL 归档误跟 `LANE_TAG`（见上）
+
+- **部署与验收**：
+  · `8768` 的 w64 已发运（`promote-w64-lane.sh` 全绿：两格齐 / base 未动 / 无死档 /
+    清单与 .oct 条数自洽），`BOOT OK 1.4s`
+  · **8768 全量 [[accept_suites]] 套 / [[accept_pass]] PASS / 0 FAIL / 0 CRASH**
+  · `relink --selftest` **28/0**、`--selfcheck` 变量全覆盖、
+    `three-products` rc=0（三产物参数差异 14 项）、闸门台全绿、`var-audit` 仍 **0**
+
+- **Release（按 Static-Contract v4 + v1.1，schema 3）**：tag
+  `octave-11.3.0-three-products-36b951e`，**3 product × 3 entry（entry 与 asset 数见 release，`gh api` 可数）**，
+  用**他们的** `check-release-v4.py` 校验 ⇒ **校验全过（PASS 数见 release 说明的复跑输出）**。
+  三个 product：`wasm32`（free）/ `wasm64std`（free）/ `wasm64ip`（non-free，
+  许可 `AGPL-3.0-or-later AND LicenseRef-nonfree-rust-sort-kernel`）。
+  **`license.url` 指向 release 内真实存在的 `docs/NONFREE-RUST-KERNEL.md`**（已核在 master 可访问）
+  —— licence URL 不许打不开，否则是空头声明。
+
+- **订阅请求已投**：`Static-Contract/mail/001-host-octave-full-wasm-subscribe.md`
+  （只写该仓 `mail/`，未碰其余路径）。信里请他们裁定 `kind` 取值，**我不自行发明词表**。
+
 ## 现在是什么（2026-11-01 · 三产物模型修正：`w64` 标准版必须有名字）
 
 - **用户点令**：「**不行，去除我们自己补丁的 w64 标准版的配方也得留着**」。这一令抓出
@@ -112,7 +174,7 @@
 
 - **实测**（全部 rc=0）：`relink --selftest` **26/0**、`--selfcheck` 32 变量全覆盖、
   `check-one-line-three-products` + `--selftest` **4/0**、`check-lanes-single-source` **16/0**
-  实跑"4 个消费方全部对齐"、闸门台 **55/55**、`var-audit` 仍 **0 处**。
+  实跑"4 个消费方全部对齐"、闸门台全绿、`var-audit` 仍 **0 处**。
   反证：坏配方（`w64-std` 回 1）⇒ **rc=1** 且 ②④ 点名；丢掉 `w64-std` ⇒ **rc=2**。
 
 ## 现在是什么（2026-11-01 · 工单 72：`var` 清零 —— 隐式改显式，零例外）
