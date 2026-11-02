@@ -130,6 +130,16 @@
   **`license.url` 指向 release 内真实存在的 `docs/NONFREE-RUST-KERNEL.md`**（已核在 master 可访问）
   —— licence URL 不许打不开，否则是空头声明。
 
+- **★ Release 的下载路径实测**（不是"传上去了"就算）：
+  · `manifest.json` 走 **`gh api` 的 octet-stream** 取回 ⇒ 与本地那份 sha256 **逐字相同**
+  · 三个 product 的 `octave.js` identity 分片各用 `curl -sL` **普通 GET** 取回
+    ⇒ 字节数与 sha256 **全部等于 manifest 声明**
+    （`wasm32 a12acb29` / `wasm64std b6f1436e` / `wasm64ip 31d9ec02`）
+  · 三份下载件**互不相同**（三产物不是同一份字节改个名字）
+  · 本地三份 == 下载三份（逐字）
+  ⚠️ 一次端到端脚本先挂在本机 TLS（`UNEXPECTED_EOF_WHILE_READING`），**一条断言都没出**
+  ⇒ 按 AGENTS「失败先排除仪器」改用 `gh api` + `curl --retry` 通道完成；这是**仪器**问题不是 Release 缺陷。
+
 - **订阅请求已投**：`Static-Contract/mail/001-host-octave-full-wasm-subscribe.md`
   （只写该仓 `mail/`，未碰其余路径）。信里请他们裁定 `kind` 取值，**我不自行发明词表**。
 
