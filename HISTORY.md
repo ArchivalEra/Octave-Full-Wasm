@@ -6313,7 +6313,11 @@ outbox 里两封历史存档（`044`→LLVM-wasm `013`、`045`→extra-content `
 ⇒ `8761 = omc-not-ready` 确认是时序不是失败率。它建议"UI 别裸等待、要有进度与取消"——
 归 UI；我方只保证状态机够用（`__octaveOmcBridge.{state,detail}`），UI 要更细进度则我方加。
 
-## §5.117 三线合一：删两条分支引用（2026-10-31 用户点令）
+## §5.117b 三线合一：删两条分支引用（2026-10-31 用户点令）
+
+> ⚠️ 编号修正（2026-11-02）：本段原写成 `§5.117`，与上一条（HTTP 缓存头）**撞号**。
+> 这是**文档编号**的错，不是 git 历史 —— 就地改成 `§5.117b` 而非重排全文
+> （HISTORY 是 append-only，改前面的编号会让别处引用失效；加后缀是唯一的无副作用改法）
 
 **用户原话**：「两条分支我打算删」+（前序）「IP做主干但是等会删掉另外两个分支，
 然后我会改成master为名字」。
@@ -6343,7 +6347,7 @@ outbox 里两封历史存档（`044`→LLVM-wasm `013`、`045`→extra-content `
 **删的是引用，不是内容**：`git branch -a` 上从此只有一条线；
 `git log archive/master-a1e2409` / `git show <tag>` 仍完整可查。
 
-## §5.115 · 2026-11-01 · 收件 067：wasm32 极简线接 symbolic（实测四问）
+## §5.118 · 2026-11-01 · 收件 067：wasm32 极简线接 symbolic（实测四问）
 
 课程站只 vendor wasm32 Release 三件套、无 `octave-core.js`、无 COI 头，问 symbolic 能否接。
 **结论：能，多 vendor 49 KB 两件 + 约 50 行宿主代码 + 懒加载 20.2 MiB Pyodide。**
@@ -6384,7 +6388,7 @@ outbox 里两封历史存档（`044`→LLVM-wasm `013`、`045`→extra-content `
 结算件：`test/browser/probe-wasm32-symbolic-minimal.mjs` ⇒ **8 PASS / 0 FAIL**。
 回信 `068`（对方信箱 `003`）已投它仓 `mail/`。
 
-## §5.116 · 2026-11-01 · 三产物模型修正：`w64` 标准版必须有名字
+## §5.119 · 2026-11-01 · 三产物模型修正：`w64` 标准版必须有名字
 
 用户点令：「**不行，去除我们自己补丁的 w64 标准版的配方也得留着**」。
 
@@ -6423,7 +6427,7 @@ w64 标准版（不带补丁、free）只能靠操作员记得 `RUST_SORT=0` 才
 `relink --selftest` 26/0、`--selfcheck` 32 变量、three-products 4/0、lanes-single-source 16/0、
 闸门台 55/55、var-audit 仍 0。反证：坏配方 ⇒ rc=1 且 ②④ 点名；丢 `w64-std` ⇒ rc=2。
 
-## §5.117 · 2026-11-02 · 撤回两个 `octave-11.3.0*` release 并改用 `octave-full-wasm` 版本轴
+## §5.120 · 2026-11-02 · 撤回两个 `octave-11.3.0*` release 并改用 `octave-full-wasm` 版本轴
 
 **用户点令原话**：「撤掉你认为不贴近合规的那版，或者两版都撤然后发 octave-full-wasm 为名字
 参考 LLVM 的版本号，**因为这确实得跟 gnu 维护的 octave 区分**」。
