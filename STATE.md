@@ -71,6 +71,46 @@
 - **现状**：`HEAD = origin = mirror = ad398f4`，`1da51e9` 对象在（可 `git log 1da51e9`）。
   后续一律 append-only，不再 force。
 
+## 现在是什么（2026-11-02 · Release 改成 action 自动出 —— 照 LLVM 管线的"先验再发"）
+
+- **用户两次点令**：①「**你应该使用 action 自动出 release，绝对不能手动改**」
+  ②「那就发呀，**你可以参考隔壁 LLVM 的管线，它是先验一遍再 publish 的**」。
+
+- **我错在哪**：用手工 `gh release upload --clobber` 把**已发布**的 `manifest.json` 换了。
+  两处错，第二处比第一处严重 —— ① 违反 v4 §0「release 不可变」；
+  ② 「这份 manifest 从哪来」变成**不可复现**（只有我一次命令，没有可重跑的东西）。
+
+- **现在的形状（三件事各归各位）**：
+  · `release/products/{wasm32,wasm64std,wasm64ip}/`：产物字节 + 身份证**入库**
+    （与 `site/` 已入库的产物同族；不放 `site/` 是因为站点只显示 base/w64 两格）
+  · `build/make-release.py`：**唯一产地** —— 读字节 → 切块 → 三编码 → 写 schema 3 manifest
+  · `.github/workflows/release.yml`：唯一的发布面，**人手不发 release、不改 asset**
+
+- **★ 从 LLVM-wasm 的 `release.yml` 学到三件（我原来缺的）**：
+  ① **`workflow_dispatch` + `publish` 布尔** —— 同一个 workflow 既能"只验不发"也能"验完就发"
+     （这正是用户说的"先验一遍再 publish"）；
+  ② **发布后反读** —— 从 GitHub 下载正在服务的字节逐条核（本仓翻案 R-012 的同一纪律），
+     并抓 `draft`（draft 对客户端不可见；gh 在慢网下会留）；
+  ③ **分批上传**（zstd / gzip / identity 各一批）—— 一次甩 81 个文件撞超时，
+     而**半发布比不发布更坏**（manifest 声明的资产打不开 ⇒ 那个错误的含义从
+     "载荷不存在"变成"发布坏了"）。
+
+- **与 LLVM 有意不同的一处（载荷从哪来）**：它几小时才建、不入库 ⇒ 从上一个 release 的
+  identity 分片拼回；**我们入库了** ⇒ 直接读。少一层搬运，就少一条会漂的链。
+
+- **判据链（本地五步先跑一遍，再让 workflow 跑同一套）**：
+  ① 生成器自证 **14/0**（含两个真 bug 的验收：空输入用例指了真目录 ⇒ 永远不报；
+     `verdict≠ok` 没覆盖）
+  ② 从 `isui.ren/static` 取契约校验器并**核指纹**（`ed877ee2`，与 Content 仓 `tools/`
+     逐字节相同）⇒ **契约校验全过（0 FAIL）**
+  ③ release 内容 **恰好等于** manifest 内容（无孤儿、无缺件；v4 §0）
+  ④ 许可全 `AGPL-3.0-or-later` 且**零 `LicenseRef`**（11-02 的 non-free 误标已撤回）
+  ⑤ 反读（仅 `publish=true`）：非 draft + ③④ 在**已发布**那份上重验 + 契约校验
+
+- **实测**：`workflow_dispatch` dry-run（run `41414994385`）⇒ **completed success**，
+  判据 ①②③④ 全绿、发布步骤按预期 `skipped`；真发布 run `41415494232`（见 STATE 后续记录）。
+  已存在的 tag 一律**拒绝重发**（要换 tag —— 这是不可变性的落地，不是麻烦）。
+
 ## 现在是什么（2026-11-02 · ★ 三产物全部实编 + wasm32 零 atomics 实测）
 
 - **用户点令**：「**32，64，non-free 三个产物都编译出来**」+「**32 版一定是完全去除
