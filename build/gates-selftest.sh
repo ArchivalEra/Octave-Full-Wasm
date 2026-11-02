@@ -45,6 +45,7 @@ build/forge-fetch.py --selftest
 build/113/check-einfacht-upgrade.sh --selftest
 build/113/check-one-line-three-products.sh --selftest
 build/113/var-audit.mjs --selftest
+build/make-release.py --selftest
 build/113/coi-sw-origin-selftest.mjs --selftest
 build/113/check-rust-toolchain.py --selftest
 build/113/oct-arch.py --selftest
