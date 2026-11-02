@@ -149,25 +149,60 @@ BASELINE_WASM=
 EXTRA_LDFLAGS=
 DEPS=/usr/local
 DEPS_ROOT=/src/deps
-GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
-GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
+GL4ES_A=/src/libwork/gl4es-src${LANE_TAG:-}/lib/libGL.a
+GLU_A=/src/libwork/glu-webgl${LANE_TAG:-}/lib/libGLU.a
 EOF
       echo "MAXIMUM_MEMORY=2GB"
       ;;
     scalar|product)
+      # ⚠️ 下面几行**必须用 echo**（单引号 heredoc 里 `${LANE_TAG:-}` 不会被展开 ——
+      #   写成 `DEPS=/usr/local${LANE_TAG:-}` 结果会原样输出那段字面，实测踩到）。
       cat <<'EOF'
 MAIN_MODULE_LEVEL=2
 WITH_JSPI=1
-KEEP_LIST=/src/libwork/keep.txt
 LIB_FUNCS=emscripten_run_script,__assert_fail,abort,exit
 EXPORT_IF_DEFINED=
 EXPORTED_FUNCS=_main
-OCT_SCAN_DIRS=/src/octs-site
-DEPS=/usr/local
-DEPS_ROOT=/src/deps
-GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a
-GLU_A=/src/libwork/glu-webgl/lib/libGLU.a
 EOF
+      # ★ 2026-11-02：**保活闸门扫的 .oct 必须与主模块同一工具链**（这一条把 product
+      #   卡了整整一轮）。实测：`octs-site/oct/*.oct` 是 **9-22（emsdk 5.0.7）** 编的，
+      #   它们导入 `_Unwind_CallPersonality`（5.x 的 `-fwasm-exceptions` 用它），
+      #   而 **6.0.12 的主模块不再提供这个符号** ⇒ 差分判据报"新缺 1 个"、RC=4。
+      #   6.0.12 重编的那批（`octs-site-6012-w32`，10-12）**不含**该符号 ⇒ 同一工具链，对得上。
+      #   ⚠️ 目录命名不是一条规则能推的（`octs-site` / `octs-site-6012-w32`）⇒
+      #      `OCT_SCAN_DIRS` 显式可覆盖；没给时才按 tag+架构拼。
+      if [ -n "${OCT_SCAN_DIRS:-}" ]; then
+        echo "OCT_SCAN_DIRS=$OCT_SCAN_DIRS"
+      elif [ -n "${LANE_TAG:-}" ]; then
+        echo "OCT_SCAN_DIRS=/src/octs-site${LANE_TAG}-w32 /src/octs-site${LANE_TAG}-pkg-w32"
+      else
+        echo "OCT_SCAN_DIRS=/src/octs-site"
+      fi
+      # ★ 2026-11-02：wasm32 分支的 DEPS/GL 也必须跟 LANE_TAG —— 原先写死 `/usr/local`，
+      #   而 -6012 车道的 wasm32 树是用 `/usr/local-6012` + `/src/deps-6012` 编的
+      #   ⇒ 拿错前缀的库去链，架构/ABI 都可能错配（product 构建的另一面墙）。
+      # ★ 2026-11-02：wasm32 的保活集叫 `keep${LANE_TAG}-w32.txt`（**带 -w32**）——
+      #   实测：写成 `keep-6012.txt` 会用**w64 车道扫出来的**那份 ⇒ 32 位产物缺
+      #   `_Unwind_CallPersonality`（w64 侧不需要它，所以那份清单里没有）⇒
+      #   保活闸门报"1 个符号在 M2 下解析不了"、RC=4。
+      #   目录命名同样不是一条规则能推出来的（`keep-6012-w32` / `keep-6012-w64`）⇒
+      #   `KEEP_LIST` 显式可覆盖，没给时才按模式拼。
+      if [ -n "${KEEP_LIST:-}" ]; then
+        echo "KEEP_LIST=$KEEP_LIST"
+      elif [ -n "${LANE_TAG:-}" ]; then
+        echo "KEEP_LIST=/src/libwork/keep${LANE_TAG}-w32.txt"   # 带 tag 的车道：-w32 变体
+      else
+        echo "KEEP_LIST=/src/libwork/keep.txt"                  # 历史默认（逐字节不变）
+      fi
+      echo "DEPS=/usr/local${LANE_TAG:-}"
+      echo "DEPS_ROOT=/src/deps${LANE_TAG:-}"
+      # ★ 2026-11-02：**wasm32 的 GL 归档不跟 LANE_TAG** —— 这条线必须**零 atomics**
+      #   （用户点令："32 版一定是完全去除线程化的，这条线保留一切兼容性"）。
+      #   实测判据：`atomics_scan gl4es-src/lib/libGL.a` ⇒ 69/69 成员**不带 atomics**，
+      #   那正是无 COI 环境要的。若跟 tag 指到 `gl4es-src-6012`（那套是给线程车道建的），
+      #   就等于把 atomics 引入 wasm32 线 —— **那会毁掉这条线存在的全部理由**。
+      echo "GL4ES_A=/src/libwork/gl4es-src/lib/libGL.a"
+      echo "GLU_A=/src/libwork/glu-webgl/lib/libGLU.a"
       echo "MAXIMUM_MEMORY=2GB"
       if [ "$m" = product ]; then
         echo "EXTRA_LDFLAGS=-L/src/deps/lapack-simd/lib"
@@ -224,9 +259,12 @@ EOF
       #     漏了它会给标准版**去掉 -pthread** ⇒ 产物根本不是 w64 线（实测踩到一次）。
       if [ "$m" = w64 ] || [ "$m" = w64-std ]; then
         if [ -n "${E2_OPENBLAS:-}" ]; then
-          echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+          echo "EXTRA_LDFLAGS=-L$E2_OPENBLAS -L/src/deps-w64/lapack-simd/lib"
         else
-          echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib -pthread -sPTHREAD_POOL_SIZE=4"
+          # ⚠️ 这里**不再**写 -pthread：线程轴由 `WITH_THREADS` 声明、由 link-web.sh 的
+          #   THREADS 数组喂到**编译与链接两处**（写在这儿只影响链接行 ⇒ main.o 不带
+          #   atomics ⇒ 实测 w64-std 首次构建就崩在 --shared-memory 那一行）。
+          echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib"
         fi
       else
         echo "EXTRA_LDFLAGS=-L/src/deps-w64/lapack-simd/lib"
@@ -270,6 +308,17 @@ EOF
   #   product/threads 仍默认 0（wasm32-final 冻结，不再做 wasm32 车道活）。
   # ★ w64-std = **标准版**：默认 0（不链 librustsort.a）。这与 w64 的默认 1 是个**硬分叉**，
   #   不是同一个模式的两种配置 —— 两个模式产出两个产物（许可边界不同）。
+  # ★ 2026-11-02：**线程轴也必须由模式表声明**（不再是 EXTRA_LDFLAGS 里的 -pthread）。
+  #   为什么：`-pthread` 写在 EXTRA_LDFLAGS 里只影响**链接行**，而 link-web.sh 编
+  #   `main.o` / `webgl_toolkit.o` 时**读不到它** ⇒ main.o 不带 atomics ⇒
+  #   `wasm-ld: error: --shared-memory is disallowed by main.o`（实测：w64-std 首次构建
+  #   就死在这一行）。这正是本仓记过的"两处旗标不对称"（MEMORY64 那次）。
+  #   ⇒ 线程轴升格为**模式属性**，link-web.sh 用同一个数组喂**编译与链接两处**。
+  case "$m" in
+    w64|w64-std) echo "WITH_THREADS=1"; echo "PTHREAD_POOL_SIZE=4" ;;
+    *)           echo "WITH_THREADS=0"; echo "PTHREAD_POOL_SIZE=" ;;   # wasm32 线永远单线程
+  esac
+
   case "$m" in
     w64)      echo "RUST_SORT=${RUST_SORT:-1}" ;;
     w64-std)  echo "RUST_SORT=${RUST_SORT:-0}" ;;
@@ -280,7 +329,16 @@ EOF
   # ★ 仓库架构批 B4：上游树路径**透传**（provision/等价性验证用）。表从环境读——
   #   操作员设 OCT_TREE=... 时透传给 link-web.sh；不设则空 = 脚本默认路径。
   #   与 E2_OPENBLAS 同族：操作员输入由表读取，不许在表外手设。
-  echo "OCT_TREE=${OCT_TREE:-}"
+  # ★ 2026-11-02：**两个变量名必须对齐** —— relink 读 `OCT`，link-web 读 `OCT_TREE`。
+  #   实测：给 relink 传 `OCT=/src/work/octave-6012-w32` 编 product 时，link-web 那边
+  #   `OCT_TREE` 是空的 ⇒ 它回落 `octave-11.3.0`（那是 **w64** 树）⇒ 链进 wasm64 对象
+  #   ⇒ `wasm-ld: must specify -mwasm64`。守卫放过了（它只看 `$OCT/Makefile`），
+  #   而真链接用的是另一棵树 —— 这是最坏的一种：守卫绿、产物错。
+  #   口径：`OCT_TREE` 未设时**从 `OCT` 推**，让两个消费者的输入恒一致。
+  echo "OCT_TREE=${OCT_TREE:-${OCT:-}}"
+  # ★ 2026-11-02：安装树也必须可覆盖（与 OCT_TREE 同族，同一批踩到的）——
+  #   编 wasm32 产物时源码树是 `octave-6012-w32`，安装树却是 w64 前缀 ⇒ 前缀守卫拒。
+  echo "INST_TREE=${INST_TREE:-}"
 }
 
 # ── 声明（declared）：模式**承诺**产物里该有什么。由 check-build-manifest.py 逐条核对 ──
@@ -316,9 +374,13 @@ EOF
       [ -n "${E2_OPENBLAS:-}" ] && _e2=', "e2_openblas": true'
       # ★ 工单 59：分配器声明**从模式表推出**（单一真值来源）—— 别从环境读：explain 的
       #   调用路径上表变量还没 export，从环境读会和真链分叉（explain 是文档，文档不能撒谎）。
+      # ★ 2026-11-02：**不再靠 case 白名单**（原写法 `case "$m" in w64)` 让 w64-std 漏了
+      #   这条声明 ⇒ 产物导出 mi_version 而 declared 无 malloc ⇒ 出厂核对
+      #   `verdict=rejected`（实测：w64-std 首次构建 RC=3 真因）。
+      #   判据只看**表里 MALLOC 的值** ⇒ 以后再加模式不会漏（"追加知识覆盖全部产地"）。
       _malloc_decl=""
-      case "$m" in w64) [ "$(mode_table "$1" | sed -n 's/^MALLOC=//p')" = mimalloc ] \
-        && _malloc_decl=', "malloc": "mimalloc"' ;; esac
+      [ "$(mode_table "$1" | sed -n 's/^MALLOC=//p')" = mimalloc ] \
+        && _malloc_decl=', "malloc": "mimalloc"' 
       # ★ 工单 63：rust_sort 声明从模式表推出（w64 亦 env 透传，nightly build-std 库）。
       _rust_decl=""
       [ "$(mode_table "$1" | sed -n 's/^RUST_SORT=//p')" = 1 ] \
@@ -491,10 +553,19 @@ cmd_link() {
   #   `verdict=ok`、三条 SHA、"链得过" **全都绿**（工单 28 的同族盲区，实测过）。
   #   判据从**树自己**读（`Makefile` 的 prefix 行），不信任何人的记忆。
   local want
-  case "$m" in
-    w64|w64-base) want=/src/work/octave-install${LANE_TAG:-}-w64 ;;
-    *)            want=/src/work/octave-install ;;
-  esac
+  # ★ 2026-11-02：**显式 INST_TREE 优先**（比"按模式拼路径"更可靠）——
+  #   实测：-6012 车道的 wasm32 安装树叫 `octave-install-6012-w32`（带 `-w32` 后缀），
+  #   而按 `octave-install${LANE_TAG}` 拼出来是 `octave-install-6012`（无后缀）⇒ 拼不对。
+  #   仓里的目录命名**不是**一条规则能推出来的 ⇒ 操作员显式给，脚本就认它。
+  #   没给时才按模式拼（保持历史行为逐字不变）。
+  if [ -n "${INST_TREE:-}" ]; then
+    want="$INST_TREE"
+  else
+    case "$m" in
+      w64|w64-std|w64-base) want=/src/work/octave-install${LANE_TAG:-}-w64 ;;
+      *)                    want=/src/work/octave-install${LANE_TAG:-} ;;
+    esac
+  fi
   if [ -f "$OCT/Makefile" ]; then
     local have
     have=$(sed -n 's/^[[:space:]]*prefix[[:space:]]*=[[:space:]]*//p' "$OCT/Makefile" | head -1)
@@ -575,7 +646,7 @@ cmd_rebuild() {
   #   的树，却用 `-pthread -sMEMORY64=1` 的编译器编 ⇒ 树自相矛盾，链到 wasm-opt 才炸
   #   （`call param types must match`，而那批 f2c ABI 不匹配本来是被容忍的）。
   #   9/28 的 w64 树是 `build-w64-lane.sh` 建的（那里传 WITH_THREADS=1）⇒ 又是"前置只在车道脚本里"。
-  local _th=0; case "$m" in w64) _th=1 ;; esac
+  local _th; _th="$(mode_table "$m" | sed -n 's/^WITH_THREADS=//p')"; _th="${_th:-0}"
   echo "  ① cd $OCT && WITH_OPENGL=1 WITH_GL2PS=1 WITH_FREETYPE=1 WITH_FONTCONFIG=1 WITH_THREADS=$_th bash $HERE/configure-113-full.sh"
   echo "  ② cd $OCT && emmake make clean      # 刻意强制：不信任 config.h 的新鲜度"
   echo "  ③ cd $OCT && emmake make -k -j$JOBS"
@@ -589,7 +660,7 @@ cmd_rebuild() {
   _deps="$(mode_table "$m" | sed -n 's/^DEPS=//p')"
   _droot="$(mode_table "$m" | sed -n 's/^DEPS_ROOT=//p')"
   case "$m" in
-    w64|w64-base) _thost=wasm64-unknown-emscripten ;;
+    w64|w64-std|w64-base) _thost=wasm64-unknown-emscripten ;;
     *)            _thost=wasm32-unknown-emscripten ;;
   esac
   [ -n "$_deps" ] || { echo "FATAL: 模式 $m 的表里没有 DEPS" >&2; exit 2; }
@@ -636,8 +707,8 @@ cmd_rebuild() {
     #   ⇒ 树 configure 出 --prefix=/src/work/octave-install-w64（无 -6012），
     #   而前缀守卫（link 侧）要 octave-install${LANE_TAG}-w64 ⇒ rebuild 完了 link 仍被拦。
     #   两处必须同一个式子 —— 这正是"追加知识要覆盖全部产地"的又一例。
-    w64|w64-base) inst=/src/work/octave-install${LANE_TAG:-}-w64 ;;
-    *)            inst=/src/work/octave-install${LANE_TAG:-} ;;
+    w64|w64-std|w64-base) inst=/src/work/octave-install${LANE_TAG:-}-w64 ;;
+    *)                    inst=/src/work/octave-install${LANE_TAG:-} ;;
   esac
   echo "   车道 install 前缀：$inst（configure 的 \$2；不传就会烘死 product 路径 —— 工单 28）"
   [ -d "$inst" ] || { echo "FATAL: 车道安装树不存在：$inst（先建它，别拿 product 树凑）" >&2; exit 2; }
@@ -956,6 +1027,35 @@ cmd_selftest() {
     bad=1
   fi
   n=$((n + 1))
+  # ★ 2026-11-02（w64-std 首次构建 RC=3 的真因）：**declared 的 malloc 必须跟表走**，
+  #   不许靠 `case "$m" in w64)` 白名单 —— 白名单漏了新模式 ⇒ 产物导出 mi_version 而
+  #   declared 没有 malloc ⇒ 出厂核对 verdict=rejected（链接明明成功）。
+  #   判据：MALLOC=mimalloc 的模式，declared 里就必须有 "malloc": "mimalloc"。
+  _ds="$(bash "$0" explain w64-std 2>/dev/null | grep -c '\"malloc\": \"mimalloc\"' || true)"
+  _dw="$(bash "$0" explain w64 2>/dev/null | grep -c '\"malloc\": \"mimalloc\"' || true)"
+  _dp="$(bash "$0" explain product 2>/dev/null | grep -c '\"malloc\"' || true)"
+  if [ "${_ds:-0}" -ge 1 ] && [ "${_dw:-0}" -ge 1 ] && [ "${_dp:-0}" -eq 0 ]; then
+    echo "PASS | ★ declared 的 malloc 跟模式表走（w64/w64-std 有、product 无）"
+  else
+    echo "fail | malloc 声明与模式表分叉（std=$_ds w64=$_dw product=$_dp）"; bad=1
+  fi
+  n=$((n + 1))
+  # ★ 2026-11-02（用户点令：「32 版一定是完全去除线程化的，这条线保留一切兼容性」）：
+  #   **wasm32 线必须零线程痕迹** —— 判据三件事全都要成立：
+  #     ① WITH_THREADS=0；② PTHREAD_POOL_SIZE 为空；③ GL 归档指**不带 tag**的 wasm32 那份
+  #        （`gl4es-src` 实测 69/69 成员不带 atomics；`-6012` 那套是给线程车道建的）。
+  #   任何一条破了 ⇒ wasm32 线失去"无 COI 也能跑"这个存在理由。
+  _wt="$(bash "$0" exports product 2>/dev/null | sed -n 's/^WITH_THREADS=//p')"
+  _ps="$(bash "$0" exports product 2>/dev/null | sed -n 's/^PTHREAD_POOL_SIZE=//p')"
+  _gl="$(bash "$0" exports product 2>/dev/null | sed -n 's/^GL4ES_A=//p')"
+  _glw="$(bash "$0" exports w64-std 2>/dev/null | sed -n 's/^GL4ES_A=//p')"
+  if [ "$_wt" = "0" ] && [ -z "$_ps" ] && \
+     printf '%s' "$_gl" | grep -qv -- '-6012' && printf '%s' "$_glw" | grep -q -- '-w64'; then
+    echo "PASS | ★ wasm32 线零线程痕迹（WITH_THREADS=0 / 无池 / GL 不跟 tag）；w64 用 w64 GL"
+  else
+    echo "fail | wasm32 线混入线程痕迹（WITH_THREADS=$_wt pool=[$_ps] gl=$_gl w64gl=$_glw）"; bad=1
+  fi
+  n=$((n + 1))
   # 反向：把 w64-std 从白名单里摘掉 ⇒ 必须被拒（证明它真的是个"登记过的模式"）
   if bash "$0" exports w64-std >/dev/null 2>&1; then
     echo "PASS | ★ w64-std 可被 exports 识别（不是未知模式）"
@@ -1025,7 +1125,7 @@ case "$SUB" in
 esac
 
 [ -n "$MODE" ] || { echo "FATAL: 要给一个模式名（$(modes_list)）" >&2; usage >&2; exit 2; }
-case "$MODE" in product|scalar|m1|w64|w64-base) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
+case "$MODE" in product|scalar|m1|w64|w64-std|w64-base) ;; *) echo "FATAL: 未知模式 '$MODE'（可选：$(modes_list)）" >&2; exit 2 ;; esac
 [ -n "$OUT" ] || OUT="$(out_default "$MODE")"
 
 case "$SUB" in

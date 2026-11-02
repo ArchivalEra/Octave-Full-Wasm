@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "generated": "2026-11-01T18:41:24+0800",
+ "generated": "2026-11-02T13:23:17+0800",
  "_why": "事实台账：每条 = 一个**测出来**的值 + 复跑命令 + 出处。别手改，跑 zreflect/facts.py。",
  "facts": {
   "wasm_v128": {
@@ -366,10 +366,10 @@
    "replay": false
   },
   "w64_wasm_sha": {
-   "value": "0225d0b374f3bed931dd61333476c4133c0526e35d0aa509a053fe0b7e39a82c",
+   "value": "78dea75ce706f8f37c97765b7898e9d827320c526fe84f976c1b9ce0ba542923",
    "cmd": "sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm | cut -d' ' -f1",
    "source": "w64-artifacts/octave.wasm",
-   "measured_at": "2026-10-31T21:48:55+0800",
+   "measured_at": "2026-11-02T13:21:39+0800",
    "first_seen": "2026-10-19"
   },
   "w64_build_recipe_ok": {
@@ -395,10 +395,10 @@
    "witness_expect": "match"
   },
   "w64_wasm_bytes": {
-   "value": 31246819,
+   "value": 30530297,
    "cmd": "stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm",
    "source": "w64-artifacts/octave.wasm",
-   "measured_at": "2026-10-31T21:48:55+0800",
+   "measured_at": "2026-11-02T13:23:17+0800",
    "first_seen": "2026-10-19"
   },
   "w64_cand_verdict": {

@@ -1560,8 +1560,8 @@
 | `w64_vs_netlib_lu1500` | **3.8** | 2026-10-31T21:48:57+0800 | `派生：native-baseline.json 的 netlib.lu1500 ÷ bench-ob-w64.log 的 lu 1500` |
 | `w64_vs_netlib_matmul1000` | **7.8** | 2026-10-31T21:48:57+0800 | `派生：native-baseline.json 的 netlib.matmul1000 ÷ bench-ob-w64.log 的 matmul 1000` |
 | `w64_wasm64` | **True** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/w64-artifacts 的 measured.wasm64` |
-| `w64_wasm_bytes` | **31246819** | 2026-10-31T21:48:55+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm` |
-| `w64_wasm_sha` | `0225d0b374f3bed9…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm | cut -d' ' -f1` |
+| `w64_wasm_bytes` | **30530297** | 2026-11-02T13:23:17+0800 | `stat -c %s /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm` |
+| `w64_wasm_sha` | `78dea75ce706f8f3…` | 2026-11-02T13:21:39+0800 | `sha256sum /mnt/hdd/octave-wasm-build/w64-artifacts/octave.wasm | cut -d' ' -f1` |
 | `wasm_bytes` | **29632229** | 2026-10-31T21:48:55+0800 | `stat -c%s /mnt/hdd/octave-wasm-build/site/octave.wasm` |
 | `wasm_sha` | `1ed3e528561e4475…` | 2026-10-31T21:48:55+0800 | `sha256sum /mnt/hdd/octave-wasm-build/site/octave.wasm | cut -d' ' -f1` |
 | `wasm_v128` | **4752** | 2026-10-31T21:48:55+0800 | `读 /mnt/hdd/octave-wasm-build/site/octave.build.json 的 measured.simd.v128` |

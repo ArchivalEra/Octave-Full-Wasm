@@ -25,7 +25,20 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${1:-/src/websrc/out}"
 # ★ 仓库架构批（B4）：树路径可覆盖（上游 fork 供给/provision 用；默认现役路径不变）
 OCT="$(cd "${OCT_TREE:-/src/work/octave-11.3.0}" && pwd)"
-INST=/src/work/octave-install
+# ★ 2026-11-02：**INST 也可覆盖**（原先写死 ⇒ 同一个"两处不对称"再犯一次）：
+#   用 `OCT_TREE=/src/work/octave-6012-w32` 编 wasm32 产物时，源码树换了而 INST 还指
+#   w64 的安装树 ⇒ 前缀守卫报「树的 configure 前缀是 …-6012-w64，但模式 product 要
+#   octave-install」（实测：product 首次构建就死在这）。
+#   口径：`INST_TREE` 显式优先；否则**从 OCT_TREE 推**（`octave-<tag>` → `octave-install-<tag>`），
+#   推不出来才回落到历史默认。
+INST="${INST_TREE:-}"
+if [ -z "$INST" ]; then
+  case "$OCT" in
+    */octave-*) INST="$(dirname "$OCT")/octave-install-${OCT##*/octave-}" ;;
+    *)          INST=/src/work/octave-install ;;
+  esac
+fi
+echo "== 安装树：INST=$INST（源码树 $OCT）"
 MV="11.3.0"
 M="$INST/share/octave/$MV/m"
 # M_SRC：预载的**源**树。默认就是安装树；`build/prerender-m-docstrings.py` 会产出一棵
@@ -448,6 +461,21 @@ if [ "${MEMORY64:-0}" = "1" ]; then
   echo "== MEMORY64=1：wasm64（main.o 与链接行都必须带它，否则 wasm-ld 拒混编）"
 fi
 
+# WITH_THREADS=1（2026-11-02）：**线程轴**。与 MEMORY64 同款纪律，而且它踩过同一个坑。
+# ★ 为什么必须有这个数组（实测事故，w64-std 首次构建的第一面墙）：
+#   `-pthread` 原先只写在 `EXTRA_LDFLAGS`（模式表给的）里 —— 那是**链接行**的旗标。
+#   而本脚本编 `main.o` / `webgl_toolkit.o` 时**读不到它** ⇒ 那两个对象**不带 atomics**
+#   ⇒ 链接期 `wasm-ld: error: --shared-memory is disallowed by /src/websrc/main.o
+#   because it was not compiled with 'atomics' or 'bulk-memory' features.`
+#   这正是下面 MEM64 注释里点名的"两处旗标不对称"—— 只是这次漏的是线程轴，不是 64 位轴。
+# ★ 判据来源：`WITH_THREADS` 是**模式表**的声明（relink.sh），不是从别人的旗标串里抄 `-pthread`。
+#   `-sPTHREAD_POOL_SIZE` 只属于链接行（编译期不认识它），所以池大小单独给。
+THREADS=()
+if [ "${WITH_THREADS:-0}" = "1" ]; then
+  THREADS=( -pthread )
+  echo "== WITH_THREADS=1：多线程（main.o/toolkit.o/链接行三处都带 -pthread；池 ${PTHREAD_POOL_SIZE:-4}）"
+fi
+
 # P5_TOOLKIT=1：把 **webgl graphics toolkit 编进主模块**（不是 `.oct`）。
 # 为什么必须进主模块：`opengl_functions`（GL 函数表）的**虚表跨模块会失效** ——
 # `opengl_renderer`（opengl-on 后编在主模块里）通过 `m_glfcns.xxx()` 回调，
@@ -475,6 +503,7 @@ if [ "${P5_TOOLKIT:-0}" = "1" ]; then
        -I/src/vendor/stb \
        -DHAVE_CONFIG_H ${P5_DEF} ${P5_GLPROBE:+ -DP5TK_GLPROBE} ${P5_TRACE:+ -DP5TK_TRACE} -std=c++17 \
        ${MEM64[@]+"${MEM64[@]}"} \
+       ${THREADS[@]+"${THREADS[@]}"} \
        "${EXC_FLAGS[@]}" -c "$P5_SRC" -o "$P5_TK_OBJ"
   echo "   $(basename "$P5_TK_OBJ") = $(stat -c%s "$P5_TK_OBJ") 字节"
   P5_OBJS=( "$P5_TK_OBJ" )
@@ -489,6 +518,7 @@ em++ -DHAVE_CONFIG_H \
      -I"$INST/include" -I"$INST/include/octave-$MV" -I"$INST/include/octave-$MV/octave" \
      ${P5_OBJS:+ $P5_DEF} \
      ${MEM64[@]+"${MEM64[@]}"} \
+     ${THREADS[@]+"${THREADS[@]}"} \
      "${EXC_FLAGS[@]}" -c "$SRC/main.cc" -o "$SRC/main.o"
 echo "   main.o = $(stat -c%s "$SRC/main.o") 字节"
 
@@ -621,6 +651,8 @@ em++ --bind \
   "${SFLAGS[@]}" \
   ${GL_ES_FLAGS[@]+"${GL_ES_FLAGS[@]}"} \
   ${EXTRA_LDFLAGS:-} \
+  ${THREADS[@]+"${THREADS[@]}"} \
+  ${WITH_THREADS:+ -sPTHREAD_POOL_SIZE=${PTHREAD_POOL_SIZE:-4}} \
   ${MALLOC_FLAGS[@]+"${MALLOC_FLAGS[@]}"} \
   ${RUST_FLAGS[@]+"${RUST_FLAGS[@]}"} \
   ${TI_TYPEINFO_FLAGS[@]+"${TI_TYPEINFO_FLAGS[@]}"} \
