@@ -164,23 +164,24 @@ Den Interpreter in eine eigene Seite einbetten: [`docs/embed-api.md`](docs/embed
 ```
 group                           files        bytes
 site/                             228     332.8 MB
-build/                            462       3.4 MB
+release/                           13     115.7 MB
+build/                            463       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     789.3 KB
+(root)                             13     790.0 KB
 upstream-patches/                  20     435.1 KB
 zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
 bridge/                            20     303.5 KB
-mail/                              52     253.9 KB
+mail/                              53     259.4 KB
 vendor/                            21     123.5 KB
 .githooks/                         15     106.2 KB
 docs/                              14      77.9 KB
 dist/                               2      23.8 KB
 reflect-hooks/                      6      14.9 KB
-.github/                            3       5.8 KB
+.github/                            4      12.1 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1145     340.1 MB
+(total)                          1161     455.8 MB
 ```
 
 Dateiliste: `git ls-files` — dieser Block ist eine Zusammenfassung, damit das README lesbar bleibt.
