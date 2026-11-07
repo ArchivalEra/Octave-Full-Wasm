@@ -116,6 +116,14 @@
   不在 measure() 产出）⇒ 正解是**补进产出**（输入全在、cmd 可复跑），不是
   --allow-drop（键都活着，非死档）。
 
+- **★ isui.ren/static 整站打不开**（2026-11-07 实测：根/README/contract/tools/catalogue
+  逐条实测都打不开；11-02 发 release 时还活着）—— Shirone 站侧未通知变更。两件处置：
+  ① release workflow 校验器来源切到 **Content 仓 tools/（git clone）** + 指纹核验保留
+    （ed877ee2 未变 ⇒ 拉到的仍是审过的那份）——渠道贴产地，渠道寿命=产地寿命
+    （照 LLVM 管线同款）；② 投信 Static-Contract `004` 请转 Shirone 核对
+    （catalogue 消费方同样断了）。上游同族问题已在 Einfacht #27/#30 有承——
+    本仓实例（env 载体污染型）已补进 #30 评论；#27 的②③覆盖 doc_names 出口。
+
 - **结果**：`registry --run commit` ⇒ **ran 9 / off 7 / failed 0**（闸门 7→9：+i18n +lint）；
   gates-selftest 两台全绿（平台 17 / 本仓 56）；facts 自证 **15/0**（+2 边界反例）；
   mail-read 9/0；check-einfacht-upgrade 结算件 rc=0（签名自适应）。端口形状补丁
