@@ -214,9 +214,19 @@ def _has_principles_doc():
 
 
 def _doc_names():
-    """有机器块的文档名（按 `_block_homes` 的归属派生，不手写名单）。"""
+    """有机器块的文档名（按 `_block_homes` 的归属派生，不手写名单）。
+
+    ⚠️ PRINCIPLES.md 受 `accepts_principles()` **声明**管辖（2026-11-07，
+    b815cd1 接入实测）：本仓没建该文件、也未曾接受原则 ⇒ `--check` 对它
+    `doc_missing_check` 是拿"没接受的原则"当"承诺过的承诺"查 —— 假红。
+    上游 b815cd1 给了显式出口（`REFLECT_NO_PRINCIPLES=1` / 文件不存在 ⇒ 不接受），
+    判据面必须同样尊重这个出口，否则"不接受"这个决定在渲染面被尊重、
+    在校验面被拒绝 —— 两个产地分叉（本仓最贵的一类债）。
+    """
     import doc  # noqa: PLC0415
-    return (_doc(), doc.PRINCIPLES)
+    if _has_principles_doc():
+        return (_doc(), doc.PRINCIPLES)
+    return (_doc(),)
 
 
 def _block_homes(ledger):
