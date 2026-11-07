@@ -164,7 +164,7 @@ master 线必须 COI+多线程，无 COI 唯一线 = wasm32，HISTORY §5.109）
 
 ### M1 / M2
 `MAIN_MODULE=1`（不做 DCE，导出全部符号）/ `=2`（DCE，只导出保活集）。判据**从产物量**，
-不看命令行：导出段条目数 M2 ≈ 710、M1 ≈ 44987（63× 差距）。
+不看命令行：导出段条目数 M2 ≈ [[exported_functions]]、M1 ≈ 44987（63× 差距）。
 **证据：** `site/octave.build.json`
 
 ### 重链

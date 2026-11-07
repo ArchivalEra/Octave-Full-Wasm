@@ -6,6 +6,12 @@ Einfacht 的 `zreflect/facts.py` 只提供**机制**（守卫 / 渲染 / 收尾�
 回归汇总、三线车道、Rust 补丁线、热点审计……全部照旧（每条带复跑命令 + 出处）。
 
 ⚠️ 本模块**自包含**：不 import build/lib（那里也有个 gate.py，命名会撞）。
+
+PINNED: 本模块的中文全是**台账注记与测量名**（"矩阵乘"、"w64 档条数"、
+PINNED: 复跑命令里的说明）——它们进 `FACTS.json` 的 note/cmd 字段、被
+PINNED: `facts.py --render-doc` 原样写进机器块，是**数据不是用户消息**，
+PINNED: 与 check_questions.py「领域词不进语言包」同一裁定。翻成英文反而让
+PINNED: 台账与 STATE 的中文正文对不上。模块级声明覆盖全文件。
 """
 import glob
 import json
@@ -47,7 +53,8 @@ def _selftest_pass_count(script):
     import re as _re
     try:
         r = subprocess.run([sys.executable or "python3", script, "--selftest"],
-                           capture_output=True, text=True, cwd=REPO, timeout=120)
+                           capture_output=True, text=True, encoding="utf-8",
+                           cwd=REPO, timeout=120)
     except (OSError, subprocess.SubprocessError):
         return None
     m = _re.search(r"自证：(\d+) PASS", r.stdout)
@@ -55,7 +62,14 @@ def _selftest_pass_count(script):
 
 
 def measure():
-    """量一遍全部事实（本仓的策略/数据）。守卫与写盘由 zreflect/facts.py 的平台负责。"""
+    """量一遍全部事实（本仓的策略/数据）。守卫与写盘由 zreflect/facts.py 的平台负责。
+
+    PINNED: 本函数体内全部中文字符串都是**台账数据**（fact() 的 note/cmd 参数、
+    PINNED: 测量名如"矩阵乘"）—— 它们进 FACTS.json、被 --render-doc 原样写进机器块，
+    PINNED: 是**数据不是用户消息**（与 check_questions.py 领域词同一裁定：AST 分不清
+    PINNED: 消息与数据，这里以声明面说清）。翻英文会让台账与 STATE 中文正文脱节。
+    PINNED: 模块 docstring 也有同款声明（双层，防本函数被改名后声明丢失）。
+    """
     facts = {}
 
     # ── 产物侧：读**产物身份证**（A1 起它在 site/ 里；读数不用重链）────────────────
@@ -91,7 +105,8 @@ def measure():
         p_ = os.path.join(SITE, rel)
         if not os.path.exists(p_):
             continue
-        h = subprocess.run(["sha256sum", p_], stdout=subprocess.PIPE, text=True).stdout.split()[0]
+        h = subprocess.run(["sha256sum", p_], stdout=subprocess.PIPE, text=True,
+                           encoding="utf-8").stdout.split()[0]
         facts[key] = fact(h, "sha256sum %s" % p_, "site/%s" % rel)
         if rel == "octave.wasm":
             facts["wasm_bytes"] = fact(os.path.getsize(p_), "stat -c%%s %s" % p_, "site/octave.wasm")
@@ -493,7 +508,7 @@ def measure():
     #   replay=True：复跑输出就是 "ok"，闸门逐字对（契约见脚本 docstring）。
     _g5 = subprocess.run([sys.executable, os.path.join(REPO, "build", "113",
                                                        "check-rust-toolchain.py")],
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, encoding="utf-8")
     facts["rust_patch_toolchain_ok"] = fact(
         "ok" if _g5.returncode == 0 else "red:%d" % _g5.returncode,
         "python3 build/113/check-rust-toolchain.py",
@@ -1525,4 +1540,46 @@ def measure():
         _c = _v.get("cmd", "")
         if _c.startswith("sha256sum ") and "|" not in _c:
             _v["cmd"] = _c + " | cut -d' ' -f1"
+
+    # ── 补 5 个"手工批"键（2026-11-07，b815cd1 接入时 guard.refuse_dropped 抓到）：
+    #   它们在工单 73 / 收件 067 批手工写进 FACTS.json，但不在 measure() 产出里 ⇒
+    #   新层重测时"掉条"被 fail-closed 拒（guard 的判据是对的：键在台账、重测没产出，
+    #   就是"量测面覆盖不全"）。5 键的输入全在、cmd 可复跑 ⇒ 正解是**补进产出**，
+    #   不是 --allow-drop（那 5 个键都活着，不是死档）。
+    _W64LOG = "/mnt/hdd/octave-wasm-build/w64-logs/cache-bytes-20261031.log"
+    if os.path.exists(_W64LOG):
+        _m = {"first": "cache_first_bytes", "second": "cache_reload_bytes"}
+        _txt = open(_W64LOG, encoding="utf-8", errors="replace").read()
+        for _tag, _key in _m.items():
+            # ⚠️ 提取用纯 Python（re 无 \K；台账 cmd 里的 grep -oP 形状留给 shell 复跑）
+            _mm = re.search(_tag + r"=(\d+)", _txt)
+            if _mm:
+                facts[_key] = fact(int(_mm.group(1)),
+                                   "grep -oP '%s=\\K[0-9]+' %s" % (_tag, _W64LOG),
+                                   _W64LOG,
+                                   "HTTP 缓存三态实测（%s 次传输字节）" % _tag)
+    _PYD = "/mnt/hdd/octave-wasm-build/site/assets/pyodide/pyodide"
+    _pyd_files = ["pyodide.asm.wasm", "pyodide.asm.mjs", "python_stdlib.zip",
+                  "sympy-1.14.0-py3-none-any.whl", "mpmath-1.4.1-py3-none-any.whl",
+                  "pyodide.js", "pyodide.mjs", "python_cli_entry.mjs"]
+    if all(os.path.exists(os.path.join(_PYD, _f)) for _f in _pyd_files):
+        facts["pyodide_min_closure_bytes"] = fact(
+            sum(os.path.getsize(os.path.join(_PYD, _f)) for _f in _pyd_files),
+            "python3 -c \"import os;d='%s';print(sum(os.path.getsize(d+'/'+f) "
+            "for f in %r))\"" % (_PYD, _pyd_files),
+            "site/assets/pyodide/pyodide/",
+            "Pyodide 最小闭包（symbolic 必需 8 件之和）")
+    for _key, _path, _note in (
+        ("web_pause_oct_bytes",
+         "/mnt/hdd/octave-wasm-build/site/assets/oct/__web_pause_ms__.oct",
+         "symbolic 接缝要 vendor 的第二件（导出 __web_run_js__ 等 6 个兄弟别名）"),
+        ("webshims_js_bytes",
+         "/mnt/hdd/octave-wasm-build/site/assets/m/webshims.js",
+         "symbolic 接缝要 vendor 的第一件（11 个 .m 的自包含 JS 包，bundle-m 产出）"),
+    ):
+        if os.path.exists(_path):
+            facts[_key] = fact(os.path.getsize(_path),
+                               "stat -c '%s' %s" % ("%s", _path),
+                               _path.replace("/mnt/hdd/octave-wasm-build/", ""),
+                               _note)
     return facts

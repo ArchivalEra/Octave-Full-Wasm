@@ -100,13 +100,24 @@ ua = getattr(cf, "_unaccounted_numbers", None)
 want(callable(ua), "#24 符号 _unaccounted_numbers 在位")
 if callable(ua):
     # 造一行正文，含一个明显不在任何台账里的数字
+    # ⚠️ 签名自适应（2026-11-07，b815cd1）：上游把首参 doc_text 去掉了
+    #   （旧 4 参 (doc, facts, bare_min, nlines) ⇒ 新 3 参 (facts, bare_min, nlines)）。
+    #   结算件不该焊死某一代的签名 —— 按 arity 探测，两个时代的机制层都能验。
+    import inspect as _inspect
+    _n = len(_inspect.signature(ua).parameters)
     nlines = [(1, "本轮无关数字 99887766 出现在正文里")]
     facts = {}
-    probs = ua("", facts, 100, nlines)     # bare_min=100
+    if _n == 4:
+        probs = ua("", facts, 100, nlines)      # 旧签名（45ca586..6e4e6e8）
+    else:
+        probs = ua(facts, 100, nlines)          # 新签名（b815cd1+）
     want(bool(probs), "#24 真跑：无出处大数 ⇒ 报")
     # 反向：包进行内代码的数字**不该**报（纪律明说代码里的示例豁免）
     nlines2 = [(1, "示例 `99887766` 在反引号里")]
-    probs2 = ua("", facts, 100, nlines2)
+    if _n == 4:
+        probs2 = ua("", facts, 100, nlines2)
+    else:
+        probs2 = ua(facts, 100, nlines2)
     want(not probs2, "#24 反向：反引号里的数字不报（示例豁免成立）")
 
 # ── #25：带「历史」二字**不再**免死 ──

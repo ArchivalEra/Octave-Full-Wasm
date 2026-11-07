@@ -64,7 +64,7 @@ hand-tuned 24-thread native OpenBLAS on `matmul` (0.0230 s against 0.0089 s).
 Memory-bandwidth-bound workloads (`dot`, `sum`) land on the same figure on every line.
 
 End-to-end Rust sort A/B (a different measurement, on the product artifact rather than the
-kernel): `w64_rustsort_ab_asc_ms` 165 ms, `w64_rustsort_ab_asc_ratio` 0.506 ⇒ 2.0×.
+kernel): [[w64_rustsort_ab_asc_ms]] ms, ratio [[w64_rustsort_ab_asc_ratio]] ⇒ 2.0×.
 Re-run: `bash build/113/sort-ab.sh`.
 
 ## Correctness
@@ -163,9 +163,9 @@ site/                             228     332.8 MB
 release/                           13     115.7 MB
 build/                            463       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     798.1 KB
+(root)                             13     799.9 KB
+zreflect/                          29     599.4 KB
 upstream-patches/                  20     435.1 KB
-zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
 bridge/                            20     303.5 KB
 mail/                              54     265.0 KB
@@ -174,10 +174,10 @@ vendor/                            21     123.5 KB
 docs/                              14      77.9 KB
 dist/                               2      23.8 KB
 .github/                            4      18.1 KB
-reflect-hooks/                      6      14.9 KB
+reflect-hooks/                      6      11.9 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1162     455.8 MB
+(total)                          1162     456.0 MB
 ```
 
 Per-file listing: `git ls-files` — this block is a summary so the README stays readable.

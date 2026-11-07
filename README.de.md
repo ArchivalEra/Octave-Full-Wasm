@@ -66,7 +66,7 @@ sie ein OpenBLAS mit relaxed-SIMD-FMA mitbringen und es multithreaded ausfuehren
 selben Wert.
 
 Der Rust-Sort-A/B ist eine **andere Messung** (am Produktartefakt statt am Kernel):
-`w64_rustsort_ab_asc_ms` 165 ms, `w64_rustsort_ab_asc_ratio` 0.506 ⇒ 2.0×.
+[[w64_rustsort_ab_asc_ms]] ms, Verhaeltnis [[w64_rustsort_ab_asc_ratio]] ⇒ 2.0×.
 Erneut ausfuehren: `bash build/113/sort-ab.sh`.
 
 ## Numerische Korrektheit
@@ -167,9 +167,9 @@ site/                             228     332.8 MB
 release/                           13     115.7 MB
 build/                            463       3.4 MB
 test/                             158       1.1 MB
-(root)                             13     798.1 KB
+(root)                             13     799.9 KB
+zreflect/                          29     599.4 KB
 upstream-patches/                  20     435.1 KB
-zreflect/                          29     415.0 KB
 .scratch/                          83     377.6 KB
 bridge/                            20     303.5 KB
 mail/                              54     265.0 KB
@@ -178,10 +178,10 @@ vendor/                            21     123.5 KB
 docs/                              14      77.9 KB
 dist/                               2      23.8 KB
 .github/                            4      18.1 KB
-reflect-hooks/                      6      14.9 KB
+reflect-hooks/                      6      11.9 KB
 upstream/                          18       4.1 KB
 .zcode/                             1       1.6 KB
-(total)                          1162     455.8 MB
+(total)                          1162     456.0 MB
 ```
 
 Dateiliste: `git ls-files` — dieser Block ist eine Zusammenfassung, damit das README lesbar bleibt.
