@@ -106,15 +106,20 @@ jobs:
 
       # ── ② 契约方校验器（外部权威说了算）──────────────────────────────────
       - name: 取契约方校验器并核指纹
-        # 从**静态契约站点**取，不从本仓复制 —— 要的是"外部说了算"。
-        # 核 sha 是为了防"站点被换了一份工具"这种静默漂移（与 provision-* 同款纪律）。
+        # ★ 2026-11-07：来源从 isui.ren/static 切到 **Content 仓 tools/**（git clone）。
+        #   原因：isui.ren/static 整站 404（Shirone 站侧未通知变更，实测含 README/
+        #   contract/catalogue 全 404）。Content 仓是校验器的**唯一产地**
+        #   （Static-Contract README 自述：tools/ 由它同步），且 GitHub 上可达
+        #   —— 照 LLVM 管线同款做法（它也 git clone Octave-Extra-Content）。
+        #   指纹核验保留：防"拉到一份没人审过的校验器"（同 provision-* 纪律）。
+        #   ⚠️ 指纹变了 ⇒ 先核清是谁改的，再更新这里的 WANT。
         run: |
           set -e
-          curl -sSL --retry 3 --retry-delay 5 \
-            https://isui.ren/static/tools/check-release-v4.py -o /tmp/check-release-v4.py
+          git clone --depth 1 https://github.com/ArchivalEra/Octave-Extra-Content /tmp/ec
+          cp /tmp/ec/tools/check-release-v4.py /tmp/check-release-v4.py
           GOT="$(sha256sum /tmp/check-release-v4.py | cut -d' ' -f1)"
           echo "check-release-v4.py sha256=$GOT"
-          # 期望值：与 Content 仓 tools/ 那份逐字节相同（2026-11-02 实测 ed877ee2…）
+          # 期望值：2026-11-02 实测 ed877ee2…（与 Static-Contract 站侧那份逐字节同）
           WANT="ed877ee23ed28cf1"
           case "$GOT" in
             "$WANT"*) ;;

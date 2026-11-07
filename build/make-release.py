@@ -144,7 +144,7 @@ def build(out, tag, problems):
                     elif codec == "gzip":
                         data = gzip.compress(c, compresslevel=9, mtime=0)  # mtime=0 ⇒ 可复现
                     else:
-                        data = zstd_compress(c) if zstd_compress else None
+                        data = _zstd_compress_fn(c) if _zstd_compress_fn else None
                     if data is None:
                         problems.append("② 没有 zstd 编码器，无法生成 %s 分支" % codec)
                         break
@@ -216,12 +216,10 @@ def build(out, tag, problems):
 try:
     import zstandard as _zstd
 
-    def zstd_compress(b):
-        return _zstd.ZstdCompressor(level=19).compress(b)
+    _zstd_compress_fn = lambda b: _zstd.ZstdCompressor(level=19).compress(b)
 
-    zstd_compress = zstd_compress
 except Exception:                                        # noqa: BLE001
-    zstd_compress = None
+    _zstd_compress_fn = None
 
 
 def selftest():
@@ -248,7 +246,7 @@ def selftest():
     case("★ chunkSize 是 5 MiB", CHUNK == 5 * 1024 * 1024)
 
     # ③ zstd 编码器在不在（缺 ⇒ 明说，不静默）
-    case("zstd 编码器可用（否则 '三编码' 是假话）", zstd_compress is not None)
+    case("zstd 编码器可用（否则 '三编码' 是假话）", _zstd_compress_fn is not None)
 
     # ④ SPDX 形（'GPL-3.0-or-later' 里的 -OR- 不许被替换成算符）
     case("★ SPDX id 合法（连字符不被当算符）", idn(LICENSE_ID) and "-OR-" not in LICENSE_ID)
