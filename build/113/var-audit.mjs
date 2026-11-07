@@ -81,6 +81,11 @@ const EXCLUDED = [
   [/^site\/omc\//, 'omc 引擎供给件（provision-omc.sh，wbindgen 产物）'],
   // 上游子模块
   [/^upstream\//, '上游 octave 子模块（不是本仓代码）'],
+  // ★ 2026-11-07：release/products/ 是**发运产物镜像**（b815cd1 接入批入库）——
+  //   三个 octave.js 都是 emcc 胶水（与 site/octave.js 同产地，见各 octave.build.json
+  //   的 build.out），字节随产物走、不该被"自写代码零 var"判据扫。GitRoll 第二轮
+  //   报的 42 条 var 全部来自这类生成物（实测：本闸门排除后自写代码 var = 0）。
+  [/^release\/products\//, '发运产物镜像（emcc 胶水；产地见同目录 octave.build.json）'],
 ];
 
 function isExcluded(rel) {
