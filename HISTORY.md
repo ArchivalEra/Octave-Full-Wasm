@@ -6465,3 +6465,47 @@ identity/gzip/zstd 分片逐字相同）。差别只有 ① `manifest.id` ② en
 **这次不同的一点**：release 的 82 个 asset 字节会**确实消失**。但它们全部可从
 `release/products/`（已入库）+ `build/make-release.py` 重新生成 —— 那是本批
 把发布改成 action 自动出的直接收益：**产物可复现，所以删了能重造。**
+
+## §5.121 · 2026-11-07 · Einfacht 机制层 6e4e6e8 → b815cd1（上游大批量，破坏面大）
+
+用户点令：「无人值守，先接入新版 Einfacht，破坏面极其大」+「预算无限，放手去做」。
+
+### 接入形状
+
+zreflect/ 与 reflect-hooks/ 整层换到 b815cd1；保留本仓专属两件（mail-read.py、
+measure_octave.py）+ Einfacht.env + install.sh。基线备份 /tmp/einfacht-baseline-6e4e6e8。
+
+### 新纪律真跑
+
+- check_i18n（零语言制度）告警全清零：measure_octave 的中文是台账数据（进机器块）
+  ⇒ measure() 函数 PINNED + 模块 docstring 双层声明；mail-read 是四仓分发件
+  （自包含 = 不能 import 语言包）⇒ 7 函数逐个 PINNED + 顶层 stderr 一行 id 化前缀。
+- off 理由真实性（off_reason_stale）抓到 doctor 谎言（"本仓没有 doctor.json 规格"
+  而文件一直在）。三轮修正：改理由 ⇒ 删理由 ⇒ 正解 = off 分支保留（上游原语义）
+  + 理由只描述旋钮状态差别且**不点名文件**（理由里的 xxx.json token 会被存在性
+  核对判 stale）。Einfacht.env 显式配 REFLECT_DOCTOR ⇒ 本仓 doctor 真启用。
+
+### b815cd1 行为变化的三个真适配点
+
+① machine 从函数拆成模块 ⇒ 全仓几十处 machine().emit 成定时炸弹；doctor.py 真炸
+   （上游自己没踩到：doctor 默认 off、其 CI 跑不到该路径）。
+② _unaccounted_numbers 签名 4→3 参 ⇒ 工单 73 结算件按 arity 自适应。
+③ copied_value 子串误报（台账值命中 0.1650 秒值）⇒ 数字边界 + 反例自证两条。
+
+### 本仓侧两处"两个产地分叉"族修正
+
+- facts --check 对 PRINCIPLES.md 假红：渲染面尊重 accepts_principles() 出口、
+  校验面没尊重 ⇒ _doc_names() 按 _has_principles_doc() 过滤。
+- 两个 bootstrap 夹具被宿主 Einfacht.env 污染（copytree 带入 ⇒ --init 的
+  "已有载体不再造"守卫失效）⇒ 夹具删除带入的 env。
+
+### guard.refuse_dropped 抓到 5 个"手工批"键
+
+cache_first/reload_bytes、pyodide_min_closure、web_pause_oct、webshims_js 在工单 73/
+收件 067 批手写进台账但不在 measure() 产出 ⇒ 补进产出（非 --allow-drop，键都活着）。
+
+### 结果
+
+registry --run commit ⇒ ran 9 / off 7 / failed 0（闸门 7→9）；gates-selftest 两台全绿
+（平台 17 / 本仓 56）；facts 自证 15/0；mail-read 9/0；check-einfacht-upgrade rc=0。
+端口形状补丁重打在新层（注释仍注明"报回上游"）。4 个改口键逐个查实后 accept。

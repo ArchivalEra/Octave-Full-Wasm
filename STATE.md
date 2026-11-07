@@ -71,6 +71,58 @@
 - **现状**：`HEAD = origin = mirror = ad398f4`，`1da51e9` 对象在（可 `git log 1da51e9`）。
   后续一律 append-only，不再 force。
 
+## 现在是什么（2026-11-07 · ★ Einfacht 机制层 6e4e6e8 → b815cd1）
+
+- **用户点令**：「无人值守，先接入新版 Einfacht，破坏面极其大」+「预算无限，放手去做」。
+
+- **接入形状**（同工单 73 先例）：`zreflect/` 与 `reflect-hooks/` 整层换到 b815cd1；
+  保留本仓专属两件（`mail-read.py` 四仓分发件 / `measure_octave.py` 本仓数据层）+
+  `Einfacht.env`（本仓配置）+ `install.sh`（旧装法入口）。基线备份在
+  `/tmp/einfacht-baseline-6e4e6e8`（git revert 亦可整体回滚）。
+
+- **新层带来的新纪律（真跑，非装样子）**：
+  · **check_i18n（零语言制度）告警全清零**：本仓两个专属文件的中文各有正当性 ——
+    `measure_octave.py` 的大多数是**台账数据**（fact 的 note/cmd，进机器块）⇒
+    `measure()` 函数 PINNED 声明（上游设计：每条豁免说清为什么）+ 模块 docstring 双层；
+    `mail-read.py` 22 处是**四仓分发件的用户界面**（自包含 = 不能 import 语言包）⇒
+    7 函数逐个 PINNED；顶层 stderr 一行走 **id 化前缀**（上游决策 1C 的正形）。
+  · **off 理由真实性**（off_reason_stale）抓到 doctor 谎言：理由说"本仓没有
+    doctor.json 规格"而根目录该文件一直在。三轮修正的落点见 `zreflect/doctor.py`
+    注释块（① 改理由 ⇒ ② 删理由 ⇒ ③ 正解 = off 分支保留（上游原语义，换名夹具
+    = 无规格模拟仓里它就该 off 且绿）+ 理由只描述旋钮状态差别**不点名文件**
+    —— 理由里的 xxx.json token 会被存在性核对判 stale）。
+  · **Einfacht.env 显式配 REFLECT_DOCTOR ⇒ 本仓 doctor 真启用**（start-of-work 相位）；
+    顺带修 doctor 死路径：machine 模块化让它从未真跑过 ⇒ 现在实测会报 DOWN。
+  · **编码常驻判据**（上游"第五次同一个坑"）：mail-read 4 处 + measure_octave 3 处
+    open/subprocess 缺 encoding ⇒ 全补。
+
+- **b815cd1 行为变化的三个真适配点（上游自己没踩到，本仓真跑踩到）**：
+  ① `machine` 从函数拆成**模块** ⇒ 全仓几十处 `machine().emit` 都是定时炸弹；
+     doctor.py 真炸（TypeError）⇒ 已修；其余在 off 闸门/异常路径，逐闸门验绿确认未触发。
+  ② `check_facts._unaccounted_numbers` 签名 4→3 参 ⇒ 工单 73 结算件按 arity 自适应
+     （两个时代的机制层都能验）。
+  ③ `copied_value` 子串误报：台账值命中 README 性能表的秒值 `0.1650`（3 条假红）⇒
+     加**数字边界**（左右非数字/小数点才算手抄），反例自证两条。
+
+- **本仓侧两处判据出口修正（都是"两个产地分叉"族）**：
+  · `facts.py --check` 对 `PRINCIPLES.md` 的 doc_missing_check 假红 —— 本仓没建该文件、
+    也从未接受原则；渲染面已尊重 `accepts_principles()` 出口、校验面没尊重 ⇒
+    `_doc_names()` 按 `_has_principles_doc()` 过滤。
+  · `facts.py` 两个 bootstrap 夹具：copytree 把**宿主** `reflect-hooks/Einfacht.env`
+    带进夹具 ⇒ `--init` 的"已有载体不再造"守卫失效 ⇒ 夹具按宿主六文档名单查 ⇒
+    2 条用例假红（上游无此文件从未暴露）⇒ 夹具删除带入的 env。
+
+- **guard.refuse_dropped 抓到 5 个"手工批"键**（工单 73/收件 067 批手写进台账、
+  不在 measure() 产出）⇒ 正解是**补进产出**（输入全在、cmd 可复跑），不是
+  --allow-drop（键都活着，非死档）。
+
+- **结果**：`registry --run commit` ⇒ **ran 9 / off 7 / failed 0**（闸门 7→9：+i18n +lint）；
+  gates-selftest 两台全绿（平台 17 / 本仓 56）；facts 自证 **15/0**（+2 边界反例）；
+  mail-read 9/0；check-einfacht-upgrade 结算件 rc=0（签名自适应）。端口形状补丁
+  重打在新层（显式枚举 + `(?<!\d)`，注释仍注明"报回上游"）。4 个改口键
+  （env_vars/pyodide_sync_ready_ms/w64_relaxed_madd/w64_v128）逐个查实为新产物
+  实测值后 --accept-changes 放行。
+
 ## 现在是什么（2026-11-02 · ★ 撤两个旧 release + 改版本轴 `octave-full-wasm-vX.Y.Z`）
 
 - **用户点令**：「**撤掉你认为不贴近合规的那版，或者两版都撤然后发 octave-full-wasm 为名字
