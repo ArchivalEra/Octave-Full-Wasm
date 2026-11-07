@@ -231,6 +231,8 @@ def _selftest():
          lambda: open(os.path.join(READ, "001-a.md"), encoding="utf-8").read() == "# 001 · x\n"),
         ("★ 未读区剩下的是没读的那封（002 还在）",
          lambda: "002-b.md" in unread()),
+        ("★ 归档：源文件不存在 ⇒ False（GitRoll BLOCKER 的反证：三分支各自可达）",
+         lambda: _archive("999-z.md") is False),
         ("★ 同名冲突拒覆盖（试验场 bug#1）：read/ 已有同名 ⇒ _archive 拒 + 新信留未读区",
          lambda: (
              # 再投一封同名 001-a，归档必须拒
