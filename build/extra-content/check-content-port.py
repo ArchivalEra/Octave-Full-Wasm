@@ -76,7 +76,7 @@ def check(schema_path=SCHEMA, validator=VALIDATOR, golden=GOLDEN, bad=BAD):
         args = ["--list", p] + (["--site"] if "site" in f else [])
         rc, out = runv(args)
         if rc == 0:
-            probs.append("R2 bad/%s 竟被判合规（假绿！）%s" % (f, "" if "site" in f else ""))
+            probs.append("R2 bad/%s 竟被判合规（假绿！）" % f)
     # 专项：站点态夹具在 --site 下必须红
     sitespec = os.path.join(bad, "absolute-url-site.json")
     if os.path.exists(sitespec):
