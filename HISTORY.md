@@ -6509,3 +6509,37 @@ cache_first/reload_bytes、pyodide_min_closure、web_pause_oct、webshims_js 在
 registry --run commit ⇒ ran 9 / off 7 / failed 0（闸门 7→9）；gates-selftest 两台全绿
 （平台 17 / 本仓 56）；facts 自证 15/0；mail-read 9/0；check-einfacht-upgrade rc=0。
 端口形状补丁重打在新层（注释仍注明"报回上游"）。4 个改口键逐个查实后 accept。
+
+## §5.122 · 2026-11-08 · handoff 接手批：release 协议 br sidecar 落地 + 三单结案
+
+新平台（zcode → 后继）交接的首个批次。handoff `/tmp/handoff-octave-full-wasm-20261108.md`
+§6 建议四项全部完成。
+
+**065（extra-content，2026-10-30 用户拍板的 release 协议）落地**：
+- 判据先行：契约 v4 §3 V9 = 开放词表（"add br/xz without a schema change"）⇒ br 是契约内
+  形状，不改契约、不发信问。校验器对 codec 开放、逐块对盘核 bytes+sha（不解码）。
+- `build/make-release.py`：br 分支（brotli q11/lgwin24）+ 阈值 `BR_MIN_BYTES=1 MiB`
+  （065 §4.1 矩阵：≥1MB 必出 / <1MB 不出——3 个 octave.js 被排除 / 已压格式不出）。
+  codec 序列 `zstd,gzip,br,identity`，identity 恒末位（V4）。自证 17 → 21 条（+br 编码器
+  在位 + 阈值正反三例）。
+- `.github/workflows/release.yml`：`pip install zstandard brotli`；上传加 `*.br.*` 批。
+- **实测**（真产物，持久 `/mnt/hdd/octave-wasm-build/release-br-e2e/`）：契约校验
+  589 PASS / 0 FAIL（6 个 br entry 逐块对盘）；br vs gzip-9 全件合计省 30.6%
+  （21.7MB / 31.3MB）；台账新键 release_br_entries / release_codecs /
+  release_br_vs_gz_saving_pct / release_br_validator_pass / make_release_selftest_pass。
+- CI 成本：q11 ~148s/74.5MB（065 实测）⇒ 6 大件 ≈4 分钟，job 预算内；release 不可变
+  ⇒ 发布即缓存。v0.1.0 已发布不补发——br 在下一个 tag 生效。
+
+**四封未读信归档**（mail-read.py，rc 全 0）：065（本批落地）/ 066（LLVM 认错 + v0.1.4/5
+已发——我方 pin v0.1.3 升级是独立批）/ 032（OM 归属 + 第二层缺陷自曝，明说不必回信）/
+064（站侧提案抄送）。均无需回信。
+
+**工单结案**（结算件本日复跑全 rc=0）：
+- 71（forge-fetch 静默失败）：修复在 84aec30 已在位；本日补 spec 点名的变异测试——
+  `return 1`→`return 0` ⇒ selftest 3 用例红，还原复绿（证它真会红）。
+- 73（Einfacht 升级）：实际以 b815cd1 达成（§5.121），结算件 rc=0，补关单。
+- 74（三线合一）：归档裁决 = 以现有成果结案（三模式 + 模式表 + 结算件 rc=0），
+  不照旧 spec 重做。
+
+**教训（变异测试的价值）**：71 的 selftest 8/0 绿只能证明"现在对"；变异测试证明
+"坏回去会红"。后者才是 spec Testing Decisions 要的结案判据——已照做，3 用例真红了。

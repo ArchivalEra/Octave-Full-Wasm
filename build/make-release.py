@@ -11,7 +11,7 @@
 
 ⇒ 现在的形状：**字节入库 + 本脚本生成 + workflow 发布**。三件事各归各位：
   · `release/products/<product>/{octave.wasm,octave.js,octave.data}` —— 产物字节（入 git）
-  · 本脚本 —— 唯一产地：读字节 → 切块 → 逐块三编码 → 写 manifest（schema 3）
+  · 本脚本 —— 唯一产地：读字节 → 切块 → 逐块四编码（zstd/gzip/br/identity）→ 写 manifest（schema 3）
   · `.github/workflows/release.yml` —— 只在 tag 上跑，调本脚本再发布
 
 ## 判据（每条都能红，见 --selftest）
@@ -46,6 +46,10 @@ MAX_CHUNK_HARD = 2 ** 25
 NAME_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$")
 LICENSE_URL = "https://github.com/ArchivalEra/Octave-Full-Wasm/blob/master/LICENSE"
 LICENSE_ID = "AGPL-3.0-or-later"
+# 065 §4.1 输出矩阵（用户拍板的 release 协议）：大件 ≥1MB 必出 br；小件 br 可选
+# （本仓取"不出"—— 矩阵理由：br header 开销吃掉小件收益）。本仓载荷里
+# octave.wasm / octave.data 都是 MB 级 ⇒ 全出 br；三个 octave.js <1MB ⇒ 不出。
+BR_MIN_BYTES = 1024 * 1024
 
 # 三个产物 → (product id, arch, 一句话)。顺序固定：free → free → 带 rust 内核。
 PRODUCTS = [
@@ -136,17 +140,22 @@ def build(out, tag, problems):
                 problems.append("② %s/%s 有块超过 chunkSize：%s" % (pid, fname, bad))
 
             variants = []
-            for codec in ("zstd", "gzip", "identity"):
+            # br 只对大件出（065 §4.1）；identity 恒在列表末位（V4）。
+            entry_codecs = [c for c in ("zstd", "gzip", "br", "identity")
+                            if c != "br" or len(raw) >= BR_MIN_BYTES]
+            for codec in entry_codecs:
                 parts = []
                 for i, c in enumerate(chunks):
                     if codec == "identity":
                         data = c
                     elif codec == "gzip":
                         data = gzip.compress(c, compresslevel=9, mtime=0)  # mtime=0 ⇒ 可复现
+                    elif codec == "br":
+                        data = _br_compress_fn(c) if _br_compress_fn else None
                     else:
                         data = _zstd_compress_fn(c) if _zstd_compress_fn else None
                     if data is None:
-                        problems.append("② 没有 zstd 编码器，无法生成 %s 分支" % codec)
+                        problems.append("② 没有 %s 编码器，无法生成该分支" % codec)
                         break
                     # 文件名 = <product>__<载荷>.<codec>.<NNN>（契约预算 ≤64 建议值，只提示）
                     f = "%s__%s.%s.%03d" % (pid, fname, codec, i)
@@ -201,7 +210,7 @@ def build(out, tag, problems):
         #   —— 版本号是**我们自己的**轴，不是上游的 11.3.0。
         "id": "Octave-Full-Wasm/%s" % _own_version(tag),
         "chunkSize": CHUNK,
-        "codecs": ["zstd", "gzip", "identity"],
+        "codecs": ["zstd", "gzip", "br", "identity"],
         "license": {"id": LICENSE_ID, "url": LICENSE_URL},
         "products": {k: {"form": v["form"], "arch": v["arch"]} for k, v in products.items()},
         "entries": entries,
@@ -220,6 +229,21 @@ try:
 
 except Exception:                                        # noqa: BLE001
     _zstd_compress_fn = None
+
+# br（brotli q11）：收件 065（extra-content，2026-10-30 用户拍板的 release 协议）——
+#   大件 sidecar br q11 比边缘动态 br 省 27.7 个百分点（74.5MB wasm：gzip -9 20.9MB /
+#   br q11 13.05MB）。契约 v4 §3 V9：`codecs[]` 是**开放词表**，"add br/xz without a
+#   schema change"；校验器对 codec 是开放字符串、只对盘逐块核 bytes+sha（不解码）。
+#   ⇒ br 作为第四个 codec 是**契约内形状**，不是自创。identity 恒末位（V4 不变）。
+#   成本：q11 压 74.5MB 要 ~148s ⇒ 只在 release 生成时做一次（release 资产不可变，
+#   发布即缓存；workflow 每次 dry-run 会重压，可接受 —— 产物以 sha 钉死）。
+try:
+    import brotli as _brotli
+
+    _br_compress_fn = lambda b: _brotli.compress(b, quality=11, lgwin=24)
+
+except Exception:                                        # noqa: BLE001
+    _br_compress_fn = None
 
 
 def selftest():
@@ -245,8 +269,18 @@ def selftest():
     case("★ chunkSize ≤ 2^25", CHUNK <= MAX_CHUNK_HARD)
     case("★ chunkSize 是 5 MiB", CHUNK == 5 * 1024 * 1024)
 
-    # ③ zstd 编码器在不在（缺 ⇒ 明说，不静默）
-    case("zstd 编码器可用（否则 '三编码' 是假话）", _zstd_compress_fn is not None)
+    # ③ zstd / br 编码器在不在（缺 ⇒ 明说，不静默）
+    case("zstd 编码器可用（否则 '四编码' 是假话）", _zstd_compress_fn is not None)
+    case("br 编码器可用（收件 065：q11 sidecar；缺了 br 就是假话）",
+         _br_compress_fn is not None)
+    # ③b br 阈值：065 §4.1 矩阵 —— ≥1MB 必出 / <1MB 不出
+    case("★ br 阈值 = 1 MiB（065 §4.1 输出矩阵）", BR_MIN_BYTES == 1024 * 1024)
+    case("★ 反向：小件（<1MB）不进 br（br header 吃掉小件收益）",
+         [c for c in ("zstd", "gzip", "br", "identity")
+          if c != "br" or 464339 >= BR_MIN_BYTES] == ["zstd", "gzip", "identity"])
+    case("★ 正向：大件（≥1MB）进 br 且 identity 仍在末位（V4）",
+         [c for c in ("zstd", "gzip", "br", "identity")
+          if c != "br" or 29621256 >= BR_MIN_BYTES][-1] == "identity")
 
     # ④ SPDX 形（'GPL-3.0-or-later' 里的 -OR- 不许被替换成算符）
     case("★ SPDX id 合法（连字符不被当算符）", idn(LICENSE_ID) and "-OR-" not in LICENSE_ID)

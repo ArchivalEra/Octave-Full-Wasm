@@ -92,10 +92,11 @@ jobs:
           echo "PUBLISH=$PUB" >> "$GITHUB_ENV"
           echo "tag=$TAG publish=$PUB"
 
-      - name: 装 zstd 编码器
-        # 契约允许 zstd/gzip/identity 三编码。缺 zstd 就**明说缺**，不静默退化成两编码
-        # （那会让 manifest 里的 `codecs` 变成假话 —— 本仓最忌的形状）。
-        run: pip install zstandard
+      - name: 装 zstd / brotli 编码器
+        # 契约 v4 V9：codecs[] 是开放词表（br 是契约内形状，收件 065）。缺 zstd/brotli
+        # 就**明说缺**，不静默退化成少编码（那会让 manifest 的 `codecs` 变成假话 ——
+        # 本仓最忌的形状）。
+        run: pip install zstandard brotli
 
       # ── ① 生成器自证 ──────────────────────────────────────────────────────
       - name: 判据 ① 生成器自证（三类用例必须齐）
@@ -208,6 +209,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" out/*.gzip.* --clobber
+
+      # br（brotli q11）分片：收件 065 的 sidecar 协议（q11 比 gzip 再省 ~35%）。
+      - name: 上传 br 分片
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.br.* --clobber
+
+      - name: 上传 identity 分片
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/*.identity.* --clobber
 
       - name: 上传 identity 分片
         if: env.PUBLISH == 'true'

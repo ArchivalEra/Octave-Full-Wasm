@@ -1582,4 +1582,67 @@ def measure():
                                "stat -c '%s' %s" % ("%s", _path),
                                _path.replace("/mnt/hdd/octave-wasm-build/", ""),
                                _note)
+    # ★ 065 sidecar 落地批（2026-11-08）：br codec 进 release。证据 = 真产物端到端
+    #   （make-release 生成 + 契约方 check-release-v4.py 对盘逐块核 bytes+sha），
+    #   持久在 /mnt/hdd/octave-wasm-build/release-br-e2e/（manifest + 全部分片 + validate.log）。
+    _BRDIR = "/mnt/hdd/octave-wasm-build/release-br-e2e"
+    if os.path.isdir(_BRDIR):
+        _brman_path = os.path.join(_BRDIR, "manifest.json")
+        if os.path.isfile(_brman_path):
+            _man = json.load(open(_brman_path, encoding="utf-8"))
+            _br_entries = [e for e in _man.get("entries", [])
+                           if any(v.get("codec") == "br" for v in e.get("variants", []))]
+            facts["release_br_entries"] = fact(
+                len(_br_entries),
+                "python3 -c \"import json;m=json.load(open('%s'));"
+                "print(len([e for e in m['entries'] if any(v['codec']=='br' "
+                "for v in e['variants'])]))\"" % _brman_path,
+                "release-br-e2e/manifest.json",
+                "release 载荷里带 br 变体的 entry 数（065 矩阵：≥1MB 必出；3 个 octave.js <1MB 不出）")
+            _codecs = _man.get("codecs") or []
+            if _codecs:
+                facts["release_codecs"] = fact(
+                    ",".join(_codecs),
+                    "python3 -c \"import json;m=json.load(open('%s'));"
+                    "print(','.join(m['codecs']))\"" % _brman_path,
+                    "release-br-e2e/manifest.json",
+                    "manifest codecs 词表（V9 开放词表；identity 恒末位 V4）")
+            _tot_raw = sum(e["bytes"] for e in _man.get("entries", []))
+            _tot_gz = sum(c["bytes"] for e in _man.get("entries", [])
+                          for v in e.get("variants", []) if v.get("codec") == "gzip"
+                          for c in v.get("chunks", []))
+            _tot_br = sum(c["bytes"] for e in _br_entries
+                          for v in e.get("variants", []) if v.get("codec") == "br"
+                          for c in v.get("chunks", []))
+            if _tot_gz and _tot_br:
+                facts["release_br_vs_gz_saving_pct"] = fact(
+                    round((1 - _tot_br / _tot_gz) * 100, 1),
+                    "python3 -c \"import json;m=json.load(open('%s'));"
+                    "e=m['entries'];gz=sum(c['bytes'] for x in e for v in x['variants'] "
+                    "if v['codec']=='gzip' for c in v['chunks']);"
+                    "br=sum(c['bytes'] for x in e for v in x['variants'] "
+                    "if v['codec']=='br' for c in v['chunks']);"
+                    "print(round((1-br/gz)*100,1))\"" % _brman_path,
+                    "release-br-e2e/manifest.json",
+                    "br(q11) 相对 gzip-9 的字节节省（全部大件合计；065 信预测 35% 量级，实测 30.6%）",
+                    replay=False)
+    _brval = os.path.join(_BRDIR, "validate.log")
+    if os.path.isfile(_brval):
+        _txt = open(_brval, encoding="utf-8", errors="replace").read()
+        _m = re.search(r"=== (\d+) PASS / (\d+) FAIL ===", _txt)
+        if _m and int(_m.group(2)) == 0:
+            facts["release_br_validator_pass"] = fact(
+                int(_m.group(1)),
+                "awk '/PASS \\/ 0 FAIL/{print $2}' %s | tail -1" % _brval,
+                "release-br-e2e/validate.log",
+                "契约方校验器对含 br 的真产物对盘核验 PASS 数（FAIL 必须 0）",
+                replay=False)
+    _mr = _selftest_pass_count(os.path.join(REPO, "build", "make-release.py"))
+    if _mr is not None:
+        facts["make_release_selftest_pass"] = fact(
+            _mr,
+            "python3 build/make-release.py --selftest | tail -1 | "
+            "grep -oE '[0-9]+ PASS / 0 fail' | grep -oE '^[0-9]+'",
+            "build/make-release.py",
+            "release 生成器自证 PASS 数（含 br 阈值正反用例；缺编码器/verdict≠ok 必报）")
     return facts

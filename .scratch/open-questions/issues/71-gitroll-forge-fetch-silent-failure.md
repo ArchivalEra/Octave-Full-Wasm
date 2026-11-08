@@ -1,7 +1,8 @@
 # GitRoll Issue #7 · 修复 spec —— forge-fetch 静默失败是第一优先
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Settling:** `python3 build/forge-fetch.py --selftest`
+（2026-11-08 结案。修复在 commit `84aec30`；本日复跑 ⇒ **8 PASS / 0 FAIL**、rc=0。spec Testing Decisions 的**变异测试**同日真跑：把解析失败路径的 `return 1` 改回 `return 0` ⇒ selftest 3 用例红（rc=1），还原后复绿 —— 证明它真会红。`forge-build.sh:33` 已带显式守卫（fetch 非零 ⇒ FATAL 不继续解包）。三条静默路径（缺包/无兼容版本/空闭包）+ 第二层静默路径（checksum 不符）全部非零退出并逐条点名。）
 rc=0 ⇒ 全部静默路径已堵（缺包/不兼容/空闭包三种都必须非零退出）
 rc=1 ⇒ 还有静默路径
 rc=2 ⇒ 读不到（fail-closed）

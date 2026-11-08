@@ -1,7 +1,8 @@
 # 73 · Einfacht 整层升级到 `6e4e6e8`（融合版 spec：新纪律 × 本仓实况）
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Settling:** `sh build/113/check-einfacht-upgrade.sh`
+（2026-11-08 结案。**注意：本单目标已先于工单达成** —— 2026-11-07 批直接接入的是**更新的上游 b815cd1**（STATE 2026-11-07 段），不是本单写的 `6e4e6e8`；三条新纪律（#23 恒真探测 / #24 反向数字 / #25 历史不免死）全部真跑。结算件本日复跑 ⇒ rc=0（7 组断言全过：三条新纪律真跑 + 本仓专属件在位）。产物形态：`registry --run commit` ⇒ ran 9 / off 7 / failed 0，gates-selftest 两台全绿（平台 17 / 本仓 56），facts 自证 15/0。）
 rc=0 ⇒ 新机制层已落且**三条新纪律全部真跑**（#23 恒真探测 / #24 反向数字 / #25 历史不免死）
 rc=1 ⇒ 有闸门红（逐条点名）
 rc=2 ⇒ 读不到（fail-closed）

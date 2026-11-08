@@ -1,7 +1,15 @@
 # 74 · 三线合一：一条线出三种产物（可执行 spec）
 
-**Status:** ready-for-agent
+**Status:** resolved
 **Settling:** `bash build/113/check-one-line-three-products.sh`
+（2026-11-08 归档裁决：**以现有成果结案，不照旧 spec 重做**。handoff §3 的评估成立 —— 实际
+成果（`product` / `w64-std` / `w64` 三模式 + `relink.sh` 模式表 + 结算件五断言）已**超越**本单
+2026-10-19 写的 spec（当时只验 2 组；11-01 用户点令修正后扩到 3 模式 / 5 断言）。
+结算件 `bash build/113/check-one-line-three-products.sh` 本日复跑 ⇒ rc=0：三组参数两两可区分
+（14 项差异）、许可边界成立（两个 free 产物都不链 rust 内核）、标准版真分叉。
+spec Solution 里的"分支统一"部分（删 `IllegalPerformance`/`wasm32-final` 引用、模式表取而代之）
+已由 2026-11-01/11-02 两批实际完成（STATE 三产物模型段、tag 轴改名段）。旧 spec 剩余未做面
+（如"三条线 git 历史合并成一条"的原始形态）被三模式模型取代，无剩余义务。）
 rc=0 ⇒ 一条线上三个模式各能 `explain` 出**可区分的参数组**，且关键差异（MEMORY64 / MALLOC /
 RUST_SORT / 目标架构）与三线裁决一致；许可边界（free 产物不链 librustsort.a）有机器判据
 rc=1 ⇒ 有断言不成立（逐条点名）
