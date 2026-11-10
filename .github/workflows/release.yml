@@ -25,6 +25,7 @@
 #   ③ release 内容 **恰好等于** manifest 内容（多一个 asset 就是不合规；v4 §0）
 #   ④ 许可必须 `AGPL-3.0-or-later` 且**零** `LicenseRef`（2026-11-02 的误标已撤回）
 #   ⑤ 发布后反读：从 GitHub 拉回全部资产 ⇒ 再跑一次 ③④ + 契约校验 + 非 draft
+#   ⑥ 071：manifest.lanes 三条齐（引擎契约身份从**产物**读回；生成面与发布后反读各一次）
 #
 # ── 触发
 #   · 只验不发：Actions → release → Run workflow，`publish` 留空（false）
@@ -160,8 +161,16 @@ jobs:
               if (e.get("license") or {}).get("id") != "AGPL-3.0-or-later":
                   print("FATAL: %s/%s 许可不是 AGPL-3.0-or-later" % (e["product"], e["name"]),
                         file=sys.stderr); bad = 1
-          print("判据 ③④ 通过：%d 个 asset，%d 个 entry，零 LicenseRef 且全 AGPL"
-                % (len(on_disk), len(man["entries"])))
+          # ⑥ 071：车道身份声明**从产物读回来**（不只信生成器说它有）。
+          #   第一版局部变量覆盖让 manifest.lanes={} 而生成器不报 ⇒ 发布面必须再拦一次。
+          declared = man.get("lanes") or {}
+          want = {"wasm32", "wasm64std", "wasm64ip"}
+          got = {v.get("product") for v in declared.values()} if isinstance(declared, dict) else set()
+          if len(declared) != 3 or got != want:
+              print("FATAL: 已生成的 manifest.lanes 声明不全（%r）—— "
+                    "引擎契约身份不能空发" % sorted(got), file=sys.stderr); bad = 1
+          print("判据 ③④⑥ 通过：%d 个 asset，%d 个 entry，%d 条 lane 声明，"
+                "零 LicenseRef 且全 AGPL" % (len(on_disk), len(man["entries"]), len(declared)))
           sys.exit(bad)
           PY
 
@@ -262,7 +271,12 @@ jobs:
           n_lr = sum('LicenseRef' in (e.get('license') or {}).get('id', '') for e in man['entries'])
           if n_lr:
               sys.exit('FATAL: 已发布 manifest 仍有 %d 个 LicenseRef' % n_lr)
-          print('PASS 判据 ④（反读）schema 3 + 许可全 AGPL + 零 LicenseRef')
+          declared = man.get('lanes') or {}
+          want = {'wasm32', 'wasm64std', 'wasm64ip'}
+          got = {v.get('product') for v in declared.values()} if isinstance(declared, dict) else set()
+          if len(declared) != 3 or got != want:
+              sys.exit('FATAL: 已发布 manifest.lanes 声明不全（%r）' % sorted(got))
+          print('PASS 判据 ④⑥（反读）schema 3 + 许可全 AGPL + 零 LicenseRef + lanes 三条齐')
           PY
 
           python3 /tmp/check-release-v4.py /tmp/vfy/manifest.json --base /tmp/vfy | tail -2

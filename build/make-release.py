@@ -41,6 +41,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRODUCTS_DIR = os.path.join(REPO, "release", "products")
+# 071（2026-11-10）：车道身份声明的唯一产地（引擎契约面）。不作第二份声明。
+LANES_PATH = os.path.join(REPO, "build", "lanes.json")
 CHUNK = 5 * 1024 * 1024
 MAX_CHUNK_HARD = 2 ** 25
 NAME_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$")
@@ -96,8 +98,56 @@ def idn(x):
     return bool(re.match(r"^[A-Za-z0-9][A-Za-z0-9.+-]*$", x))
 
 
+def lane_identity(problems):
+    """071：读 `build/lanes.json` 的 `release_identity`，三面对账后返回可投影的声明。
+
+    对账面（fail-closed，任何一面不齐就不许发 —— 声明错了比没声明更坏）：
+      ① lane 名 == `product_lines` 的键（不造第三个名字）
+      ② product 名 == `release/products/` 的目录名（投送坐标逐字对上）
+      ③ build_mode == 该目录 `octave.build.json` 的 `build.mode`（身份 ↔ 配方）
+      ④ 三个 product 恰好覆盖 `PRODUCTS`（不多不少，零值守卫）
+    """
+    try:
+        decl = json.load(open(LANES_PATH, encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        problems.append("⑥ 读不到车道身份声明 %s：%s" % (LANES_PATH, e))
+        return None
+    ri = decl.get("release_identity") or {}
+    lanes = ri.get("lanes") or {}
+    if not lanes:
+        problems.append("⑥ lanes.json 没有 release_identity.lanes（零值守卫：空声明不是通过）")
+        return None
+    lines = decl.get("product_lines") or {}
+    for name, v in lanes.items():
+        if name not in lines:
+            problems.append("⑥ lane %r 不在 product_lines（不造第三个名字）" % name)
+        pid = v.get("product")
+        pdir = os.path.join(PRODUCTS_DIR, str(pid))
+        if not os.path.isdir(pdir):
+            problems.append("⑥ lane %r 的 product %r 不在 release/products/" % (name, pid))
+            continue
+        card_path = os.path.join(pdir, "octave.build.json")
+        try:
+            card = json.load(open(card_path, encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            problems.append("⑥ %s 读不到身份证：%s" % (pid, e))
+            continue
+        mode = (card.get("build") or {}).get("mode")
+        if v.get("build_mode") != mode:
+            problems.append("⑥ %s 声明 build_mode=%r，身份证 build.mode=%r（配方漂移）"
+                            % (pid, v.get("build_mode"), mode))
+        if v.get("arch") != ("wasm32" if mode == "product" else "wasm64"):
+            problems.append("⑥ %s 声明 arch=%r 与配方不符" % (pid, v.get("arch")))
+    want = {p[0] for p in PRODUCTS}
+    got = {v.get("product") for v in lanes.values()}
+    if got != want:
+        problems.append("⑥ 声明的 product 集 %r ≠ 三产物 %r（多/少都是错）" % (sorted(got), sorted(want)))
+    return {"lanes": lanes, "_decl": decl}
+
+
 def build(out, tag, problems):
     """生成 out/ 下的 manifest.json 与全部分片。problems 收集每条不成立的判据。"""
+    lane_decl = lane_identity(problems)
     entries = []
     products = {}
     used_names = set()
@@ -213,6 +263,10 @@ def build(out, tag, problems):
         "codecs": ["zstd", "gzip", "br", "identity"],
         "license": {"id": LICENSE_ID, "url": LICENSE_URL},
         "products": {k: {"form": v["form"], "arch": v["arch"]} for k, v in products.items()},
+        # 071：引擎契约面的车道身份声明（投影自 build/lanes.json 的单一产地）。
+        # 分发契约 v4 校验器对顶层/产品附加字段开放 —— 这不是契约外形状，
+        # 是把「身份」与「投送坐标」分家：lane ⇒ 选哪条线，product ⇒ 取哪组字节。
+        "lanes": (lane_decl or {}).get("lanes", {}),
         "entries": entries,
     }
     open(os.path.join(out, "manifest.json"), "w", encoding="utf-8").write(
@@ -292,6 +346,42 @@ def selftest():
          _own_version("octave-11.3.0-r2") == "unreleased")
     case("★ 反向：空 tag ⇒ unreleased（不编假版本）", _own_version("") == "unreleased")
 
+    # ④c 071 车道身份声明（三面对账，每条都要能红）
+    li_ok = lane_identity([])
+    case("★ 071 正常：lanes.json ↔ 目录 ↔ 身份证 build.mode 三面对齐",
+         li_ok is not None and len(li_ok["lanes"]) == len(PRODUCTS))
+    li_bad = []
+    lane_identity(li_bad)                     # 真仓不红（重复跑一遍纯函数）
+    case("★ 071 反向：真仓声明当前必须零问题", li_bad == [])
+    # 单面反例用注入式纯函数：把声明 copy 后改一处，重跑同一套对账逻辑
+    import copy
+    _real_lanes_path = LANES_PATH
+    try:
+        for label, mutate, expect in (
+            ("造第三个 lane 名 ⇒ 必报", lambda d: d["release_identity"]["lanes"].update(
+                {"bogus-lane": {"product": "wasm32", "build_mode": "product", "arch": "wasm32"}}),
+             "不造第三个名字"),
+            ("product 目录名漂一个字 ⇒ 必报", lambda d: d["release_identity"]["lanes"]["master"].update(
+                {"product": "wasm64stdx"}), "不在 release/products"),
+            ("build_mode 与身份证配方不符 ⇒ 必报", lambda d: d["release_identity"]["lanes"]["master"].update(
+                {"build_mode": "w64"}), "配方漂移"),
+            ("空声明 ⇒ 必报（零值守卫）", lambda d: d["release_identity"].update({"lanes": {}}),
+             "零值守卫"),
+        ):
+            doc = copy.deepcopy(li_ok["_decl"])
+            mutate(doc)
+            import tempfile as _tf
+            fd, path = _tf.mkstemp(suffix=".json")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(doc, fh)
+            globals()["LANES_PATH"] = path
+            probs = []
+            lane_identity(probs)
+            case("★ 071 反向：%s" % label, any(expect in p for p in probs))
+            os.unlink(path)
+    finally:
+        globals()["LANES_PATH"] = _real_lanes_path
+
     # ⑤ 空输入必须报 —— ⚠️ 必须指**夹具目录**，不能指真 release/products
     #   （第一版就错在这里：真仓里有产物 ⇒ build() 真读到了它们 ⇒ 这条用例永远"不报"，
     #    自证变成空转。教训：自证要证明"该报时会报"，就必须能控制输入）。
@@ -323,6 +413,42 @@ def selftest():
              any("verdict" in p for p in probs2))
     finally:
         shutil.rmtree(d, ignore_errors=True)
+    # ⑤c ★ 071「从产物读出来」：用微型产物真跑 build()，读**写出的 manifest.json**
+    #   的 lanes。本批真缺陷：ident 变量被循环里的 identity variant 覆盖 ⇒ manifest
+    #   里 lanes={} 而生成器一声不响（与 AGENTS 坑段「两个变量名」同族）。
+    #   「声明写对了」不等于「投影进产物了」—— 这条锁住投影这一步。
+    d3 = tempfile.mkdtemp()
+    try:
+        mini = os.path.join(d3, "products")
+        for pid, mode, arch in (("wasm32", "product", "wasm32"),
+                                ("wasm64std", "w64-std", "wasm64"),
+                                ("wasm64ip", "w64", "wasm64")):
+            p = os.path.join(mini, pid)
+            os.makedirs(p, exist_ok=True)
+            card = {"verdict": "ok", "build": {"mode": mode},
+                    "measured": {"files": {fn: {"sha256": sha256(b"mini-" + fn.encode()),
+                                               "bytes": 7 + len(fn)} for fn in FILES}}}
+            open(os.path.join(p, "octave.build.json"), "w", encoding="utf-8").write(
+                json.dumps(card))
+            for fn in FILES:
+                open(os.path.join(p, fn), "wb").write(b"mini-" + fn.encode())
+        real = PRODUCTS_DIR
+        PRODUCTS_DIR = mini
+        try:
+            probs3 = []
+            out3 = os.path.join(d3, "out3")
+            build(out3, "selftest", probs3)
+        finally:
+            PRODUCTS_DIR = real
+        man3 = json.load(open(os.path.join(out3, "manifest.json"), encoding="utf-8"))
+        lanes3 = man3.get("lanes") or {}
+        case("★ 071 产物自证：manifest.lanes 三条齐且 product 逐字对上（防投影静默丢）",
+             len(lanes3) == len(PRODUCTS)
+             and {v["product"] for v in lanes3.values()} == {p[0] for p in PRODUCTS})
+        case("★ 071 产物自证：微型产物无其它判据不成立（本用例不靠红来过）",
+             probs3 == [])
+    finally:
+        shutil.rmtree(d3, ignore_errors=True)
     print("=== make-release 自证：%d PASS / %d fail ===" % (n - bad, bad))
     return 0 if bad == 0 else 1
 

@@ -6543,3 +6543,30 @@ registry --run commit ⇒ ran 9 / off 7 / failed 0（闸门 7→9）；gates-sel
 
 **教训（变异测试的价值）**：71 的 selftest 8/0 绿只能证明"现在对"；变异测试证明
 "坏回去会红"。后者才是 spec Testing Decisions 要的结案判据——已照做，3 用例真红了。
+
+## §5.123 · 2026-11-10 · 收件 071：车道身份声明进引擎契约 + 发 v0.1.1
+
+UI `156`（经 content `071` 转呈）：其 `LANE_PRODUCT` 让消费侧身份依赖 release `product`
+（与作废的 `acquisition.releaseRef` 同族），要引擎契约先给声明才敢拆映射。
+
+**声明形状**（不造第三个名字，UI questions/07 硬令）：`build/lanes.json` 新增
+`release_identity.lanes`，由 `build/make-release.py` **投影**进 manifest 顶层 `lanes`。
+lane 逐字 = `product_lines` 键 = UI `EngineLane` 值（`wasm32-final`/`master`/
+`IllegalPerformance`）；product 逐字 = `release/products/` 目录名；build_mode 逐字 =
+`relink.sh` 模式名。身份（选哪条线）与投送坐标（取哪组字节）分家，`products` 一字未动
+——content `160`/`075` 的裁定不变，v4 校验器对顶层/产品附加字段开放。
+
+**★ 真缺陷（端到端抓到，非猜测）**：第一版生成出的 `manifest.json` 里 `lanes = {}`，
+而生成器**一声不响**。根因 = `build()` 里 `ident = lane_identity(...)` 的变量名，
+在循环里被 `ident = next(... identity variant ...)` 覆盖（AGENTS 坑段「两个变量名」
+同族）。修法 = 改名 `lane_decl` + **从产物读回来**的两条自证（微型产物真跑 `build()`，
+读写出 manifest 的 lanes 三条齐 / product 逐字对上）。只改代码不补判据 = 下次还会静默丢。
+另修一处夹具变量覆盖（`for n in FILES` 撞了 case 计数器 `n` ⇒ TypeError）。
+
+**判据**：生成器自证 21 → 29（+4 条 071 对账反例：造第三个 lane 名 / product 漂字 /
+build_mode 与配方不符 / 空声明；+2 条产物读回；+2 条真仓三面对账）；真产物端到端
+契约方校验 589 PASS / 0 FAIL。
+
+**发布**：v0.1.0 已发布且 v4 §0 不可变 ⇒ 新 tag `octave-full-wasm-v0.1.1`
+（workflow 唯一发布面，publish=true 先验后发 + 发布后反读，人手不改 asset）。
+回信 `072` 投 UI 仓，抄送 content；本仓副本留 `mail/read/`。

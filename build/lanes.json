@@ -39,6 +39,45 @@
    "desc": "non-free：Rust 补丁脱离开源社区；主线榨干前不开"
   }
  },
+ "release_identity": {
+  "_why": [
+   "★ 071（extra-content 转呈 UI 156，2026-11-10）：**引擎契约面的车道身份声明**。",
+   "UI 的 LANE_PRODUCT 把消费侧身份硬编码成 release product 的映射，删了就断；",
+   "而 2026-11-02 用户裁定 product 是「这份 release 里第几组字节」的**投送坐标**，",
+   "不许上升为身份产地（与作废的 acquisition.releaseRef 同族）。本段把两者分家：",
+   "lane = 引擎契约的身份（选哪条线），product = 分发契约的投送坐标（取哪组字节）。",
+   "★ 不造第三个名字（UI 2026-11-10 硬令）：lane 逐字 = product_lines 的键 = UI",
+   "  EngineLane 词表；product 逐字 = release/products/ 目录名；build_mode 逐字 =",
+   "  relink.sh 模式名。三处都是既有产地，本段只是把它们**声明**在一处。",
+   "★ 本段由 build/make-release.py 投影进 manifest 顶层 lanes（引擎契约扩展字段；",
+   "  分发契约 v4 的校验器对 products/顶层附加字段开放，V9 只约束 codecs 词表）。",
+   "  对账器在生成器的 selftest：声明 ↔ 目录 ↔ octave.build.json 的 build.mode 三面对齐。",
+   "★ 站点两格（base/w64）是本仓选档器的档名，不是引擎身份，勿混（见 lanes 段）。"
+  ],
+  "lanes": {
+   "wasm32-final": {
+    "product": "wasm32",
+    "build_mode": "product",
+    "arch": "wasm32",
+    "threads": false,
+    "coi_required": false
+   },
+   "master": {
+    "product": "wasm64std",
+    "build_mode": "w64-std",
+    "arch": "wasm64",
+    "threads": true,
+    "coi_required": true
+   },
+   "IllegalPerformance": {
+    "product": "wasm64ip",
+    "build_mode": "w64",
+    "arch": "wasm64",
+    "threads": true,
+    "coi_required": true
+   }
+  }
+ },
  "precedence": [
   "w64",
   "base"

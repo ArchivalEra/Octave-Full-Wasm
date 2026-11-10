@@ -1645,4 +1645,34 @@ def measure():
             "grep -oE '[0-9]+ PASS / 0 fail' | grep -oE '^[0-9]+'",
             "build/make-release.py",
             "release 生成器自证 PASS 数（含 br 阈值正反用例；缺编码器/verdict≠ok 必报）")
+    # ★ 071（2026-11-10）：车道身份声明进引擎契约。证据 = 真产物端到端
+    #   （manifest 顶层 lanes + 契约方校验），持久在 release-lanes-e2e/。
+    _LADIR = "/mnt/hdd/octave-wasm-build/release-lanes-e2e"
+    _laman = os.path.join(_LADIR, "manifest.json")
+    if os.path.isfile(_laman):
+        _lam = json.load(open(_laman, encoding="utf-8"))
+        facts["release_lanes_declared"] = fact(
+            len(_lam.get("lanes") or {}),
+            "python3 -c \"import json;m=json.load(open('%s'));print(len(m.get('lanes') or {}))\""
+            % _laman,
+            "release-lanes-e2e/manifest.json",
+            "manifest 顶层 lanes 声明的引擎车道数（071：身份与投送坐标分家；0 = 投影丢了）")
+    _laval = os.path.join(_LADIR, "validate.log")
+    if os.path.isfile(_laval):
+        _txt = open(_laval, encoding="utf-8", errors="replace").read()
+        _m = re.search(r"=== (\d+) PASS / (\d+) FAIL ===", _txt)
+        if _m and int(_m.group(2)) == 0:
+            facts["release_lanes_validator_pass"] = fact(
+                int(_m.group(1)),
+                "awk '/PASS \\/ 0 FAIL/{print $2}' %s | tail -1" % _laval,
+                "release-lanes-e2e/validate.log",
+                "含 lanes 声明的真产物过契约方校验器 PASS 数（FAIL 必须 0）",
+                replay=False)
+    if _mr is not None:
+        facts["release_lanes_selftest_pass"] = fact(
+            _mr,
+        "python3 build/make-release.py --selftest | tail -1 | "
+        "grep -oE '[0-9]+ PASS / 0 fail' | grep -oE '^[0-9]+'",
+        "build/make-release.py",
+        "生成器自证总 PASS 数（071 部分：四类反例 + 两条从产物读回的判据）")
     return facts
