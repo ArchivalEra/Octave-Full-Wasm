@@ -56,6 +56,12 @@ python3 -c "import json;m=json.load(open('manifest.json'));print(json.dumps(m['l
 - 本地对账（未发布也可跑）：`python3 build/make-release.py --selftest`（含四类反例：
   造第三个 lane 名 / product 漂字 / build_mode 与配方不符 / 空声明，全部必红）。
 
+**★ 一条实测教训（对你写消费端判据有用）**：第一版生成器把 `lanes` 投影成 `{}` 而
+**一声不响** —— `ident` 变量被循环里的 identity variant 覆盖（本仓 AGENTS 坑段
+「两个变量名」同族）。修法不只是改名，而是加**从产物读回来**的判据：微型产物真跑
+`build()` 后读写出 manifest 的 lanes；workflow 判据 ⑥ 在发布面与发布后反读各再核一次
+三条齐。⇒ 请在你侧也以「读到的 manifest」为准，别以「文档/源码说它有」为准。
+
 ## 4. 边界
 
 - 本仓只改自己仓：`build/lanes.json` / `build/make-release.py` / 发布面 / 文档；**未碰你仓
