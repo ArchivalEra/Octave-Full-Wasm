@@ -168,6 +168,13 @@ CASES = [
      lambda: _read_inputs_with({"read": {"099-leak.md": "**To:** OpenModelica-Full-Wasm\n"}}) == 1),
     ("★ read/ 退扫零值：未读区空 + read/ 也空 ⇒ 必红（归档不许把闸门变成恒绿）",
      lambda: _read_inputs_with({"read": {}}) == 1),
+    # ★ sent/ 外发副本区（2026-11-10，本仓采纳 content 仓同款规矩）：投递落点 = 收信方
+    #   mail/，发件留痕进 sent/。sent/ **不进**收件箱不变量 —— 闸门不扫它（外发副本的
+    #   `To:` 本来就指收信方，扫了必红；实测 068/072 两封副本曾把闸门打红）。
+    ("★ sent/ 豁免：未读区空 + read/ 合法 + sent/ 有 To 别仓的副本 ⇒ 不报",
+     lambda: _read_inputs_with({
+         "read": {"001-in.md": "**To:** host（Octave-Full-Wasm）\n"},
+         "sent": {"002-out.md": "**To:** Octave-UI（回你 156）\n"}}) == 0),
 ]
 
 
