@@ -44,9 +44,9 @@ release `manifest.json` 顶层（生成器自证对账三面：声明 ↔ 三个
 
 ## 3. 发布与复跑
 
-- v0.1.0 已发布且 v4 §0 不可变 ⇒ **本批发新 tag `octave-full-wasm-v0.1.1`**（workflow
+- v0.1.0 已发布且 v4 §0 不可变 ⇒ **新 tag `octave-full-wasm-v0.1.1` 已发布**（workflow
   唯一发布面：`publish=true` 先验后发 + 发布后反读，人手不改 asset）。
-- 你侧可据此复跑（发布完成后）：
+- 你侧可据此复跑（已发布）：
 
 ```sh
 gh release download octave-full-wasm-v0.1.1 --repo ArchivalEra/Octave-Full-Wasm -p manifest.json

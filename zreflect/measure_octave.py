@@ -1671,8 +1671,33 @@ def measure():
     if _mr is not None:
         facts["release_lanes_selftest_pass"] = fact(
             _mr,
-        "python3 build/make-release.py --selftest | tail -1 | "
-        "grep -oE '[0-9]+ PASS / 0 fail' | grep -oE '^[0-9]+'",
-        "build/make-release.py",
-        "生成器自证总 PASS 数（071 部分：四类反例 + 两条从产物读回的判据）")
+            "python3 build/make-release.py --selftest | tail -1 | "
+            "grep -oE '[0-9]+ PASS / 0 fail' | grep -oE '^[0-9]+'",
+            "build/make-release.py",
+            "生成器自证总 PASS 数（071 部分：四类反例 + 两条从产物读回的判据）")
+    # ★ 071 发布后反读（R-012：关于 release 的声明只能由读 release 来核）。证据持久在
+    #   release-v011-readback/（GitHub 下载的已发布字节 + 契约校验日志）。
+    _RLRE = "/mnt/hdd/octave-wasm-build/release-v011-readback"
+    _rlm = os.path.join(_RLRE, "manifest.json")
+    if os.path.isfile(_rlm):
+        _rm = json.load(open(_rlm, encoding="utf-8"))
+        _rll = _rm.get("lanes") or {}
+        facts["release_lanes_published"] = fact(
+            len(_rll),
+            "python3 -c \"import json;m=json.load(open('%s'));print(len(m.get('lanes') or {}))\""
+            % _rlm,
+            "release-v011-readback/manifest.json",
+            "已发布 v0.1.1 的 manifest.lanes 引擎车道数（反读自 GitHub，非本地生成）",
+            replay=False)
+    _rlval = os.path.join(_RLRE, "validate.log")
+    if os.path.isfile(_rlval):
+        _txt = open(_rlval, encoding="utf-8", errors="replace").read()
+        _m = re.search(r"=== (\d+) PASS / (\d+) FAIL ===", _txt)
+        if _m and int(_m.group(2)) == 0:
+            facts["release_lanes_published_validator_pass"] = fact(
+                int(_m.group(1)),
+                "awk '/PASS \\/ 0 FAIL/{print $2}' %s | tail -1" % _rlval,
+                "release-v011-readback/validate.log",
+                "已发布 v0.1.1 字节过契约方校验器 PASS 数（FAIL 必须 0；反读实例）",
+                replay=False)
     return facts
