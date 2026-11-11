@@ -70,8 +70,13 @@
   · **74**（三线合一）：归档裁决 = **以现有成果结案**（`product`/`w64-std`/`w64` 三模式 +
     模式表 + 结算件 rc=0），不照旧 spec 重做。
 
-- **isui.ren/static 悬线未动**（2026-11-07 已处置：校验器源切 Content 仓 + 投信 004）；
-  本批 workflow 用的是 Content 仓 clone + 指纹 `ed877ee2` 核验，与该处置一致。
+- **isui.ren/static 悬线了结**（收件 005，2026-11-08 投、11-11 归档处理）：
+  `404` 是**裁定不是故障**——契约站 2026-11-03 迁 `https://static.isui.ren/`，发布面有意
+  收窄为货架+契约（README/tools 不上站）。三件落地：① workflow 校验器 clone 源切正典
+  `ArchivalEra/Static-Contract` 的 `tools/`（指纹核验 PASS，正典与 Content 仓副本逐字同）；
+  ② RELEASE-NOTES 与 workflow 注释落新地址（地址也是契约的一部分）；③ catalogue 线上
+  两条 v0.1.x 的 license 独立复核 = 全 `AGPL-3.0-or-later` 零 `LicenseRef`（无需重派生，
+  该措辞本仓文档从未写过）。回执留痕于其 `mail/005`（已归档）。
 
 ## 现在是什么（2026-11-01 · 收件 067：wasm32 极简线能不能接 symbolic —— 实测答完四问）
 

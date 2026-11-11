@@ -21,7 +21,8 @@
 # ── 判据（逐条 fail-closed，任何一条红就不发布）
 #   ① `make-release.py --selftest` 必须绿（生成器自己会红才可信）
 #   ② `check-release-v4.py <manifest> --base <out>` 必须 **0 FAIL**
-#      —— 用**契约方**的校验器（从 isui.ren/static 取，并核 sha），不是"我同意我自己"
+#      —— 用**契约方**的校验器（正典 = ArchivalEra/Static-Contract 的 tools/，并核 sha），
+#         不是"我同意我自己"
 #   ③ release 内容 **恰好等于** manifest 内容（多一个 asset 就是不合规；v4 §0）
 #   ④ 许可必须 `AGPL-3.0-or-later` 且**零** `LicenseRef`（2026-11-02 的误标已撤回）
 #   ⑤ 发布后反读：从 GitHub 拉回全部资产 ⇒ 再跑一次 ③④ + 契约校验 + 非 draft
@@ -108,20 +109,23 @@ jobs:
 
       # ── ② 契约方校验器（外部权威说了算）──────────────────────────────────
       - name: 取契约方校验器并核指纹
-        # ★ 2026-11-07：来源从 isui.ren/static 切到 **Content 仓 tools/**（git clone）。
-        #   原因：isui.ren/static 整站 404（Shirone 站侧未通知变更，实测含 README/
-        #   contract/catalogue 全 404）。Content 仓是校验器的**唯一产地**
-        #   （Static-Contract README 自述：tools/ 由它同步），且 GitHub 上可达
-        #   —— 照 LLVM 管线同款做法（它也 git clone Octave-Extra-Content）。
+        # ★ 2026-11-08（SC mail/005，本仓 11-11 归档处理）：404 是裁定不是故障 ——
+        #   契约站 2026-11-03 迁 https://static.isui.ren/ 且发布面**有意收窄**为
+        #   「货架 + 契约」（README/tools 不上站，发布清单 = deploy 分支 files.json，
+        #   count=6）。正典产地 = **ArchivalEra/Static-Contract 的 tools/**
+        #   （本仓同目录还挂着 v1–v3 历史工具的另一仓不再作 clone 源）。
+        #   Content 仓 tools/ 指纹与正典相同（ed877ee2 实测），但下游 clone 整目录
+        #   容易把过时判据一并带走 ⇒ 切正典。
         #   指纹核验保留：防"拉到一份没人审过的校验器"（同 provision-* 纪律）。
-        #   ⚠️ 指纹变了 ⇒ 先核清是谁改的，再更新这里的 WANT。
+        #   ★ 产地证明 = git clone 正典仓 + 核对执行字节 == 产地登记的字节；
+        #     指纹会随正典仓合法升级而变 ⇒ 变时先核清是谁改的，再更新 WANT。
         run: |
           set -e
-          git clone --depth 1 https://github.com/ArchivalEra/Octave-Extra-Content /tmp/ec
-          cp /tmp/ec/tools/check-release-v4.py /tmp/check-release-v4.py
+          git clone --depth 1 https://github.com/ArchivalEra/Static-Contract /tmp/sc
+          cp /tmp/sc/tools/check-release-v4.py /tmp/check-release-v4.py
           GOT="$(sha256sum /tmp/check-release-v4.py | cut -d' ' -f1)"
           echo "check-release-v4.py sha256=$GOT"
-          # 期望值：2026-11-02 实测 ed877ee2…（与 Static-Contract 站侧那份逐字节同）
+          # 期望值：2026-11-11 实测正典仓 tools/ = ed877ee2…（与 Content 仓副本逐字节同）
           WANT="ed877ee23ed28cf1"
           case "$GOT" in
             "$WANT"*) ;;
