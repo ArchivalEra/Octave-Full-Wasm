@@ -1700,4 +1700,50 @@ def measure():
                 "release-v011-readback/validate.log",
                 "已发布 v0.1.1 字节过契约方校验器 PASS 数（FAIL 必须 0；反读实例）",
                 replay=False)
+    # ★ v0.1.1 全量浏览器验收（2026-11-12）：字节从已发布 release 的 identity 分片拼回
+    #   （9/9 sha 逐字核过）铺三车道站（base=wasm32 产品 / w64-std / w64=wasm64ip），
+    #   起 8769（COI）跑 PROBES=1 全量。三个 NO-SUMMARY 均为环境缺件，单套补跑全绿
+    #   （定性依据：对照 20261101-105708 的 97 套历史全量）。
+    _V11 = "/mnt/hdd/octave-wasm-build/sweep-logs/20261112-073819.sweep.out"
+    if os.path.isfile(_V11):
+        _txt = open(_V11, encoding="utf-8", errors="replace").read()
+        _m = re.search(r"合计：(\d+) 套 / (\d+) PASS / (\d+) FAIL", _txt)
+        if _m:
+            facts["v011_sweep_suites"] = fact(int(_m.group(1)),
+                "grep -oE '合计：[0-9]+ 套' %s | grep -oE '[0-9]+'" % _V11,
+                "sweep-logs/20261112-073819.sweep.out",
+                "v0.1.1 站点（8769）PROBES=1 全量的套数（对应 20261101 全量 97 套的 8761 形态）",
+                replay=False)
+            facts["v011_sweep_pass"] = fact(int(_m.group(2)),
+                "grep -oE '合计：.*PASS' %s | grep -oE '[0-9]+ PASS' | grep -oE '^[0-9]+'" % _V11,
+                "sweep-logs/20261112-073819.sweep.out",
+                "v0.1.1 全量 PASS 合计（FAIL 必须 0）",
+                replay=False)
+            facts["v011_sweep_fail"] = fact(int(_m.group(3)),
+                "grep -oE '合计：[0-9]+ 套 / [0-9]+ PASS / [0-9]+ FAIL' %s | grep -oE '[0-9]+ FAIL' | grep -oE '^[0-9]+' | tail -1" % _V11,
+                "sweep-logs/20261112-073819.sweep.out",
+                "v0.1.1 全量 FAIL 合计（必须 0；三个 NO-SUMMARY 是环境缺件，补跑单套另计）",
+                replay=False)
+    def _probe_sum(path, pat=r"=== (\d+) PASS / 0 FAIL ==="):
+        if not os.path.isfile(path):
+            return None
+        _t = open(path, encoding="utf-8", errors="replace").read()
+        _m = re.search(pat, _t)
+        return int(_m.group(1)) if _m else None
+    for _key, _path, _note in (
+        ("v011_reprobe_matrix",
+         "/tmp/pbm-v011.log",
+         "补跑 probe-browser-matrix（8761；sweep 时因 8761 死而 NO-SUMMARY；5 PASS/0 FAIL）"),
+        ("v011_reprobe_wasm32_nocoi",
+         "/tmp/p32-v011.log",
+         "补跑 probe-wasm32-no-coi（SITE=site-v011 产物树；sweep 未注入 SITE 故 NO-SUMMARY；5 PASS/0 FAIL）"),
+        ("v011_reprobe_toolchain_gap",
+         "/tmp/ptg-v011.log",
+         "补跑 probe-toolchain-gap（夹具 /tmp/p-throw.oct 按工单 65 配方现编；2 PASS/0 FAIL，两条缺口均已修）"),
+    ):
+        _v = _probe_sum(_path)
+        if _v is not None:
+            facts[_key] = fact(_v,
+                "tail -2 %s | grep -oE '=== [0-9]+ PASS / 0 FAIL ===' | grep -oE '[0-9]+' | tail -1" % _path,
+                _path.replace("/tmp/", "tmp/"), _note, replay=False)
     return facts
