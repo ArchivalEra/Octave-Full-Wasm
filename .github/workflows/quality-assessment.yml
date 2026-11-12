@@ -1,0 +1,119 @@
+# 本地等价 GitHub Code Quality（Shirone-personalized 同款，2026-11-12 全网通报）：
+# 官方版个人账号不可用 ⇒ 各仓自跑**已有检查**，只让结果可见可比（不新增 lint 规则）。
+#
+# 与 gates.yml 的分工（两份都有、互不取代）：
+#   gates.yml     = 判据面：set -e 一红全断，push/PR 每次跑（闸门语义）。
+#   本文件        = 评估面：逐项 record rc、互不拖垮、产出 PR 摘要表 + 日志 artifact
+#                   （跨仓对照语义，面向 GitRoll 那类 provenance 质询）。
+#
+# 检查清单 = runner 可跑且结果可比的**既有检查**；跳过名单与 gates.yml 文件头同一口径
+#   （check_facts_replay / witness-* / plugin-check 要 /mnt/hdd 部署树与 docker 容器；
+#    check_stale 时间敏感在 runner 上必假红——不假装查过）。
+name: Code quality assessment
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 6 * * 1'
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  assess:
+    name: Assess ${{ github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install gate dependencies
+        # make-release 自证要 zstd/brotli 编码器（缺了会如实报"四编码是假话"而不是静默
+        # 退化——本地实测：缺包时 3 用例红，装上即 29/0）。TypeScript 解析器给 var-audit。
+        run: |
+          pip install zstandard brotli
+          npm install --prefix /tmp/ts typescript@5 --no-save
+
+      - name: Run checks
+        shell: bash
+        run: |
+          set +e
+          # 平台闸门的旋钮（不 source 必红 —— 与 gates.yml 同一教训）
+          . reflect-hooks/Einfacht.env
+          export PATH="/tmp/ts/node_modules/.bin:$PATH"
+          : > results.tsv
+          run_one() {
+            n="$1"; shift
+            printf '%s\t%s\t' "$n" "$*" >> results.tsv
+            "$@" > "/tmp/$n.log" 2>&1
+            rc=$?
+            printf '%s\n' "$rc" >> results.tsv
+            printf '  %s: rc=%s\n' "$n" "$rc"
+          }
+          # 本仓专属闸门（.githooks/*，仓库输入）
+          run_one wants        python3 .githooks/check-wants.py
+          run_one whitelist    python3 .githooks/check-whitelist.py
+          run_one consistency  python3 .githooks/check-consistency.py
+          run_one readiness    python3 .githooks/check-readiness-pattern.py
+          run_one mail-boundary python3 .githooks/check-mail-boundary.py
+          # ⚠️ update-readme/update-state 的 --check **不上 CI**：它们的 AUTO 块数据源含
+          #   机器本地 /mnt/hdd（sweep-logs / dist 交付包），runner 上必然重算出不同值
+          #   ⇒ 恒假红（本地实测：rc=1 的 diff 就是「最近全绿回归」一行的 logdir 名）。
+          #   与 check_facts_replay / witness-* 同理：要部署树的检查不假装查过。
+          # 平台闸门（runner 可跑的三件；跳过名单见 gates.yml 文件头）
+          run_one questions    python3 zreflect/check_questions.py
+          run_one retractions  python3 zreflect/check_retractions.py
+          run_one facts        python3 zreflect/check_facts.py
+          # 自证台：每个闸门必须证明自己会红（F1）
+          run_one selftest-root   sh gates-selftest.sh
+          run_one selftest-build  sh build/gates-selftest.sh
+          # GitRoll-adjacent：逐字节产物审计（工单 72 的机器判据）
+          run_one var-audit    node build/113/var-audit.mjs
+          # release 生成器自证（真仓 release/products/ 在仓库内，runner 可跑）
+          run_one release-selftest python3 build/make-release.py --selftest
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Code quality assessment — Octave-Full-Wasm"
+            echo ""
+            echo "| Check | Command | Result |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f results.tsv ]; then
+            while IFS=$'\t' read -r n c rc; do
+              badge=$([ "$rc" = "0" ] && echo PASS || echo "FAIL (rc=$rc)")
+              printf '| %s | `%s` | %s |\n' "$n" "$c" "$badge" >> "$GITHUB_STEP_SUMMARY"
+            done < results.tsv
+          else
+            echo "| (no results) | — | — |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo ""
+            echo "Assessment uses each repository's existing gates (no new lint rules)."
+            echo "Checks needing the deploy tree (\`check_facts_replay\`, witnesses, \`check_stale\`) run on the maintainer machine only — see gates.yml header; not silently skipped here."
+            echo "GitRoll context: round-3 triaged in issue #8 (own code / external bytes / scanner fixture — 0 real vulns, provenance f-request in trash-can@gitroll/2026-11-12)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-logs
+          path: /tmp/*.log
+          if-no-files-found: ignore
