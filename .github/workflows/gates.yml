@@ -53,6 +53,16 @@ jobs:
           python3 zreflect/check_questions.py
           python3 zreflect/check_retractions.py
           python3 zreflect/check_facts.py
-          # 自证台：平台闸门 + 本仓专属闸门都必须能红（F1）
+          # ⚠️ 两台 selftest 挪进独立 step（见下）——它们必须跑在**干净环境**：
+          #   delegated 自证继承 step 环境，REFLECT_* 旋钮泄进夹具 ⇒ 假红
+          #   （2026-11-13 实测 run 43335566015：check_facts/facts_replay/facts_cli/knobs
+          #    自证在带 env 的 step 里 1+2+2+2 条 fail；本地同 env 复现 next/registry 红）。
+          #   这是上游 Einfacht #34 夹具 env 污染族的同族形状。
+
+      # 自证台必须在**干净环境**跑（与 REFLECT_* 旋钮正交 —— delegated 自证继承
+      # step 环境，旋钮泄进夹具即假红；上游 Einfacht #34 同族，2026-11-13 实测）。
+      - name: Selftest suites (clean env)
+        shell: bash
+        run: |
           sh gates-selftest.sh
           sh build/gates-selftest.sh
