@@ -28,6 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # ★ fetch-depth: 0（完整历史）：两台 selftest 里有**真仓形态用例**
+          #   （facts.fresh_repo_bootstraps_green / real_repo_shaped_bootstraps /
+          #   knobs.coverage_real_repo_clean / facts_cli 等），浅克隆（默认 depth=1）下
+          #   必红 —— 2026-11-13 四次 CI 实测 + 本地浅克隆复现（症状逐字吻合：
+          #   check_facts/facts_replay/facts_cli/knobs 自证 + 跨仓换名用例）。
+          #   完整历史 ⇒ 自证在真仓形态上跑（与本地一致）。仓库体积可接受（无大件）。
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: '3.13' }
       - run: |
