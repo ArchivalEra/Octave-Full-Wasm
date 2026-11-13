@@ -19,6 +19,15 @@
 !CONTEXT.md
 !DEPLOY.md
 !doctor.json
+# ★ zreflect/lang/ 语言包**全量跟踪**（2026-11-13，用户点令）：Einfacht 是 CI 的
+#   一部分，语言包跟测试文件一样必须全量入库；此前只放行 3 个 doctor.json，
+#   其余 90 个是 gitignored 本地私货 ⇒ 干净 checkout 的 runner 缺件，
+#   平台自证（facts_cli/knobs/check_facts/换名用例）在 CI 上必红（五轮实测）。
+#   上游 Einfacht 仓 93 个语言包全量跟踪 —— 本仓对齐。432 KiB，无大件。
+!zreflect/lang/
+!zreflect/lang/*/
+!zreflect/lang/*.json
+!zreflect/lang/*/*.json
 !build/plugins.json
 !build/lanes.json
 !.githooks/check-state.py
@@ -207,6 +216,15 @@
 !reflect-hooks/*
 !gates-selftest.sh
 !doctor.json
+# ★ zreflect/lang/ 语言包**全量跟踪**（2026-11-13，用户点令）：Einfacht 是 CI 的
+#   一部分，语言包跟测试文件一样必须全量入库；此前只放行 3 个 doctor.json，
+#   其余 90 个是 gitignored 本地私货 ⇒ 干净 checkout 的 runner 缺件，
+#   平台自证（facts_cli/knobs/check_facts/换名用例）在 CI 上必红（五轮实测）。
+#   上游 Einfacht 仓 93 个语言包全量跟踪 —— 本仓对齐。432 KiB，无大件。
+!zreflect/lang/
+!zreflect/lang/*/
+!zreflect/lang/*.json
+!zreflect/lang/*/*.json
 !build/webgraphics/*
 !build/webdoc/*
 !build/assets-meta.json
