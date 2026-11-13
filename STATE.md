@@ -3,6 +3,22 @@
 正文只写「现在是什么」，**数字一律引用 `build/FACTS.json` 的键**（或看文末机器块）。
 方向与地图在 `maintaince.md`；硬规矩在 `AGENTS.md`；历史在 `HISTORY.md`（append-only）。
 
+## 现在是什么（2026-11-13 · gates CI 首次真正跑绿 + quality-assessment 接入）
+
+- **★ 用户点令**：Einfacht 成为仓库 CI 的一部分 ⇒ 语言包跟测试文件一样**全量跟踪**，
+  不绕开。核出真根因：上游 93 个语言包全量跟踪，本仓 `.gitignore` 只放行 3 个
+  `doctor.json`，其余 90 个是 gitignored 本地私货 ⇒ runner 干净 checkout 缺件、
+  平台自证 FATAL（五轮 CI 实测）。`858ca31` 全量入库（`432` KiB，与上游逐字节同；
+  3 个 knobs.json 为本仓 b815cd1 旧版配套，升级另批）。
+- **CI 六层变量闭合**（`909be64`，run `43362852326` **success 2m53s**，全部 step 绿 ——
+  gates workflow 自工单 67 以来首次真正跑绿 push）：部署树闸门挪出 CI /
+  AUTO 数据源闸门挪出 / selftest 独立干净 step / Python 钉 3.13 / fetch-depth 0 /
+  runner 装 zstandard+brotli + typescript@5 + octave-cli。判据一个没撤。
+- **`quality-assessment.yml`**（Shirone-personalized 同款本地等价 Code Quality）：
+  首跑 run `43332302508` **success 15m17s**；13 项既有检查逐项 record 到 results.tsv
+  → `GITHUB_STEP_SUMMARY` 可比表 + 日志 artifact，workflow_dispatch + 每周 cron +
+  PR。与 gates.yml 分工：gates=判据面（一红全断），quality=评估面（互不拖垮）。
+
 ## 现在是什么（2026-11-10 · 收件 071：车道身份声明落进引擎契约 + 发 v0.1.1）
 
 - **收件 `071`（extra-content 转呈 UI `156`）**：UI 的 `LANE_PRODUCT` 让消费侧身份依赖

@@ -6570,3 +6570,37 @@ build_mode 与配方不符 / 空声明；+2 条产物读回；+2 条真仓三面
 **发布**：v0.1.0 已发布且 v4 §0 不可变 ⇒ 新 tag `octave-full-wasm-v0.1.1`
 （workflow 唯一发布面，publish=true 先验后发 + 发布后反读，人手不改 asset）。
 回信 `072` 投 UI 仓，抄送 content；本仓副本留 `mail/read/`。
+
+## §5.124 · 2026-11-13 · gates CI 首次真正跑绿：语言包全量跟踪 + runner 依赖装齐
+
+用户点令（针对「能否给 CI 设不需要语言包的 Einfacht 配置」）：**Einfacht 成为仓库 CI
+的一部分，语言包就该跟测试文件一样全量跟踪**。这方向推翻了我准备「把平台自证台从
+CI 撤下」的绕开方案 —— 核查后确认用户的判断才是根因所在。
+
+- **真根因**：上游 Einfacht 仓 `zreflect/lang/` 的 **93 个语言包全量跟踪**；本仓
+  `.gitignore` 白名单只放行了 3 个 `doctor.json`，其余 **90 个是 gitignored 的本地私货**
+  ⇒ 本机真仓全绿、干净 checkout 的 runner 缺件。平台自证（facts_cli / knobs /
+  check_facts / check_facts_replay / 跨仓换名用例）在 CI 上 FATAL。
+- **逐层证伪的五个中间假设**（每轮 CI 实测 + 本地复演，全部不是根因）：
+  ① 部署树（check-state 零值守卫 2、update-readme/state 的 AUTO 数据源）——
+  这两件确实不该进 CI，已挪出并留 pre-commit；② `Einfacht.env` 泄进同 step 的
+  selftest 夹具（Einfacht #34 同族）—— selftest 挪独立干净 step；
+  ③ Python `'3.x'` 滚动到 3.15.2 —— 两份 workflow 钉 3.13；
+  ④ 浅克隆 `fetch-depth:1` —— 改 0（本地浅克隆一度复现出同症状，但 fetch-depth 0
+  后 CI 仍红 ⇒ 证伪；那次复现其实是浅克隆同样缺语言包的巧合）；
+  ⑤ runner 工具链 —— 语言包入库后平台 17 件全绿，剩本仓台 3 件红：
+  `make-release --selftest` 缺 zstandard/brotli、`var-audit.mjs` 缺 typescript、
+  `check_m.py` 的「合法 .m ⇒ 通过」要 octave-cli 真跑一次。**按用户方向不撤判据、
+  把跑点配齐**：CI 装 zstandard+brotli / typescript@5（NODE_PATH 回落）/ octave。
+- **结果**：run `43362852326` **success（2m53s，全部 step 绿）** —— gates workflow
+  自工单 67 入库以来首次真正跑绿 push 事件（此前 push 从未触发过，漏核了数据源
+  与跟踪面）。`quality-assessment.yml`（Shirone-personalized 同款本地等价 Code
+  Quality）首跑 `43332302508` success（15m17s），13 项逐项 record + 摘要表 +
+  日志 artifact。
+- **落账**：`858ca31`（90 语言包入库，432 KiB，与上游逐字节同；3 个 knobs.json 是
+  本仓 b815cd1 机制的旧版配套，不动、上游升级另批）+ `909be64`（依赖装齐）；
+  中间五轮的 gates.yml 修订（check-state / readme-state / env step / 3.13 /
+  fetch-depth 0）全部保留为有效修正（各自解决了一个真实的 runner 不可跑项）。
+- **教训**：「CI 上红、本地绿」先怀疑**跟踪面**（哪些文件根本没进 git），再怀疑
+  环境差异；白名单式 .gitignore 的默认拒绝会让「本机有的东西」静默不进库 ——
+  这正是工单 67 的同一类坑在机制层的重演。
