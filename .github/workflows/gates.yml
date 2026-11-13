@@ -15,8 +15,12 @@
 #       也在部署树）⇒ CI 不跑。以上四个只在带部署树的机器上跑（pre-commit）。
 #   本仓专属 .githooks/* 里 runner 可跑的与两份自证台全部进 CI；`git add -A` 让
 #   check-whitelist 在 CI 上非空转（全跟踪集对白名单，与本地"只查暂存批"互补）。
-#   ⚠️ 2026-11-12 修正：check-state **不进 CI**——零值守卫 2 要部署件/回归事实
-#   至少一条可读，runner 上必判"闸门空转"红（实测）。它留在 pre-commit（带部署树）。
+#   ⚠️ 2026-11-12/13 修正（两次 CI 实测）：**不进 CI 的本仓闸门不止 check-state**——
+#   update-readme --check / update-state --check 的 AUTO 块数据源含机器本地
+#   sweep-logs/dist，runner 上恒"过期"红。runner 可跑清单最终 = check-wants /
+#   whitelist / consistency / readiness-pattern / mail-boundary + 平台三件 +
+#   两台 selftest。要部署树的闸门（check-state / readme-sync / state-sync /
+#   check_facts_replay / witness-* / plugin-check）全在带部署树的机器跑。
 name: gates
 on: [push, pull_request]
 jobs:
@@ -38,12 +42,13 @@ jobs:
           python3 .githooks/check-consistency.py
           python3 .githooks/check-readiness-pattern.py
           python3 .githooks/check-mail-boundary.py
-          # ⚠️ check-state 不在 CI：其零值守卫 2 要求部署件或回归事实至少一条可读
-          #   （/mnt/hdd 数据源），runner 上两条都缺 ⇒ 必判"闸门空转"红（2026-11-12
-          #   实测 run 43332066325）。判据本身是对的（无事实不装绿）——但这个闸门的
-          #   正确跑点是带部署树的机器（pre-commit），CI 不假装查过。
-          python3 .githooks/update-readme.py --check
-          python3 .githooks/update-state.py --check
+          # ⚠️ check-state / update-readme --check / update-state --check 三件**都不进 CI**：
+          #   · check-state 的零值守卫 2 要部署件或回归事实至少一条可读（/mnt/hdd 数据源），
+          #     runner 上必判"闸门空转"红（2026-11-12 实测 run 43332066325）；
+          #   · update-readme/update-state 的 AUTO 块数据源同含机器本地 sweep-logs/dist，
+          #     runner 上重算必不同 ⇒ 恒"过期"红（2026-11-13 实测 run 43335004809，
+          #     README 三语全部）。判据都是对的（无事实不装绿 / 块必须新鲜）——
+          #     但它们是**带部署树的机器（pre-commit/pre-push）的闸门**，CI 不假装查过。
           # 平台闸门（runner 可跑的三件；跳过名单见文件头，不假装查过）
           python3 zreflect/check_questions.py
           python3 zreflect/check_retractions.py
