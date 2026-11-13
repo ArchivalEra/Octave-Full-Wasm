@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.x' }
+        with: { python-version: '3.13' }
       - run: |
           # 平台闸门的旋钮（REFLECT_FACTS 等）唯一可复现来源 —— 不 source 必红
           # （实测：裸跑 check_facts 报"缺事实台账"，是输入没配，不是闸门坏了）。
