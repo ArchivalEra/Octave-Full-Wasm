@@ -38,6 +38,21 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: '3.13' }
+
+      - name: Install runner-side gate dependencies
+        # 本仓专属闸门要的三样本机工具（2026-11-13 CI 逐项实测，见 run 43361595538）：
+        #   · zstandard / brotli —— make-release --selftest 四编码判据缺则明说缺；
+        #   · typescript —— var-audit.mjs 的 TS 解析器（它先找 crossbuild-tools，
+        #     再回落到 NODE_PATH / 全局；runner 上走回落）；
+        #   · octave-cli —— check_m.py 用真实 Octave 跑一遍合法 .m（runner 无则
+        #     "合法 .m ⇒ 通过" 用例红）。
+        # 与 quality-assessment.yml 的依赖面同一口径；不撤判据，把跑点配齐。
+        run: |
+          pip install zstandard brotli
+          npm install -g typescript@5
+          sudo apt-get update -qq && sudo apt-get install -y -qq octave
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+
       - run: |
           # 平台闸门的旋钮（REFLECT_FACTS 等）唯一可复现来源 —— 不 source 必红
           # （实测：裸跑 check_facts 报"缺事实台账"，是输入没配，不是闸门坏了）。
